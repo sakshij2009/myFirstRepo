@@ -17,6 +17,10 @@ import AddUserShift from "./AddUserShift";
 import AddAgency from "./AddAgency";
 import AddClient from "./AddClient";
 import IntakeForm from "./IntakeForm";
+import ManageIntakeWorkers from "./ManageIntakeWorkers";
+import ManageIntakeForms from "./ManageIntakeForms";
+import AddIntakeWorkerForm from "./AddIntakeWorker";
+import AddIntakeWorker from "./AddIntakeWorker";
 
 const AdminHomePage = ({ user ,setUser}) => {
   const navigate = useNavigate();
@@ -46,7 +50,9 @@ const AdminHomePage = ({ user ,setUser}) => {
             <Route path="clients" element={<ManageClients />} />
             <Route path="users" element={<ManageUser />} />
             <Route path="agency" element={<ManageAgency />} />
-            <Route path="shift-report/:id" element={<ShiftReport />} />
+             <Route path="intake-workers" element={<ManageIntakeWorkers/>} />
+             <Route path="intake-forms" element={<ManageIntakeForms/>} />
+            <Route path="shift-report/:id" element={<ShiftReport user={user}/>} />
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
 
             {/* ✅ Adding Page (Route-based Forms) */}
@@ -61,6 +67,9 @@ const AdminHomePage = ({ user ,setUser}) => {
               <Route path="update-client/:id" element={<AddClient mode="update" user={user}/>} />
               <Route path="add-intake-form" element={<IntakeForm mode="add" user={user}/>} />
               <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user}/>} />
+               <Route path="add-intakeworker" element={<AddIntakeWorker mode="add" user={user}/>} />
+              <Route path="update-intakeworker/:id" element={<AddIntakeWorker mode="update" user={user}/>} />
+
             </Route>
 
             

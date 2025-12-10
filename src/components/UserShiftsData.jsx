@@ -312,6 +312,15 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                       <BiTransfer className="text-[18px]" />
                       <p>Transfer Shift</p>
                     </div>
+                    {/* //cancel shift */}
+                    <div
+                      onClick={() => handleViewReport(emp.id)}
+                      className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px] font-medium text-[14px] leading-[20px]
+                        ${canMakeReport ? "border-[#1D5F33] text-[#1D5F33] bg-white hover:bg-[#e6f5ea] cursor-pointer" : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
+                    >
+                      <p>Cancel Shift</p>
+                    </div>
+
                   </div>
                 </div>
               </div>

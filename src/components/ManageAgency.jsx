@@ -31,20 +31,34 @@ const ManageAgency = () => {
 
   // ✅ Fetch all agencies
   useEffect(() => {
-    const fetchAgencies = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "agencies"));
-        const agencyList = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setAgencies(agencyList);
-      } catch (error) {
-        console.error("Error fetching agencies:", error);
-      }
-    };
-    fetchAgencies();
-  }, []);
+  const fetchAgencies = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "agencies"));
+      let agencyList = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // ✅ Sort by createdAt (latest first)
+      agencyList.sort((a, b) => {
+        const dateA = a.createdAt?.toMillis
+          ? a.createdAt.toMillis()
+          : new Date(a.createdAt || 0).getTime();
+        const dateB = b.createdAt?.toMillis
+          ? b.createdAt.toMillis()
+          : new Date(b.createdAt || 0).getTime();
+        return dateB - dateA; // latest first
+      });
+
+      setAgencies(agencyList);
+    } catch (error) {
+      console.error("Error fetching agencies:", error);
+    }
+  };
+
+  fetchAgencies();
+}, []);
+
 
   // ✅ Delete agency
   const handleDelete = async (agencyId) => {
@@ -99,7 +113,7 @@ const ManageAgency = () => {
 
   const getRate = (rateList, name) => {
     const rateItem = rateList?.find((r) => r.name === name);
-    return rateItem ? rateItem.rate : "_";
+    return rateItem ? rateItem.rate || rateItem.billingRate : "_";
   };
 
   return (

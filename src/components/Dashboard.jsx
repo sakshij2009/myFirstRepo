@@ -20,6 +20,7 @@ import {
   endOfYear,
 } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import TransportationDetails from "./TransportationDetails";
 
 // ✅ Helper: get date range for filter
 const getDateRange = (filter) => {
@@ -50,6 +51,24 @@ const Dashboard = () => {
   const [hasUnread, setHasUnread] = useState(false);
   const [userDocId, setUserDocId] = useState("familyforeverAdmin#1"); 
 
+const [showTransportDetails, setShowTransportDetails] = useState(false);
+const [selectedTransportShift, setSelectedTransportShift] = useState(null);
+
+
+// OPEN TRANSPORT SLIDER
+const openTransportDetails = (shift) => {
+  setSelectedTransportShift(shift);
+  setShowTransportDetails(true);
+};
+
+// CLOSE TRANSPORT SLIDER
+const closeTransportDetails = () => {
+  setShowTransportDetails(false);
+  setTimeout(() => setSelectedTransportShift(null), 300);
+};
+
+
+
   // 🔴 Real-time listener for unread notifications
   useEffect(() => {
     const q = query(
@@ -64,22 +83,7 @@ const Dashboard = () => {
     return () => unsub();
   }, [userDocId]);
 
-  // ✅ Mark all as read when opening slider
-  // useEffect(() => {
-  //   if (!showNotifications) return;
 
-  //   const markAllRead = async () => {
-  //     const q = query(
-  //       collection(db, "notifications", userDocId, "userNotifications"),
-  //       where("read", "==", false)
-  //     );
-  //     const snapshot = await getDocs(q);
-  //     snapshot.forEach(async (docSnap) => {
-  //       await updateDoc(docSnap.ref, { read: true });
-  //     });
-  //   };
-  //   markAllRead();
-  // }, [showNotifications, userDocId]);
 
   // ✅ Fetch stats whenever filter changes
   useEffect(() => {
@@ -207,8 +211,8 @@ const Dashboard = () => {
         {[
           { title: "Total Clients", value: stats.clients },
           { title: "Total Shifts", value: stats.shifts },
-          { title: "Total Revenue", value: `₹${stats.revenue}` },
-          { title: "Total Expenses", value: `₹${stats.expenses}` },
+          { title: "Total Revenue", value: `$${stats.revenue}` },
+          { title: "Total Expenses", value: `$${stats.expenses}` },
         ].map((card, idx) => (
           <div
             key={idx}
@@ -232,11 +236,12 @@ const Dashboard = () => {
       <hr className="border-t border-gray-300" />
 
       {/* Dashboard Content */}
-      <div className="bg-[#E4E4E4] gap-4 pt-4 pr-6 pb-4 pl-6 rounded-[4px] h-full w-full">
+      <div className="bg-[#E4E4E4] gap-4 pt-4 pr-6 pb-4 pl-6 rounded-[4px] h-full min-h-[600px] w-full">
         <DashboardContentPage
           activeTab={activeTab}
           handleOpenForm={handleOpenForm}
           handleViewReport={handleViewReport}
+          openTransportDetails={openTransportDetails}
         />
       </div>
 
@@ -253,6 +258,20 @@ const Dashboard = () => {
           />
         </div>
       )}
+      {/* ✅ TRANSPORTATION DETAILS SLIDER */}
+      {showTransportDetails && (
+        <div
+          className={`fixed top-0 right-0 h-full w-[450px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${
+            showTransportDetails ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <TransportationDetails
+            shift={selectedTransportShift}               
+            onClose={closeTransportDetails}
+          />
+        </div>
+      )}
+
     </div>
   );
 };

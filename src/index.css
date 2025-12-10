@@ -3,6 +3,34 @@
 @import "tailwindcss";
 @import 'tailwind-scrollbar-hide/v4';
 
+
+
+/* Ensures form fields render correctly in PDF */
+.pdf-safe {
+  --tw-text-opacity: 1 !important;
+  --tw-border-opacity: 1 !important;
+
+  /* FORCE all Tailwind-generated colors to RGB instead of OKLCH */
+  --tw-prose-body: rgb(0 0 0) !important;
+  --tw-prose-headings: rgb(0 0 0) !important;
+
+  /* MAIN OVERRIDE — This neutralizes all OKLCH values */
+  --tw-color-scheme: hsl !important;
+}
+
+.pdf-safe * {
+  color: rgb(0 0 0) !important;
+  border-color: rgb(120 120 120) !important;
+  background-color: white !important;
+}
+
+
+
+/* Make containers expand fully to avoid clipped content */
+
+
+
+
 @theme {
   /* Your custom theme settings */
   --font-display: "roboto", sans-serif;
@@ -51,3 +79,37 @@ html {
 .react-datepicker__day-name {
   font-variant-numeric: tabular-nums;
 }
+
+
+/* ---- GREEN THEME FOR DAY PICKER ---- */
+
+/* Selected Date */
+.custom-daypicker-green .rdp-day_selected {
+  background-color: #1B5E20 !important; /* dark green */
+  color: white !important;
+  border-radius: 5px !important;
+}
+
+/* Hover color on days */
+.custom-daypicker-green .rdp-day:hover {
+  background-color: #C8E6C9 !important; /* light green */
+}
+
+/* Navigation arrows */
+.custom-daypicker-green .rdp-nav_button {
+  color: #1B5E20 !important;
+}
+
+/* Month Title */
+.custom-daypicker-green .rdp-caption_label {
+  color: #1B5E20 !important;
+  font-weight: bold !important;
+}
+
+/* Today ring color */
+.custom-daypicker-green .rdp-day_today {
+  border: 1px solid #1B5E20 !important;
+}
+
+
+

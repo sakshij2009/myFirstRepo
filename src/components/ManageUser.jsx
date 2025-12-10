@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaPlus } from "react-icons/fa6";
 import { IoIosSearch } from "react-icons/io";
 import { IoChevronDown } from "react-icons/io5";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -24,21 +24,34 @@ const ManageUser = () => {
   const shiftHoursOption = ["All", "12:00 Hours", "9:00 Hours", "6:00 Hours"];
 
   // ✅ Fetch Users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "users"));
-        const userList = querySnapshot.docs.map((doc) => ({
+ useEffect(() => {
+  const fetchUsers = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "users"));
+      const userList = querySnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
           id: doc.id,
-          ...doc.data(),
-        }));
-        setUsers(userList);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      }
-    };
-    fetchUsers();
-  }, []);
+          ...data,
+          suspended: data.isSuspended ?? false, // ✅ default false
+        };
+      });
+
+      // ✅ Sort newest first
+      const sortedList = userList.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt.seconds ? a.createdAt.seconds * 1000 : a.createdAt) : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt.seconds ? b.createdAt.seconds * 1000 : b.createdAt) : 0;
+        return dateB - dateA;
+      });
+
+      setUsers(sortedList);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
+  fetchUsers();
+}, []);
+
 
   // ✅ Fetch shift types dynamically
   useEffect(() => {
@@ -68,6 +81,31 @@ const ManageUser = () => {
       alert("Failed to delete user");
     }
   };
+
+    // ✅ Toggle suspension
+  // ✅ Handle suspension toggle
+const handleSuspendToggle = async (userId, currentStatus) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const newStatus = !currentStatus;
+
+    // ✅ Update Firestore
+    await updateDoc(userRef, { isSuspended: newStatus });
+
+    // ✅ Update UI instantly
+    setUsers((prevUsers) =>
+      prevUsers.map((u) =>
+        u.id === userId ? { ...u, isSuspended: newStatus } : u
+      )
+    );
+  } catch (error) {
+    console.error("Error updating suspension:", error);
+    alert("Failed to update suspension status. Please try again.");
+  }
+};
+
+
+
 
   // ✅ Filtering logic
   const filteredUsers = users.filter((user) => {
@@ -269,14 +307,28 @@ const ManageUser = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3 w-50">{user.phone}</td>
-                  <td className="px-4 py-3 w-40">${user.salary}</td>
-                  <td className="px-4 py-3 text-center ">
+                  <td className="px-4 py-3 w-40 text-center">$ {user.salaryPerHour}</td>
+                  <td className="px-4 py-3 text-center">
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-dark-green transition-colors"></div>
-                      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={!!user.isSuspended} // ✅ Reflect actual Firestore value
+                        onChange={() => handleSuspendToggle(user.id, user.isSuspended || false)} // ✅ Update when toggled
+                      />
+                      <div
+                        className={`w-11 h-6 rounded-full transition-colors ${
+                          user.isSuspended ? "bg-dark-green" : "bg-gray-300"
+                        }`}
+                      ></div>
+                      <div
+                        className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                          user.isSuspended ? "translate-x-5" : ""
+                        }`}
+                      ></div>
                     </label>
                   </td>
+
                   <td className="px-4 py-3 text-center">
                     <div className="flex justify-center gap-2">
                       <img

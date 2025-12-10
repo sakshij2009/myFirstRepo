@@ -18,6 +18,7 @@ const AddingPage = () => {
     { label: "Add Intake Form", path: null, icon: <MdAssignmentAdd className="text-xl" /> }, // opens modal
     { label: "Add Agency", path: "/admin-dashboard/add/add-agency", icon: <HiOutlineBuildingOffice className="text-xl" /> },
     { label: "Add Client", path: "/admin-dashboard/add/add-client", icon: <FaUserFriends className="text-xl" /> },
+    { label: "Add Intake Worker", path: "/admin-dashboard/add/add-intakeworker", icon: <FaUserFriends className="text-xl" /> },
   ];
 
   // ✅ Helper function to check if current route is active

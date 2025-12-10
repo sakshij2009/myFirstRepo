@@ -7,7 +7,7 @@ import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
 import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
 
-const ReportsSection = ({ shiftId, shiftData }) => {
+const ReportsSection = ({ shiftId, shiftData,user }) => {
   const [text, setText] = useState("");
   const [showForm, setShowForm] = useState(null);
   const minWords = 1000;
@@ -93,6 +93,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
       title: "Critical Incident Reporting",
       description: "For serious incidents requiring immediate management attention",
       buttonText: "Report Critical Incident",
+      onlyUseWhen:"Self-harm, violence, abuse allegations, serious accidents, medication errors, or any incident requiring immediate intervention occurs.",
       color: "red",
       type: "critical",
     },
@@ -100,6 +101,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
       title: "Contact Note",
       description: "For serious incidents requiring immediate management attention",
       buttonText: "Contact Note",
+       onlyUseWhen:"Self-harm, violence, abuse allegations, serious accidents, medication errors, or any incident requiring immediate intervention occurs.",
       color: "blue",
       type: "contact",
     },
@@ -107,6 +109,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
       title: "Noteworthy Event",
       description: "For serious incidents requiring immediate management attention",
       buttonText: "Noteworthy Event",
+       onlyUseWhen:"Self-harm, violence, abuse allegations, serious accidents, medication errors, or any incident requiring immediate intervention occurs.",
       color: "orange",
       type: "noteworthy",
     },
@@ -114,6 +117,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
       title: "Follow Through",
       description: "For serious incidents requiring immediate management attention",
       buttonText: "Follow Through",
+      onlyUseWhen:"Self-harm, violence, abuse allegations, serious accidents, medication errors, or any incident requiring immediate intervention occurs.",
       color: "green",
       type: "follow"
     },
@@ -132,6 +136,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
          shiftId={shiftId}
         onCancel={() => setShowForm(null)}
         onSuccess={() => setShowForm(null)}
+        user={user}
       />
     )}
 
@@ -141,6 +146,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
          shiftId={shiftId}
         onCancel={() => setShowForm(null)}
         onSuccess={() => setShowForm(null)}
+         user={user}
       />
     )}
 
@@ -150,6 +156,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
         shiftId={shiftId}
         onCancel={() => setShowForm(null)}
         onSuccess={() => setShowForm(null)}
+         user={user}
       />
     )}
 
@@ -159,6 +166,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
          shiftId={shiftId}
         onCancel={() => setShowForm(null)}
         onSuccess={() => setShowForm(null)}
+         user={user}
       />
     )}
     
@@ -166,7 +174,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
       {/* Report Section */}
       <div className="flex flex-col bg-white rounded py-3 px-4 gap-4">
         <div className="flex">
-          <p className="font-bold text-[28px] leading-[32px]">Report 1</p>
+          <p className="font-bold text-[28px] leading-[32px]">Shift Report</p>
         </div>
 
         {/* Report Info */}

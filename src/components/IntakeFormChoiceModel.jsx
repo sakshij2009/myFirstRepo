@@ -51,8 +51,8 @@ import { useNavigate } from 'react-router-dom';
       type="radio"
       name="formType"
       value="IntakeWorker"
-      checked={choice === 'IntakeWorker'} // controlled via state
-      onChange={() => setChoice('IntakeWorker')}
+      checked={choice === 'Intake Worker'} // controlled via state
+      onChange={() => setChoice('Intake Worker')}
       className="mt-1 h-5 w-5 accent-dark-green "
     />
     <span>

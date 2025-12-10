@@ -1,5 +1,5 @@
 // src/pages/CriticalIncidentForm.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import {
@@ -16,6 +16,7 @@ import { db } from "../firebase"; // adjust path if needed
 
 // Your existing input primitives (keep as-is)
 import { Field, TextInput, TextArea, Select, Check, Radio } from "../components/Inputs";
+import { downloadIncidentFormPDF } from "./DownloadIncidentFormPDF ";
 
 /* ---------- constants (same as your reference) ---------- */
 const cfgStatuses = ["CAG", "ICO", "TGO", "PGO", "SFP"];
@@ -28,90 +29,165 @@ const facilityTypesLeft = [
   "Agency Campus-based Treatment Centre",
 ];
 const facilityTypesRight = [
-  "Ministry Campus-based Treatment Centre",
+  "Ministry Campus-based Treatment Centre", 
   "Personalized Community Care",
   "Secure Services / PSECA Confident",
   "PSECA (Voluntary)",
   "Other No placement",
 ];
 
-const incidentCatsLeft = [
-  "Accident",
-  "Allegations of Abuse/ Neglect",
-  "Absent from Care/ Unauthorized Absence",
-  "Child Criminal Activity/Charges/Offences",
-  "Staff/Staff Criminal Activity/Charges/Offences",
-  "Death of the Child",
-  "Destruction",
-  "Fire",
-  "Infectious Disease",
-];
-const incidentCatsRight = [
-  "Medication Error/ Medication Concern",
-  "Medical attention was required",
-  "Placement Disruption",
-  "Self-harm/ Self-injury",
-  "Sexually Problematic Behaviours",
-  "Substance Use/Abuse",
-  "Suicide Attempt/ Suicidal Ideation",
-  "Weapons",
-  "Violence/ Aggression",
-  "Victimization",
-];
-const abuseNeglectSubs = [
-  "Current Staff/Staff",
-  "Program/ House peer",
-  "Parent/ Guardian",
-  "Previous Staff",
-  "Community member",
-  "‘Other’ Please describe",
+export const incidentCategoriesLeft = [
+  {
+    label: "Accident",
+    dividerAfter: true,
+  },
+  {
+    label:
+      "Allegations of Abuse/ Neglect allegations related to (must also select appropriate purported maltreater subcategories)",
+    children: [
+      "Current Staff/Staff",
+      "Program/ House peer",
+      "Parent/ Guardian",
+      "Previous Staff",
+      "Community member",
+      "‘Other’ Please describe",
+    ],
+  },
+  {
+    label: "Absent from Care/ Unauthorized Absence",
+  },
+  {
+    label: "Child Criminal Activity/Charges/Offences",
+  },
+  {
+    label: "Staff/Staff Criminal Activity/Charges/Offences (or potential of)",
+  },
+  {
+    label: "Death of the Child",
+  },
+  {
+    label: "Destruction",
+  },
+  {
+    label: "Fire",
+  },
+  {
+    label: "Infectious Disease",
+  },
+  {
+    label: "Level of harm (must also select appropriate subcategories)",
+    children: [
+      "Minor injury (non-life threatening, may or may not have required first aid attention)",
+      "Moderate injury (non-life threatening, medical attention required)",
+      "Serious Injury to Child (life-threatening injury or significant impairment)",
+    ],
+  },
+  {
+    label: "Purported Perpetrator (Child)",
+    children: [
+      "Injury by self",
+      "Injury by program peer",
+      "Injury by staff/Staff",
+      "Injury by community member",
+      "Other, Please Describe",
+      "Unknown",
+    ],
+  },
+  {
+    label:
+      "‘Other’ occurrence that may seriously affect the health or safety of the child.",
+  },
 ];
 
-const medicalAttentionSubs = ["Child", "Program/ house peer", "Staff/Staff"];
-
-const substanceUseSubs = [
-  "In licensed facility or placement/home",
-  "Outside of licensed facility or placement/home",
+export const incidentCategoriesRight = [
+  {
+    label: "Medication Error/ Medication Concern",
+    dividerAfter: true,
+  },
+  {
+    label:
+      "Medical attention was required for (must also select appropriate subcategories)",
+    children: ["Child", "Program/ house peer", "Staff/Staff"],
+  },
+  {
+    label: "Placement Disruption",
+  },
+  {
+    label: "Self-harm/ Self-injury",
+  },
+  {
+    label: "Sexually Problematic Behaviours",
+  },
+  {
+    label:
+      "Substance Use/Abuse (must also select appropriate subcategories). Use occurred:",
+    children: [
+      "In licensed facility or placement/home",
+      "Outside of licensed facility or placement/home",
+    ],
+  },
+  {
+    label: "Suicide Attempt/ Suicidal Ideation",
+  },
+  {
+    label: "Weapons",
+  },
+  {
+    label: "Violence/ Aggression",
+  },
+  {
+    label: "Victimization",
+  },
+  {
+    label:
+      "Injury to Staff/Staff Level of harm (must also select appropriate sub-categories)",
+    children: [
+      "Minor injury (non-life threatening, may or may not have required first aid attention)",
+      "Moderate injury (non-life threatening, medical attention required)",
+      "Serious Injury (life-threatening or significant impairment to staff)",
+    ],
+  },
+  {
+    label: "Purported Perpetrator (Staff)",
+    children: [
+      "Accidental (self)",
+      "Injury by child/youth in program/house",
+      "Injury by staff/Staff",
+      "Injury by community member",
+      "Other, Please Describe",
+      "Unknown",
+    ],
+  },
 ];
 
-
-const harmChild = ["Minor injury", "Moderate injury", "Serious Injury to Child"];
-const harmStaff = ["Minor injury", "Moderate injury", "Serious Injury"];
-
-const perpetratorChild = [
-  "Injury by self",
-  "Injury by program peer",
-  "Injury by staff/Staff",
-  "Injury by community member",
-  "Other",
-  "Unknown",
-];
-const perpetratorStaff = [
-  "Accidental (self)",
-  "Injury by child/youth in program/house",
-  "Injury by staff/Staff",
-  "Injury by community member",
-  "Other",
-  "Unknown",
-];
 
 const restrictiveA = [
-  "Use of Intrusive Measures",
-  "Use of monitoring and/or restricting private communication",
-  "Surveillance",
-  "Room search",
-  "Personal search",
-  "Voluntary surrender",
-  "Restricting access to or confiscating personal property",
-  "Use of Restrictive Procedure",
+  {
+    label: "Use of Intrusive Measures (must also select appropriate sub-categories)",
+    subItems: [
+      "Use of monitoring and/or restricting private communication",
+      "Surveillance",
+      "Room search",
+      "Personal search",
+      "Voluntary surrender",
+      "Restricting access to or confiscating personal property",
+    ],
+  },
+  {
+    label: "Use of Restrictive Procedure (must also select appropriate sub-categories)",
+    subItems: [
+      "Physical restraint (physical escort, seated, supine, standing, and/or floor restraint)",
+      "Isolation room (locked confinement)",
+      "Inclusionary time out",
+      "Exclusionary time out",
+    ],
+  },
+  {
+    label: "Use of a Prohibited Practice(s)",
+    subItems: [],
+  },
 ];
-const restrictiveB = [
-  "Physical restraint (escort/seated/supine/standing/floor)",
-  "Isolation room (locked confinement)",
-  "Inclusionary time out",
-  "Exclusionary time out",
-  "Use of a Prohibited Practice(s)",
-];
+
 
 const notifyRows = [
   "CFS Intervention Practitioner",
@@ -119,6 +195,49 @@ const notifyRows = [
   "Child’s Family",
   "OCYA Complaints Officer",
 ];
+
+const RenderCategory = ({ item ,values,setFieldValue}) => (
+  <div key={item.label} className="flex flex-col w-full">
+
+    {/* MAIN CHECKBOX */}
+    <Check
+      labelText={item.label}
+      checked={values.types.categories?.[item.label] || false}
+      onChange={() =>
+        setFieldValue("types.categories", {
+          ...values.types.categories,
+          [item.label]: !values.types.categories?.[item.label],
+        })
+      }
+    />
+
+    {/* HORIZONTAL LINE IF REQUIRED */}
+    {item.dividerAfter && (
+      <div className="border-b border-gray-200 my-2"></div>
+    )}
+
+    {/* CHILDREN (INDENTED) */}
+    {item.children &&
+      values.types.categories?.[item.label] && (
+        <div className="ml-6 mt-1 flex flex-col gap-1 text-sm text-gray-700">
+          {item.children.map((child) => (
+            <Check
+              key={child}
+              labelText={child}
+              checked={values.types.subValues?.[child] || false}
+              onChange={() =>
+                setFieldValue("types.subValues", {
+                  ...values.types.subValues,
+                  [child]: !values.types.subValues?.[child],
+                })
+              }
+            />
+          ))}
+        </div>
+      )}
+  </div>
+);
+
 
 /* ---------- helpers ---------- */
 const toggleMap = (obj = {}, key) => ({ ...obj, [key]: !obj[key] });
@@ -150,76 +269,85 @@ const deepMerge = (defaults, data) => {
   return out;
 };
 
-/* ---------- default initial values structure ---------- */
-const buildDefaultInitialValues = (clientData = {}) => ({
+
+
+
+/* ---------- default initial values structure (UPDATED) ---------- */
+const buildDefaultInitialValues = (seed = {}) => ({
+  
   meta: {
-    clientName: clientData.clientName || clientData.name || "",
-    dob: clientData.dob || "",
-    cyimId: clientData.cyimId || clientData.id || "",
-    cipOffice: "",
-    cipPractitioner: "",
-    centralOffice: "",
-    cfg: objectFromKeysFalse(cfgStatuses),
+    clientName: seed.clientName ?? "",
+    dob: seed.dob ?? "",
+    cyimId: seed.cyimId ?? "",
+    cipOffice: seed.cipOffice ?? "",
+    cipPractitioner:
+      seed.cipPractitioner ??
+      seed.caseWorkerName ??
+      seed.intakeCipPractitioner ??
+      "",
+    centralOffice: seed.centralOffice ?? "",
+    cfg: seed.cfg ?? objectFromKeysFalse(cfgStatuses),
   },
 
-  // incident background
   bg: {
-    reporterName: "",
-    titleRole: "",
-    date: "",
-    timeOccur: "",
-    timeEnd: "",
-    location: "",
-    whoInvolved: "",
+    reporterName: seed.staffName ?? "",
+    titleRole: seed.staffRole ?? "",
+    date:
+      seed.bg?.date ??
+      seed.bgDate ??
+      new Date().toISOString().split("T")[0],
+    timeOccur: seed.bg?.timeOccur ?? "",
+    timeEnd: seed.bg?.timeEnd ?? "",
+    location: seed.bg?.location ?? "",
+    whoInvolved: seed.bg?.whoInvolved ?? "",
   },
 
-  // facility
   facility: {
-    agencyName: clientData.agencyName || "",
-    staffAddress: "",
-    staffId: "",
-    types: objectFromKeysFalse([...facilityTypesLeft, ...facilityTypesRight]),
-    specify: "",
+    agencyName: seed.agencyName ?? "",
+    staffAddress: seed.staffAddress ?? "",
+    staffId: seed.staffId ?? "",
+    types: seed.facility?.types ??
+      objectFromKeysFalse([...facilityTypesLeft, ...facilityTypesRight]),
+    specify: seed.facility?.specify ?? "",
   },
 
-  // types
   types: {
-    categories: objectFromKeysFalse([...incidentCatsLeft, ...incidentCatsRight]),
-    childHarm: objectFromKeysFalse(harmChild),
-    staffHarm: objectFromKeysFalse(harmStaff),
-    perpetratorChild: objectFromKeysFalse(perpetratorChild),
-    perpetratorStaff: objectFromKeysFalse(perpetratorStaff),
-    otherAffect: "",
+    categories: seed.types?.categories ??
+      objectFromKeysFalse([...incidentCategoriesLeft, ...incidentCategoriesRight]),
+    subValues: seed.types?.subValues ?? {},
+    otherAffect: seed.types?.otherAffect ?? "",
   },
 
-  // restrictive procedures
   restr: {
-    usedA: objectFromKeysFalse(restrictiveA),
-    usedB: objectFromKeysFalse(restrictiveB),
-    debriefChild: "yes",
-    precedingEvents: "",
-    informedRights: "yes",
+    usedA: seed.restr?.usedA ?? objectFromKeysFalse(restrictiveA),
+    debriefChild: seed.restr?.debriefChild ?? "yes",
+    precedingEvents: seed.restr?.precedingEvents ?? "",
+    informedRights: seed.restr?.informedRights ?? "yes",
   },
 
-  // details
   details: {
-    preceding: "",
-    factors: "",
-    description: "",
-    mitigation: "",
-    safetyPlan: "",
+    preceding: seed.details?.preceding ?? "",
+    factors: seed.details?.factors ?? "",
+    description: seed.details?.description ?? "",
+    mitigation: seed.details?.mitigation ?? "",
+    safetyPlan: seed.details?.safetyPlan ?? "",
   },
 
-  // notifications
-  notifications: notifyRows.map((n) => ({ name: n, checked: false, time: "", person: "" })),
+  notifications: seed.notifications ??
+    notifyRows.map((n) => ({
+      name: n,
+      checked: false,
+      time: "",
+      person: "",
+    })),
 
-  // meta fields for storage
   _meta: {
-    status: "draft",
-    createdAt: null,
-    updatedAt: null,
+    status: seed._meta?.status ?? "draft",
+    createdAt: seed._meta?.createdAt ?? null,
+    updatedAt: seed._meta?.updatedAt ?? null,
   },
 });
+
 
 /* ---------- validation schema ---------- */
 const validationSchema = Yup.object().shape({
@@ -245,82 +373,180 @@ const validationSchema = Yup.object().shape({
   details: Yup.object().shape({
     description: Yup.string().required("Description is required"),
   }),
-  // notifications array optional
 });
 
 /* ---------- component ---------- */
-export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }) {
-  // currentUser optional — removed since not passed
+export default function CriticalIncidentForm({
+  clientData,
+  onSuccess,
+  onCancel,
+  user,
+}) {
+  const formRef = useRef();
   const [initialValues, setInitialValues] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // build defaults with client info
-  const defaults = useMemo(() => buildDefaultInitialValues(clientData), [clientData]);
+  const defaults = useMemo(
+    () => buildDefaultInitialValues(clientData),
+    [clientData]
+  );
 
-  // derive clientId from clientData (expected prop)
-  const clientId = clientData?.clientId || clientData?.cyimId || clientData?.id || null;
+  const clientId =
+    clientData?.clientId || clientData?.cyimId || clientData?.id || null;
 
-  // load existing report (draft/submitted) if present AND intake form data by clientId
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      setLoading(true);
+  /* ---------- Data Loading & Prefilling (UPDATED) ---------- */
+useEffect(() => {
+  let mounted = true;
+
+  const load = async () => {
+    setLoading(true);
+
+    try {
+      if (!clientId) {
+        if (mounted) setInitialValues(defaults);
+        return;
+      }
+
+      /* ---------------- 1️⃣ STAFF INFO (user assigned to client) ---------------- */
+      let staffInfo = {};
       try {
-        // If no clientId, just use defaults built from clientData prop
-        if (!clientId) {
-          if (mounted) setInitialValues(defaults);
-          return;
-        }
+        const staffId = clientData?.userId || null;
 
-        // 1) Fetch intakeForms where clientId == clientId (to prefll a few fields)
-        let intakeInfo = {};
-        try {
-          const intakeQ = query(collection(db, "intakeForms"), where("clientId", "==", clientId));
-          const intakeSnap = await getDocs(intakeQ);
-          if (!intakeSnap.empty) {
-            const intakeData = intakeSnap.docs[0].data();
-            intakeInfo = {
-              clientName: intakeData.clientName || intakeData.name || "",
-              dob: intakeData.dob || "",
-              cyimId: intakeData.cyimId || intakeData.id || "",
-              agencyName: intakeData.agencyName || "",
+        if (staffId) {
+          // fetch user by userId, not by document ID
+          const qStaff = query(
+            collection(db, "users"),
+            where("userId", "==", staffId)
+          );
+          const snap = await getDocs(qStaff);
+
+          if (!snap.empty) {
+            const u = snap.docs[0].data();
+            staffInfo = {
+              staffId: staffId,
+              staffName: u.name || "",
+              staffRole: u.role || u.position || "",
+              staffAddress: u.address || "",
             };
           }
-        } catch (err) {
-          // If intake lookup fails, continue with defaults (don't block)
-          console.warn("Failed to load intake form for clientId:", clientId, err);
         }
-
-        // 2) Fetch existing critical incident document for this clientId (if exists)
-        let incidentData = null;
-        try {
-          const incidentRef = doc(db, "criticalIncidents", String(clientId));
-          const incidentSnap = await getDoc(incidentRef);
-          if (incidentSnap.exists()) {
-            incidentData = incidentSnap.data();
-          }
-        } catch (err) {
-          console.warn("Failed to load critical incident for clientId:", clientId, err);
-        }
-
-        // Merge: defaults <- intakeInfo <- existing incidentData
-        const baseDefaults = buildDefaultInitialValues(intakeInfo && Object.keys(intakeInfo).length ? intakeInfo : clientData);
-        const merged = deepMerge(baseDefaults, incidentData || {});
-        if (mounted) setInitialValues(merged);
       } catch (err) {
-        console.error("Failed to load report:", err);
-        if (mounted) setInitialValues(defaults);
-      } finally {
-        if (mounted) setLoading(false);
+        console.warn("Staff fetch error:", err);
       }
-    };
 
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [clientId, clientData, defaults]);
+      /* ---------------- 2️⃣ CLIENT DOB (always correct!) ---------------- */
+      let clientInfo = {};
+      try {
+        // fetch client by clientId field (NOT document ID)
+        const qClient = query(
+          collection(db, "clients"),
+          where("clientId", "==", clientId)
+        );
+        const snap = await getDocs(qClient);
+
+        if (!snap.empty) {
+          const cd = snap.docs[0].data();
+          clientInfo = {
+            dob: cd.dob || "",
+            clientName: cd.clientName || cd.name || "",
+            cyimId: cd.cyimId || cd.clientId || "",
+          };
+        }
+      } catch (err) {
+        console.warn("Client fetch error:", err);
+      }
+
+      /* ---------------- 3️⃣ INTAKE FORM (Agency + Case Worker) ---------------- */
+      let intakeInfo = {};
+      try {
+        const q = query(
+          collection(db, "intakeForms"),
+          where("clientId", "==", clientId)
+        );
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const d = snap.docs[0].data();
+          intakeInfo = {
+            agencyName: d.agencyName || "",
+            caseWorkerName: d.caseWorkerName || "",
+            intakeCipPractitioner: d.caseWorkerName || "",
+            clientName: d.clientName || d.name || "",
+            cyimId: d.cyimId || d.id || "",
+          };
+        }
+      } catch (err) {
+        console.warn("Intake fetch error:", err);
+      }
+
+      /* ---------------- 4️⃣ INCIDENT (if editing) ---------------- */
+      let incidentData = null;
+      try {
+        const ir = doc(db, "criticalIncidents", String(clientId));
+        const snap = await getDoc(ir);
+        if (snap.exists()) incidentData = snap.data();
+      } catch (err) {
+        console.warn("Incident fetch error:", err);
+      }
+
+      /* ---------------- 5️⃣ MERGE EVERYTHING INTO SEED ---------------- */
+      const seed = {
+        ...clientData,
+        ...clientInfo,
+        ...intakeInfo,
+        ...staffInfo,
+      };
+
+      /* ---------------- 6️⃣ FIX DOB FORMAT ---------------- */
+      if (seed.dob) {
+        try {
+          let v = seed.dob;
+
+          if (v instanceof Object && v.toDate) {
+            v = v.toDate().toISOString().split("T")[0];
+          } else if (
+            typeof v === "string" &&
+            /^\d{4}-\d{2}-\d{2}$/.test(v)
+          ) {
+            // already correct
+          } else {
+            v = new Date(v).toISOString().split("T")[0];
+          }
+
+          seed.dob = v;
+        } catch {
+          seed.dob = "";
+        }
+      }
+
+      /* ---------------- 7️⃣ BUILD FINAL VALUES ---------------- */
+      const base = buildDefaultInitialValues(seed);
+
+      // If editing, merge incident data
+      const merged = deepMerge(base, incidentData || {});
+
+      if (!incidentData) {
+        // NEW REPORT → auto set today's date if not present
+        merged.bg.date = new Date().toISOString().split("T")[0];
+      }
+
+      if (mounted) setInitialValues(merged);
+    } catch (err) {
+      console.error(err);
+      if (mounted) setInitialValues(defaults);
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  };
+
+  load();
+  return () => (mounted = false);
+}, [clientId, clientData, defaults]);
+
+
+
+
 
   // Save draft to Firestore (merge) using clientId
   const saveDraftToFirestore = async (values) => {
@@ -389,7 +615,7 @@ export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }
   }
 
   return (
-    <div className="flex flex-col  bg-white rounded ">
+    <div className="flex flex-col  bg-white rounded " ref={formRef}>
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
@@ -651,7 +877,7 @@ export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }
 
            
 
-            {/*------------------- Type of Incident--------------------------------------------------- */}
+           
              {/*------------------- Type of Incident--------------------------------------------------- */}
 <div className="flex flex-col gap-[10px]">
   <h2 className="leading-[28px] text-[24px] font-bold">Type of Incident</h2>
@@ -660,332 +886,130 @@ export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }
       Identify the type of Incident (Select as many categories as apply to the incident that has occurred)
     </p>
 
-    {/* Two-column layout */}
-    <div className="grid grid-cols-2 gap-4 gap-x-16 border border-light-gray rounded p-4">
-      {/* LEFT COLUMN */}
-      <div className="flex flex-col gap-3">
-        {incidentCatsLeft.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.categories?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.categories", {
-                ...values.types.categories,
-                [k]: !values.types.categories?.[k],
-              })
-            }
-          />
-        ))}
+        {/* Two-column layout */}
+    <div className="border border-light-gray rounded p-4 w-full">
 
-        {/* Allegations of Abuse/Neglect subcategories */}
-        {values.types.categories?.["Allegations of Abuse/ Neglect"] && (
-          <div className="ml-6 mt-2 space-y-1 text-sm text-gray-700">
-            <p className="font-medium">Allegations related to (select one or more):</p>
-            {abuseNeglectSubs.map((sub) => (
-              <Check
-                key={sub}
-                labelText={sub}
-                checked={values.types.abuseNeglectSubs?.[sub] || false}
-                onChange={() =>
-                  setFieldValue("types.abuseNeglectSubs", {
-                    ...values.types.abuseNeglectSubs,
-                    [sub]: !values.types.abuseNeglectSubs?.[sub],
-                  })
-                }
-              />
-            ))}
-          </div>
-        )}
+      {/* 2 Columns with Vertical Divider */}
+      <div className="grid grid-cols-[1fr_1px_1fr] gap-8 w-full">
 
-        {/* Level of harm to child */}
-        <p className="mt-4 text-sm font-medium text-gray-900">Level of harm (must also select subcategories)</p>
-        {harmChild.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.childHarm?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.childHarm", {
-                ...values.types.childHarm,
-                [k]: !values.types.childHarm?.[k],
-              })
-            }
-          />
-        ))}
+        {/* LEFT COLUMN */}
+        <div className="flex flex-col gap-4">
+          {incidentCategoriesLeft.map((item) => (
+            <RenderCategory
+              key={item.label}
+              item={item}
+              values={values}
+              setFieldValue={setFieldValue}
+            />
+          ))}
+        </div>
+
+        {/* VERTICAL DIVIDER */}
+        <div className="bg-gray-300 w-px"></div>
+
+        {/* RIGHT COLUMN */}
+        <div className="flex flex-col gap-4">
+          {incidentCategoriesRight.map((item) => (
+            <RenderCategory
+              key={item.label}
+              item={item}
+              values={values}
+              setFieldValue={setFieldValue}
+            />
+          ))}
+        </div>
+
       </div>
 
-      {/* RIGHT COLUMN */}
-      <div className="flex flex-col gap-3">
-        {incidentCatsRight.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.categories?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.categories", {
-                ...values.types.categories,
-                [k]: !values.types.categories?.[k],
-              })
-            }
-          />
-        ))}
-
-        {/* Medical attention required subcategories */}
-        {values.types.categories?.["Medical attention was required"] && (
-          <div className="ml-6 mt-2 space-y-1 text-sm text-gray-700">
-            <p className="font-medium">Medical attention was required for:</p>
-            {medicalAttentionSubs.map((sub) => (
-              <Check
-                key={sub}
-                labelText={sub}
-                checked={values.types.medicalAttentionSubs?.[sub] || false}
-                onChange={() =>
-                  setFieldValue("types.medicalAttentionSubs", {
-                    ...values.types.medicalAttentionSubs,
-                    [sub]: !values.types.medicalAttentionSubs?.[sub],
-                  })
-                }
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Substance Use/Abuse subcategories */}
-        {values.types.categories?.["Substance Use/Abuse"] && (
-          <div className="ml-6 mt-2 space-y-1 text-sm text-gray-700">
-            <p className="font-medium">Use occurred:</p>
-            {substanceUseSubs.map((sub) => (
-              <Check
-                key={sub}
-                labelText={sub}
-                checked={values.types.substanceUseSubs?.[sub] || false}
-                onChange={() =>
-                  setFieldValue("types.substanceUseSubs", {
-                    ...values.types.substanceUseSubs,
-                    [sub]: !values.types.substanceUseSubs?.[sub],
-                  })
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
     </div>
 
-    {/* Harm and perpetrator sections below */}
-    <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-900">Level of harm to Child (select sub-categories)</p>
-        {harmChild.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.childHarm?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.childHarm", {
-                ...values.types.childHarm,
-                [k]: !values.types.childHarm?.[k],
-              })
-            }
-          />
-        ))}
-
-        <p className="mt-4 text-sm font-medium text-gray-900">Purported Perpetrator (Child)</p>
-        {perpetratorChild.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.perpetratorChild?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.perpetratorChild", {
-                ...values.types.perpetratorChild,
-                [k]: !values.types.perpetratorChild?.[k],
-              })
-            }
-          />
-        ))}
+     <div className="mt-4">
+                <Field labelText="Please Specify">
+                  <TextArea
+                    value={values.facility.specify}
+                    onChange={(e) => setFieldValue("facility.specify", e.target.value)}
+                    placeholder="More Details about Incident"
+                    
+                  />
+                </Field>
       </div>
 
-      <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-900">Injury to Staff/Staff Level of harm (select sub-categories)</p>
-        {harmStaff.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.staffHarm?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.staffHarm", {
-                ...values.types.staffHarm,
-                [k]: !values.types.staffHarm?.[k],
-              })
-            }
-          />
-        ))}
+    
 
-        <p className="mt-4 text-sm font-medium text-gray-900">Purported Perpetrator (Staff)</p>
-        {perpetratorStaff.map((k) => (
-          <Check
-            key={k}
-            labelText={k}
-            checked={values.types.perpetratorStaff?.[k] || false}
-            onChange={() =>
-              setFieldValue("types.perpetratorStaff", {
-                ...values.types.perpetratorStaff,
-                [k]: !values.types.perpetratorStaff?.[k],
-              })
-            }
-          />
-        ))}
-      </div>
-    </div>
+    
+   
+  </div>
+  <div className="flex flex-col gap-[10px] border border-light-gray rounded p-4">
+    <p className="mb-1 text-sm font-bold leading-[20px]">
+      Incidents with use of Intrusive Measures and Restrictive Procedures, Identify the type of response (select as many as apply) to the incident.
+    </p>
+    <div className="border border-light-gray rounded p-4 w-full">
+      <div className="flex flex-col  gap-4">
 
-    {/* Text Area */}
-    <div className="mt-4">
-      <Field labelText="Description of who was involved in the incident including any witness(es)">
-        <TextArea
-          value={values.bg.whoInvolved}
-          onChange={(e) => setFieldValue("bg.whoInvolved", e.target.value)}
-          placeholder="Write down description who was involved during the incident"
-          rows={5}
+  {restrictiveA.map((category) => (
+    <div key={category.label} className="flex flex-col gap-2">
+      
+      {/* Main category checkbox */}
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          className="mt-[3px]"
+          name={category.label}
+          onChange={(e) =>
+            setFieldValue(category.label, e.target.checked)
+          }
         />
-      </Field>
+        <span className="font-semibold text-sm leading-[20px]">
+          {category.label}
+        </span>
+      </label>
+
+      {/* Sub-items */}
+      {category.subItems.length > 0 && (
+        <div className="ml-6 flex flex-col gap-2">
+          {category.subItems.map((sub) => (
+            <label key={sub} className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-[3px]"
+                name={sub}
+                onChange={(e) =>
+                  setFieldValue(sub, e.target.checked)
+                }
+              />
+              <span className="text-sm leading-[20px]">
+                {sub}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
     </div>
+  ))}
+
+</div>
+
+
+    </div>
+     <div className="mt-4">
+                <Field labelText="Please Specify">
+                  <TextArea
+                    value={values.facility.specify}
+                    onChange={(e) => setFieldValue("facility.specify", e.target.value)}
+                    placeholder="More Details about Incident"
+                    
+                  />
+                </Field>
+      </div>
+
   </div>
 </div>
 
+ 
             
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            {/* //////////////////////////////////////////////////////////////////////////// */}
-            <section className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">Type of Incident *</h2>
-              <p className="mb-3 text-sm text-gray-600">Identify the type of Incident (select as many as apply).</p>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="flex flex-col gap-3">
-                  {incidentCatsLeft.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.categories?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.categories", {
-                          ...values.types.categories,
-                          [k]: !values.types.categories?.[k],
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-                <div className="flex flex-col gap-3">
-                  {incidentCatsRight.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.categories?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.categories", {
-                          ...values.types.categories,
-                          [k]: !values.types.categories?.[k],
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Level of harm + Perpetrators */}
-              <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-gray-900">Level of harm to Child (select sub-categories)</p>
-                  {harmChild.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.childHarm?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.childHarm", {
-                          ...values.types.childHarm,
-                          [k]: !values.types.childHarm?.[k],
-                        })
-                      }
-                    />
-                  ))}
-
-                  <p className="mt-4 text-sm font-medium text-gray-900">Purported Perpetrator (Child)</p>
-                  {perpetratorChild.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.perpetratorChild?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.perpetratorChild", {
-                          ...values.types.perpetratorChild,
-                          [k]: !values.types.perpetratorChild?.[k],
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-gray-900">Injury to Staff/Staff Level of harm (select sub-categories)</p>
-                  {harmStaff.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.staffHarm?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.staffHarm", {
-                          ...values.types.staffHarm,
-                          [k]: !values.types.staffHarm?.[k],
-                        })
-                      }
-                    />
-                  ))}
-
-                  <p className="mt-4 text-sm font-medium text-gray-900">Purported Perpetrator (Staff)</p>
-                  {perpetratorStaff.map((k) => (
-                    <Check
-                      key={k}
-                      labelText={k}
-                      checked={values.types.perpetratorStaff?.[k] || false}
-                      onChange={() =>
-                        setFieldValue("types.perpetratorStaff", {
-                          ...values.types.perpetratorStaff,
-                          [k]: !values.types.perpetratorStaff?.[k],
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <Field labelText="‘Other’ occurrence that may seriously affect the health or safety">
-                  <TextArea
-                    value={values.types.otherAffect}
-                    onChange={(e) => setFieldValue("types.otherAffect", e.target.value)}
-                  />
-                </Field>
-              </div>
-            </section>
-            {/* ////////////////////////////////////////////////////////// */}
 
             {/* Incident Details */}
             <div className="flex flex-col gap-[10px]">
@@ -1125,51 +1149,67 @@ export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }
              <div className="flex flex-col gap-[10px]">
                <h2 className="leading-[28px] text-[24px] font-bold ">Notifications</h2>
                <div className="flex flex-col gap-[10px] border border-light-gray rounded p-4">
-            
-                <div className="space-y-4">
-                {values.notifications.map((row, i) => (
-                  <div key={row.name} className="grid grid-cols-1 items-center gap-4 md:grid-cols-[auto_1fr_1fr] border border-light-gray p-4 rounded">
-                    <Check
-                      labelText={row.name}
-                      checked={row.checked}
-                      onChange={() => {
-                        const next = [...values.notifications];
-                        next[i] = { ...row, checked: !row.checked };
-                        setFieldValue("notifications", next);
-                      }}
-                    />
-                    <TextInput
-                      placeholder="Time of Incident End/ Return Time"
-                      value={row.time}
-                      onChange={(e) => {
-                        const next = [...values.notifications];
-                        next[i] = { ...row, time: e.target.value };
-                        setFieldValue("notifications", next);
-                      }}
-                    />
-                    <TextInput
-                      placeholder="Name of Person (if applicable)"
-                      value={row.person}
-                      onChange={(e) => {
-                        const next = [...values.notifications];
-                        next[i] = { ...row, person: e.target.value };
-                        setFieldValue("notifications", next);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
+  <div className="space-y-4">
+    {values.notifications.map((row, i) => (
+      <div
+        key={row.name}
+        className="grid grid-cols-1 md:grid-cols-[250px_1fr_1fr] gap-6 border border-light-gray p-4 rounded items-start"
+      >
+        {/* Checkbox + Label */}
+        <div className="flex items-center">
+          <Check
+            labelText={row.name}
+            checked={row.checked}
+            onChange={() => {
+              const next = [...values.notifications];
+              next[i] = { ...row, checked: !row.checked };
+              setFieldValue("notifications", next);
+            }}
+          />
+        </div>
 
-              
-                
-             
-              </div>
+        {/* Time Input */}
+        <div className="flex flex-col w-full">
+          <label className="text-sm font-semibold mb-1">
+            Time of Incident End/ Return Time
+          </label>
+          <TextInput
+            placeholder="Please enter the timeline of report"
+            value={row.time}
+            onChange={(e) => {
+              const next = [...values.notifications];
+              next[i] = { ...row, time: e.target.value };
+              setFieldValue("notifications", next);
+            }}
+          />
+        </div>
+
+        {/* Person Name Input */}
+        <div className="flex flex-col w-full">
+          <label className="text-sm font-semibold mb-1">
+            Name of Person (If applicable)
+          </label>
+          <TextInput
+            placeholder="Please enter the name of the person"
+            value={row.person}
+            onChange={(e) => {
+              const next = [...values.notifications];
+              next[i] = { ...row, person: e.target.value };
+              setFieldValue("notifications", next);
+            }}
+          />
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
             </div>
              
 
 
             {/* /////////////////////////////////////////// */}
-            <div className="flex flex-col rounded bg-[#FEF2F2] p-4 gap-4 border border-[#FFC9C9] ">
+            <div className="flex flex-col rounded bg-[#FEF2F2] p-4 gap-4 border border-[#FFC9C9] pdf-exclude ">
               <div className=" flex gap-4 items-center">
                 <img src="/images/jam_triangle-danger.png" alt="" />
                 <p className="text-[#82181A] font-bold text-[16px] leading-[24px] text-center items-center">Critical Incident Report Submission</p>
@@ -1178,25 +1218,40 @@ export default function CriticalIncidentForm({ clientData, onSuccess, onCancel }
                 <p className="text-[#CD0007] font-normal text-[13px] leading-[20px]">This report must be submitted immediately upon completion. Management will be automatically notified. Ensure all sections are complete and accurate as this is a legal document.</p>
               </div>
 
-              <div className=" flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => saveDraftToFirestore(values)}
-                  disabled={saving}
-                  className=" items-center justify-center rounded border border-light-green bg-white px-4 py-[10px] text-[16px] leading-[24px] font-medium text-light-green cursor-pointer "
-                >
-                  Save Draft
-                </button>
+              <div className="flex justify-end gap-4 ">
 
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className=" items-center justify-center rounded bg-[#E7000B] px-4 py-[10px] text-[16px] font-medium text-white cursor-pointer"
-                >
-                  Report Critical Incident
-                </button>
+  {user?.role === "user" && (
+    <button
+      type="button"
+      onClick={() => saveDraftToFirestore(values)}
+      disabled={saving}
+      className="items-center justify-center rounded border border-light-green bg-white px-4 py-[10px] text-[16px] leading-[24px] font-medium text-light-green cursor-pointer"
+    >
+      Save Draft
+    </button>
+  )}
 
-              </div>
+  {user?.role === "admin" && (
+    <button
+      type="button"
+      onClick={()=>{downloadIncidentFormPDF(formRef,values)}}  // Your PDF function
+      disabled={saving}
+      className="items-center justify-center rounded border border-light-green bg-white px-4 py-[10px] text-[16px] leading-[24px] font-medium text-light-green cursor-pointer"
+    >
+      Download Report
+    </button>
+  )}
+
+  <button
+    type="submit"
+    disabled={saving}
+    className="items-center justify-center rounded bg-[#E7000B] px-4 py-[10px] text-[16px] font-medium text-white cursor-pointer"
+  >
+    Report Critical Incident
+  </button>
+
+</div>
+
             </div>
           </form>
         )}

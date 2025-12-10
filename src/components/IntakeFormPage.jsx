@@ -7,7 +7,7 @@ const IntakeFormPage = ({ user }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user?.role === "intakeworker") {
+    if (user?.role === "Intake Worker") {
       setIsCaseWorker(true);
     }
   }, [user]);
@@ -17,7 +17,7 @@ const IntakeFormPage = ({ user }) => {
       
 
       <div className="flex w-full  rounded  py-3 justify-center">
-        <IntakeForm isCaseWorker={isCaseWorker} />
+        <IntakeForm isCaseWorker={isCaseWorker} user={user} />
       </div>
     </div>
   );

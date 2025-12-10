@@ -10,7 +10,7 @@ import { FaPlus } from "react-icons/fa6";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TransportationShiftsData from "./TransportationShiftsData";
 
-const DashboardContentPage = ({ activeTab, handleViewReport }) => {
+const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails }) => {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
@@ -35,12 +35,15 @@ const DashboardContentPage = ({ activeTab, handleViewReport }) => {
           ...doc.data(),
         }));
         setShifts(employeeList);
+        console.log("Fetched Shifts:", employeeList);
+
       } catch (error) {
         console.error("Error fetching employees:", error);
       }
     };
     fetchEmployees();
   }, []);
+  
 
   // Helper functions
   const getShiftStatus = (clockIn, clockOut) => {
@@ -75,30 +78,126 @@ const DashboardContentPage = ({ activeTab, handleViewReport }) => {
     }
   };
 
-  // Filter logic
-  const filteredShifts = shifts.filter((shift) => {
-    const statusMatches =
-      !shiftStatus || getShiftStatus(shift.clockIn, shift.clockOut) === shiftStatus;
+const filteredShifts = shifts.filter((shift) => {
+  const status = getShiftStatus(shift.clockIn, shift.clockOut);
+  const shiftCategoryName =
+    shift.categoryName || shift.shiftCategory || "";
+  const clientName =
+    shift.clientName ||
+    shift.clientDetails?.name ||
+    shift.clientDetails?.clientName ||
+    "";
+  const clientId =
+    shift.clientId ||
+    shift.clientDetails?.id ||
+    shift.clientDetails?.clientId ||
+    "";
 
-    const categoryMatches =
-      !shiftCategory || shiftCategory === "All" || shift.categoryName === shiftCategory;
+  // ---------------- STATUS ----------------
+  const statusMatches =
+    !shiftStatus || status === shiftStatus;
 
-    const dateMatches =
-      selectedDates.length === 0 ||
-      selectedDates.some((date) => {
-        const formattedShiftDate = formatDateToDDMMYYYY(
-          shift.startDate?.toDate ? shift.startDate.toDate() : shift.startDate
+  // ---------------- CATEGORY ----------------
+  const categoryMatches =
+    !shiftCategory ||
+    shiftCategory === "All" ||
+    shiftCategoryName.toLowerCase() === shiftCategory.toLowerCase();
+
+  // ---------------- DATE ----------------
+  // ---------------- DATE ----------------
+let dateMatches = true;
+try {
+  if (selectedDates.length > 0) {
+    let shiftStart = null;
+
+    // ✅ 1. Handle Firestore Timestamp
+    if (shift.startDate?.toDate) {
+      shiftStart = shift.startDate.toDate();
+
+    // ✅ 2. Handle already a Date object
+    } else if (shift.startDate instanceof Date) {
+      shiftStart = shift.startDate;
+
+    // ✅ 3. Handle string formats like "05 DEC 2024", "05 December 2024", "DEC 05 2024"
+    } else if (typeof shift.startDate === "string") {
+      // Normalize common formats before parsing
+      const cleaned = shift.startDate
+        .replace(/,/g, "") // remove commas
+        .replace(/\s+/g, " ") // normalize spaces
+        .trim();
+
+      // Try different possible date formats
+      const parsed = Date.parse(cleaned);
+
+      if (!isNaN(parsed)) {
+        shiftStart = new Date(parsed);
+      } else {
+        // Try manual parsing like "05 DEC 2024"
+        const parts = cleaned.split(" ");
+        if (parts.length >= 3) {
+          const [day, month, year] = parts;
+          const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
+          if (!isNaN(monthIndex)) {
+            shiftStart = new Date(Number(year), monthIndex, Number(day));
+          }
+        }
+      }
+    }
+
+    // ✅ Compare normalized day, month, and year
+    if (shiftStart && !isNaN(shiftStart)) {
+      const shiftDay = shiftStart.getDate();
+      const shiftMonth = shiftStart.getMonth();
+      const shiftYear = shiftStart.getFullYear();
+
+      dateMatches = selectedDates.some((selectedDate) => {
+        return (
+          selectedDate.getDate() === shiftDay &&
+          selectedDate.getMonth() === shiftMonth &&
+          selectedDate.getFullYear() === shiftYear
         );
-        return formattedShiftDate === formatDateToDDMMYYYY(date);
       });
+    } else {
+      console.warn("⚠️ Invalid startDate for shift:", shift.id, shift.startDate);
+      dateMatches = false;
+    }
+  }
+} catch (err) {
+  console.error("❌ Date filter error:", err);
+  dateMatches = false;
+}
 
-    const searchMatches =
-      !searchTerm ||
-      shift.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      shift.clientId?.toString().toLowerCase().includes(searchTerm.toLowerCase());
 
-    return statusMatches && categoryMatches && dateMatches && searchMatches;
-  });
+  // ---------------- SEARCH ----------------
+  const searchMatches =
+    !searchTerm ||
+    clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    clientId.toString().toLowerCase().includes(searchTerm.toLowerCase());
+
+  const passes =
+    statusMatches && categoryMatches && dateMatches && searchMatches;
+
+  if (!passes) {
+    console.log("❌ Filtered OUT:", {
+      id: shift.id,
+      shiftCategoryName,
+      clientName,
+      status,
+      statusMatches,
+      categoryMatches,
+      dateMatches,
+      searchMatches,
+      startDate: shift.startDate,
+      selectedDates,
+    });
+  } else {
+    console.log("✅ Shift PASSES:", shift.id);
+  }
+
+  return passes;
+});
+
+
 
   // Fetch shift categories
   useEffect(() => {
@@ -207,7 +306,7 @@ const DashboardContentPage = ({ activeTab, handleViewReport }) => {
           <button
             key={cat.id}
             onClick={() => setShiftCategory(cat.name)}
-            className={`pb-2 text-sm font-medium ${
+            className={`pb-2 text-sm font-medium cursor-pointer ${
               shiftCategory === cat.name
                 ? "text-dark-green border-b-2 border-dark-green font-bold"
                 : "text-light-black font-bold"
@@ -297,11 +396,12 @@ const DashboardContentPage = ({ activeTab, handleViewReport }) => {
       </div>
 
       {/* ✅ Data Section */}
-      <div className="flex p-1 h-autO">
+      <div className="flex p-1 h-auto">
         {shiftCategory === "Transportation" ? (
           <TransportationShiftsData
             filteredShifts={filteredShifts}
             handleViewReport={handleViewReport}
+             openTransportDetails={openTransportDetails}
           />
         ) : (
           <ShiftsData

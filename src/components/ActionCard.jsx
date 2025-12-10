@@ -1,6 +1,6 @@
 import React from "react";
 
-const ActionCard = ({ onClick,title, description, buttonText, color  }) => {
+const ActionCard = ({ onClick,title, description, buttonText, onlyUseWhen,color  }) => {
   const colorMap = {
     red: {
       border: "border-[#FFC9C9]",
@@ -75,7 +75,7 @@ const ActionCard = ({ onClick,title, description, buttonText, color  }) => {
       </div>
       <div className="flex items-center gap-1">
         <p className={`font-bold ${c.label} text-[14px] leading-[24px]`}>Only Use When: </p>
-          <p className={` ${c.label} text-[14px] leading-[20px] items-center `}>helloo</p>
+          <p className={` ${c.label} text-[14px] leading-[20px] items-center `}>{onlyUseWhen}</p>
 
       </div>
     </div>

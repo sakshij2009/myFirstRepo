@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db } from '../firebase'
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+
 
 const Login = ({ setUser }) => {   // ✅ added setUser here
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const navigate = useNavigate()
+  const [showPassword, setShowPassword] = useState(false);
+
 
   useEffect(() => {
     // If already logged in → send to correct dashboard
@@ -96,15 +100,27 @@ const Login = ({ setUser }) => {   // ✅ added setUser here
           </div>
 
           <div className='flex flex-col gap-1'>
-            <p className='flex font-bold text-[14px] leading-[20px] tracking-normal'>Password</p>
+          <p className='flex font-bold text-[14px] leading-[20px] tracking-normal'>Password</p>
+
+          <div className="relative w-full">
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               placeholder='Enter your password'
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className='border border-gray-300 rounded p-[10px] placeholder:font-normal text-[14px] leading-[20px] tracking-normal'
+              className='border border-gray-300 rounded p-[10px] w-full placeholder:font-normal text-[14px] leading-[20px] tracking-normal'
             />
+
+            {/* Eye Icon */}
+            <span
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
+            >
+              {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+            </span>
           </div>
+        </div>
+
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
 

@@ -215,7 +215,7 @@ console.log("✅ Filtered forms for display:", filteredForms);
             </div>
 
             {/* Right controls - Category dropdown */}
-            <div className="flex gap-[12px] items-center relative">
+            {/* <div className="flex gap-[12px] items-center relative">
               <p className="font-bold text-base leading-6">Shift Category</p>
               <button
                 onClick={() => setCategoryOpen(!categoryOpen)}
@@ -248,7 +248,7 @@ console.log("✅ Filtered forms for display:", filteredForms);
                   </div>
                 </>
               )}
-            </div>
+            </div> */}
           </div>
 
           {/* Table */}

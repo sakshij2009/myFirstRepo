@@ -27,6 +27,8 @@ const AddUserForm = ({  mode = "add", user }) => {
     
   });
     const [createdUser, setCreatedUser] = useState(null);
+    const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
 
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [initialValues, setInitialValues] = useState({
@@ -38,12 +40,14 @@ const AddUserForm = ({  mode = "add", user }) => {
     phone: "",
     gender: "",
     dayOfJoining: "",
-    dailyShiftHours: "",
+    dailyShiftHours: 12,
     salaryPerHour: "",
     address: "",
-    employmentType: "",
+    role: "",
     description: "",
     avatar: null,
+    dayOfLeaving:"",
+    position:""
   });
 
   // Validation Schema
@@ -68,8 +72,9 @@ const AddUserForm = ({  mode = "add", user }) => {
       .required("Required")
       .positive("Positive only"),
     address: Yup.string().required("Address required"),
-    employmentType: Yup.string().required("Select type"),
+    role: Yup.string().required("Select role"),
     description: Yup.string().max(200, "Max 200 chars"),
+    position:  Yup.string().required("Position is required")
   });
 
  
@@ -101,9 +106,11 @@ useEffect(() => {
             dailyShiftHours: data.dailyShiftHours ? Number(data.dailyShiftHours) : "",
             salaryPerHour: data.salaryPerHour ? Number(data.salaryPerHour) : "",
             address: data.address || "",
-            employmentType: data.employmentType || "",
+            role: data.role || "",
             description: data.description || "",
             avatar: null,
+            leavingDate: data.leavingDate ||data.dateOfResignation|| "",
+            position:data.position || ""
           });
 
           if (data.profilePhotoUrl) setAvatarPreview(data.profilePhotoUrl);
@@ -137,6 +144,7 @@ useEffect(() => {
 
   // Submit
    const handleSubmit = async (values, { resetForm }) => {
+    
     try {
       let photoURL = avatarPreview;
 
@@ -171,11 +179,14 @@ useEffect(() => {
         }
       } else {
         // ✅ ADD
-        await setDoc(doc(db, "dev_users", values.username), {
+       
+        await setDoc(doc(db, "users", values.username), {
           ...values,
           profilePhotoUrl: photoURL,
           createdAt: new Date(),
+          isSuspended:false
         });
+         console.log("hi");
 
         setSlider({
           show: true,
@@ -241,17 +252,23 @@ useEffect(() => {
           <Form className="flex flex-col gap-4">
             {/* Avatar Section */}
             <div className="flex items-center gap-4 p-4 bg-white border border-light-gray rounded-sm">
-              <div className="flex bg-gray-200 h-[90px] w-[90px] rounded-full overflow-hidden items-center justify-center">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <img src="/images/profile.jpeg" />
-                )}
-              </div>
+              <div
+  className="flex bg-gray-200 h-[90px] w-[90px] rounded-full overflow-hidden items-center justify-center cursor-pointer hover:opacity-80 transition"
+  onClick={() => {
+    if (avatarPreview) setIsImageModalOpen(true);
+  }}
+>
+  {avatarPreview ? (
+    <img
+      src={avatarPreview}
+      alt="Avatar"
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <img src="/images/profile.jpeg" className="h-full w-full object-cover" />
+  )}
+</div>
+
 
               {/* Buttons */}
               <div className="flex gap-3">
@@ -269,7 +286,7 @@ useEffect(() => {
                   htmlFor="avatarInput"
                   className="text-light-green px-3 py-[6px] rounded-sm border-2 border-dark-green font-medium text-sm leading-5 tracking-normal cursor-pointer bg-dark-green text-white"
                 >
-                  Change Avatar
+                  Add Avatar
                 </label>
 
                 {/* Remove Avatar */}
@@ -443,7 +460,7 @@ useEffect(() => {
               {/* Day of Joining */}
               <div>
                 <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Day of Joining
+                  Date of Joining
                 </label>
                 <Field
                   name="dayOfJoining"
@@ -462,6 +479,49 @@ useEffect(() => {
                 />
               </div>
 
+              {/* Leaving Date */}
+            <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
+                  Date of Leaving
+                </label>
+                <Field
+                  name="dayOfLeaving"
+                  type="date"
+                  className={`w-full border rounded-sm p-[10px]  
+                    ${values.dayOfLeaving === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
+                    ${touched.dayOfLeaving && errors.dayOfLeaving
+                      ? "border-red-500"
+                      : "border-light-gray"
+                  }`}
+                />
+                <ErrorMessage
+                  name="dayOfLeaving"
+                  component="div"
+                  className="text-red-500 text-xs mt-1"
+                />
+              </div>
+
+               {/* position */}
+               <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
+                  Position
+                </label>
+                <Field
+                  name="position"
+                  type="text"
+                  placeholder="Please enter the position of user"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
+                    touched.name && errors.name ? "border-red-500" : "border-light-gray"
+                  }`}
+                />
+                <ErrorMessage
+                  name="name"
+                  component="div"
+                  className="text-red-500 text-xs mt-1"
+                />
+              </div>
+
+
               {/* Daily Shift Hours */}
               <div>
                 <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
@@ -470,6 +530,7 @@ useEffect(() => {
                 <Field
                   name="dailyShiftHours"
                   type="number"
+                  
                   placeholder="Enter the Daily allowed hours"
                   className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
                     touched.dailyShiftHours && errors.dailyShiftHours
@@ -528,26 +589,27 @@ useEffect(() => {
                 />
               </div>
 
-              {/* Employment Type */}
+              {/* role */}
               <div className="relative">
                 <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Employment Type
+                  Role
                 </label>
 
                 <Field
-                  as="select"
-                  name="employmentType"
-                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                    ${values.employmentType === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
-                    ${touched.employmentType && errors.employmentType
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                >
-                  <option value="">Please select employment type</option>
-                  <option value="Full-time">Full-time</option>
-                  <option value="Part-time">Part-time</option>
-                </Field>
+                    as="select"
+                    name="role"
+                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10
+                      ${values.role === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
+                      ${touched.role && errors.role
+                        ? "border-red-500"
+                        : "border-light-gray"
+                    }`}
+                  >
+                    <option value="">Please select role </option>
+                    <option value="Admin">Admin</option>
+                    <option value="User">User</option>
+                    <option value="Manager">Manager</option>
+                  </Field>
 
                 {/* Custom dropdown arrow */}
                 <span className="absolute right-3 top-[65%] -translate-y-1/2 pointer-events-none">
@@ -608,6 +670,29 @@ useEffect(() => {
         }}
         onDismiss={() => setSlider({ ...slider, show: false })}
       />
+      {isImageModalOpen && (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50"
+    onClick={() => setIsImageModalOpen(false)}
+  >
+    <div className="relative">
+      <img
+        src={avatarPreview}
+        alt="Large Preview"
+        className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-xl"
+      />
+
+      {/* Close button */}
+      <button
+        className="absolute top-2 right-2 bg-white text-black px-3 py-1 rounded-full shadow cursor-pointer"
+        onClick={() => setIsImageModalOpen(false)}
+      >
+        ✕
+      </button>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };

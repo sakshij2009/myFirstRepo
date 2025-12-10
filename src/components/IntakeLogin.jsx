@@ -11,15 +11,34 @@ import { useNavigate } from "react-router-dom";
 const IntakeLogin = () => {
   const navigate = useNavigate();
 
+  // UI Toggle
   const [isLogin, setIsLogin] = useState(true);
-  const [name, setName] = useState(""); // signup name
-  const [email, setEmail] = useState(""); // signup email
-  const [role, setRole] = useState(""); // signup role
-  const [loginEmail, setLoginEmail] = useState(""); // login email
+
+  // SIGNUP FIELDS
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [agency, setAgency] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [invoiceEmail, setInvoiceEmail] = useState("");
+
+  // LOGIN FIELD
+  const [loginEmail, setLoginEmail] = useState("");
+
+  // Messages
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  // Detect if user clicked on magic link
+   const UPCS_EMAIL_OPTIONS = [
+    "billing@upcs.com",
+    "accounts@upcs.com",
+  ];
+
+  const isUPCSAgency =
+    agency.trim().toLowerCase().startsWith("upcs");
+
+  
+  // Detect magic link login
   useEffect(() => {
     if (isSignInWithEmailLink(auth, window.location.href)) {
       let storedEmail = window.localStorage.getItem("emailForSignIn");
@@ -32,7 +51,6 @@ const IntakeLogin = () => {
         .then(async () => {
           window.localStorage.removeItem("emailForSignIn");
 
-          // Fetch Firestore user details
           const q = query(
             collection(db, "intakeUsers"),
             where("email", "==", storedEmail)
@@ -40,31 +58,33 @@ const IntakeLogin = () => {
           const snap = await getDocs(q);
 
           if (!snap.empty) {
-            const userData = snap.docs[0].data();
-
-            // Store user data in localStorage for dashboard
-            // localStorage.setItem("user", JSON.stringify(userData));
-
             navigate("/intake-form/dashboard");
           } else {
             setError("User not found in database.");
           }
         })
-        .catch((err) => {
-          setError("Sign-in failed: " + err.message);
-        });
+        .catch((err) => setError("Sign-in failed: " + err.message));
     }
   }, [navigate]);
 
-  // SIGNUP — No password
+  // -----------------------------
+  // SIGNUP HANDLER (UPDATED)
+  // -----------------------------
   const handleSignup = async () => {
     setError("");
     setMessage("");
 
-    if (!name || !email || !role) {
-      setError("Name, Email, and Role are required.");
+    if (!name || !role || !phone || !email || !invoiceEmail) {
+      setError("All fields are required.");
       return;
     }
+
+    if (role === "Intake Worker" && !agency) {
+      setError("Agency Name is required for Intake Workers.");
+      return;
+    }
+
+    
 
     try {
       const q = query(collection(db, "intakeUsers"), where("email", "==", email));
@@ -77,23 +97,33 @@ const IntakeLogin = () => {
 
       await addDoc(collection(db, "intakeUsers"), {
         name,
+        role,
+        agency: role === "Intake Worker" ? agency : "",
+        phone,
         email,
-        role, // added role
+        invoiceEmail,
         createdAt: new Date(),
       });
 
       alert("Signup successful! Please log in using your email.");
-      setName("");
-      setEmail("");
-      setRole("");
-      setIsLogin(true);
 
+      // Clear fields
+      setName("");
+      setRole("");
+      setAgency("");
+      setPhone("");
+      setEmail("");
+      setInvoiceEmail("");
+
+      setIsLogin(true);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  // LOGIN — Send magic link to email
+  // -----------------------------
+  // LOGIN HANDLER (unchanged)
+  // -----------------------------
   const handleSendMagicLink = async () => {
     setError("");
     setMessage("");
@@ -121,23 +151,21 @@ const IntakeLogin = () => {
       };
 
       await sendSignInLinkToEmail(auth, loginEmail, actionCodeSettings);
-
       window.localStorage.setItem("emailForSignIn", loginEmail);
 
       setMessage("Login link sent! Please check your email.");
-
     } catch (err) {
       setError(err.message);
     }
   };
 
   return (
-    <div className="flex bg-white min-h-screen  justify-center items-center">
-      <div className="max-h-screen bg-amber-200">
-        <img src="/images/loginPic.png" alt="login" className="h-max-screen"/>
+    <div className="flex bg-white min-h-screen justify-center items-center">
+      <div className=" bg-amber-200">
+        <img src="/images/loginPic.png" alt="login" className="h-max-screen" />
       </div>
 
-      <div className="flex flex-col justify-center items-center m-auto p-6 w-[404px] gap-6 bg-white shadow-xl rounded-xl">
+      <div className="flex flex-col justify-center items-center m-auto py-4 px-6 w-[404px] gap-6 bg-white shadow-xl rounded-xl">
         <p className="text-center font-bold text-[24px]">
           {isLogin ? "Welcome Back" : "Create an Account"}
         </p>
@@ -147,17 +175,14 @@ const IntakeLogin = () => {
 
         {isLogin ? (
           <>
-           <div className="flex flex-col gap-1 w-full">
-  <label className="font-bold text-[14px]">Email</label>
-  <input
-    type="email"
-    value={loginEmail}
-    onChange={(e) => setLoginEmail(e.target.value)}
-    placeholder="your@email.com"
-    className="border border-gray-300 rounded p-[10px] text-[14px]"
-  />
-</div>
-
+            {/* LOGIN FORM */}
+            <InputField
+              label="Email"
+              type="email"
+              value={loginEmail}
+              onChange={setLoginEmail}
+              placeholder="your@email.com"
+            />
 
             <button
               onClick={handleSendMagicLink}
@@ -174,43 +199,83 @@ const IntakeLogin = () => {
           </>
         ) : (
           <>
-         {/* FULL NAME */}
-<div className="flex flex-col gap-1 w-full">
-  <label className="font-bold text-[14px]">Full Name</label>
-  <input
-    type="text"
-    value={name}
-    onChange={(e) => setName(e.target.value)}
-    placeholder="John Doe"
-    className="border border-gray-300 rounded p-[10px] text-[14px]"
-  />
-</div>
+            {/* SIGNUP FORM */}
 
-{/* ROLE DROPDOWN */}
-<div className="flex flex-col gap-1 w-full">
-  <label className="font-bold text-[14px]">Role</label>
-  <select
-    value={role}
-    onChange={(e) => setRole(e.target.value)}
-    className="border border-gray-300 rounded p-[10px] text-[14px]"
-  >
-    <option value="">Select Role</option>
-    <option value="Private Family">Private Family</option>
-    <option value="Intake Worker">Intake Worker</option>
-  </select>
-</div>
+            <InputField
+              label="Name"
+              value={name}
+              onChange={setName}
+              placeholder="Enter full name"
+            />
 
-{/* EMAIL */}
-<div className="flex flex-col gap-1 w-full">
-  <label className="font-bold text-[14px]">Email</label>
-  <input
+            {/* ROLE DROPDOWN */}
+            <div className="flex flex-col gap-1 w-full">
+              <label className="font-bold text-[14px]">Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="border border-gray-300 rounded p-[10px] text-[14px]"
+              >
+                <option value="">Select Role</option>
+                <option value="Intake Worker">Intake Worker</option>
+                <option value="Parent">Parent</option>
+              </select>
+            </div>
+
+            {/* AGENCY FIELD — only if role is Intake Worker */}
+            {role === "Intake Worker" && (
+              <InputField
+                label="Name of Agency / Organisation"
+                value={agency}
+                onChange={setAgency}
+                placeholder="Enter agency name"
+              />
+            )}
+
+            <InputField
+              label="Phone Number"
+              value={phone}
+              onChange={setPhone}
+              placeholder="Enter phone number"
+              type="tel"
+            />
+
+            <InputField
+              label="E-mail"
+              value={email}
+              onChange={setEmail}
+              placeholder="Enter email address"
+              type="email"
+            />
+{/* INVOICE EMAIL FIELD */}
+{isUPCSAgency ? (
+  <div className="w-full">
+    <label className="font-semibold text-sm w-full">
+      Invoice E-mail
+    </label>
+
+    <select
+      value={invoiceEmail}
+      onChange={(e) => setInvoiceEmail(e.target.value)}
+      className="border border-gray p-2 rounded w-full"
+    >
+      <option value="">Select Invoice Email</option>
+      {UPCS_EMAIL_OPTIONS.map((email) => (
+        <option key={email} value={email}>
+          {email}
+        </option>
+      ))}
+    </select>
+  </div>
+) : (
+  <InputField
+    label="Invoice E-mail"
+    value={invoiceEmail}
+    onChange={setInvoiceEmail}
+    placeholder="Enter invoice email"
     type="email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    placeholder="email@example.com"
-    className="border border-gray-300 rounded p-[10px] text-[14px]"
   />
-</div>
+)}
 
             <button
               onClick={handleSignup}
@@ -231,9 +296,9 @@ const IntakeLogin = () => {
   );
 };
 
-// Fields
+// Reusable InputField
 const InputField = ({ label, value, onChange, placeholder, type = "text" }) => (
-  <div className="flex flex-col gap-1">
+  <div className="flex flex-col gap-1 w-full">
     <label className="font-bold text-[14px]">{label}</label>
     <input
       type={type}
@@ -245,6 +310,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text" }) => (
   </div>
 );
 
+// Switch text link
 const SwitchText = ({ text, linkText, onClick }) => (
   <div className="text-center text-[14px] text-gray-700">
     {text}{" "}

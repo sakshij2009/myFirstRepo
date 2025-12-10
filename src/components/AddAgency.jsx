@@ -70,7 +70,7 @@ const AddAgency = ({  mode = "add", user }) => {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          console.log(data);
+          // console.log(data);
           setInitialValues({
             agencyType: data.agencyType || "",
             name: data.name || "",
@@ -83,7 +83,7 @@ const AddAgency = ({  mode = "add", user }) => {
             const matched = data.rateList?.find((rate) => rate.name === service.name);
             return {
               name: service.name,
-              billingRate: matched ? matched.rate || "" : "",
+              billingRate: matched ? matched.rate || matched.billingRate || "" : "",
               kmRate: matched ? matched.kmRate || "" : "",
             };
           }),
@@ -100,6 +100,8 @@ const AddAgency = ({  mode = "add", user }) => {
   };
   fetchAgency();
 }, [mode, id]);
+
+
 
 
   // Validation schema
@@ -144,87 +146,92 @@ const AddAgency = ({  mode = "add", user }) => {
   };
 
   // Submit form
- const handleSubmit = async (values, { resetForm }) => {
-    try {
-      let photoURL = avatarPreview || "";
+const handleSubmit = async (values, { resetForm }) => {
+  try {
+    let photoURL = avatarPreview || "";
 
-      if (values.avatar) {
-        const storageRef = ref(storage, `agency-images/${values.avatar.name}`);
-        await uploadBytes(storageRef, values.avatar);
-        photoURL = await getDownloadURL(storageRef);
-      }
+    if (values.avatar) {
+      const storageRef = ref(storage, `agency-images/${values.avatar.name}`);
+      await uploadBytes(storageRef, values.avatar);
+      photoURL = await getDownloadURL(storageRef);
+    }
 
-      const agencyId = mode === "update" ? id : Date.now().toString();
+    const agencyId = mode === "update" ? id : Date.now().toString();
 
-      const dataToSave = {
-        id: agencyId,
-        ...values,
-        avatar: photoURL,
-        updatedAt: new Date(),
-        ...(mode === "add" && { createdAt: new Date() }),
-      };
+    // ✅ Attach proper service names to rateList before saving
+    const rateListWithNames = serviceList.map((service, index) => ({
+      name: service.name,
+      billingRate: values.rateList[index]?.billingRate || 0,
+      kmRate: values.rateList[index]?.kmRate || 0,
+    }));
 
-      if (mode === "update") {
-        const q = query(collection(db, "agencies"), where("id", "==", id));
-        const snapshot = await getDocs(q);
+    const dataToSave = {
+      id: agencyId,
+      ...values,
+      rateList: rateListWithNames, // ✅ Updated rateList with names
+      avatar: photoURL,
+      updatedAt: new Date(),
+      ...(mode === "add" && { createdAt: new Date() }),
+    };
 
-        if (!snapshot.empty) {
-          const docId = snapshot.docs[0].id;
-          await updateDoc(doc(db, "agencies", docId), dataToSave);
-          setSlider({
-            show: true,
-            title: "Agency Updated Successfully!",
-            subtitle: `${values.name} ${values.agencyType}`,
-            
-          });
-        }
-      } else {
-        await setDoc(doc(db, "dev_agencies", agencyId), dataToSave);
+    if (mode === "update") {
+      const q = query(collection(db, "agencies"), where("id", "==", id));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const docId = snapshot.docs[0].id;
+        await updateDoc(doc(db, "agencies", docId), dataToSave);
         setSlider({
           show: true,
-          title: "Agency Added Successfully!",
+          title: "Agency Updated Successfully!",
           subtitle: `${values.name} ${values.agencyType}`,
-          
-        });      
-
+        });
       }
-      //get all admin user
-       const q = query(collection(db, "users"), where("role", "==", "admin"));
-        const adminsSnapshot = await getDocs(q);
-        const admins = adminsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Send notification to each admin
-        for (const admin of admins) {
-          await sendNotification(admin.id, {
-            type: "info",
-            title: mode === "add" ? "New Agency Created" : "Agency Updated",
-            message:
-              mode === "add"
-                ? `A new agency "${values.name}" has been added .`
-                : `Agency "${values.name}" has been updated.`,
-            senderId: user.name, 
-            meta: {
-              agencyId: agencyId,
-              agencyName: values.name,
-              entity:"Agency"
-            },
-          });
-}
-
-      setCreatedAgency(dataToSave);
-      resetForm();
-      setAvatarPreview(null);
-      
-    } catch (error) {
-      console.error("Error saving agency:", error);
+    } else {
+      await setDoc(doc(db, "agencies", agencyId), dataToSave);
       setSlider({
         show: true,
-        title: "Error Saving Agency!",
-        subtitle: "Please try again.",
-        viewText: "",
+        title: "Agency Added Successfully!",
+        subtitle: `${values.name} ${values.agencyType}`,
       });
     }
-  };
+
+    // ✅ Notify admins (unchanged)
+    const q = query(collection(db, "users"), where("role", "==", "admin"));
+    const adminsSnapshot = await getDocs(q);
+    const admins = adminsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    for (const admin of admins) {
+      await sendNotification(admin.id, {
+        type: "info",
+        title: mode === "add" ? "New Agency Created" : "Agency Updated",
+        message:
+          mode === "add"
+            ? `A new agency "${values.name}" has been added.`
+            : `Agency "${values.name}" has been updated.`,
+        senderId: user.name,
+        meta: {
+          agencyId: agencyId,
+          agencyName: values.name,
+          entity: "Agency",
+        },
+      });
+    }
+
+    setCreatedAgency(dataToSave);
+    resetForm();
+    setAvatarPreview(null);
+  } catch (error) {
+    console.error("Error saving agency:", error);
+    setSlider({
+      show: true,
+      title: "Error Saving Agency!",
+      subtitle: "Please try again.",
+      viewText: "",
+    });
+  }
+};
+
 
   // if (mode === "update" && !initialValues) {
   //   return <p>Loading agency data...</p>;

@@ -1,166 +1,137 @@
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import html2pdf from "html2pdf.js";
 
-export const generateShiftReportPDF = async (shiftData) => {
-  const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage([595, 842]); // A4
-  const { width } = page.getSize();
+export const formatTime = (value) => {
+  if (!value) return "N/A";
 
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-  // -------------------- LOAD IMAGES --------------------
-  const logoBytes = await fetch("/images/Logo2.png").then((res) =>
-    res.arrayBuffer()
-  );
-
-  const logoImage = await pdfDoc.embedPng(logoBytes);
-  const logoDims = logoImage.scale(0.40); // ⬅ Bigger logo
-
-  // -------------------- HEADER --------------------
-  page.drawImage(logoImage, {
-    x: 30,
-    y: 775,
-    width: logoDims.width,
-    height: logoDims.height,
+  return new Date(value).toLocaleTimeString("en-CA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Edmonton"
   });
+};
 
-  page.drawText("Family Forever", {
-    x: 140,
-    y: 805,
-    size: 22,
-    font: bold,
-  });
+export const calculateTotalHours = (start, end) => {
+  if (!start || !end) return "N/A";
 
-  page.drawText("From Humanity to Community", {
-    x: 140,
-    y: 785,
-    size: 12,
-    font,
-  });
+  const s = parseFloat(start);
+  const e = parseFloat(end);
 
-  // -------------------- REPORT TITLE --------------------
-  page.drawText("Report 1", {
-    x: 35,
-    y: 740,
-    size: 18,
-    font: bold,
-  });
+  if (isNaN(s) || isNaN(e)) return "N/A";
 
-  // -------------------- DETAILS (Single Row) --------------------
-  let y = 710;
+  if (e >= s) return (e - s).toFixed(2);
 
-  const writeInline = (labelText, valueText) => {
-    page.drawText(labelText, {
-      x: currentX,
-      y,
-      size: 11,
-      font: bold,
-    });
+  return ((24 - s) + e).toFixed(2);
+};
 
-    currentX += bold.widthOfTextAtSize(labelText, 11) + 3;
+export const generateShiftReportPDF = (shift) => {
+  const clockInFormatted = formatTime(shift.clockIn);
+  const clockOutFormatted = formatTime(shift.clockOut);
+  const totalHoursCalculated = calculateTotalHours(shift.startTime, shift.endTime);
 
-    page.drawText(valueText, {
-      x: currentX,
-      y,
-      size: 11,
-      font,
-    });
+  const content = `
+    <div style="font-family: Arial; padding: 30px 35px;">
+      <div style="display: flex; gap: 24px; align-items: flex-start;">
+        <img src="/images/Logo2.png" style="width: 80px; height: 80px;" />
+        <div>
+          <h1 style="margin: 0; font-size: 32px;">Family Forever</h1>
+          <p style="margin: 0; font-size: 16px; font-weight: 600;">From Humanity to Community</p>
+        </div>
+      </div>
 
-    currentX += font.widthOfTextAtSize(valueText, 11) + 25; // natural spacing
+      <hr style="margin: 15px 0;" />
+
+      <h2 style="font-size: 22px;">Shift Report</h2>
+
+      <div style="display: flex; justify-content: space-between;">
+        <div>
+          <p>Date: <b>${shift.dateKey}</b></p>
+          <p>Staff Name: <b>${shift.name}</b></p>
+          <p>Staff ID: <b>${shift.userId}</b></p>
+        </div>
+        <div>
+          <p>Client Name: <b>${shift.clientName}</b></p>
+          <p>Shift Time: <b>${shift.startTime} - ${shift.endTime}</b></p>
+          <p>Total Hours: <b>${totalHoursCalculated}</b></p>
+        </div>
+      </div>
+
+      <hr style="margin: 15px 0;" />
+
+      <h3 style="font-size: 18px;">Shift Timeline</h3>
+
+      <p>Clock In: ${clockInFormatted}</p>
+      <p>Clock Out: ${clockOutFormatted}</p>
+
+     <div style="
+  margin-top: 15px;
+  text-align: justify;
+  line-height: 1.55;
+  font-size: 14px;
+">
+
+  ${shift.shiftReport
+    .split(/\n+/)
+    .map(
+      (p) => `
+        <div style="
+          margin-bottom: 12px;
+          page-break-inside: avoid;
+        ">
+          ${p}
+        </div>
+      `
+    )
+    .join("")}
+
+</div>
+
+    </div>
+  `;
+
+  const opt = {
+    margin: 10,
+    filename: `Shift_Report_${shift.clientName}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: "pt", format: "a4", orientation: "portrait" }
   };
 
-  let currentX = 35;
+  html2pdf()
+  .from(content)
+  .set(opt)
+  .toPdf()
+  .get("pdf")
+  .then((pdf) => {
+    const totalPages = pdf.internal.getNumberOfPages();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-  writeInline("Date: ", shiftData.date || "N/A");
-  writeInline("Staff Name: ", shiftData.staffName || "N/A");
-  writeInline("Staff ID: ", shiftData.staffId || "N/A");
-  writeInline("Client Name: ", shiftData.clientName || "N/A");
-  writeInline("Client ID: ", shiftData.clientId || "N/A");
-  writeInline(
-    "Shift Time: ",
-    `${shiftData.clockIn || ""} - ${shiftData.clockOut || ""}`
-  );
+    pdf.setLineHeightFactor(1.25); // prevents slicing text across pages
 
-  // -------------------- SHIFT TIMELINE --------------------
-  y -= 40;
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
 
-  page.drawText("Shift Timeline", {
-    x: 35,
-    y,
-    size: 14,
-    font: bold,
-  });
+      /* ⬆ Add top spacing */
+      pdf.setFontSize(4);
+      pdf.text(" ", 40, 60);  // pushes content slightly down
 
-  y -= 25;
-  page.drawText(`Clock In: ${shiftData.clockIn || "N/A"}`, {
-    x: 35,
-    y,
-    size: 11,
-    font,
-  });
+      /* ⬇ Add bottom spacing */
+      pdf.text(" ", 40, pageHeight - 60);
 
-  y -= 20;
-  page.drawText(`Clock Out: ${shiftData.clockOut || "N/A"}`, {
-    x: 35,
-    y,
-    size: 11,
-    font,
-  });
-
-  // -------------------- WATERMARK --------------------
-  const watermarkDims = logoImage.scale(1.5);
-
-  page.drawImage(logoImage, {
-    x: width / 2 - watermarkDims.width / 2,
-    y: 280,
-    width: watermarkDims.width,
-    height: watermarkDims.height,
-    opacity: 0.08,
-  });
-
-  // -------------------- LONG SHIFT REPORT (Word Wrapping) --------------------
-  const wrapText = (text, maxWidth) => {
-    const words = text.split(" ");
-    const lines = [];
-    let current = "";
-
-    for (const w of words) {
-      const test = current + w + " ";
-      if (font.widthOfTextAtSize(test, 11) > maxWidth) {
-        lines.push(current.trim());
-        current = w + " ";
-      } else {
-        current = test;
-      }
+      /* Add centered watermark */
+      pdf.setGState(pdf.GState({ opacity: 0.15 }));
+      pdf.addImage(
+        "/images/Logo2.png",
+        "PNG",
+        pageWidth / 2 - 150,
+        pageHeight / 2 - 150,
+        300,
+        300
+      );
+      pdf.setGState(pdf.GState({ opacity: 1 }));
     }
-    if (current.trim()) lines.push(current.trim());
-    return lines;
-  };
+  })
+  .save();
 
-  y -= 40;
-  const lines = wrapText(shiftData.shiftReport || "", 520);
-
-  for (let line of lines) {
-    if (y < 50) {
-      page = pdfDoc.addPage([595, 842]);
-      y = 800;
-    }
-    page.drawText(line, {
-      x: 35,
-      y,
-      size: 11,
-      font,
-    });
-    y -= 15;
-  }
-
-  // -------------------- DOWNLOAD PDF --------------------
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Shift_Report_${shiftData.clientName}.pdf`;
-  a.click();
 };

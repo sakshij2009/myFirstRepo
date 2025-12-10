@@ -7,6 +7,7 @@ import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
 
 
+
 const ShiftsData = ({ filteredShifts = [] }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const navigate=useNavigate();
@@ -80,10 +81,20 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
-   const handleViewIntakeForm = (intakeId) => {
-    if (!intakeId) return;
-    navigate(`/admin-dashboard/add/update-intake-form/${intakeId}`);
-  };
+  const handleViewIntakeForm = (intakeId, shift) => {
+  if (!intakeId) return;
+
+  const agency = shift?.agencyName?.trim() || "";
+
+  const formType = agency.toLowerCase() === "private"
+    ? "Private"
+    : "Intake Worker";
+
+  navigate(
+    `/admin-dashboard/add/update-intake-form/${intakeId}?type=${formType}`
+  );
+};
+
 
   const handleViewReport = (shiftId) => {
     if (!shiftId) return;
@@ -135,13 +146,13 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                     <div className="flex justify-start gap-[8px]">
                       <p className="font-normal text-[14px] leading-[20px]">Client</p>
                       <p className="font-bold text-[14px] leading-[20px]">
-                        {shift.clientName || "-"}
+                        {shift.clientName || shift.clientDetails?.name ||  "-"}
                       </p>
                     </div>
                     <div className="flex justify-start gap-[8px]">
                       <p className="font-normal text-[14px] leading-[20px]">Client ID</p>
                       <p className="font-bold text-[14px] leading-[20px]">
-                        {shift.clientId || "-"}
+                        {shift.clientId || shift.clientDetails?.id || "-"}
                       </p>
                     </div>
                   </div>
@@ -156,17 +167,17 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                         className="font-bold text-[14px] leading-[20px] truncate"
                         title={shift.name}
                       >
-                        {shift.name || "-"}
+                        {shift.name || shift.user ||  "-"}
                       </p>
                     </div>
 
                     <div className="gap-2">
                       <p className="flex font-normal text-[14px] leading-[20px]">Shift Category</p>
                       <p
-                        className={getShiftCategoryStyle(shift.categoryName)}
-                        title={shift.categoryName}
+                        className={getShiftCategoryStyle(shift.categoryName || shift.shiftCategory)}
+                        title={shift.categoryName || shift.shiftCategory}
                       >
-                        {shift.categoryName || "-"}
+                        {shift.categoryName || shift.shiftCategory || "-"}
                       </p>
                     </div>
 
@@ -180,14 +191,14 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                       <span className={getStatusStyles(status)}>{status}</span>
                     </div>
 
-                    <div className="w-[70px]">
+                    <div className="w-[50px]">
                       <p className="font-normal text-[14px] leading-[20px]">Staff ID</p>
                       <p className="font-bold text-[14px] leading-[20px]">
                         {shift.userId || "-"}
                       </p>
                     </div>
 
-                    <div className="w-[80px]">
+                    <div className="w-[90px]">
                       <p className="flex font-normal text-[14px] leading-[20px]">Shift</p>
                       <p className="flex font-bold text-[14px] leading-[20px]">
                         {getShift(shift.shiftConfirmed)}
@@ -198,9 +209,9 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                       <p className="font-normal text-[14px] leading-[20px]">Agency</p>
                       <p
                         className="truncate font-bold text-[14px] leading-[20px]"
-                        title={shift.agencyName}
+                        title={shift.agencyName || shift.clientDetails?.agencyName}
                       >
-                        {shift.agencyName || "-"}
+                        {shift.agencyName || shift.clientDetails?.agencyName || "-"}
                       </p>
                     </div>
                   </div>
@@ -211,7 +222,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                 {/* Footer actions */}
                 <div className="flex justify-between text-light-green text-[14px]">
                   <div className="flex items-center font-medium cursor-pointer"
-                  onClick={() => handleViewIntakeForm(shift.clientId)}
+                  onClick={() => handleViewIntakeForm(shift.clientId,shift)}
                   >
                     <p>View Intake Form</p>
                   </div>
@@ -229,7 +240,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                       className={`px-3 font-medium ${
                         isCompleted ? "text-light-green cursor-pointer" : "text-[#72787E] cursor-not-allowed"
                       }`}
-                      onClick={() => isCompleted && handleViewReport(shift.id)}
+                       onClick={() => isCompleted && handleViewReport(shift.id)}
                     >
                       View Report
                     </div>
