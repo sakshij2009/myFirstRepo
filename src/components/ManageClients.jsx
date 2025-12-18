@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaPlus } from "react-icons/fa6";
 import { IoIosSearch } from "react-icons/io";
 import { IoChevronDown } from "react-icons/io5";
-import { collection, doc, getDocs, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -63,21 +63,53 @@ const ManageClients = () => {
 
   // ✅ Fetch clients
   useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "clients"));
-        const clientList = querySnapshot.docs.map((doc) => ({
+  const fetchClients = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "clients"));
+
+      const clientList = querySnapshot.docs
+        .map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }));
-        setClients(clientList);
-        fetchServiceTypes(clientList);
-      } catch (error) {
-        console.error("Error fetching clients:", error);
-      }
-    };
-    fetchClients();
-  }, []);
+        }))
+        // ✅ newest first
+        .sort((a, b) => {
+          const aTime = a.createdAt?.seconds || 0;
+          const bTime = b.createdAt?.seconds || 0;
+          return bTime - aTime;
+        });
+
+      setClients(clientList);
+      fetchServiceTypes(clientList);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+    }
+  };
+
+  fetchClients();
+}, []);
+
+const handleDeleteClient = async (clientId) => {
+  const confirmDelete = window.confirm(
+    "Are you sure you want to delete this client? This action cannot be undone."
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    await deleteDoc(doc(db, "clients", clientId));
+
+    // ✅ Remove from UI instantly
+    setClients((prev) => prev.filter((c) => c.id !== clientId));
+
+    alert("Client deleted successfully");
+  } catch (error) {
+    console.error("Error deleting client:", error);
+    alert("Failed to delete client");
+  }
+};
+
+
 
   const fetchServiceTypes = async (clientList) => {
     try {
@@ -418,6 +450,7 @@ const ManageClients = () => {
                         src="/images/delete.png"
                         alt="delete"
                         className="w-[14px] h-[18px] cursor-pointer"
+                         onClick={() => handleDeleteClient(client.id)}
                       />
                     </div>
                   </td>

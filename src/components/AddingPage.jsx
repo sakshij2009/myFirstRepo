@@ -6,7 +6,7 @@ import { FaUserFriends } from "react-icons/fa";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
 
-const AddingPage = () => {
+const AddingPage = ({user}) => {
   const [showModel, setShowModel] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,7 +28,7 @@ const AddingPage = () => {
     <div className="flex flex-col gap-6  h-full">
       <div className="flex gap-6 h-auto">
         {/* ✅ Sidebar */}
-        <div className="flex flex-col bg-white w-1/6 p-4 gap-3 rounded-md">
+       {user?.role=="admin" ?  <div className="flex flex-col bg-white w-1/6 p-4 gap-3 rounded-md">
           {sidebarItems.map((item, index) => (
             <div
               key={index}
@@ -49,7 +49,7 @@ const AddingPage = () => {
               <p className="font-bold text-base leading-6">{item.label}</p>
             </div>
           ))}
-        </div>
+        </div>: <div></div>}
 
         {/* ✅ Intake Form Selection Modal */}
         {showModel && (
@@ -63,7 +63,9 @@ const AddingPage = () => {
         )}
 
         {/* ✅ Right content: dynamic form outlet */}
-        <div className="flex flex-col gap-4 p-4 rounded-md  w-5/6">
+        <div className={`flex flex-col gap-4 rounded-md  w-5/6 ${
+           user?.role == "admin" ? "w-5/6 p-4" : "w-full pr-5"
+        }`}>
           <Outlet />
         </div>
       </div>

@@ -30,38 +30,35 @@ export const generateShiftReportPDF = (shift) => {
   const totalHoursCalculated = calculateTotalHours(shift.startTime, shift.endTime);
 
   const content = `
-    <div style="font-family: Arial; padding: 30px 35px;">
-      <div style="display: flex; gap: 24px; align-items: flex-start;">
-        <img src="/images/Logo2.png" style="width: 80px; height: 80px;" />
+    <div style="font-family: Arial; padding: 30px 35px; ">
+      <div style="display: flex; gap: 24px; align-items: center;">
+        <img src="/images/Logo2.png" style="width: 60px; height: 60px; display: flex;" />
         <div>
-          <h1 style="margin: 0; font-size: 32px;">Family Forever</h1>
+          <h1 style="margin: 0; font-size: 28px;">Family Forever</h1>
           <p style="margin: 0; font-size: 16px; font-weight: 600;">From Humanity to Community</p>
         </div>
       </div>
 
       <hr style="margin: 15px 0;" />
 
-      <h2 style="font-size: 22px;">Shift Report</h2>
+      <h2 style="font-size: 18px;"><b>Shift Report</b></h2>
 
-      <div style="display: flex; justify-content: space-between;">
+      <div style="display: flex; gap:100px;">
         <div>
-          <p>Date: <b>${shift.dateKey}</b></p>
-          <p>Staff Name: <b>${shift.name}</b></p>
-          <p>Staff ID: <b>${shift.userId}</b></p>
+          <p style="font-size: 14px;">Date: <b>${shift.dateKey}</b></p>
+          <p style="font-size: 14px;">Staff Name: <b>${shift.name}</b></p>
+          <p style="font-size: 14px;">Staff ID: <b>${shift.userId}</b></p>
         </div>
         <div>
-          <p>Client Name: <b>${shift.clientName}</b></p>
-          <p>Shift Time: <b>${shift.startTime} - ${shift.endTime}</b></p>
-          <p>Total Hours: <b>${totalHoursCalculated}</b></p>
+          <p style="font-size: 14px;">Client Name: <b>${shift.clientName}</b></p>
+          <p style="font-size: 14px;">Shift Time: <b>${shift.startTime} - ${shift.endTime}</b></p>
+          <p style="font-size: 14px;">Total Hours: <b>${totalHoursCalculated}</b></p>
         </div>
       </div>
 
       <hr style="margin: 15px 0;" />
 
-      <h3 style="font-size: 18px;">Shift Timeline</h3>
-
-      <p>Clock In: ${clockInFormatted}</p>
-      <p>Clock Out: ${clockOutFormatted}</p>
+      
 
      <div style="
   margin-top: 15px;

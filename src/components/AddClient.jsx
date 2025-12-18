@@ -6,6 +6,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   updateDoc,
   doc,
   setDoc,
@@ -14,12 +15,13 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
 import SuccessSlider from "../components/SuccessSlider";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 
 const AddClient = ({ mode = "add", user }) => {
   const { id } = useParams();
 
+  const navigate = useNavigate();
   const [slider, setSlider] = useState({
     show: false,
     title: "",
@@ -31,29 +33,36 @@ const AddClient = ({ mode = "add", user }) => {
   const [avatarPreview, setAvatarPreview] = useState(null);
 
   const [initialValues, setInitialValues] = useState({
-    name: "",
-    clientCode: "",
-    password: "",
-    clientStatus: "",
-    parentEmail: "",
-    agency: "",
-    address: "",
-    dob: "",
-    kmRate:"",
-    clientRate:"",
-    description: "",
-    avatar: null,
-    // NEW: medications is an array so we can have multiple blocks
-    medications: [
-      {
-        medicationName: "",
-        dosage: "",
-        medicineDescription: "",
-        reasonOfMedication: "",
-        cautions: "",
-      },
-    ],
-  });
+  name: "",
+  clientCode: "",
+  password: "",
+  clientStatus: "",
+  parentEmail: "",
+  agency: "",
+  address: "",
+  dob: "",
+  kmRate: "",
+  clientRate: "",
+  description: "",
+  avatar: null,
+  medications: [
+    {
+      medicationName: "",
+      dosage: "",
+      timing: "",
+      medicineDescription: "",
+      reasonOfMedication: "",
+      cautions: "",
+    },
+  ],
+  pharmacy: {
+    pharmacyName: "",
+    pharmacyEmail: "",
+    pharmacyPhone: "",
+    pharmacyAddress: "",
+  },
+});
+
 
   // ✅ Validation Schema
   const validationSchema = Yup.object({
@@ -70,19 +79,7 @@ const AddClient = ({ mode = "add", user }) => {
     dob: Yup.date().required("Date of Birth required"),
     description: Yup.string().max(200, "Max 200 chars"),
     // NEW: validate medications array
-    medications: Yup.array()
-      .of(
-        Yup.object({
-          medicationName: Yup.string().required(
-            "Medication name is required"
-          ),
-          dosage: Yup.string().required("Dosage is required"),
-          medicineDescription: Yup.string().max(200, "Max 200 chars"),
-          reasonOfMedication: Yup.string().max(200, "Max 200 chars"),
-          cautions: Yup.string().max(200, "Max 200 chars"),
-        })
-      )
-      .min(1, "At least one medication is required"),
+
   });
 
   // ✅ Fetch client data for update mode
@@ -90,12 +87,10 @@ const AddClient = ({ mode = "add", user }) => {
     const fetchClient = async () => {
       if (mode === "update" && id) {
         try {
-          const q = query(collection(db, "clients"), where("id", "==", id));
-          const querySnapshot = await getDocs(q);
+         const clientSnap = await getDoc(doc(db, "clients", id));
 
-          if (!querySnapshot.empty) {
-            const clientDoc = querySnapshot.docs[0];
-            const data = clientDoc.data();
+          if (clientSnap.exists()) {
+           const data = clientSnap.data();
 
             // If document already has medications array, use it.
             // Otherwise, build one item from legacy single fields.
@@ -112,20 +107,41 @@ const AddClient = ({ mode = "add", user }) => {
                     },
                   ];
 
-            setInitialValues({
-              name: data.name || "",
-              clientCode: data.clientCode || "",
-              clientStatus: data.clientStatus || "",
-              parentEmail: data.email || "",
-              agency: data.agencyName || "",
-              address: data.address || "",
-              dob: data.dob || "",
-              kmRate:data.kmRate || "",
-              clientRate:data.rate || "",
-              description: data.description || "",
-              avatar: null,
-              medications: existingMeds,
-            });
+           setInitialValues({
+  name: data.name || "",
+  clientCode: data.clientCode || "",
+  clientStatus: data.clientStatus || "Active",
+  parentEmail: data.parentEmail || "",
+  agency: data.agencyName || "",
+  address: data.address || "",
+  dob: data.dob || "",
+  kmRate: data.kmRate || "",
+  clientRate: data.clientRate || "",
+  description: data.description || "",
+  avatar: null,
+
+  medications:
+    Array.isArray(data.medications) && data.medications.length > 0
+      ? data.medications
+      : [
+          {
+            medicationName: "",
+            dosage: "",
+            timing: "",
+            medicineDescription: "",
+            reasonOfMedication: "",
+            cautions: "",
+          },
+        ],
+
+  pharmacy: data.pharmacy || {
+    pharmacyName: "",
+    pharmacyEmail: "",
+    pharmacyPhone: "",
+    pharmacyAddress: "",
+  },
+});
+
 
             if (data.avatar) setAvatarPreview(data.avatar);
           } else {
@@ -185,25 +201,21 @@ const AddClient = ({ mode = "add", user }) => {
         avatar: photoURL || "",
         medications,
         // legacy fields – in case something else in the app still reads them
-        medicationName: firstMed.medicationName || "",
-        dosage: firstMed.dosage || "",
-        medicineDescription: firstMed.medicineDescription || "",
-        reasonOfMedication: firstMed.reasonOfMedication || "",
-        cautions: firstMed.cautions || "",
+       
+        
       };
 
       if (mode === "update" && id) {
         // Fetch the existing client
-        const q = query(collection(db, "clients"), where("id", "==", id));
-        const querySnapshot = await getDocs(q);
+       const clientSnap = await getDoc(doc(db, "clients", id));
 
-        if (!querySnapshot.empty) {
-          const clientDoc = querySnapshot.docs[0];
+        if (clientSnap.exists()) {
+         const data = clientSnap.data();
 
           // Use the existing document ID as customId
-          customId = clientDoc.id;
+          // customId = clientDoc.id;
 
-          await updateDoc(doc(db, "clients", customId), {
+          await updateDoc(doc(db, "clients", id), {
             ...dataToSave,
             updatedAt: new Date(),
           });
@@ -441,11 +453,52 @@ const AddClient = ({ mode = "add", user }) => {
                 errors={errors}
               />
 
+              {/* =================== PHARMACY INFORMATION =================== */}
+<div className="col-span-2  rounded-sm p-1 bg-white">
+  <p className="font-bold text-2xl mb-3 leading-7 text-light-black">Pharmacy Information</p>
+
+  <div className="grid grid-cols-2 gap-x-8 gap-y-4  border border-light-gray p-4">
+    <FieldInput
+      label="Pharmacy Name"
+      name="pharmacy.pharmacyName"
+      placeholder="Enter pharmacy name"
+      touched={touched.pharmacy || {}}
+      errors={errors.pharmacy || {}}
+    />
+
+    <FieldInput
+      label="Pharmacy Email"
+      name="pharmacy.pharmacyEmail"
+      placeholder="Enter pharmacy email"
+      touched={touched.pharmacy || {}}
+      errors={errors.pharmacy || {}}
+      type="email"
+    />
+
+    <FieldInput
+      label="Pharmacy Phone"
+      name="pharmacy.pharmacyPhone"
+      placeholder="Enter phone number"
+      touched={touched.pharmacy || {}}
+      errors={errors.pharmacy || {}}
+    />
+
+    <FieldInput
+      label="Pharmacy Address"
+      name="pharmacy.pharmacyAddress"
+      placeholder="Enter address"
+      touched={touched.pharmacy || {}}
+      errors={errors.pharmacy || {}}
+    />
+  </div>
+</div>
+
+
               {/* =================== MEDICATIONS BLOCK (MULTIPLE) =================== */}
               <FieldArray name="medications">
                 {(arrayHelpers) => (
                   <>
-                    <div className="col-span-2 flex items-center justify-between mt-4">
+                    <div className="col-span-2 flex  justify-between ">
                       <div className="font-bold text-2xl leading-7">
                         Medications Information
                       </div>
@@ -470,7 +523,7 @@ const AddClient = ({ mode = "add", user }) => {
                       values.medications.map((med, index) => (
                         <div
                           key={index}
-                          className="col-span-2 border border-light-gray rounded-sm p-4 mt-2"
+                          className="col-span-2 border border-light-gray rounded-sm p-4 "
                         >
                           <div className="flex justify-between items-center mb-2">
                             <p className="font-semibold text-base">
@@ -536,6 +589,28 @@ const AddClient = ({ mode = "add", user }) => {
                                 className="text-red-500 text-xs mt-1"
                               />
                             </div>
+
+                            <div>
+                                <label className="font-bold text-sm">Timing</label>
+                                <Field
+                                  name={`medications[${index}].timing`}
+                                  placeholder="e.g. Morning and Evening"
+                                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
+                                    touched.medications &&
+                                    touched.medications[index] &&
+                                    errors.medications &&
+                                    errors.medications[index] &&
+                                    errors.medications[index].timing
+                                      ? "border-red-500"
+                                      : "border-light-gray"
+                                  }`}
+                                />
+                                <ErrorMessage
+                                  name={`medications[${index}].timing`}
+                                  component="div"
+                                  className="text-red-500 text-xs mt-1"
+                                />
+                              </div>
 
                             {/* Description */}
                             <div className="col-span-2">
@@ -625,7 +700,7 @@ const AddClient = ({ mode = "add", user }) => {
               <div className="col-span-2 flex justify-center mt-4">
                 <button
                   type="submit"
-                  className="bg-dark-green text-white px-6 py-2 rounded"
+                  className="bg-dark-green text-white px-6 py-2 rounded cursor-pointer"
                 >
                   {mode === "update" ? "Update Client" : "Add Client"}
                 </button>
@@ -643,6 +718,7 @@ const AddClient = ({ mode = "add", user }) => {
         viewText={slider.viewText}
         onView={() => {
           if (createdClient) setInitialValues(createdClient);
+          navigate("/admin-dashboard/clients")
           setSlider({ ...slider, show: false });
         }}
         onDismiss={() => setSlider({ ...slider, show: false })}

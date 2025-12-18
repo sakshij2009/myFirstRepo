@@ -101,6 +101,22 @@ const IntakeFormMainPage = () => {
         }
       />
 
+      {/* UPDATE / VIEW INTAKE PAGE (Protected Route) */}
+<Route
+  path="update-intake-form/:id"
+  element={
+    firebaseUser && userData ? (
+      <IntakeFormPage
+        user={userData}
+        onBack={() => navigate("/intake-form/dashboard")}
+      />
+    ) : (
+      <Navigate to="/intake-form/login" replace />
+    )
+  }
+/>
+
+
       {/* DEFAULT: Redirect unknown paths to login */}
       <Route path="*" element={<Navigate to="/intake-form/login" replace />} />
     </Routes>

@@ -11,6 +11,7 @@ const ReportsSection = ({ shiftId, shiftData,user }) => {
   const [text, setText] = useState("");
   const [showForm, setShowForm] = useState(null);
   const minWords = 1000;
+  
 
   // ✅ Initialize with report from props (editable)
   useEffect(() => {
@@ -44,6 +45,62 @@ const ReportsSection = ({ shiftId, shiftData,user }) => {
       return "—";
     }
   };
+
+  const renderDate = (value) => {
+  if (!value) return "—";
+
+  // Firestore Timestamp
+  if (value?.toDate) {
+    return value.toDate().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  // Old string dates
+  if (typeof value === "string") return value;
+
+  return "—";
+};
+
+
+ const calculateOvertime = (shiftData) => {
+  try {
+    const { startTime, endTime, clockIn, clockOut } = shiftData;
+    if (!clockIn || !clockOut || !startTime || !endTime) return "—";
+
+    // Convert actual clock-in/out
+    const actualStart = clockIn.toDate ? clockIn.toDate() : new Date(clockIn);
+    const actualEnd = clockOut.toDate ? clockOut.toDate() : new Date(clockOut);
+    const actualHours = (actualEnd - actualStart) / (1000 * 60 * 60);
+
+    // Parse scheduled start/end (e.g., "09:00" or "09:00 AM")
+    const parseTime = (t) => {
+      const [hours, minutes] = t.match(/(\d+):(\d+)/).slice(1);
+      const isPM = /pm/i.test(t);
+      let h = parseInt(hours, 10);
+      if (isPM && h !== 12) h += 12;
+      if (!isPM && h === 12) h = 0;
+      return { h, m: parseInt(minutes, 10) };
+    };
+
+    const start = parseTime(startTime);
+    const end = parseTime(endTime);
+    const scheduledStart = new Date(actualStart);
+    scheduledStart.setHours(start.h, start.m, 0);
+    const scheduledEnd = new Date(actualStart);
+    scheduledEnd.setHours(end.h, end.m, 0);
+    const scheduledHours = (scheduledEnd - scheduledStart) / (1000 * 60 * 60);
+
+    const overtime = actualHours - scheduledHours;
+    return overtime > 0 ? overtime.toFixed(2) : "0.00";
+  } catch (err) {
+    console.error("Error calculating overtime:", err);
+    return "—";
+  }
+};
+
 
   // ✅ Save as draft (local only)
   const handleSaveDraft = () => {
@@ -180,16 +237,16 @@ const formatTime = (timestamp, timeZone = "UTC") => {
         {/* Report Info */}
         <div className="flex flex-wrap items-center text-sm gap-6">
           <div>
-            <span className="font-semibold">Date:</span> {shiftData.startDate}
+            <span className="font-semibold">Date:</span>{renderDate(shiftData.startDate)}
           </div>
           <div>
-            <span className="font-semibold">Staff Name:</span> {shiftData.name}
+            <span className="font-semibold">Staff Name:</span> {shiftData.name || shiftData.userName}
           </div>
           <div>
-            <span className="font-semibold">Staff ID:</span> {shiftData.userId}
+            <span className="font-semibold">Staff ID:</span> {shiftData.userId || shiftData.userId}
           </div>
           <div className="truncate w-[200px]" title={shiftData.clientName}>
-            <span className="font-semibold" >Client Name:</span> {shiftData.clientName}
+            <span className="font-semibold" >Client Name:</span> {shiftData.clientName || shiftData?.clientDetails.name}
           </div>
           <div>
             <span className="font-semibold">Shift Time:</span> {shiftData.startTime} - {shiftData.endTime}
@@ -220,6 +277,13 @@ const formatTime = (timestamp, timeZone = "UTC") => {
                 {calculateHours(shiftData.clockIn, shiftData.clockOut)}
               </p>
             </div>
+            <div className="flex gap-1">
+              <p className="font-normal text-[14px]">Overtime Hours:</p>
+              <p className="font-bold text-[14px]">
+                {calculateOvertime(shiftData)}
+              </p>
+            </div>
+
           </div>
         </div>
 
@@ -236,7 +300,7 @@ const formatTime = (timestamp, timeZone = "UTC") => {
 
         <div className="flex flex-col gap-2">
           <textarea
-            className="w-full border border-light-gray rounded p-3 h-70 focus:outline-none bg-[#F3F3F5] placeholder:text-[#535E5E] scroll-auto"
+            className="w-full border border-light-gray rounded p-3 h-150 focus:outline-none bg-[#F3F3F5] placeholder:text-[#535E5E] scroll-auto"
             placeholder="Begin your report"
             value={text}
             onChange={handleChange}

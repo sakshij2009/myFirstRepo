@@ -46,13 +46,13 @@ const SuccessSlider = ({
             <div className="flex justify-center gap-4 mt-3">
               <button
                 onClick={onView}
-                className="bg-dark-green text-white px-3 py-[6px] rounded-md transition-all text-[14px] font-medium"
+                className="bg-dark-green text-white px-3 py-[6px] rounded-md transition-all text-[14px] font-medium cursor-pointer"
               >
                 View
               </button>
               <button
                 onClick={onDismiss}
-                className="text-dark-green font-medium text-[14px]"
+                className="text-dark-green font-medium text-[14px] cursor-pointer"
               >
                 Dismiss
               </button>

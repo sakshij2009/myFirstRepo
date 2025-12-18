@@ -21,6 +21,8 @@ import {
 } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import TransportationDetails from "./TransportationDetails";
+import { useLocation } from "react-router-dom";
+
 
 // ✅ Helper: get date range for filter
 const getDateRange = (filter) => {
@@ -33,6 +35,9 @@ const getDateRange = (filter) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+const [initialShiftCategory, setInitialShiftCategory] = useState(null);
 
   const [activeTab, setActiveTab] = useState("shifts");
   const scrollRef = useRef(null);
@@ -53,6 +58,14 @@ const Dashboard = () => {
 
 const [showTransportDetails, setShowTransportDetails] = useState(false);
 const [selectedTransportShift, setSelectedTransportShift] = useState(null);
+
+
+useEffect(() => {
+  if (location.state?.shiftCategory) {
+    setInitialShiftCategory(location.state.shiftCategory);
+  }
+}, [location.state]);
+
 
 
 // OPEN TRANSPORT SLIDER
@@ -238,10 +251,12 @@ const closeTransportDetails = () => {
       {/* Dashboard Content */}
       <div className="bg-[#E4E4E4] gap-4 pt-4 pr-6 pb-4 pl-6 rounded-[4px] h-full min-h-[600px] w-full">
         <DashboardContentPage
-          activeTab={activeTab}
+          // activeTab={activeTab}
+           key={initialShiftCategory || "default"} 
           handleOpenForm={handleOpenForm}
           handleViewReport={handleViewReport}
           openTransportDetails={openTransportDetails}
+           initialShiftCategory={initialShiftCategory} 
         />
       </div>
 

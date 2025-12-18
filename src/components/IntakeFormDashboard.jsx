@@ -8,6 +8,7 @@ import { FaPlus } from "react-icons/fa6";
 import { MdOutlineEdit, MdDelete } from "react-icons/md";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TopBar from "./TopBar";
+import { useNavigate } from "react-router-dom"; 
 
 const IntakeFormDashboard = ({user, onLogout,onAddIntake }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -18,9 +19,35 @@ const IntakeFormDashboard = ({user, onLogout,onAddIntake }) => {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [intakeForms, setIntakeForms] = useState([]);
 
+  
+
+const navigate = useNavigate();
+
+
   // pagination
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 7;
+const [allClients, setAllClients] = useState([]);
+
+  // ✅ Fetch clients (for clientCode lookup)
+useEffect(() => {
+  const fetchClients = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "clients"));
+      const clientList = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      console.log("🧾 All clients from 'clients' collection:", clientList);
+      setAllClients(clientList);
+    } catch (error) {
+      console.error("❌ Error fetching clients:", error);
+    }
+  };
+
+  fetchClients();
+}, []);
+
 
   // ✅ Fetch categories
   useEffect(() => {
@@ -47,39 +74,144 @@ const IntakeFormDashboard = ({user, onLogout,onAddIntake }) => {
   }, []);
 
   // ✅ Fetch intake forms
-  useEffect(() => {
-    const fetchIntakeForms = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "InTakeForms"));
-        const forms = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        console.log("🔥 Raw forms from Firestore:", forms);
-        setIntakeForms(forms);
-      } catch (error) {
-        console.error("Error fetching intake forms:", error);
-      }
-    };
-    fetchIntakeForms();
-  }, []);
+  // ✅ Fetch intake forms (filtered by logged-in user and flattened clients)
+useEffect(() => {
+  const fetchIntakeForms = async () => {
+    if (!user?.name) {
+      console.warn("⚠️ No logged-in user found for intake filtering");
+      return;
+    }
+
+    try {
+      // ✅ Fetch all forms, clients, and categories
+      const [formsSnap, categoriesSnap] = await Promise.all([
+        getDocs(collection(db, "InTakeForms")),
+        getDocs(collection(db, "shiftCategories")),
+      ]);
+
+      const allForms = formsSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // 🔹 Create a category map (ID → Name)
+      const categoryMap = {};
+      categoriesSnap.forEach((doc) => {
+        const data = doc.data();
+        categoryMap[doc.id] = data.name || data.categoryName || "Unknown Category";
+      });
+
+      // 🔹 Filter forms belonging to this logged-in worker
+      const relevantForms = allForms.filter((form) => {
+        const workerName =
+          form.workerInfo?.workerName ||
+          form.intakeworkerName ||
+          form.nameOfPerson ||
+          "";
+
+        return (
+          workerName.trim().toLowerCase() === user.name.trim().toLowerCase()
+        );
+      });
+
+      // 🔹 Flatten clients from each form
+      const flattenedClients = relevantForms.flatMap((form) => {
+        // ✅ Helper to resolve care categories
+        const resolveServiceCategory = () => {
+          const serviceArray =
+            form.serviceRequired ||
+            form.services?.serviceRequired ||
+            form.services?.serviceType ||
+            [];
+
+          if (Array.isArray(serviceArray)) {
+            return serviceArray
+              .map((id) => categoryMap[id] || id) // Replace ID with readable name
+              .join(", ");
+          } else if (typeof serviceArray === "string") {
+            return categoryMap[serviceArray] || serviceArray;
+          } else {
+            return "—";
+          }
+        };
+
+        if (form.clientsCreated && form.clients) {
+          return Object.values(form.clients).map((client) => {
+            const matchedClient =
+              allClients.find(
+                (c) =>
+                  c.name?.trim().toLowerCase() ===
+                  client.fullName?.trim().toLowerCase()
+              ) || {};
+
+            return {
+              intakeId: form.id,
+              intakeworkerName:
+                form.workerInfo?.workerName ||
+                form.intakeworkerName ||
+                form.nameOfPerson ||
+                "",
+              agencyName: form.agencyName || "",
+              clientName: client.fullName || "Unnamed Client",
+              clientCode: matchedClient.clientCode || client.clientCode || "—",
+              dob: client.birthDate || "",
+              address: client.address || "",
+              serviceRequired: resolveServiceCategory(), // ✅ converted to readable names
+              status: form.status || "",
+            };
+          });
+        } else {
+          return (form.inTakeClients || []).map((c) => {
+            const matchedClient =
+              allClients.find(
+                (cl) =>
+                  cl.name?.trim().toLowerCase() ===
+                  c.name?.trim().toLowerCase()
+              ) || {};
+
+            return {
+              intakeId: form.id,
+              intakeworkerName:
+                form.workerInfo?.workerName ||
+                form.intakeworkerName ||
+                form.nameOfPerson ||
+                "",
+              agencyName: form.agencyName || "",
+              clientName: c.name || form.nameInClientTable || "Unnamed Client",
+              clientCode: matchedClient.clientCode || form.clientCode || "—",
+              dob: c.dob || "",
+              address: c.address || "",
+              serviceRequired: resolveServiceCategory(), // ✅ converted to readable names
+              status: form.status || "",
+            };
+          });
+        }
+      });
+
+      console.log("✅ Flattened client records:", flattenedClients);
+      setIntakeForms(flattenedClients);
+    } catch (error) {
+      console.error("❌ Error fetching intake forms:", error);
+    }
+  };
+
+  fetchIntakeForms();
+}, [user?.name, allClients]);
+
+
+
 
   // ✅ Filtered data
-const filteredForms = intakeForms.filter((form) => {
-  // only show data for the logged-in user
-  const userMatches = form.nameOfPerson === "Cammi McInroy";  
-  
-
-  const categoryMatches =
-    !shiftCategory || shiftCategory === "All" || form.careCategory === shiftCategory;
-
+// ✅ Search filter (client name or code)
+const filteredForms = intakeForms.filter((client) => {
   const searchMatches =
     !searchTerm ||
-    form.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    form.clientCode?.toString().toLowerCase().includes(searchTerm.toLowerCase());
+    client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.clientCode?.toString().toLowerCase().includes(searchTerm.toLowerCase());
 
-  return userMatches && searchMatches;
+  return searchMatches;
 });
+
 
 console.log("✅ Filtered forms for display:", filteredForms);
 
@@ -133,6 +265,12 @@ console.log("✅ Filtered forms for display:", filteredForms);
       isThisWeek: inThisWeek,
     };
   }, [selectedDates]);
+
+  const handleViewIntakeForm = (intakeId) => {
+  if (!intakeId) return;
+  navigate(`/intake-form/update-intake-form/${intakeId}`);
+};
+
 
   return (
     <div className="flex flex-col">
@@ -276,34 +414,37 @@ console.log("✅ Filtered forms for display:", filteredForms);
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {currentForms.map((form, index) => (
-                  <tr key={form.id} className="h-[65px]">
-                    <td className="font-normal text-[14px] border-gray border border-l-0 border-b-0 border-r-0 py-3 px-4 text-light-green truncate max-w-[249px]">
-                      {form.nameInClientTable || "_"}
-                    </td>
-                    <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4">
-                      {form.clientCode || "_"}
-                    </td>
-                  <td className="font-normal text-[14px] border-gray border border-b-0 border-l-0 border-r-0 py-3 px-4">
-                      {form.serviceRequired?.[0] || "_"}
-                    </td>
+             <tbody>
+  {currentForms.map((client, index) => (
+    <tr key={`${client.intakeId}-${index}`} className="h-[65px]">
+      <td className="font-normal text-[14px] border-gray border border-l-0 border-b-0 border-r-0 py-3 px-4 text-light-green truncate max-w-[249px]">
+        {client.clientName || "_"}
+      </td>
+      <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4">
+        {client.clientCode || "_"}
+      </td>
+      <td className="font-normal text-[14px] border-gray border border-b-0 border-l-0 border-r-0 py-3 px-4">
+        {client.serviceRequired || "_"}
+      </td>
+      <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4">
+        {client.dob || "_"}
+      </td>
+      <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4 truncate max-w-[249px]">
+        {client.address || "_"}
+      </td>
+      <td className="font-normal text-[14px] border-gray border border-b-0 border-r-0 border-l-0 py-3 px-4">
+  <div
+    className="flex gap-[8px] justify-center text-dark-green cursor-pointer hover:underline"
+    onClick={() => handleViewIntakeForm(client.intakeId)}
+  >
+    View Intake Form
+  </div>
+</td>
 
-                    <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4">
-                      {form.inTakeClients?.[0]?.dob || "_"}
-                    </td>
+    </tr>
+  ))}
+</tbody>
 
-                    <td className="font-normal text-[14px] border-gray border border-r-0 border-l-0 border-b-0 py-3 px-4 truncate max-w-[249px]">
-                      {form.inTakeClients?.[0]?.address || "_"}
-                    </td>
-                    <td className="font-normal text-[14px] border-gray border border-b-0 border-r-0 border-l-0 py-3 px-4">
-                      <div className="flex gap-[8px] justify-center text-dark-green">
-                        View Intake Form
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
             </table>
           </div>
 

@@ -7,12 +7,13 @@ import { db, storage } from "../firebase";
 import { FaRegUserCircle, FaChevronDown } from "react-icons/fa";
 import SuccessSlider from "./SuccessSlider";
 import { sendNotification } from "../utils/notificationHelper";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 
 const AddAgency = ({  mode = "add", user }) => {
 
  const{id}=useParams();
+ const navigate=useNavigate();
 
   const [slider, setSlider] = useState({
     show: false,
@@ -534,6 +535,7 @@ const handleSubmit = async (values, { resetForm }) => {
         viewText={slider.viewText}
         onView={() => {
           if (createdAgency) setInitialValues(createdAgency);
+          navigate("/admin-dashboard/agency")
           setSlider({ ...slider, show: false });
         }}
         onDismiss={() => setSlider({ ...slider, show: false })}

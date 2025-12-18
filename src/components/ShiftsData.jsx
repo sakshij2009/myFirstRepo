@@ -68,6 +68,23 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     }
   };
 
+  const formatDate = (timestamp) => {
+  if (!timestamp) return "-";
+
+  // Firebase Timestamp support
+  const date =
+    typeof timestamp?.toDate === "function"
+      ? timestamp.toDate()
+      : new Date(timestamp);
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+
  
 
 
@@ -159,6 +176,17 @@ const ShiftsData = ({ filteredShifts = [] }) => {
 
                   {/* Shift info */}
                   <div className="flex flex-row gap-[24px] justify-end">
+                    <div>
+                      <p className="font-normal text-[14px] leading-[20px]">Shift Date</p>
+                      <p
+                        className="font-bold text-[14px] leading-[20px] truncate"
+                        title={formatDate(shift.startDate)}
+                      >
+                        {formatDate(shift.startDate)}
+                      </p>
+                    </div>
+
+
                     <div className="w-[120px]">
                       <p className="font-normal text-[14px] leading-[20px]">
                         Assign Caregiver
@@ -191,12 +219,12 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                       <span className={getStatusStyles(status)}>{status}</span>
                     </div>
 
-                    <div className="w-[50px]">
+                    {/* <div className="w-[50px]">
                       <p className="font-normal text-[14px] leading-[20px]">Staff ID</p>
                       <p className="font-bold text-[14px] leading-[20px]">
                         {shift.userId || "-"}
                       </p>
-                    </div>
+                    </div> */}
 
                     <div className="w-[90px]">
                       <p className="flex font-normal text-[14px] leading-[20px]">Shift</p>
@@ -227,7 +255,14 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                     <p>View Intake Form</p>
                   </div>
 
-                  <div className="flex">
+                  <div className="flex gap-4">
+
+                    
+                    <div className="flex gap-1 text-light-black">
+                      <p className="font-bold">Shift Timeline:</p>
+                      <p>{shift.startTime}-{shift.endTime}</p>
+                    </div>
+
                     {/* 🔒 SHIFT LOCK TOGGLE WITH SAFE STATE */}
                   <ShiftLockToggle
                     shiftId={shift.id}
@@ -235,19 +270,31 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                     className={""}
                   />
 
+                  
+
                     {/* View Report */}
-                    <div
-                      className={`px-3 font-medium ${
-                        isCompleted ? "text-light-green cursor-pointer" : "text-[#72787E] cursor-not-allowed"
-                      }`}
-                       onClick={() => isCompleted && handleViewReport(shift.id)}
-                    >
-                      View Report
-                    </div>
+                    {/* View Report */}
+                  <div
+                    className={` font-medium ${
+                      shift.shiftConfirmed
+                        ? "text-light-green cursor-pointer"
+                        : "text-[#72787E] cursor-not-allowed"
+                    }`}
+                    onClick={() => {
+                      if (!shift.shiftConfirmed) {
+                        alert("This staff hasn’t confirmed the shift yet. Report cannot be viewed.");
+                        return;
+                      }
+                      handleViewReport(shift.id);
+                    }}
+                  >
+                    View Report
+                  </div>
+
 
                     {/* Download Report */}
                     <div
-                      className={`px-3 font-medium ${
+                      className={` font-medium ${
                         isCompleted ? "text-light-green cursor-pointer" : "text-[#72787E] cursor-not-allowed"
                       }`}
                       onClick={() => isCompleted &&  generateShiftReportPDF(shift)}
@@ -257,7 +304,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
 
                     {/* Edit Shift */}
                     <div
-                      className={"pl-3 font-medium cursor-pointer text-light-green "}
+                      className={" font-medium cursor-pointer text-light-green "}
                       onClick={() => handleEditShift(shift.id)
                       }
                     >

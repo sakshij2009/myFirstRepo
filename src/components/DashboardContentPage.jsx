@@ -10,12 +10,15 @@ import { FaPlus } from "react-icons/fa6";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TransportationShiftsData from "./TransportationShiftsData";
 
-const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails }) => {
+const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails,initialShiftCategory }) => {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
   const [shiftStatus, setShiftStatus] = useState("");
-  const [shiftCategory, setShiftCategory] = useState("");
+  const [shiftCategory, setShiftCategory] = useState(
+  initialShiftCategory || ""
+);
+
   const [statusOpen, setStatusOpen] = useState(false);
   const [selectedDates, setSelectedDates] = useState([new Date()]);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -24,6 +27,18 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
   const [showModal, setShowModal] = useState(false);
 
   const statusOptions = ["All", "InProgress", "Completed", "Incomplete"];
+
+
+//  useEffect(() => {
+//   if (
+//     initialShiftCategory &&
+//     categories.some(c => c.name === initialShiftCategory)
+//   ) {
+//     setShiftCategory(initialShiftCategory);
+//   }
+// }, [initialShiftCategory, categories]);
+
+
 
   // Fetch shifts
   useEffect(() => {
@@ -200,31 +215,39 @@ try {
 
 
   // Fetch shift categories
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "shiftCategories"));
-        let categoryList = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+useEffect(() => {
+  const fetchCategories = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "shiftCategories"));
 
-        categoryList = categoryList.filter(
-          (cat) =>
-            cat.name !== "Supervised Visitation + Transportation" &&
-            cat.name !== "Shadow Shift" &&
-            cat.name !== "Administration"
-        );
+      let categoryList = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-        setCategories(categoryList);
-        if (categoryList.length > 0) setShiftCategory(categoryList[0].name);
-      } catch (error) {
-        console.error("Error fetching shift categories:", error);
-      }
-    };
+      categoryList = categoryList.filter(
+        (cat) =>
+          cat.name !== "Supervised Visitation + Transportation" &&
+          cat.name !== "Shadow Shift" &&
+          cat.name !== "Administration"
+      );
 
-    fetchCategories();
-  }, []);
+      setCategories(categoryList);
+
+      // ✅ set default ONLY if navigation did not provide category
+     if (!initialShiftCategory && !shiftCategory && categoryList.length > 0) {
+  setShiftCategory(categoryList[0].name);
+}
+
+    } catch (error) {
+      console.error("Error fetching shift categories:", error);
+    }
+  };
+
+  fetchCategories();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+ 
 
   // Calendar formatting
   const formatDDMMYYYY = (date) => {

@@ -5,11 +5,10 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-const MedicationPage = ({ shiftData }) => {
+const MedicationPage = ({ shiftData,user }) => {
   const today = new Date();
 
   const [currentDate, setCurrentDate] = useState({
@@ -20,82 +19,152 @@ const MedicationPage = ({ shiftData }) => {
   const [medications, setMedications] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
-  const [editIndex, setEditIndex] = useState(null);
-
-  const [formData, setFormData] = useState({
-    medicineName: "",
-    dosage: "",
-    time: "",
-    color: "Yellow",
-    cautions: "",
-    reason: "",
-  });
+  const [selectedTime, setSelectedTime] = useState(null);
+  const [witnessName, setWitnessName] = useState("");
+  const [timeBasedMeds, setTimeBasedMeds] = useState([]);
 
   const [healthcareNumber, setHealthcareNumber] = useState("");
+  const [pharmacyInfo, setPharmacyInfo] = useState(null);
+  const [clientMedications, setClientMedications] = useState([]);
 
-  // 🔹 Fetch healthcare number
+  const staffName = shiftData?.name || shiftData?.user || "Unknown Staff";
+
   useEffect(() => {
-    const fetchHealthcareNumber = async () => {
-      if (!shiftData?.name) return;
+    const fetchClientMedicationData = async () => {
+      const clientId=shiftData?.clientId || shiftData?.clientDetails.id;
+      if (!clientId) return;
       try {
-        const intakeFormsRef = collection(db, "InTakeForms");
-        const snapshot = await getDocs(intakeFormsRef);
+        const clientRef = doc(db, "clients", clientId);
+        const clientSnap = await getDoc(clientRef);
 
-        let foundNumber = null;
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const clients = data.inTakeClients || [];
-          const matchedClient = clients.find(
-            (c) =>
-              c.name && c.name.toLowerCase() === shiftData.name.toLowerCase()
-          );
-          if (matchedClient) {
-            foundNumber = matchedClient.healthCareNumber || "";
+        if (clientSnap.exists()) {
+          const clientData = clientSnap.data();
+          if (clientData.pharmacy) setPharmacyInfo(clientData.pharmacy);
+          if (Array.isArray(clientData.medications)) {
+            setClientMedications(clientData.medications);
           }
-        });
-
-        setHealthcareNumber(foundNumber || "");
-      } catch (err) {
-        console.error("Error fetching healthcare number:", err);
+        }
+      } catch (error) {
+        console.error("Error fetching client medications:", error);
       }
     };
 
-    fetchHealthcareNumber();
-  }, [shiftData?.name]);
+    fetchClientMedicationData();
+  }, [shiftData?.clientId || shiftData?.clientDetails.id]);
+
+  useEffect(() => {
+  const fetchHealthcareNumber = async () => {
+    if (!shiftData?.clientName && !shiftData?.clientDetails.name) return;
+
+    const targetName = (
+      shiftData.clientName || shiftData?.clientDetails.name
+    )?.trim().toLowerCase();
+
+    if (!targetName) return;
+
+    try {
+      const snapshot = await getDocs(collection(db, "InTakeForms"));
+      let found = null;
+
+      snapshot.forEach((docSnap) => {
+        if (found) return;
+
+        const data = docSnap.data();
+
+        /* ----------------------------------
+           1️⃣ NEW FORMAT — medicalInfoList
+        ---------------------------------- */
+        if (Array.isArray(data.medicalInfoList)) {
+          const match = data.medicalInfoList.find(
+            (m) =>
+              m.clientName?.trim().toLowerCase() === targetName &&
+              m.healthCareNo
+          );
+
+          if (match?.healthCareNo) {
+            found = match.healthCareNo;
+            return;
+          }
+        }
+
+        /* ----------------------------------
+           2️⃣ NEW FORMAT — clients MAP
+        ---------------------------------- */
+        if (data.clients && typeof data.clients === "object") {
+          Object.values(data.clients).forEach((c) => {
+            if (found) return;
+
+            const name =
+              c.fullName || c.name || "";
+
+            if (
+              name.trim().toLowerCase() === targetName &&
+              c.healthCareNo
+            ) {
+              found = c.healthCareNo;
+            }
+          });
+        }
+
+        /* ----------------------------------
+           3️⃣ OLD FORMAT — inTakeClients ARRAY
+        ---------------------------------- */
+        if (Array.isArray(data.inTakeClients)) {
+          const match = data.inTakeClients.find(
+            (c) =>
+              c.name?.trim().toLowerCase() === targetName &&
+              c.healthCareNumber
+          );
+
+          if (match?.healthCareNumber) {
+            found = match.healthCareNumber;
+            return;
+          }
+        }
+
+        /* ----------------------------------
+           4️⃣ VERY OLD ROOT FIELDS (fallback)
+        ---------------------------------- */
+        if (
+          data.clientName?.trim().toLowerCase() === targetName &&
+          data.healthCareNumber
+        ) {
+          found = data.healthCareNumber;
+        }
+      });
+
+      setHealthcareNumber(found || "Not Available");
+    } catch (err) {
+      console.error("Error fetching healthcare number:", err);
+      setHealthcareNumber("Error Loading");
+    }
+  };
+
+  fetchHealthcareNumber();
+}, [shiftData?.clientName, shiftData?.name]);
 
 
-   useEffect(() => {
+  useEffect(() => {
     const fetchMedications = async () => {
       if (!shiftData?.clientId) return;
-
       try {
         const docRef = doc(db, "medicationRecords", shiftData.clientId);
         const docSnap = await getDoc(docRef);
-
+        const monthKey = `${currentDate.year}-${String(currentDate.month + 1).padStart(2, "0")}`;
         if (docSnap.exists()) {
           const data = docSnap.data();
-          const monthKey = `${currentDate.year}-${String(
-            currentDate.month + 1
-          ).padStart(2, "0")}`;
           if (data.records && data.records[monthKey]) {
             setMedications(data.records[monthKey]);
-          } else {
-            setMedications({});
           }
-        } else {
-          setMedications({});
         }
       } catch (err) {
         console.error("Error loading medication data:", err);
-      } finally {
-        setLoading(false);
       }
     };
-
     fetchMedications();
   }, [shiftData?.clientId, currentDate]);
 
-  // Calendar helpers
+  // Helper functions for calendar
   const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const getDaysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
   const getFirstDayOfMonth = (m, y) => {
@@ -105,7 +174,6 @@ const MedicationPage = ({ shiftData }) => {
   const daysInMonth = getDaysInMonth(currentDate.month, currentDate.year);
   const firstDayIndex = getFirstDayOfMonth(currentDate.month, currentDate.year);
 
-  // Month navigation
   const handlePrevMonth = () =>
     setCurrentDate((p) =>
       p.month === 0
@@ -128,62 +196,79 @@ const MedicationPage = ({ shiftData }) => {
   const isTodayOrPast = (day) =>
     new Date(currentDate.year, currentDate.month, day) <= today;
 
-  // 🔹 Open modal for new or edit
-  const handleAddClick = (day) => {
+  // 🕒 Parse and collect unique times from comma-separated strings
+  const uniqueTimes = Array.from(
+    new Set(
+      clientMedications
+        .flatMap((m) =>
+          (m.timing || "")
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        )
+    )
+  );
+
+  // 🎨 Color code helper
+  const getTimeColor = (time) => {
+    const lower = time.toLowerCase();
+    if (lower.includes("a.m") || lower.includes("am")) return "bg-yellow-100 border-yellow-400 text-yellow-800"; // Morning
+    if (lower.includes("p.m") || lower.includes("pm")) {
+      const hour = parseInt(time);
+      if (hour >= 6 && hour < 12) return "bg-purple-100 border-purple-400 text-purple-800"; // Night (6–11 p.m.)
+      return "bg-blue-100 border-blue-400 text-blue-800"; // Afternoon
+    }
+    return "bg-gray-100 border-gray-300 text-gray-800";
+  };
+
+  // 🩺 Handle clicking a time on a day cell
+  const handleTimeClick = (day, time) => {
+    // find all meds that include this time in their timing string
+    const medsAtThisTime = clientMedications.filter((m) =>
+      (m.timing || "")
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .includes(time.trim().toLowerCase())
+    );
+
+    setTimeBasedMeds(medsAtThisTime);
     setSelectedDay(day);
-    setFormData({
-      medicineName: "",
-      dosage: "",
-      time: "",
-      color: "Yellow",
-      cautions: "",
-      reason: "",
-    });
-    setEditIndex(null);
+    setSelectedTime(time);
+    setWitnessName("");
     setShowModal(true);
   };
 
-  const handleEditClick = (day, idx) => {
-    const med = medications[day][idx];
-    setFormData(med);
-    setSelectedDay(day);
-    setEditIndex(idx);
-    setShowModal(true);
+  // Toggle medication given
+  const toggleMedGiven = (index) => {
+    setTimeBasedMeds((prev) =>
+      prev.map((m, i) =>
+        i === index ? { ...m, given: !m.given } : m
+      )
+    );
   };
 
-  // 🔹 Add / Update medicine
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.medicineName) return;
+  // Save to Firestore
+  const handleModalSubmit = async () => {
+    if (!selectedDay || !selectedTime) return;
 
-    setMedications((prev) => {
-      const updated = { ...prev };
-      const dayMeds = [...(updated[selectedDay] || [])];
+    const updated = { ...medications };
+    if (!updated[selectedDay]) updated[selectedDay] = {};
+    updated[selectedDay][selectedTime] = timeBasedMeds
+      .filter((m) => m.given)
+      .map((m) => ({
+        medicationName: m.medicationName,
+        dosage: m.dosage,
+        givenBy: staffName,
+        witness: witnessName,
+        given: true,
+      }));
 
-      if (editIndex !== null) {
-        dayMeds[editIndex] = { ...formData };
-      } else {
-        dayMeds.push({ ...formData });
-      }
-
-      updated[selectedDay] = dayMeds;
-      return updated;
-    });
-
+    setMedications(updated);
     setShowModal(false);
+    await handleSaveToFirestore(updated);
   };
 
-  const handleDeleteMedicine = (day, idx) => {
-    setMedications((prev) => {
-      const updated = { ...prev };
-      updated[day] = prev[day].filter((_, i) => i !== idx);
-      if (updated[day].length === 0) delete updated[day];
-      return updated;
-    });
-  };
-
-  // 🔹 Save to Firestore (on final Submit)
-  const handleSaveToFirestore = async () => {
+  const handleSaveToFirestore = async (updatedMeds = medications) => {
     try {
       if (!shiftData?.id || !shiftData?.clientName) {
         alert("Client info missing!");
@@ -199,8 +284,8 @@ const MedicationPage = ({ shiftData }) => {
 
       const existingData = docSnap.exists() ? docSnap.data() : {};
       const updatedRecords = {
-        ...(existingData.records || {}),  
-        [monthKey]: medications,
+        ...(existingData.records || {}),
+        [monthKey]: updatedMeds,
       };
 
       await setDoc(
@@ -235,7 +320,7 @@ const MedicationPage = ({ shiftData }) => {
           <label className=" text-sm leading-[20px] font-semibold">Client Name</label>
           <input
             type="text"
-            value={shiftData.clientName}
+            value={shiftData?.clientDetails?.name || shiftData.clientName}
             placeholder="Please enter the Client Name"
             className="w-full border border-light-gray rounded p-1 placeholder:text-sm"
           />
@@ -246,9 +331,13 @@ const MedicationPage = ({ shiftData }) => {
           </label>
           <input
             type="text"
-            className="w-full border border-light-gray rounded p-1 placeholder:text-sm"
+            value={`${new Date(currentDate.year, currentDate.month).toLocaleString("default", {
+              month: "long",
+            })} / ${currentDate.year}`}
+            className="w-full border border-light-gray rounded p-1 bg-gray-100 text-gray-700 font-medium"
           />
         </div>
+
         <div className="flex flex-col gap-[6px]">
           <label className="text-sm leading-[20px] font-semibold">ACH</label>
           <input
@@ -272,280 +361,199 @@ const MedicationPage = ({ shiftData }) => {
 
       {/* Medication Timing & Type */}
       <div className="flex flex-col gap-4">
-        <h2 className="font-bold text-[20px] leading-[24px] ">
-          Medication Timing & Type
-        </h2>
-        <div className="bg-[#EFF6FF] border border-[#D8E9FF] rounded p-[10px]">
-          <ul className="text-[12px] leading-[14px] text-[#2F5CE9] space-y-3">
-            <li>
-              <strong>Amoxicillin (antibiotic)</strong>
-              <ul className="list-disc ml-5 font-normal">
+  <h2 className="font-bold text-[20px] leading-[24px]">
+    Medication Timing & Type
+  </h2>
+
+  <div className="bg-[#EFF6FF] border border-[#D8E9FF] rounded p-[10px]">
+    {clientMedications && clientMedications.length > 0 ? (
+      <ul className="text-[16px] leading-[14px] text-[#2F5CE9] space-y-3 space-x-3">
+        {clientMedications.map((med, index) => (
+          <li key={index}>
+           <strong>
+              {(med.medicationName
+                ? med.medicationName
+                    .toLowerCase()
+                    .replace(/\b\w/g, (char) => char.toUpperCase())
+                : "Unnamed Medication")}
+            </strong>
+
+            <ul className="list-disc ml-5 font-normal text-[#2F5CE9] text-[14px] mt-1">
+              {med.dosage && (
                 <li>
-                  Weeks 1–2: 500 mg every 8 hours for 7 days; complete full course
-                  even if symptoms improve; take with light food to reduce nausea.
+                  <span className="font-semibold">Dosage:</span> {med.dosage}
                 </li>
-                <li>Timing example: 7:00 AM, 3:00 PM, 11:00 PM</li>
-              </ul>
-            </li>
-            <li>
-              <strong>Atorvastatin (cholesterol)</strong>
-              <ul className="list-disc ml-5 font-normal">
+              )}
+              {med.timing && (
                 <li>
-                  Weeks 1–4: 10 mg daily; take consistently in the evening; monitor
-                  for muscle aches; avoid grapefruit.
+                  <span className="font-semibold">Timing:</span> {med.timing}
                 </li>
-                <li>Timing example: 10:00 PM</li>
-              </ul>
-            </li>
-            <li>
-              <strong>Metformin (type 2 diabetes)</strong>
-              <ul className="list-disc ml-5 font-normal">
+              )}
+              {med.reasonOfMedication && (
                 <li>
-                  Weeks 1–2: 500 mg twice daily with evening meal to reduce GI upset.
+                  <span className="font-semibold">Reason:</span>{" "}
+                  {med.reasonOfMedication}
                 </li>
+              )}
+              {med.cautions && (
                 <li>
-                  Weeks 3–4: 500 mg once daily with breakfast and dinner if tolerated,
-                  per clinician plan.
+                  <span className="font-semibold">Cautions:</span>{" "}
+                  {med.cautions}
                 </li>
-                <li>Timing example: 8:00 AM with breakfast, 8:00 PM with dinner.</li>
-              </ul>
-            </li>
-          </ul>
-        </div>
-      </div>
+              )}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="text-gray-500 text-sm">
+        No medication information available for this client.
+      </p>
+    )}
+  </div>
+</div>
+
 
       <hr className="border-t border-light-gray" />
 
-      {/* Monthly Medication Calendar */}
+       {/* Monthly Medication Calendar */}
       <h2 className="font-bold text-[20px] leading-[24px]">
         Monthly Medication Calendar
       </h2>
-      <div className="mb-6">
-        <div className="border border-light-gray rounded overflow-hidden">
-          {/* Month Header */}
-          <div className="flex justify-between items-center px-4 py-2 border-b border-light-gray">
-            <button
-              onClick={handlePrevMonth}
-              className="px-2 py-1 hover:text-black"
-            >
-              ←
-            </button>
-            <div className="text-center font-semibold text-sm leading-5">
-              {monthName.toUpperCase()} {currentDate.year}
+
+      <div className="border border-light-gray rounded overflow-hidden mb-6">
+        {/* Month Header */}
+        <div className="flex justify-between items-center px-4 py-2 border-b border-light-gray">
+          <button onClick={handlePrevMonth}>←</button>
+          <div className="font-semibold">
+            {monthName.toUpperCase()} {currentDate.year}
+          </div>
+          <button onClick={handleNextMonth}>→</button>
+        </div>
+
+        {/* Weekdays */}
+        <div className="grid grid-cols-7 font-bold text-sm border-b border-light-gray">
+          {weekDays.map((d) => (
+            <div key={d} className="py-2 text-center border-r last:border-0">
+              {d}
             </div>
-            <button
-              onClick={handleNextMonth}
-              className="px-2 py-1 text-gray-600 hover:text-black"
-            >
-              →
-            </button>
-          </div>
+          ))}
+        </div>
 
-          {/* Weekdays */}
-          <div className="grid grid-cols-7 font-bold text-sm leading-5 border-b border-light-gray ">
-            {weekDays.map((day) => (
-              <div key={day} className="border-r last:border-r-0 text-center border-light-gray py-3">
-                {day}
-              </div>
-            ))}
-          </div>
+        {/* Dates */}
+        <div className="grid grid-cols-7 text-center text-sm">
+          {Array.from({ length: firstDayIndex }).map((_, i) => (
+            <div key={`empty-${i}`} className="border-r border-b min-h-[80px]" />
+          ))}
 
-          {/* Dates */}
-          <div className="grid grid-cols-7 text-center text-sm">
-            {Array.from({ length: firstDayIndex }).map((_, i) => (
-              <div key={`empty-${i}`} className="border-r border-b border-light-gray min-h-[80px]" />
-            ))}
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const day = i + 1;
+            const showDay = isTodayOrPast(day);
+            const medsForDay = medications[day] || {};
 
-            {Array.from({ length: daysInMonth }, (_, i) => {
-              const day = i + 1;
-              const showPlus = isTodayOrPast(day);
-               const medsForDay = medications[day] || [];
+            return (
+              <div
+                key={day}
+                className="flex flex-col border-r border-b border-light-gray min-h-[90px] p-1"
+              >
+                <div className="flex justify-between">
+                  <span>{day}</span>
+                </div>
 
-              return (
-                <div
-                  key={day}
-                  className="flex flex-col border-r border-b border-light-gray min-h-[80px] relative p-1"
-                >
-                  <div className="flex flex-col px-2">
-                    <div className="flex justify-between">
-                      <div className="flex text-sm font-normal">{day}</div>
-                      <div className="flex">
-                        {showPlus && (
-                        <button
-                          onClick={() => handleAddClick(day)}
-                          className="flex text-xs font-bold rounded hover:bg-gray-100"
-                        >
-                          +
-                        </button>
-                        )}
-                      </div>
-                    
-                    </div>
-                   
-                    <div className="mt-5 flex flex-col gap-1 items-center">
-                  {medsForDay.map((med, idx) => (
-                    <div
-                      key={idx}
-                      
-                      className="relative flex items-center justify-center gap-1 px-2 py-1 bg-yellow-50 border border-yellow-300 rounded text-xs text-gray-800 w-full text-center"
-                      title="Click to edit"
-                    >
-                      <span className="truncate" onClick={() => handleEditClick(day, idx)}>{med.medicineName}</span>
-                      {/* ❌ Delete button */}
+                <div className="flex flex-wrap gap-1 mt-2 justify-center">
+                  {showDay &&
+                    uniqueTimes.map((time) => (
                       <button
-                        onClick={() => handleDeleteMedicine(day, idx)}
-                        className="absolute top-0 right-1 text-red-500 hover:text-red-700 text-sm font-bold"
-                        title="Remove medicine"
+                        key={time}
+                        onClick={() => handleTimeClick(day, time)}
+                        className={`text-xs border rounded px-2 py-1 hover:opacity-80 ${getTimeColor(
+                          time
+                        )}`}
                       >
-                        ×
+                        {time}
                       </button>
+                    ))}
+                </div>
+
+                <div className="mt-2 flex flex-col gap-1">
+                  {Object.entries(medsForDay).map(([time, meds]) => (
+                    <div key={time} className="text-[10px] text-green-700">
+                      {time}: {meds.map((m) => m.medicationName).join(", ")}
                     </div>
                   ))}
                 </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Modal */}
       {showModal && (
-  <div className="fixed inset-0 flex items-center justify-center z-50  bg-black/40">
-    {/* Modal Container */}
-    <div className="flex flex-col bg-white rounded-lg w-[573px] max-h-[85vh] relative gap-3 text-light-black  overflow-hidden my-6">
-      {/* Header */}
-      <div className="flex justify-between items-center px-5 py-4 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-[24px] leading-[28px]">
-          {editIndex !== null
-                  ? `Edit Medicine - Day ${selectedDay}`
-                  : `Add Medicine - Day ${selectedDay}`}
-        </h2>
-        <button
-          onClick={() => setShowModal(false)}
-          className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
-        >
-          ×
-        </button>
-      </div>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+          <div className="bg-white rounded-lg w-[500px] p-5 flex flex-col gap-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h2 className="font-bold text-lg">
+                Day {selectedDay} - {selectedTime}
+              </h2>
+              <button onClick={() => setShowModal(false)} className="text-xl">
+                ×
+              </button>
+            </div>
 
-      {/* Scrollable Form Area */}
-      <div className="overflow-y-auto px-5 py-3 space-y-4">
-        <div className="text-sm text-[#2F5CE9] border border-[#D8E9FF] p-[10px] rounded">
-          This entry records medicines for Day-{selectedDay} and will be visible to the supervisor and the assigned staff member; verify details before submitting.
+            <div className="space-y-3">
+              {timeBasedMeds.map((med, i) => (
+                <label key={i} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!med.given}
+                    onChange={() => toggleMedGiven(i)}
+                  />
+                  <span>
+                    {med.medicationName} ({med.dosage})
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold">Staff Name</label>
+              <input
+                type="text"
+                value={staffName}
+                readOnly
+                className="border rounded w-full p-2 bg-gray-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold">Witness Name</label>
+              <input
+                type="text"
+                value={witnessName}
+                onChange={(e) => setWitnessName(e.target.value)}
+                className="border rounded w-full p-2"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-3">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleModalSubmit}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Medicine Name */}
-          <div>
-            <label className="text-sm font-semibold">Medicine Name</label>
-            <input
-              type="text"
-              value={formData.medicineName}
-              onChange={(e) =>
-                setFormData({ ...formData, medicineName: e.target.value })
-              }
-              placeholder="Enter Medicine Name"
-              className="w-full border border-gray-300 rounded p-2"
-            />
-          </div>
-
-          {/* Dosage */}
-          <div>
-            <label className="text-sm font-semibold">Dosage</label>
-            <input
-              type="text"
-              value={formData.dosage}
-              onChange={(e) =>
-                setFormData({ ...formData, dosage: e.target.value })
-              }
-              placeholder="e.g., 500mg, 2 tablets"
-              className="w-full border border-gray-300 rounded p-2"
-            />
-          </div>
-
-          {/* Time */}
-          <div>
-            <label className="text-sm font-semibold">Time</label>
-            <input
-              type="time"
-              value={formData.time}
-              onChange={(e) =>
-                setFormData({ ...formData, time: e.target.value })
-              }
-              className="w-full border border-gray-300 rounded p-2"
-            />
-          </div>
-
-          {/* Color */}
-          <div>
-            <label className="text-sm font-semibold">Color</label>
-            <select
-              value={formData.color}
-              onChange={(e) =>
-                setFormData({ ...formData, color: e.target.value })
-              }
-              className="w-full border border-gray-300 rounded p-2"
-            >
-              <option>Yellow</option>
-              <option>Blue</option>
-              <option>Green</option>
-              <option>Red</option>
-            </select>
-          </div>
-
-          {/* Cautions */}
-          <div>
-            <label className="text-sm font-semibold">Cautions</label>
-            <input
-              type="text"
-              value={formData.cautions}
-              onChange={(e) =>
-                setFormData({ ...formData, cautions: e.target.value })
-              }
-              placeholder="Enter any cautions"
-              className="w-full border border-gray-300 rounded p-2"
-            />
-          </div>
-
-          {/* Reason */}
-          <div>
-            <label className="text-sm font-semibold">
-              Reason for Medicines
-            </label>
-            <textarea
-              value={formData.reason}
-              onChange={(e) =>
-                setFormData({ ...formData, reason: e.target.value })
-              }
-              placeholder="Please provide a detailed reason..."
-              className="w-full border border-gray-300 rounded p-2 h-28 resize-none"
-            />
-          </div>
-        </form>
-      </div>
-
-      {/* Footer Buttons (Sticky) */}
-      <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-white sticky bottom-0">
-        <button
-          type="button"
-          onClick={() => setShowModal(false)}
-          className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          onClick={handleSubmit}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-        >
-          Submit
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
+    
 
 
       {/* Footer Sections */}
@@ -565,12 +573,17 @@ const MedicationPage = ({ shiftData }) => {
 
         <div className="border rounded-md p-4">
           <h3 className="font-bold mb-2">Pharmacy Information</h3>
+          {pharmacyInfo ? 
           <p className="text-sm leading-6">
-            <strong>Name:</strong> Dr. Tony Wales <br />
-            <strong>Email:</strong> tonywales21@gmail.com <br />
-            <strong>Number:</strong> +61-5644327891 <br />
-            <strong>Address:</strong> 123, ABC Park
-          </p>
+            <strong>Name:</strong> {pharmacyInfo.pharmacyName || "N/A"} <br />
+            <strong>Email:</strong>  {pharmacyInfo.pharmacyEmail || "N/A"}<br />
+            <strong>Number:</strong> {pharmacyInfo.pharmacyPhone || "N/A"} <br />
+            <strong>Address:</strong> {pharmacyInfo.pharmacyAddress || "N/A"}
+          </p> :
+          <p className="text-gray-500 text-sm">No pharmacy information found.</p>
+          
+        } 
+          
         </div>
 
         <div className="border rounded-md p-4">
@@ -591,15 +604,15 @@ const MedicationPage = ({ shiftData }) => {
       </div>
 
       {/* Buttons */}
+      {user?.role == "admin" ? 
       <div className="flex justify-end gap-3 mt-6">
         <button className="bg-gray-200 text-gray-700 font-semibold px-6 py-2 rounded hover:bg-gray-300">
           Export
         </button>
-        <button className="bg-green-600 text-white font-semibold px-6 py-2 rounded hover:bg-green-700" 
-         onClick={handleSaveToFirestore}>
-          Submit
-        </button>
-      </div>
+       
+      </div> :
+      <div></div>
+      }
     </div>
   );
 };

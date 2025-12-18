@@ -56,7 +56,7 @@ const AdminHomePage = ({ user ,setUser}) => {
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
 
             {/* ✅ Adding Page (Route-based Forms) */}
-            <Route path="add" element={<AddingPage />}>
+            <Route path="add" element={<AddingPage  user={user}/>}>
               <Route path="add-user" element={<AddUserForm mode="add" user={user}/>} />
               <Route path="update-user/:id" element={<AddUserForm mode="update" user={user}/>} />
               <Route path="add-user-shift" element={<AddUserShift mode="add" user={user}/>} />

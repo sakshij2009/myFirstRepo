@@ -38,6 +38,11 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
     startIndex + ITEMS_PER_PAGE
   );
 
+   const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+
   const getFlag = (shift, key) => {
     if (shift.transportation && key in shift.transportation) {
       return !!shift.transportation[key];
@@ -333,9 +338,9 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
                   className={`${
                     isCompleted
                       ? "cursor-pointer text-light-green"
-                      : "cursor-not-allowed text-gray-400"
+                      : "cursor-pointer text-gray-400"
                   }`}
-                  onClick={() => isCompleted && handleViewReport(shift.id)}
+                  onClick={() => handleViewReport(shift.id)}
                 >
                   View Report
                 </div>
@@ -365,6 +370,55 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
           </div>
         );
       })}
+
+       {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-end items-center gap-1 py-[10px] px-4 rounded">
+          <button
+            onClick={() => goToPage(1)}
+            disabled={currentPage === 1}
+            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+          >
+            «
+          </button>
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+          >
+            ‹
+          </button>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))
+            .map((page) => (
+              <button
+                key={page}
+                onClick={() => goToPage(page)}
+                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
+                  currentPage === page ? "bg-light-green text-white" : "bg-white"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+          >
+            ›
+          </button>
+          <button
+            onClick={() => goToPage(totalPages)}
+            disabled={currentPage === totalPages}
+            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+          >
+            »
+          </button>
+        </div>
+      )}
     </div>
   );
 };

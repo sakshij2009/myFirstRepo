@@ -12,6 +12,7 @@ import {
   where,
   Timestamp,
   setDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { FaChevronDown } from "react-icons/fa";
@@ -20,6 +21,8 @@ import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap } from "react-icons/fa";
 import { FaRegCalendarAlt } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+
 
 
 // multi-date calendar
@@ -110,11 +113,15 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [selectedShiftCategory, setSelectedShiftCategory] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);   
 
+  const navigate = useNavigate();
+
+
 
   const [slider, setSlider] = useState({
     show: false,
     title: "",
     subtitle: "",
+    redirectTo:"",
   });
   const [createdShift, setCreatedShift] = useState(null);
 
@@ -176,21 +183,29 @@ const AddUserShift = ({ mode = "add", user }) => {
 
   // ---------------- DATE HELPERS ----------------
   const formatDateFromFirestore = (dateValue) => {
-    if (!dateValue) return "";
+  if (!dateValue) return "";
 
-    if (dateValue.toDate) {
-      return dateValue.toDate().toISOString().split("T")[0];
+  if (dateValue.toDate) {
+    const d = dateValue.toDate();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof dateValue === "string") {
+    const parsed = new Date(dateValue);
+    if (!isNaN(parsed)) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, "0");
+      const day = String(parsed.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     }
+  }
 
-    if (typeof dateValue === "string") {
-      const parsed = new Date(dateValue);
-      if (!isNaN(parsed)) {
-        return parsed.toISOString().split("T")[0];
-      }
-    }
+  return "";
+};
 
-    return "";
-  };
 
   const normalizeDate = (input) => {
     if (input instanceof Date) return input;
@@ -298,63 +313,52 @@ const AddUserShift = ({ mode = "add", user }) => {
         // ✅ Handle all shift point schema versions (old + new)
         let points = [];
 
-        const fromClient =
-          Array.isArray(data.clientDetails?.shiftPoints) &&
-          data.clientDetails.shiftPoints.length > 0
-            ? data.clientDetails.shiftPoints
-            : [];
+if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
+  points = data.shiftPoints.map((p) => ({
+    pickupLocation: p.pickupLocation || "",
+    pickupTime: p.pickupTime || "",
+    pickupLatitude: p.pickupLatitude || 0,
+    pickupLongitude: p.pickupLongitude || 0,
 
-        const fromRoot =
-          Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0
-            ? data.shiftPoints
-            : [];
+    visitLocation: p.visitLocation || "",
+    visitStartTime: p.visitStartTime || "",
+    visitEndTime: p.visitEndTime || "",
+    visitLatitude: p.visitLatitude || 0,
+    visitLongitude: p.visitLongitude || 0,
 
-        const hasFlatFields =
-          data.pickupLocation || data.dropLocation || data.seatType;
+    dropLocation: p.dropLocation || "",
+    dropTime: p.dropTime || "",
+    dropLatitude: p.dropLatitude || 0,
+    dropLongitude: p.dropLongitude || 0,
 
-        if (fromClient.length > 0) {
-          points = fromClient.map((p) => ({
-            ...p,
-            totalKilometers: p.totalKilometers ?? data.totalKilometers ?? 0,
-          }));
-        } else if (fromRoot.length > 0) {
-          points = fromRoot.map((p) => ({
-            ...p,
-            totalKilometers: p.totalKilometers ?? data.totalKilometers ?? 0,
-          }));
-        } else if (hasFlatFields) {
-          points = [
-            {
-              pickupLocation: data.pickupLocation || "",
-              pickupTime: data.pickupTime || "",
-              visitLocation: data.visitLocation || "",
-              visitStartTime: data.visitStartTime || "",
-              visitEndTime: data.visitEndTime || "",
-              dropLocation: data.dropLocation || "",
-              dropTime: data.dropTime || "",
-              seatType: data.seatType || "",
-              transportationMode: data.transportationMode || "",
-              totalKilometers: data.totalKilometers ?? 0,
-            },
-          ];
-        } else {
-          points = [
-            {
-              pickupLocation: "",
-              pickupTime: "",
-              visitLocation: "",
-              visitStartTime: "",
-              visitEndTime: "",
-              dropLocation: "",
-              dropTime: "",
-              seatType: "",
-              transportationMode: "",
-              totalKilometers: data.totalKilometers ?? 0,
-            },
-          ];
-        }
+    seatType: p.seatType || "",
+    transportationMode: p.transportationMode || "",
 
-        setShiftPoints(points);
+    // ✅ THIS IS THE KEY FIX
+    totalKilometers:
+      p.totalKilometers !== undefined && p.totalKilometers !== null
+        ? Number(p.totalKilometers)
+        : 0,
+  }));
+} else {
+  points = [
+    {
+      pickupLocation: "",
+      pickupTime: "",
+      visitLocation: "",
+      visitStartTime: "",
+      visitEndTime: "",
+      dropLocation: "",
+      dropTime: "",
+      seatType: "",
+      transportationMode: "",
+      totalKilometers: 0,
+    },
+  ];
+}
+
+setShiftPoints(points);
+
 
         // ✅ Prefill all fields
         setInitialValues((prev) => ({
@@ -408,9 +412,14 @@ const AddUserShift = ({ mode = "add", user }) => {
       }
 
       // If we are editing an existing shift that already has shiftPoints, don't override
-      if (mode === "update" && shiftPoints.length > 0) {
-        return;
-      }
+    if (
+  mode === "update" &&
+  Array.isArray(shiftPoints) &&
+  shiftPoints.some(p => p.totalKilometers !== undefined)
+) {
+  return;
+}
+
 
       try {
         const clientNameCandidate =
@@ -539,25 +548,32 @@ const handleSubmit = async (values, { resetForm }) => {
         let endDateObj = new Date(primaryDate);
         if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-        await updateDoc(docRef, {
-          ...restValues,
-          startDate: Timestamp.fromDate(primaryDate),
-          endDate: Timestamp.fromDate(endDateObj),
-          clientDetails: selectedClient,
-          updatedAt: new Date(),
-          totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
-          shiftPoints: [finalPoint],
-          clockIn: "",
-          clockOut: "",
-          isRatified: false,
-          isCancelled: false,
-          dateKey: primaryDate.toISOString().split("T")[0],
-        });
+        // ✅ Ensure totalKilometers lives inside shiftPoints only
+const pointWithKM = {
+  ...finalPoint,
+  totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
+};
+
+await updateDoc(docRef, {
+  ...restValues,
+  startDate: Timestamp.fromDate(primaryDate),
+  endDate: Timestamp.fromDate(endDateObj),
+  clientDetails: selectedClient,
+  updatedAt: new Date(),
+  shiftPoints: [pointWithKM], // ✅ Only inside shiftPoints
+  clockIn: "",
+  clockOut: "",
+  isRatified: false,
+  isCancelled: false,
+  dateKey: primaryDate.toISOString().split("T")[0],
+});
+
 
         setSlider({
           show: true,
           title: "Shift Updated Successfully!",
           subtitle: `${selectedClient?.name || ""} on ${primaryDate.toDateString()} at ${values.startTime}`,
+          redirectTo: "/admin-dashboard/dashboard",
         });
       }
       return;
@@ -572,25 +588,30 @@ const handleSubmit = async (values, { resetForm }) => {
       let endDateObj = new Date(startDateObj);
       if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-      await setDoc(doc(db, "shifts", newShiftId), {
-          ...values,
-          startDate: startDateObj,
-          endDate: endDateObj,
-          clientDetails: selectedClient,
-          createdAt: new Date(),
-          shiftReport: "",
-          shiftConfirmed: false,
-          // status: "Pending",
-          id: newShiftId,
-          totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
+     // ✅ Ensure totalKilometers lives inside the shift point itself
+const pointWithKM = {
+  ...finalPoint,
+  totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
+};
 
-          // ✅ New fields
-          clockIn: "",
-          clockOut: "",
-          isRatify: false,
-          isCancelled: false,
-          // dateKey: startDateObj.toISOString().split("T")[0],
-        });
+await setDoc(doc(db, "shifts", newShiftId), {
+  ...values,
+   userId:selectedUser?.userId ,
+  userName: selectedUser?.name || "",
+  startDate: startDateObj,
+  endDate: endDateObj,
+  clientDetails: selectedClient,
+  createdAt: new Date(),
+  shiftReport: "",
+  shiftConfirmed: false,
+  id: newShiftId,
+  shiftPoints: [pointWithKM], // ✅ stored here
+  clockIn: "",
+  clockOut: "",
+  isRatify: false,
+  isCancelled: false,
+});
+
 
       // ✅ SEND ADMIN NOTIFICATION
       const adminQuery = query(collection(db, "users"), where("role", "==", "admin"));
@@ -635,6 +656,7 @@ const handleSubmit = async (values, { resetForm }) => {
       show: true,
       title: "Shifts Created Successfully!",
       subtitle: `${selectedClient?.name || ""} – ${selectedDates.length} day(s) starting ${firstDate.toDateString()} at ${values.startTime}`,
+      redirectTo: "/admin-dashboard/dashboard",
     });
 
     setCreatedShift(values);
@@ -667,9 +689,31 @@ const handleCalculateKilometers = async (shiftPoint) => {
   // ---------------- RENDER ----------------
   return (
     <div className="flex flex-col gap-4">
-      <p className="font-bold text-2xl leading-7 text-light-black">
+      <div className="flex justify-between">
+        <p className="font-bold text-2xl leading-7 text-light-black flex">
         {mode === "update" ? "Update Shift" : "Add Shift"}
       </p>
+       {mode === "update" && (
+    <button
+      onClick={async () => {
+        if (window.confirm("Are you sure you want to delete this shift?")) {
+          try {
+            await deleteDoc(doc(db, "shifts", id));
+            alert("Shift deleted successfully!");
+            window.history.back(); // navigate back after delete
+          } catch (err) {
+            console.error("Error deleting shift:", err);
+            alert("Failed to delete shift. Please try again.");
+          }
+        }
+      }}
+      className="bg-[#C70036] text-white px-4 py-2 rounded hover:bg-[#A0002C] transition flex"
+    >
+      Delete Shift
+    </button>
+  )}
+      </div>
+      
       <hr className="border-t border-gray" />
 
       <Formik
@@ -692,9 +736,10 @@ const handleCalculateKilometers = async (shiftPoint) => {
             );
             setSelectedShiftType(shiftTypeData || null);
 
-            const shiftCategoryData = shiftCategories.find(
-              (s) => s.id === values.shiftCategory
+           const shiftCategoryData = shiftCategories.find(
+              (s) => s.name === values.shiftCategory
             );
+
             setSelectedShiftCategory(shiftCategoryData || null);
           }, [
             values.client,
@@ -1512,7 +1557,13 @@ const handleCalculateKilometers = async (shiftPoint) => {
         title={slider.title}
         subtitle={slider.subtitle}
         viewText="View Shift"
-        onView={() => setSlider({ ...slider, show: false })}
+        onView={() => {
+            navigate("/admin-dashboard/dashboard", {
+              state: { shiftCategory: selectedShiftCategory?.name }
+            });
+          setSlider({ ...slider, show: false });
+          
+        }}
         onDismiss={() => setSlider({ ...slider, show: false })}
       />
     </div>

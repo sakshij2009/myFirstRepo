@@ -20,7 +20,7 @@ const ManageIntakeForms = () => {
   const navigate = useNavigate();
 
   const formTypeOptions = ["All", "Parent Form", "Intake Worker Form"];
-  const statusOptions = ["All", "Pending", "Submitted", "Accepted", "Rejected"];
+  const statusOptions = ["All", "Submitted", "Accepted", "Rejected"];
 
   // =======================
 // 📌 FETCH FORMS (OLD + NEW)
@@ -34,7 +34,7 @@ useEffect(() => {
 
         const normalized = {
           id: d.id,
-          formId: data.formId || data.id || "N/A",
+          formId:d.id || "N/A",
           formType:
             data.formType || (data.inTakeWorkerName ? "Intake Worker" : "Private "),
           filledBy:
@@ -42,17 +42,23 @@ useEffect(() => {
             data.inTakeWorkerName ||
             data.nameOfPerson ||
             data.parentName ||
+            data.workerInfo?.workerName ||
             "Unknown",
-          clients:
-            data.clients?.client1?.fullName
-              ? [data.clients.client1.fullName]
-              : Array.isArray(data.inTakeClients)
-              ? data.inTakeClients.map((c) => c.name)
-              : Array.isArray(data.clients)
-              ? data.clients
-              : [data.nameInClientTable || "—"],
+              clients: Array.isArray(data.inTakeClients)
+      ? data.inTakeClients.map((c) => c.name).filter(Boolean)
+
+      : data.clients && typeof data.clients === "object"
+      ? Object.values(data.clients)
+          .map((c) => c.fullName)
+          .filter(Boolean)
+
+      : data.nameInClientTable
+      ? [data.nameInClientTable]
+
+      : ["—"],
+
           submittedOn:
-            data.submittedOn || data.createDate || data.date || data.dateOfInTake || "—",
+            data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || "—",
           status: data.status || "Pending",
           isEditable: data.isEditable || false,
         };

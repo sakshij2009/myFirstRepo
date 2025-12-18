@@ -28,7 +28,25 @@ const AddTransportation = ({ shiftId, shiftData }) => {
 
   const fileInputRef = useRef(null);
   const isTransportation =
-    shiftData?.categoryName?.toLowerCase() === "transportation";
+    shiftData?.categoryName?.toLowerCase() === "transportation" || shiftData?.shiftCategory?.toLowerCase() === "transportation";
+
+
+    const renderDate = (value) => {
+  if (!value) return "—";
+
+  if (value?.toDate) {
+    return value.toDate().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  if (typeof value === "string") return value;
+
+  return "—";
+};
+
 
   // Prefill data for Transportation shifts
   useEffect(() => {
@@ -37,7 +55,7 @@ const AddTransportation = ({ shiftId, shiftData }) => {
       setStartPoint(t?.pickupLocation || "");
       setVisitPoint(t?.visitLocation || "");
       setEndPoint(t?.dropLocation || "");
-      setTotalKilometer(t?.totalKilometer || "");
+      setTotalKilometer(t?.totalKilometers || "");
       setStaffKilometer(t?.staffTraveledKM || "");
       setPickupScheduledAt(t?.pickupTime || "");
       setPickupDoneAt(t?.pickupDoneAt || "");
@@ -124,17 +142,42 @@ const AddTransportation = ({ shiftId, shiftData }) => {
   };
 
   // Upload receipts
-  const handleReceiptUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    const uploaded = [];
-    for (const file of files) {
-      const storageRef = ref(storage, `transportReceipts/${shiftId}_${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      uploaded.push(url);
-    }
-    setUploadedReceipts((prev) => [...prev, ...uploaded]);
-  };
+ const handleReceiptUpload = (e) => {
+  const files = Array.from(e.target.files);
+
+  const mapped = files.map((file) => ({
+    name: file.name,
+    preview: URL.createObjectURL(file),
+    file,
+  }));
+
+  setUploadedReceipts((prev) => [...prev, ...mapped]);
+};
+
+
+const uploadReceiptsToStorage = async () => {
+  const urls = [];
+
+  for (const item of uploadedReceipts) {
+    const storageRef = ref(
+      storage,
+      `shiftReceipts/${shiftId}/${Date.now()}_${item.name}`
+    );
+
+    await uploadBytes(storageRef, item.file);
+    const url = await getDownloadURL(storageRef);
+
+    urls.push({
+      name: item.name,
+      url,
+      uploadedAt: new Date(),
+    });
+  }
+
+  return urls;
+};
+
+
 
 // ✅ Updated Submit handler
 const handleSubmit = async () => {
@@ -149,40 +192,43 @@ const handleSubmit = async () => {
     const shift = shiftSnap.data();
 
     // 🚗 CASE 1: Transportation Shift
-    if (isTransportation) {
-      // Just update receipts and travel comments
-      const updatedShiftPoints = (shift.shiftPoints || []).map((point) => ({
-        ...point,
-        expenseReceiptUrls: [
-          ...(point.expenseReceiptUrls || []),
-          ...uploadedReceipts,
-        ],
-        driveComments:
-          travelComments || point.driveComments || "",
-        updatedAt: new Date(),
-      }));
+   if (isTransportation) {
+  const receiptUrls = await uploadReceiptsToStorage();
 
-      await updateDoc(shiftRef, { shiftPoints: updatedShiftPoints });
+  const updatedShiftPoints = (shift.shiftPoints || []).map((point) => ({
+    ...point,
+    expenseReceiptUrls: [
+      ...(point.expenseReceiptUrls || []),
+      ...receiptUrls, // ✅ URLs only
+    ],
+    driveComments: travelComments || point.driveComments || "",
+    updatedAt: new Date(),
+  }));
 
-      alert("Receipts and comments updated for transportation shift.");
-      return;
-    }
+  await updateDoc(shiftRef, { shiftPoints: updatedShiftPoints });
+
+  alert("Receipts and comments updated for transportation shift.");
+  return;
+}
+
 
     // 🧍 CASE 2: Non-Transportation (Extra Drive)
-    const newExtraPoint = {
-      startLocation: startPoint,
-      endLocation: endPoint,
-      totalKilometer: Number(totalKilometer) || 0,
-      staffTraveledKM: Number(staffKilometer) || 0,
-      expenseReceiptUrls: uploadedReceipts,
-      driveComments: travelComments,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    const receiptUrls = await uploadReceiptsToStorage();
 
-    await updateDoc(shiftRef, {
-      extraShiftPoints: arrayUnion(newExtraPoint),
-    });
+const newExtraPoint = {
+  startLocation: startPoint,
+  endLocation: endPoint,
+  totalKilometer: Number(totalKilometer) || 0,
+  staffTraveledKM: Number(staffKilometer) || 0,
+  expenseReceiptUrls: receiptUrls, // ✅ URLs only
+  driveComments: travelComments,
+  createdAt: new Date(),
+};
+
+await updateDoc(shiftRef, {
+  extraShiftPoints: arrayUnion(newExtraPoint),
+});
+
 
     alert("Extra drive details saved successfully!");
   } catch (error) {
@@ -198,8 +244,8 @@ const handleSubmit = async () => {
 
       {/* Header with full details */}
       <div className="flex flex-wrap items-center text-sm gap-6">
-        <div><b>Date:</b> {shiftData.startDate}</div>
-        <div><b>Staff Name:</b> {shiftData.name}</div>
+        <div><b>Date:</b> {renderDate(shiftData.startDate)}</div>
+        <div><b>Staff Name:</b> {shiftData.name || shiftData.userName}</div>
         <div><b>Staff ID:</b> {shiftData.userId}</div>
         <div><b>Client Name:</b> {shiftData.clientName}</div>
         <div><b>Shift Time:</b> {shiftData.startTime} - {shiftData.endTime}</div>
@@ -213,31 +259,31 @@ const handleSubmit = async () => {
           <div>
             <label className="font-semibold mb-1">Pickup Address</label>
             <input value={startPoint} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
-            <p className="text-sm mt-1">Scheduled At: {pickupScheduledAt || "N/A"}</p>
-            <p className="text-sm">Done At: {pickupDoneAt || "Pending"}</p>
+            <p className="text-sm mt-1 font-bold">Scheduled At: {pickupScheduledAt || "N/A"}</p>
+            <p className="text-sm  font-bold">Done At: {pickupDoneAt || "Pending"}</p>
           </div>
 
           {visitPoint && (
             <div>
               <label className="font-semibold mb-1">Visit Address</label>
               <input value={visitPoint} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
-              <p className="text-sm mt-1">Scheduled At: {visitScheduledAt || "N/A"}</p>
-              <p className="text-sm">Done At: {visitDoneAt || "Pending"}</p>
+              <p className="text-sm mt-1 font-bold">Scheduled At: {visitScheduledAt || "N/A"}</p>
+              <p className="text-sm  font-bold">Done At: {visitDoneAt || "Pending"}</p>
             </div>
           )}
 
           <div>
             <label className="font-semibold mb-1">Drop Address</label>
             <input value={endPoint} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
-            <p className="text-sm mt-1">Scheduled At: {dropScheduledAt || "N/A"}</p>
-            <p className="text-sm">Done At: {dropDoneAt || "Pending"}</p>
+            <p className="text-sm mt-1  font-bold">Scheduled At: {dropScheduledAt || "N/A"}</p>
+            <p className="text-sm  font-bold">Done At: {dropDoneAt || "Pending"}</p>
           </div>
 
           <div>
             <label className="font-semibold mb-1">Total Kilometer (Planned)</label>
-            <input value={totalKilometer} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
+            <input value={totalKilometer}  className="w-full border border-gray rounded p-2 bg-gray-100" />
             <label className="font-semibold mt-3 mb-1 block">Total Kilometers Staff Traveled</label>
-            <input value={staffKilometer} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
+            <input value={staffKilometer}  className="w-full border border-gray rounded p-2 bg-gray-100" />
           </div>
         </div>
       ) : (
@@ -285,14 +331,70 @@ const handleSubmit = async () => {
 
       <hr className="border-light-gray" />
 
-      {/* Receipts + Comments */}
-      <div className="flex flex-col gap-2">
-        <label className="font-semibold">Upload Receipts</label>
-        <input type="file" multiple ref={fileInputRef} onChange={handleReceiptUpload} className="hidden" />
-        <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 border px-3 py-2 rounded text-dark-green border-gray ">
-          <FaUpload /> Upload Receipts
-        </button>
-      </div>
+    {/* Receipts + Comments */}
+<div className="flex flex-col gap-2">
+  <label className="font-semibold">Upload Receipts</label>
+
+  {/* Hidden input */}
+  <input
+    type="file"
+    multiple
+    ref={fileInputRef}
+    onChange={handleReceiptUpload}
+    className="hidden"
+  />
+
+ <button
+  type="button"
+  onClick={() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = null; // 🔥 RESET
+      fileInputRef.current.click();
+    }
+  }}
+  className="flex items-center gap-2 border px-3 py-2 rounded text-dark-green border-gray w-fit cursor-pointer"
+>
+  <FaUpload /> Upload Receipts
+</button>
+
+
+  {/* File names list */}
+  {uploadedReceipts.length > 0 && (
+    <ul className="mt-3 space-y-2">
+      {uploadedReceipts.map((item, index) => (
+        <li
+          key={index}
+          className="flex items-center justify-between border rounded px-3 py-2"
+        >
+          {/* File name */}
+          <span
+            className="text-dark-green underline cursor-pointer truncate max-w-[300px]"
+            onClick={() => window.open(item.preview, "_blank")}
+            title={item.name}
+          >
+            {item.name}
+          </span>
+
+          {/* ❌ Remove */}
+          <button
+            type="button"
+            onClick={() => {
+              URL.revokeObjectURL(item.preview);
+              setUploadedReceipts((prev) =>
+                prev.filter((_, i) => i !== index)
+              );
+            }}
+            className="text-red-600 font-bold text-lg"
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
+  )}
+</div>
+
+
 
       <div>
         <label className="font-semibold mb-1">Travel Comments</label>
@@ -305,7 +407,7 @@ const handleSubmit = async () => {
       </div>
 
       <div className="flex justify-end">
-        <button onClick={handleSubmit} className="bg-dark-green text-white px-6 py-2 rounded">
+        <button onClick={handleSubmit} className="bg-dark-green text-white px-6 py-2 rounded cursor-pointer">
           Submit
         </button>
       </div>

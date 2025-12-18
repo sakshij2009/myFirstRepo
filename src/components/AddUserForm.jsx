@@ -12,6 +12,8 @@ import { FaChevronDown } from "react-icons/fa6";
 import SuccessSlider from "../components/SuccessSlider";
 import { useNavigate, useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
+import GoogleAddressInput from "../components/GoogleAddressInput";
+
 
 
 
@@ -568,26 +570,25 @@ useEffect(() => {
               </div>
 
               {/* Address */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Address
-                </label>
-                <Field
-                  name="address"
-                  type="text"
-                  placeholder="Please enter the address of the user"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.address && errors.address
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="address"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
+             {/* Address with Google Autocomplete */}
+            <div>
+              <label className="font-bold text-sm text-light-black">Address</label>
+              <GoogleAddressInput
+                value={values.address}
+                placeholder="Enter user address"
+                onChange={(val) => setFieldValue("address", val)}
+                // onLocationSelect={(loc) => {
+                //   setFieldValue("latitude", loc.lat);
+                //   setFieldValue("longitude", loc.lng);
+                // }}
+              />
+              <ErrorMessage
+                name="address"
+                component="div"
+                className="text-red-500 text-xs mt-1"
+              />
+            </div>
+
 
               {/* role */}
               <div className="relative">
@@ -666,6 +667,7 @@ useEffect(() => {
         viewText={slider.viewText}
         onView={() => {
           if (createdUser) setInitialValues(createdUser);
+          navigate("/admin-dashboard/users")
           setSlider({ ...slider, show: false });
         }}
         onDismiss={() => setSlider({ ...slider, show: false })}

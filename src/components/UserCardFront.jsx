@@ -2,37 +2,61 @@ import React from "react";
 
 const UserCardFront = ({ user }) => {
   return (
-    <div className=" max-w-sm bg-[linear-gradient(138.15deg,_#0DBB85_0%,_#395A69_97.38%)]  text-white rounded-[6px]  p-4 flex flex-col items-center text-center border border-[#5BEABA] gap-4 w-[374px] h-[270px]">
-      
-      {/* Organization Name */}
-      <h2 className="text-sm md:text-base font-bold leading-4 ">Family Forever INC</h2>
-      
-      {/* Profile Image */}
-      <div className="flex gap-4 items-center">
-        <div className="flex w-20 h-20 rounded-full overflow-hidden border-2 border-white shadow-md mb-4">
-        <img
-          src={user.profilePhotoUrl}
-          alt={name}
-          className="w-full h-full object-cover object-center"
-        />
-      </div>
-      <div className="flex flex-col ">
-        <h3 className="text-lg md:text-xl font-bold">{user.name}</h3>
-        <p className="text-sm md:text-base opacity-90">Child and Youth Care Worker</p>
+    <div className="w-[340px] h-[500px] bg-white rounded-lg overflow-hidden shadow-lg border border-gray-200 flex flex-col items-center font-sans">
+      {/* ====== GREEN HEADER ====== */}
+      <div className="w-full bg-[#134E3A] flex flex-col items-center justify-start pt-5 pb-[120px] relative">
+        {/* Logo + Company */}
+        <div className="flex flex-col items-center text-white">
+          <div className="flex items-center gap-2 mb-1">
+            <img
+              src="/images/Logo2.png"
+              alt="Family Forever Logo"
+              className="w-6 h-6 object-contain"
+            />
+            <h2 className="text-lg font-bold">Family Forever Inc.</h2>
+          </div>
+          <p className="text-sm font-medium">Employee ID {user.userId || "—"}</p>
+        </div>
+
+        {/* Semicircle */}
+        <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[180px] h-[180px] z-0"></div>
+
+        {/* Profile Image */}
+        <div className="absolute bottom-[-55px] left-1/2 transform -translate-x-1/2 z-10">
+          <div className="w-[120px] h-[120px] rounded-full border-4 border-white overflow-hidden shadow-md">
+            <img
+              src={user.profilePhotoUrl || "/images/profile.jpeg"}
+              alt={user.name || "Profile"}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
       </div>
 
+      {/* ====== WHITE CONTENT AREA ====== */}
+      <div className="flex flex-col items-center text-center text-[#111827] px-4 mt-[80px] flex-grow">
+        <h3 className="text-lg font-semibold leading-tight">
+          {user.name || "Employee Name"}
+        </h3>
+        <p className="text-sm text-gray-700 mb-3">
+          {user.role || "Child and Youth Care Worker"}
+        </p>
+
+        {/* Contact Info */}
+        {user.email && (
+          <p className="text-sm text-gray-700 mb-[2px]">{user.email}</p>
+        )}
+        {user.phone && (
+          <p className="text-sm text-gray-700 mb-5">{user.phone}</p>
+        )}
       </div>
-      
 
-     
-
-      {/* Employee ID */}
-      <div className="mt-4 mb-4 bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-sm font-medium">
-        Employee ID: <span className="font-bold text-white">{user.userId}</span>
+      {/* ====== FOOTER TAGLINE ====== */}
+      <div className="w-full border-t border-gray-200 py-3 text-center">
+        <p className="text-xs font-semibold text-[#111827]">
+          From Humanity to Community
+        </p>
       </div>
-
-      {/* Tagline */}
-      <p className="text-xs md:text-sm font-medium opacity-90">From Humanity to Community</p>
     </div>
   );
 };

@@ -8,6 +8,10 @@ import {
   setDoc,
   getDocs,
   collection,
+  getDoc,
+  where,
+  addDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
@@ -18,6 +22,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import GoogleAddressInput from "./GoogleAddressInput";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { EditableProvider } from "./EditableContext";
 
 //
 // ---------- helpers ----------
@@ -35,15 +40,21 @@ const normalizeGender = (g) => {
 // convert "DD-MM-YYYY" → "YYYY-MM-DD" for <input type="date">
 const convertToISO = (d) => {
   if (!d) return "";
-  const parts = String(d).split("-");
-  if (parts.length !== 3) return d; // if format is unexpected, just return as-is
-  const [dd, mm, yyyy] = parts;
-  if (yyyy.length === 4) {
-    // already YYYY-MM-DD?
+
+  // If already ISO (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
     return d;
   }
-  return `${yyyy}-${mm}-${dd}`;
+
+  // Handle DD-MM-YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(d)) {
+    const [dd, mm, yyyy] = d.split("-");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return "";
 };
+
 
 // format JS Date → YYYY-MM-DD in local time (no timezone shift)
 const formatDateLocal = (date) => {
@@ -91,7 +102,7 @@ const deriveCarSeatFromAge = (ageYears) => {
 
 const createEmptyInitialValues = () => ({
   // Top-level
-  avatar: null,
+  // avatar: null,
 
   // Services grouped
   services: {
@@ -184,18 +195,25 @@ const createEmptyInitialValues = () => ({
     signature: "",
   },
 
+   caseworkerName: "",
+  caseworkerAgencyName: "",
+  caseworkerPhone: "",
+  caseworkerEmail: "",
+
   // Case/Intake worker flat fields (for your two sections)
   intakeworkerName: "",
   agencyName: "",
   intakeworkerPhone: "",
   intakeworkerEmail: "",
 
+  
+
   // Uploads
   uploadDocs: [],
-  uploadMedicalDocs: [],
+  // uploadMedicalDocs: [],
 
   // Status (for update view)
-  status: "submitted",
+  status: "",
 });
 
 // Extract clients from old `inTakeClients` into new `clients` array
@@ -238,7 +256,7 @@ const mapOldIntakeToInitialValues = (raw) => {
           address: c.address || "",
           latitude: c.latitude,
           longitude: c.longitude,
-          startDate: convertToISO(
+          startDate: formatDateLocal(
             c.serviceStartDate || raw.serviceStartDate || ""
           ),
           clientInfo: c.otherServiceConcerns || "",
@@ -340,7 +358,7 @@ const mapOldIntakeToInitialValues = (raw) => {
     intakeworkerEmail: raw.inTakeWorkerEmail || "",
     uploadDocs: [],
     uploadMedicalDocs: [],
-    status: raw.status || "submitted",
+    status: raw.status || "Submitted",
   };
 };
 
@@ -348,20 +366,25 @@ const mapOldIntakeToInitialValues = (raw) => {
 // ---------- component ----------
 //
 
-const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user }) => {
+const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: propId,isEditable=true}) => {
   const [showServiceCalendar, setShowServiceCalendar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [shiftCategories, setShiftCategories] = useState([]);
   const fileInputRef = useRef(null);
   const fileInputRefMedical = useRef(null);
+  const hasResigned = useRef(false);
+
 const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+
 
   const previousServiceStart = useRef(null);
 
-  const { id } = useParams();
+  const { id:paramId } = useParams();
   const [searchParams] = useSearchParams();
   const formType = searchParams.get("type");
-
+  
+  
+  const intakeFormId = propId || paramId;
   // type can be "Intake Worker" or "Private Family"
   const urlCaseWorker = formType === "Intake Worker";
   const isCaseWorker = propCaseWorker ?? urlCaseWorker;
@@ -390,130 +413,187 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   }, []);
 
   // Fetch intake form data in update mode (support new + old structures)
-  useEffect(() => {
-    const fetchIntakeForm = async () => {
-      if (mode === "update" && id) {
-        try {
-          // Load ALL intake forms
-          const intakeQuery = await getDocs(collection(db, "InTakeForms"));
+ useEffect(() => {
+  const fetchIntakeForm = async () => {
+    if (mode !== "update" || !intakeFormId) return;
 
-          let matchedData = null;
+    try {
+      const docRef = doc(db, "InTakeForms", intakeFormId);
+      const docSnap = await getDoc(docRef);
 
-          intakeQuery.forEach((docSnap) => {
-            const data = docSnap.data();
-
-            // New structure: match inside clientsArray by id/clientId
-            if (!matchedData && Array.isArray(data.clientsArray)) {
-              const clientMatch = data.clientsArray.find(
-                (c) =>
-                  c.id?.toString() === id.toString() ||
-                  c.clientId?.toString() === id.toString() ||
-                  c.formId?.toString() === id.toString()
-              );
-              if (clientMatch) {
-                matchedData = data;
-              }
-            }
-
-            // Old flat structure: top-level clientId
-            if (!matchedData) {
-              if (
-                data.clientId?.toString() === id.toString() ||
-                data.formId?.toString() === id.toString() ||
-                data.id?.toString() === id.toString()
-              ) {
-                matchedData = data;
-              }
-            }
-          });
-
-          if (!matchedData) {
-            console.warn("⚠ No intake form found for client ID:", id);
-            return;
-          }
-
-          const data = matchedData;
-          const hasNewStructure =
-            Array.isArray(data.clientsArray) ||
-            Array.isArray(data.parentInfoList) ||
-            Array.isArray(data.medicalInfoList) ||
-            Array.isArray(data.transportationInfoList);
-
-          let nextVals;
-
-          if (hasNewStructure) {
-            const base = createEmptyInitialValues();
-
-            nextVals = {
-              ...base,
-              name: data.name || "",
-              dateOfIntake:
-                data.dateOfIntake || data.dateOfInTake || data.date || "",
-              avatar: data.avatar || null,
-              services: {
-                ...base.services,
-                ...(data.services || {}),
-                serviceType: Array.isArray(data.services?.serviceType)
-                  ? data.services.serviceType
-                  : data.services?.serviceType
-                  ? [data.services.serviceType]
-                  : [],
-                serviceDates: Array.isArray(data.services?.serviceDates)
-                  ? data.services.serviceDates.map((s) =>
-                      typeof s === "string" ? s : formatDateLocal(s)
-                    )
-                  : [],
-              },
-
-              // Prefer clientsArray if present (already in new shape).
-              // Ensure photos array exists.
-              clients: Array.isArray(data.clientsArray)
-                ? data.clientsArray.map((c) => ({
-                    ...c,
-                    photos: c.photos || [],
-                  }))
-                : extractOldClients(data),
-              billingInfo: {
-                ...base.billingInfo,
-                ...(data.billingInfo || {}),
-              },
-              parentInfoList: data.parentInfoList || base.parentInfoList,
-              medicalInfoList: data.medicalInfoList || base.medicalInfoList,
-              transportationInfoList:
-                data.transportationInfoList || base.transportationInfoList,
-              supervisedVisitations:
-                data.supervisedVisitations || base.supervisedVisitations,
-              workerInfo: data.workerInfo || base.workerInfo,
-              intakeworkerName: data.intakeworkerName || "",
-              agencyName: data.agencyName || "",
-              intakeworkerPhone: data.intakeworkerPhone || "",
-              intakeworkerEmail: data.intakeworkerEmail || "",
-              uploadDocs: data.uploadedDocs || [],
-              uploadMedicalDocs: data.uploadedMedicalDocs || [],
-              status: data.status || "submitted",
-            };
-
-            if (data.avatar) setAvatarPreview(data.avatar);
-          } else {
-            // Old flat format mapping
-            nextVals = mapOldIntakeToInitialValues(data);
-            if (data.photo) setAvatarPreview(data.photo);
-          }
-
-          setInitialValues(nextVals);
-        } catch (err) {
-          console.error("Error fetching intake form:", err);
-        }
+      if (!docSnap.exists()) {
+        console.warn("No intake form found:", intakeFormId);
+        return;
       }
-    };
 
-    fetchIntakeForm();
-  }, [mode, id]);
+      const data = docSnap.data();
+      const base = createEmptyInitialValues();
+
+      // ---------- detect structure ----------
+  //     const hasNewStructure =
+  // data.clients && !Array.isArray(data.clients);
+
+  const isOldStructure = Array.isArray(data.inTakeClients);
+  console.log(isOldStructure);
+
+
+
+      let nextVals;
+
+      // =================================================
+      // NEW STRUCTURE
+      // =================================================
+      if (!isOldStructure) {
+        const normalizedClients = data.clients
+          ? Object.values(data.clients)
+          : [];
+
+        const clients =
+          normalizedClients.length > 0
+            ? normalizedClients.map((c) => ({
+                fullName: c.fullName || "",
+                gender: normalizeGender(c.gender),
+                birthDate: convertToISO(c.birthDate),
+                startDate: formatDateLocal(c.startDate),
+                address: c.address || "",
+                latitude: c.latitude || "",
+                longitude: c.longitude || c.longtitude || "",
+                clientInfo: c.clientInfo || "",
+                phone: c.phone || "",
+                email: c.email || "",
+                photos: c.photos || [],
+              }))
+            : base.clients;
+
+        nextVals = {
+          ...base,
+
+          services: {
+            ...base.services,
+            ...(data.services || {}),
+            serviceType: Array.isArray(data.services?.serviceType)
+              ? data.services.serviceType
+              : [],
+            serviceDates: Array.isArray(data.services?.serviceDates)
+              ? data.services.serviceDates.map(convertToISO)
+              : [],
+          },
+
+          clients,
+
+          billingInfo: {
+            invoiceEmail: data.billingInfo?.invoiceEmail || "",
+          },
+
+          parentInfoList: clients.map((c) =>
+            data.parentInfoList?.find(
+              (p) => p.clientName === c.fullName
+            ) || {
+              clientName: c.fullName,
+              parentName: "",
+              relationShip: "",
+              parentPhone: "",
+              parentEmail: "",
+              parentAddress: "",
+            }
+          ),
+
+          medicalInfoList: clients.map((c) =>
+            data.medicalInfoList?.find(
+              (m) => m.clientName === c.fullName
+            ) || {
+              clientName: c.fullName,
+              healthCareNo: "",
+              diagnosis: "",
+              diagnosisType: "",
+              medicalConcern: "",
+              mobilityAssistance: "",
+              mobilityInfo: "",
+              communicationAid: "",
+              communicationInfo: "",
+            }
+          ),
+
+          transportationInfoList: clients.map((c) =>
+            data.transportationInfoList?.find(
+              (t) => t.clientName === c.fullName
+            ) || {
+              clientName: c.fullName,
+              pickupAddress: "",
+              dropoffAddress: "",
+              pickupTime: "",
+              dropOffTime: "",
+              transportationOverview: "",
+              carSeatRequired: "",
+              carSeatType: "",
+            }
+          ),
+
+          supervisedVisitations: clients.map((c) =>
+            data.supervisedVisitations?.find(
+              (v) => v.clientName === c.fullName
+            ) || {
+              clientName: c.fullName,
+              visitStartTime: "",
+              visitEndTime: "",
+              visitDuration: "",
+              visitPurpose: "",
+              visitAddress: "",
+              visitOverview: "",
+            }
+          ),
+
+          workerInfo: {
+            workerName: data.workerInfo?.workerName || "",
+            date: formatDateLocal(
+              data.workerInfo?.date || data.dateOfIntake
+            ),
+
+            signature: data.workerInfo?.signature || "",
+          },
+
+          intakeworkerName: data.intakeworkerName || "",
+          agencyName: data.agencyName || "",
+          intakeworkerPhone: data.intakeworkerPhone || "",
+          intakeworkerEmail: data.intakeworkerEmail || "",
+
+          uploadDocs: data.uploadedDocs || [],
+          status: data.status ,
+        };
+
+        if (data.avatar) setAvatarPreview(data.avatar);
+        if (data.workerInfo?.signature && sigCanvas.current) {
+          sigCanvas.current.fromDataURL(data.workerInfo.signature);
+          hasResigned.current = false;
+        }
+
+
+
+      }
+
+      // =================================================
+      // OLD STRUCTURE
+      // =================================================
+      else {
+        nextVals = mapOldIntakeToInitialValues(data);
+        if (data.photo) setAvatarPreview(data.photo);
+      }
+
+      setInitialValues(nextVals);
+      console.log("Prefilled intake values:", nextVals);
+    } catch (err) {
+      console.error("Error fetching intake form:", err);
+    }
+  };
+
+  fetchIntakeForm();
+}, [mode, intakeFormId]);
+
+
 
   // Validation
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required("Name is required"),
-    dateOfIntake: Yup.string().required("Date of intake is required"),
+  
     services: Yup.object().shape({
       serviceType: Yup.array()
         .of(Yup.string())
@@ -553,22 +633,22 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   };
 
   // avatar
-  const handleAvatarChange = (event, setFieldValue) => {
-    const file = event.currentTarget.files[0];
-    if (file) {
-      setFieldValue("avatar", file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  // const handleAvatarChange = (event, setFieldValue) => {
+  //   const file = event.currentTarget.files[0];
+  //   if (file) {
+  //     setFieldValue("avatar", file);
+  //     const reader = new FileReader();
+  //     reader.onloadend = () => {
+  //       setAvatarPreview(reader.result);
+  //     };
+  //     reader.readAsDataURL(file);
+  //   }
+  // };
 
-  const handleRemoveAvatar = (setFieldValue) => {
-    setFieldValue("avatar", null);
-    setAvatarPreview(null);
-  };
+  // const handleRemoveAvatar = (setFieldValue) => {
+  //   setFieldValue("avatar", null);
+  //   setAvatarPreview(null);
+  // };
 
   // per-client photos: add / remove
   const handleClientPhotosChange = (
@@ -594,156 +674,256 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     setFieldValue(`clients.${clientIndex}.photos`, next);
   };
 
-  const handleSubmit = async (values, { resetForm }) => {
-    try {
-      console.log("Form Values:", values);
-      let uploadedDocs = [];
-      let uploadedMedicalDocs = [];
+  // Utility to format date like "01 Dec 2025 12:53 PM"
+const formatReadableDate = (date) => {
+  const d = new Date(date);
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).replace(",", "");
+};
 
-      // Upload docs
-      if (values.uploadDocs && values.uploadDocs.length > 0) {
-        uploadedDocs = await Promise.all(
-          values.uploadDocs.map(async (file) => {
-            const storageRef = ref(
-              storage,
-              `documents/${Date.now()}_${file.name}`
-            );
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            return { fileName: file.name, fileUrl: url };
-          })
-        );
-      }
 
-      if (values.uploadMedicalDocs && values.uploadMedicalDocs.length > 0) {
-        uploadedMedicalDocs = await Promise.all(
-          values.uploadMedicalDocs.map(async (file) => {
-            const storageRef = ref(
-              storage,
-              `documents/${Date.now()}_${file.name}`
-            );
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            return { fileName: file.name, fileUrl: url };
-          })
-        );
-      }
+////client formation////////////////////////
+const generateClientCode = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
 
-      // Upload avatar (top-level client photo)
-      let avatarURL = null;
-      if (values.avatar) {
-        if (typeof values.avatar === "string") {
-          avatarURL = values.avatar;
-        } else {
-          const avatarRef = ref(
-            storage,
-            `avatars/${Date.now()}_${values.avatar.name}`
-          );
-          await uploadBytes(avatarRef, values.avatar);
-          avatarURL = await getDownloadURL(avatarRef);
-        }
-      }
+const createClientsFromIntake = async (intake, intakeId, db) => {
+  for (const client of intake.clients) {
+    await createSingleClient(intake, intakeId, client, db);
+  }
+};
 
-      // Upload signature
-      let signatureURL = null;
-      if (sigCanvas.current && !sigCanvas.current.isEmpty()) {
-        const dataURL = sigCanvas.current.toDataURL("image/png");
-        const res = await fetch(dataURL);
-        const blob = await res.blob();
-        const uniqueSigId = `form_${Date.now()}`;
-        const signatureRef = ref(storage, `signatures/${uniqueSigId}.png`);
-        await uploadBytes(signatureRef, blob);
-        signatureURL = await getDownloadURL(signatureRef);
-      }
+const createSingleClient = async (intake, intakeId, client, db) => {
+  let agencyName = "Private";
+  let agencyId = "";
+  let agencyAddress = "";
+  let agencyType = "Private";
 
-      // Upload per-client photos and get URLs
-      const clientsWithPhotoUrls = await Promise.all(
-        (values.clients || []).map(async (client, idx) => {
-          const photos = client.photos || [];
-          const uploadedPhotoUrls = [];
+  let clientRate = "";
+  let kmRate = "";
+  let rateList = [];
 
-          for (const p of photos) {
-            if (!p) continue;
+  // ------------------------------------------------
+  // CASE WORKER → fetch agency + rates
+  // ------------------------------------------------
+  if (intake.isCaseWorker) {
+    agencyName = intake.agencyName || "";
 
-            // If it's already a URL string (when editing), just keep it
-            if (typeof p === "string") {
-              uploadedPhotoUrls.push(p);
-              continue;
-            }
+    const agencySnap = await getDocs(
+      query(
+        collection(db, "agencies"),
+        where("agencyName", "==", agencyName)
+      )
+    );
 
-            // New upload (File)
-            if (p instanceof File) {
-              const photoRef = ref(
-                storage,
-                `client_photos/${Date.now()}_${idx}_${p.name}`
-              );
-              await uploadBytes(photoRef, p);
-              const url = await getDownloadURL(photoRef);
-              uploadedPhotoUrls.push(url);
-            }
-          }
+    if (!agencySnap.empty) {
+      const agencyDoc = agencySnap.docs[0];
+      const agency = agencyDoc.data();
 
-          return {
-            ...client,
-            photos: uploadedPhotoUrls,
-          };
-        })
+      agencyId = agencyDoc.id;
+      agencyAddress = agency.address || "";
+      agencyType = agency.type || "";
+      rateList = agency.rateList || [];
+
+      // resolve rate from selected service
+      const serviceId = intake.services?.serviceType?.[0];
+      const matchedRate = rateList.find(
+        (r) => r.id === serviceId
       );
 
-      // Convert clients array -> client1, client2, ...
-      const clientsObj = {};
-      clientsWithPhotoUrls.forEach((client, idx) => {
-        clientsObj[`client${idx + 1}`] = client;
-      });
-
-      // Build form data
-      const formData = {
-        name: values.name,
-        dateOfIntake: values.dateOfIntake,
-        avatar: avatarURL,
-        services: values.services,
-        clients: clientsObj,
-        clientsArray: clientsWithPhotoUrls,
-        billingInfo: values.billingInfo,
-        parentInfoList: values.parentInfoList || [],
-        medicalInfoList: values.medicalInfoList || [],
-        transportationInfoList: values.transportationInfoList || [],
-        supervisedVisitations: values.supervisedVisitations || [],
-        uploadedDocs,
-        uploadedMedicalDocs,
-        workerInfo: {
-          ...values.workerInfo,
-          signature: signatureURL || values.workerInfo.signature || "",
-        },
-        intakeworkerName: values.intakeworkerName || "",
-        agencyName: values.agencyName || "",
-        intakeworkerPhone: values.intakeworkerPhone || "",
-        intakeworkerEmail: values.intakeworkerEmail || "",
-        isCaseWorker: !!isCaseWorker,
-        createdAt: new Date(),
-      };
-
-      // Status: worker has submitted the intake form
-      // Possible values: "pending", "submitted", "approved", "rejected"
-      // Here we save as "submitted" when the worker clicks submit.
-      const uniqueId = `form_${Date.now()}`;
-      await setDoc(doc(db, "dev_InTakeForms", uniqueId), {
-        ...formData,
-        status: "submitted",
-        // helpful metadata if this came from update of an old client
-        sourceClientId: id || null,
-        sourceMode: mode,
-      });
-
-      alert("✅ Intake Form submitted successfully!");
-      resetForm();
-      setAvatarPreview(null);
-      if (sigCanvas.current) sigCanvas.current.clear();
-    } catch (error) {
-      console.error("❌ Error submitting form:", error);
-      alert("Error submitting form, please try again!");
+      clientRate = matchedRate?.rate ?? "";
+      kmRate = matchedRate?.kmRate ?? "";
     }
-  };
+  }
+
+  // ------------------------------------------------
+  // PARENT EMAIL (from intake)
+  // ------------------------------------------------
+  const parent =
+    intake.parentInfoList?.find(
+      (p) => p.clientName === client.fullName
+    ) || {};
+
+  // ------------------------------------------------
+  // CREATE CLIENT DOCUMENT
+  // ------------------------------------------------
+  
+  const clientId = Date.now().toString();
+
+await setDoc(doc(db, "clients", clientId), {
+  // basic
+  name: client.fullName,
+  dob: client.birthDate,
+  gender: client.gender || "",
+  address: client.address || "",
+  avatar: Array.isArray(client.photos) && client.photos.length > 0
+  ? client.photos[0]
+  : "",
+
+  clientCode: generateClientCode(),
+  clientStatus: "Active",
+  fileClosed: false,
+
+  description: client.clientInfo || "",
+  parentEmail: parent.parentEmail || "",
+
+  // agency
+  agencyName,
+  agencyId,
+  agencyAddress,
+  agencyType,
+
+  // rates
+  clientRate,
+  kmRate,
+  rateList: intake.isCaseWorker ? rateList : [],
+
+  // empty initially
+  medications: [],
+  pharmacy: {},
+  hospital: {},
+  astrologist: {},
+
+  // meta
+  createdAt: Timestamp.now(),
+  intakeId,
+  id: clientId, // optional but matches old style
+});
+
+};
+
+
+ 
+
+
+const handleSubmit = async (values, { resetForm }) => {
+  try {
+    // ================== SIGNATURE UPLOAD ==================
+    let signatureURL = values.workerInfo.signature || "";
+
+    if (
+      sigCanvas.current &&
+      hasResigned.current &&
+      !sigCanvas.current.isEmpty()
+    ) {
+      const dataURL = sigCanvas.current
+        .getTrimmedCanvas()
+        .toDataURL("image/png");
+
+      const res = await fetch(dataURL);
+      const blob = await res.blob();
+
+      const sigRef = ref(
+        storage,
+        `intake_signatures/${Date.now()}_${values.workerInfo.workerName}.png`
+      );
+      await uploadBytes(sigRef, blob);
+      signatureURL = await getDownloadURL(sigRef);
+    }
+
+    // ================== CLIENT PHOTOS ==================
+    const clientsWithPhotos = await Promise.all(
+      (values.clients || []).map(async (client, idx) => {
+        const uploadedPhotos = [];
+
+        for (const photo of client.photos || []) {
+          if (typeof photo === "string") {
+            uploadedPhotos.push(photo);
+            continue;
+          }
+
+          const photoRef = ref(
+            storage,
+            `client_photos/${Date.now()}_${idx}_${photo.name}`
+          );
+          await uploadBytes(photoRef, photo);
+          uploadedPhotos.push(await getDownloadURL(photoRef));
+        }
+
+        return {
+          ...client,
+          photos: uploadedPhotos,
+        };
+      })
+    );
+
+    // ================== CLIENT OBJECT ==================
+    const clientsObj = {};
+    clientsWithPhotos.forEach((c, i) => {
+      clientsObj[`client${i + 1}`] = c;
+    });
+
+    // ================== FINAL PAYLOAD ==================
+    const payload = {
+      avatar: avatarPreview || null,
+
+      services: {
+        ...values.services,
+        serviceType: values.services.serviceType || [],
+      },
+
+      clients: clientsObj,
+
+      billingInfo: values.billingInfo,
+      parentInfoList: values.parentInfoList || [],
+      medicalInfoList: values.medicalInfoList || [],
+      transportationInfoList: values.transportationInfoList || [],
+      supervisedVisitations: values.supervisedVisitations || [],
+
+      uploadedDocs: values.uploadDocs || [],
+
+      workerInfo: {
+        ...values.workerInfo,
+        signature: signatureURL,
+      },
+
+      intakeworkerName: values.intakeworkerName || "",
+      agencyName: values.agencyName || "",
+      intakeworkerPhone: values.intakeworkerPhone || "",
+      intakeworkerEmail: values.intakeworkerEmail || "",
+
+      isCaseWorker: !!isCaseWorker,
+      status: values.status || "Submitted",
+
+      // 🔐 IMPORTANT FLAG
+      clientsCreated: values.clientsCreated || false,
+
+      createdAt: formatReadableDate(new Date()),
+    };
+
+    // ================== SAVE INTAKE ==================
+    const formId = mode === "update" && id ? id : Date.now().toString();
+
+    // 🔥 CREATE CLIENTS ONLY WHEN STATUS CHANGES TO ACCEPTED
+    if (
+      initialValues.status !== "Accepted" &&
+      values.status === "Accepted" &&
+      !values.clientsCreated
+    ) {
+      await createClientsFromIntake(values, formId, db);
+      payload.clientsCreated = true; // mark processed
+    }
+
+    await setDoc(doc(db, "InTakeForms", formId), payload);
+
+    alert("✅ Intake form submitted successfully");
+
+    resetForm();
+    setAvatarPreview(null);
+    sigCanvas.current?.clear();
+  } catch (err) {
+    console.error("❌ Intake submit failed:", err);
+    alert("Something went wrong while submitting the form");
+  }
+};
+
+
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -755,14 +935,25 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
       </div>
       <hr className="border-t border-gray" />
 
-      <Formik
-        enableReinitialize
+       <EditableProvider isEditable={isEditable}>
+        <Formik
+        enableReinitialize={true}
         initialValues={initialValues}
         validate={validate}
-        validationSchema={validationSchema}
+
         onSubmit={handleSubmit}
       >
        {({ touched, errors, values, setFieldValue }) => {
+
+         useEffect(() => {
+      if (user) {
+        setFieldValue("intakeworkerName", user.name || "");
+        setFieldValue("agencyName", user.agency || "");
+        setFieldValue("intakeworkerPhone", user.phone || "");
+        setFieldValue("intakeworkerEmail", user.email || "");
+      }
+    }, [user, setFieldValue]);
+
   // derive sections visibility from selected service types
   const selectedServiceIds = values.services?.serviceType || [];
 
@@ -788,7 +979,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
               {/* Status (only in update mode) */}
               {mode === "update" && (
                 <div className="flex justify-end">
-                  <div className="bg-white border border-light-gray rounded p-3 mb-2">
+                  <div className="bg-white border border-light-gray rounded p-3 ">
                     <label className="font-bold text-sm text-light-black mr-2">
                       Status
                     </label>
@@ -798,9 +989,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                       disabled={isCaseWorker}
                       className="border border-light-gray rounded-sm p-[8px] text-sm"
                     >
-                      <option value="submitted">Submitted</option>
-                      <option value="accepted">Accepted</option>
-                      <option value="rejected">Rejected</option>
+                      <option value="Submitted">Submitted</option>
+                      <option value="Accepted">Accepted</option>
+                      <option value="Rejected">Rejected</option>
                     </Field>
                   </div>
                 </div>
@@ -839,13 +1030,13 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                 </h3>
                 <div className="grid grid-cols-3 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
                   {/* Multi-select Service Type */}
-<div className="relative">
-  <label
-    htmlFor="shiftCategory"
-    className="font-bold text-sm leading-5 tracking-normal text-light-black"
-  >
-    Types of Services
-  </label>
+      <div className="relative">
+        <label
+          htmlFor="shiftCategory"
+          className="font-bold text-sm leading-5 tracking-normal text-light-black"
+        >
+          Types of Services
+        </label>
 
   {/* CLICKABLE DISPLAY BOX */}
   <div
@@ -1328,17 +1519,17 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         Name
                       </label>
                       <Field
-                        name="intakeworkerName"
+                        name="caseworkerName"
                         type="text"
                         placeholder="Please enter the name of case worker "
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.intakeworkerName && errors.intakeworkerName
+                          touched.caseworkerName && errors.caseworkerName
                             ? "border-red-500"
                             : "border-light-gray"
                         }`}
                       />
                       <ErrorMessage
-                        name="intakeworkerName"
+                        name="caseworkerName"
                         component="div"
                         className="text-red-500 text-xs mt-1"
                       />
@@ -1348,17 +1539,17 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         Name of Agency/Organisation
                       </label>
                       <Field
-                        name="agencyName"
+                        name="caseworkerAgencyName"
                         type="text"
                         placeholder="Please enter the name of agency/organisation"
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.agencyName && errors.agencyName
+                          touched.caseworkerAgencyName && errors.caseworkerAgencyName
                             ? "border-red-500"
                             : "border-light-gray"
                         }`}
                       />
                       <ErrorMessage
-                        name="agencyName"
+                        name="caseworkerAgencyName"
                         component="div"
                         className="text-red-500 text-xs mt-1"
                       />
@@ -1368,18 +1559,18 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         Phone Number
                       </label>
                       <Field
-                        name="intakeworkerPhone"
+                        name="caseworkerPhone"
                         type="text"
                         placeholder="Please enter the phone number"
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.intakeworkerPhone &&
-                          errors.intakeworkerPhone
+                          touched.caseworkerPhone &&
+                          errors.caseworkerPhone
                             ? "border-red-500"
                             : "border-light-gray"
                         }`}
                       />
                       <ErrorMessage
-                        name="intakeworkerPhone"
+                        name="caseworkerPhone"
                         component="div"
                         className="text-red-500 text-xs mt-1"
                       />
@@ -1389,18 +1580,18 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         E-mail
                       </label>
                       <Field
-                        name="intakeworkerEmail"
+                        name="caseworkerEmail"
                         type="text"
                         placeholder="Please enter the e-mail of case worker"
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.intakeworkerEmail &&
-                          errors.intakeworkerEmail
+                          touched.caseworkerEmail &&
+                          errors.caseworkerEmail
                             ? "border-red-500"
                             : "border-light-gray"
                         }`}
                       />
                       <ErrorMessage
-                        name="intakeworkerEmail"
+                        name="caseworkerEmail"
                         component="div"
                         className="text-red-500 text-xs mt-1"
                       />
@@ -1424,8 +1615,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         name="intakeworkerName"
                         type="text"
                         placeholder="Please enter the name of intake worker "
-                        value={user?.name || ""}
-                       
+                        
+                        
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
                       />
                     </div>
@@ -1437,7 +1628,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         name="agencyName"
                         type="text"
                         placeholder="Please enter the name of agency/organisation"
-                        value={user?.agency || ""}
+                       
                         
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
                       />
@@ -1450,7 +1641,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         name="intakeworkerPhone"
                         type="text"
                         placeholder="Please enter the phone number"
-                        value={user?.phone || ""}
+                       
                         
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
                       />
@@ -1462,8 +1653,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                       <Field
                         name="intakeworkerEmail"
                         type="text"
-                        placeholder="Please enter the e-mail of intake worker"
-                        value={user?.email || ""}
+                        placeholder="Please enter the e-mail of intake worker"  
                         
                         className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
                       />
@@ -2406,6 +2596,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                     <div className="border rounded-sm mt-1 relative border-light-gray ">
                       <SignatureCanvas
                         ref={sigCanvas}
+                        
                         penColor="black"
                         backgroundColor="#ffffff"
                         canvasProps={{
@@ -2416,10 +2607,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
                         minWidth={0.4}
                         maxWidth={1.0}
                         velocityFilterWeight={0.7}
-                        onEnd={() => {
-                          const dataURL =
-                            sigCanvas.current?.toDataURL("image/png") || "";
-                          setFieldValue("workerInfo.signature", dataURL);
+                        onBegin={() => {
+                          hasResigned.current = true;   // ✅ user started drawing
                         }}
                       />
 
@@ -2448,7 +2637,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
               <div className="col-span-2 flex justify-center">
                 <button
                   type="submit"
-                  className="bg-dark-green text-white px-6 py-2 rounded "
+                  className="bg-dark-green text-white px-6 py-2 rounded  cursor-pointer"
                 >
                   Submit Intake Form
                 </button>
@@ -2457,6 +2646,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           );
         }}
       </Formik>
+       </EditableProvider>
+      
     </div>
   );
 };

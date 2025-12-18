@@ -41,6 +41,54 @@ const navigate = useNavigate();
   return new Date(Number(year), monthIndex, Number(day));
 }
 
+const formatDate = (value) => {
+  if (!value) return "—";
+
+  // Firestore Timestamp
+  if (value?.seconds) {
+    return new Date(value.seconds * 1000).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  // Old string dates (backward compatibility)
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "—";
+};
+
+const renderDate = (value) => {
+  if (!value) return "—";
+
+  // Firestore Timestamp
+  if (value?.seconds) {
+    return new Date(value.seconds * 1000).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  // JS Date
+  if (value instanceof Date) {
+    return value.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  // String (old schema)
+  if (typeof value === "string") return value;
+
+  return "—";
+};
+
+
 
   // -------------------- 1. FETCH SHIFT DATA --------------------
   useEffect(() => {
@@ -68,7 +116,7 @@ const navigate = useNavigate();
 
     const fetchIntake = async () => {
       try {
-        const ref = doc(db, "intakeForms", shiftData.clientId);
+        const ref = doc(db, "InTakeForms", shiftData.clientId);
         const snap = await getDoc(ref);
         if (snap.exists()) setIntakeData(snap.data());
       } catch (err) {
@@ -79,50 +127,66 @@ const navigate = useNavigate();
     fetchIntake();
   }, [shiftData]);
 
+
+  const resolveClientAndDate = (shiftData) => {
+  if (!shiftData) return { clientId: "", startDate: null };
+
+  const clientId =
+    shiftData.clientId ||              // old
+    shiftData.client ||                // new
+    shiftData.clientDetails?.id || ""; // fallback
+
+  let startDate = null;
+
+  if (shiftData.startDate?.toDate) {
+    // ✅ Firestore Timestamp
+    startDate = shiftData.startDate.toDate();
+  } else if (typeof shiftData.startDate === "string") {
+    // ✅ Old string format: "25 Dec 2025"
+    const parts = shiftData.startDate.split(" ");
+    if (parts.length === 3) {
+      const [day, mon, year] = parts;
+      startDate = new Date(`${day} ${mon} ${year}`);
+    }
+  }
+
+  return { clientId, startDate };
+};
+
   // -------------------- 3. FETCH REPORTS (24 HOURS) --------------------
  
 
+ 
 useEffect(() => {
-  if (!shiftData?.clientId || !shiftData?.startDate) {
-    console.log("❌ Missing clientId or startDate in shiftData");
-    return;
-  }
 
-  // --- SAFE date parser for "20 May 2025"
-  const parseShiftDate = (str) => {
-    if (typeof str !== "string") return null;
+ 
+ if (!shiftData) {
+  console.log("⏳ shiftData not ready yet");
+  return;
+}
 
-    const [day, monthName, year] = str.split(" ");
+const { clientId: resolvedClientId, startDate: resolvedStartDate } =
+  resolveClientAndDate(shiftData);
 
-    const monthIndex = [
-      "jan","feb","mar","apr","may","jun",
-      "jul","aug","sep","oct","nov","dec"
-    ].indexOf(monthName.toLowerCase().slice(0,3));
+if (!resolvedClientId || !resolvedStartDate || isNaN(resolvedStartDate.getTime())) {
+  console.log("❌ Missing or invalid clientId/startDate", {
+    resolvedClientId,
+    resolvedStartDate,
+    shiftData,
+  });
+  return;
+}
 
-    if (monthIndex === -1) return null;
 
-    return new Date(Number(year), monthIndex, Number(day));
-  };
 
-  // Convert startDate (supports string or Firestore Timestamp)
-  let shiftStart;
+  
 
-  if (shiftData.startDate?.toDate) {
-    shiftStart = shiftData.startDate.toDate(); // Firestore timestamp
-  } else {
-    shiftStart = parseShiftDate(shiftData.startDate); // string parser
-  }
+ const shiftStart = resolvedStartDate;
 
-  if (!shiftStart || isNaN(shiftStart.getTime())) {
-    console.log("❌ Invalid startDate format:", shiftData.startDate);
-    return;
-  }
+const windowStart = new Date(
+  shiftStart.getTime() - 24 * 60 * 60 * 1000
+);
 
-  // 24-hour window before shiftStart
-  const windowStart = new Date(shiftStart.getTime() - 24 * 60 * 60 * 1000);
-
-  console.log("🕒 Parsed Shift Start:", shiftStart);
-  console.log("⏳ Fetching from window:", windowStart);
 
   const fetchReports = async () => {
     try {
@@ -133,7 +197,11 @@ useEffect(() => {
         const data = docSnap.data();
 
         // Match clientId
-        if (String(data.clientId) !== String(shiftData.clientId)) return;
+       const dataClientId =
+  data.clientId || data.client || data.clientDetails?.id;
+
+if (String(dataClientId) !== String(resolvedClientId)) return;
+
 
         // Parse each shift's date
         let sDate = data.startDate?.toDate?.() || parseShiftDate(data.startDate);
@@ -152,20 +220,18 @@ if (typeof parsedReport === "string") {
   try {
     parsedReport = JSON.parse(parsedReport);
   } catch (err) {
-    console.error("❌ JSON parse failed for report:", parsedReport);
+    
   }
 }
 
 finalReports.push({
   shiftId: docSnap.id,
   shiftReport: parsedReport,
+  staffName: data.name || "Unknown"
 });
-
 
         }
       });
-
-    
 
       console.log("🎉FINAL 24H REPORTS:", finalReports);
       setRecentReports(finalReports);
@@ -180,33 +246,72 @@ finalReports.push({
 
 
   // -------------------- 4. PRIMARY STAFF --------------------
- useEffect(() => {
-  if (!shiftData?.userId) return;
+useEffect(() => {
+  if (!shiftData) return;
 
   const fetchPrimaryStaff = async () => {
     try {
-      const q = query(
-        collection(db, "users"),
-        where("userId", "==", shiftData.userId)
-      );
+      let userDocData = null;
+      const usersRef = collection(db, "users");
 
-      const snap = await getDocs(q);
+      // ✅ Try by Firestore Document ID
+      if (shiftData.userId) {
+        const directDoc = await getDoc(doc(db, "users", shiftData.username));
+        if (directDoc.exists()) userDocData = directDoc.data();
+      }
 
-      if (!snap.empty) {
-        const userDoc = snap.docs[0].data();
+      // ✅ Try by 'id' field in user document
+      if (!userDocData && shiftData.userId) {
+        const qById = query(usersRef, where("userId", "==", shiftData.userId));
+        const snapById = await getDocs(qById);
+        if (!snapById.empty) userDocData = snapById.docs[0].data();
+      }
 
+      // ✅ Try by username
+      if (!userDocData && shiftData.user) {
+        const qByUsername = query(usersRef, where("username", "==", shiftData.user || shiftData.username));
+        const snapByUsername = await getDocs(qByUsername);
+        if (!snapByUsername.empty) userDocData = snapByUsername.docs[0].data();
+      }
+
+      // ✅ Try by name
+      if (!userDocData && shiftData.userName) {
+        const qByName = query(usersRef, where("name", "==", shiftData.name));
+        const snapByName = await getDocs(qByName);
+        if (!snapByName.empty) userDocData = snapByName.docs[0].data();
+      }
+
+      // ✅ Finally, set primary staff
+      if (userDocData) {
+        console.log("✅ Primary staff fetched:", userDocData);
         setPrimaryStaff({
-          name: userDoc.name || "N/A",
-          staffId: userDoc.userId,
-          category: shiftData.categoryName,
-          avatar: userDoc.profilePhotoUrl || userDoc.avatar || null,
+          name: userDocData.name || "N/A",
+          staffId: userDocData.id || userDocData.userId || "N/A",
+          category:
+            shiftData.categoryName ||
+            shiftData.shiftCategory ||
+            "N/A",
+          avatar:
+            userDocData.profilePhotoUrl ||
+            userDocData.photoURL ||
+            userDocData.profilePhoto ||
+            userDocData.profilePic ||
+            userDocData.avatar ||
+            null,
         });
       } else {
-        // Fallback
+        console.warn("⚠️ No user document found for staff:", shiftData.userId);
         setPrimaryStaff({
-          name: null,
-          staffId: shiftData.userId,
-          category: shiftData.categoryName,
+          name:
+            shiftData.userName ||
+            shiftData.name ||
+            shiftData.user ||
+            "N/A",
+          staffId: shiftData.userId || "N/A",
+          category:
+            shiftData.categoryName ||
+            shiftData.shiftCategory ||
+            "N/A",
           avatar: null,
         });
       }
@@ -217,6 +322,9 @@ finalReports.push({
 
   fetchPrimaryStaff();
 }, [shiftData]);
+
+
+
 
 const fetchShiftById = async (shiftId, report) => {
   try {
@@ -242,13 +350,43 @@ const fetchShiftById = async (shiftId, report) => {
   if (loading) return <div className="p-7 text-gray-500">Loading…</div>;
   if (!shiftData) return <div className="p-7 text-red-500">Shift not found</div>;
 
-  const {
-    clientName,
-    clientId,
-    categoryName,
-    dob,
-    clientAvatar
-  } = shiftData;
+  const normalized = {
+  clientId:
+    shiftData.clientId ||
+    shiftData.client ||
+    shiftData.clientDetails?.id ||
+    "N/A",
+
+  clientName:
+    shiftData.clientName ||
+    shiftData.clientDetails?.name ||
+    "N/A",
+
+  dob:
+    shiftData.dob ||
+    shiftData.clientDetails?.dob ||
+    "N/A",
+
+  avatar:
+    shiftData.clientAvatar ||
+    shiftData.clientDetails?.avatar ||
+    null,
+
+  category:
+    shiftData.categoryName ||
+    shiftData.category ||
+    shiftData.shiftCategory ||
+    "N/A",
+
+  startDate:
+    shiftData.startDate ||
+    shiftData.startDateTime ||
+    null,
+
+  startTime: shiftData.startTime || "—",
+  endTime: shiftData.endTime || "—",
+};
+
 
   return (
     <div className="flex flex-col gap-6 p-2">
@@ -260,170 +398,152 @@ const fetchShiftById = async (shiftId, report) => {
       
       <hr className="border-t border-gray" />
 
-      <div className="flex gap-4">
+      <div className="flex h-[calc(100vh-100px)] overflow-hidden gap-4">
 
-        {/* -------------- LEFT PANEL -------------- */}
-        <div className="flex flex-col flex-1/5 gap-4">
-          <div className="bg-white p-3 rounded border border-light-gray flex flex-col gap-4 text-light-black">
+  {/* -------------- LEFT PANEL (FIXED) -------------- */}
+  <div className="w-[320px] flex-shrink-0 overflow-y-auto sticky top-0 h-full">
+    <div className="flex flex-col gap-4 p-3 bg-white border border-light-gray rounded text-light-black">
+      {/* --- Client Statistics --- */}
+      <p className="font-bold text-[16px]">Client Statistics</p>
 
-            {/* --- Client Statistics --- */}
-            <p className="font-bold text-[16px]">Client Statistics</p>
-
-            <div className="flex gap-4 ">
-              <div className="h-22 w-22 rounded-full overflow-hidden flex items-center justify-center">
-                {clientAvatar
-                  ? <img src={clientAvatar} className="h-full w-full object-cover" />
-                  : <img src="/images/profile.jpeg" className="rounded-full"/>
-                }
-              </div>
-
-             <div className="flex flex-col gap-1 text-nowrap ">
-                {/* Name */}
-                <div className="flex gap-2">
-                  <p className="font-normal text-[14px] leading-[20px]">Name:</p>
-                  <p
-                    className="font-bold text-[14px] leading-[20px] w-[127px] truncate"
-                    title={clientName}
-                  >
-                    {clientName || "N/A"}
-                  </p>
-                </div>
-
-                {/* Client ID */}
-                <div className="flex gap-2">
-                  <p className="font-normal text-[14px] leading-[20px]">Client ID:</p>
-                  <p className="font-bold text-[14px] leading-[20px]">
-                    {clientId || "N/A"}
-                  </p>
-                </div>
-
-                {/* Shift Category */}
-                <div className="flex gap-2">
-                  <p className="font-normal text-[14px] leading-[20px]">Shift Category:</p>
-                  <p
-                    className="font-bold text-[14px] leading-[20px] truncate w-[127px]"
-                    title={categoryName}
-                  >
-                    {categoryName || "N/A"}
-                  </p>
-                </div>
-
-                {/* Date of Birth */}
-                <div className="flex gap-2">
-                  <p className="font-normal text-[14px] leading-[20px]">Date of Birth:</p>
-                  <p className="font-bold text-[14px] leading-[20px]">
-                    {dob || "N/A"}
-                  </p>
-                </div>
-
-              </div>
-
-            </div>
-
-            <hr className="text-light-gray"/>
-
-            {/* --- Medical Info --- */}
-            <p className="font-bold text-[16px]">Medical Info</p>
-
-            {intakeData?.medicalConcerns?.length ? (
-              <ul className="list-disc pl-4 text-sm">
-                {intakeData.medicalConcerns.map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-600 text-sm">Not available</p>
-            )}
-
-            <hr className="text-light-gray"/>
-
-            {/* --- View Reports --- */}
-            <p className="font-bold text-[16px]">View Previous Reports</p>
-
-           {recentReports.length ? (
-          <ul className="list-disc pl-4 text-sm">
-            {recentReports.map((report, i) => (
-              <li
-                key={i}
-                className="text-dark-green cursor-pointer hover:underline"
-                onClick={() => fetchShiftById(report.shiftId, report)}
-
-              >
-                Report {i + 1}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-600 text-sm">No reports in last 24 hours.</p>
-        )}
-
-
-            
-           
-
-          </div>
-          <div className="flex flex-col gap-4 bg-white p-4 rounded border border-light-gray text-light-black">
-             <p className="font-bold text-[16px]">Primary Staff</p>
-
-            <div className="flex gap-4 items-center">
-              <div className="h-23 w-23 rounded-full bg-gray-300 overflow-hidden">
-                {primaryStaff?.avatar
-                  ? <img src={primaryStaff.avatar} className="h-full w-full object-cover" />
-                  : <img src="/images/profile.jpeg" className="rounded-full"/>
-                }
-              </div>
-
-              <div className="text-sm flex flex-col gap-1">
-                <p><b>Name:</b> {primaryStaff?.name}</p>
-                <p><b>Staff ID:</b> {primaryStaff?.staffId}</p>
-                <p className="truncate w-[200px]" title={primaryStaff?.category}><b>Shift Category:</b> {primaryStaff?.category}</p>
-              </div>
-            </div>
-
-          </div>
+      <div className="flex gap-4 ">
+        <div className="h-22 w-22 rounded-full flex items-center justify-center">
+          {normalized.avatar
+            ? <img src={normalized.avatar} className="h-full w-full" />
+            : <img src="/images/profile.jpeg" className="rounded-full"/>
+          }
         </div>
 
-        {/* -------------- RIGHT SECTION (UNCHANGED) -------------- */}
-        <div className="flex flex-col flex-4/5 gap-4">
-         <div className="w-full">
-          <div className="flex space-x-6 relative border-b border-gray-300">
-            {["Reports", "Medications", "Service Plan", "Transportation"].map((tab) => {
-              const isActive = activeTab === tab.toLowerCase();
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab.toLowerCase())}
-                  className={`relative font-bold text-[14px] pb-2 transition-colors ${
-                    isActive ? "text-dark-green" : "text-black"
-                  }`}
-                >
-                  {tab}
-                  {isActive && (
-                    <span className="absolute left-0 bottom-0 h-[2px] w-full bg-dark-green"></span>
-                  )}
-                </button>
-              );
-            })}
+        <div className="flex flex-col gap-1 text-nowrap ">
+          <div className="flex gap-2">
+            <p className="font-normal text-[14px] leading-[20px]">Name:</p>
+            <p className="font-bold text-[14px] leading-[20px] w-[127px] truncate" title={normalized.clientName}>
+              {normalized.clientName || "N/A"}
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <p className="font-normal text-[14px] leading-[20px]">Client ID:</p>
+            <p className="font-bold text-[14px] leading-[20px]">{normalized.clientId || "N/A"}</p>
+          </div>
+
+          <div className="flex gap-2">
+            <p className="font-normal text-[14px] leading-[20px]">Shift Category:</p>
+            <p className="font-bold text-[14px] leading-[20px] truncate w-[127px]" title={normalized.category}>
+              {normalized.category || "N/A"}
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <p className="font-normal text-[14px] leading-[20px]">Date of Birth:</p>
+            <p className="font-bold text-[14px] leading-[20px]">{normalized.dob || "N/A"}</p>
           </div>
         </div>
-
-
-          <div>
-            {activeTab === "reports" && (
-              <ReportsSection shiftId={shiftId} shiftData={shiftData} user={user} />
-            )}
-            {activeTab === "medications" && <MedicationPage shiftData={shiftData} />}
-            {activeTab === "serviceplan" && <div>Service Plan Component Here</div>}
-            {activeTab === "transportation" && (
-              <AddTransportation shiftId={shiftId} shiftData={shiftData} />
-            )}
-          </div>
-        </div>
-
       </div>
+
+      <hr className="text-light-gray"/>
+
+      {/* --- Medical Info --- */}
+      <p className="font-bold text-[16px]">Medical Info</p>
+
+      {intakeData?.medicalConcerns?.length ? (
+        <ul className="list-disc pl-4 text-sm">
+          {intakeData.medicalConcerns.map((m, i) => (
+            <li key={i}>{m}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-600 text-sm">Not available</p>
+      )}
+
+      <hr className="text-light-gray"/>
+
+      {/* --- View Reports --- */}
+      <p className="font-bold text-[16px]">View Previous Reports</p>
+      {recentReports.length ? (
+        <ul className="list-disc pl-4 text-sm">
+          {recentReports.map((report, i) => (
+            <li
+              key={i}
+              className="text-dark-green cursor-pointer hover:underline"
+              onClick={() => fetchShiftById(report.shiftId, report)}
+            >
+              Report {i + 1}
+              {report.staffName && (
+                <span className="text-gray-700 font-medium"> — {report.staffName}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-600 text-sm">No reports in last 24 hours.</p>
+      )}
+
+      <hr className="text-light-gray"/>
+
+      {/* --- Primary Staff --- */}
+      <p className="font-bold text-[16px]">Primary Staff</p>
+      <div className="flex gap-4 items-center">
+        <div className="h-25 w-25 rounded-full bg-gray-300 overflow-hidden">
+          {primaryStaff?.avatar
+            ? <img src={primaryStaff.avatar} className="h-full w-full" />
+            : <img src="/images/profile.jpeg" className="rounded-full"/>
+          }
+        </div>
+
+        <div className="text-sm flex flex-col gap-1">
+          <p><b>Name:</b> {primaryStaff?.name}</p>
+          <p><b>Staff ID:</b> {primaryStaff?.staffId}</p>
+          <p className="truncate w-[200px]" title={primaryStaff?.category}>
+            <b>Shift Category:</b> {primaryStaff?.category}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* -------------- RIGHT PANEL (SCROLLABLE) -------------- */}
+  <div className="flex-1 overflow-y-auto pr-2">
+    <div className="flex flex-col flex-4/5 gap-4">
+      <div className="w-full">
+        <div className="flex space-x-6 relative border-b border-gray-300">
+          {["Reports", "Medications", "Service Plan", "Transportation"].map((tab) => {
+            const isActive = activeTab === tab.toLowerCase();
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab.toLowerCase())}
+                className={`relative font-bold text-[14px] pb-2 transition-colors cursor-pointer ${
+                  isActive ? "text-dark-green" : "text-black"
+                }`}
+              >
+                {tab}
+                {isActive && (
+                  <span className="absolute left-0 bottom-0 h-[2px] w-full bg-dark-green"></span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        {activeTab === "reports" && (
+          <ReportsSection shiftId={shiftId} shiftData={shiftData} user={user} />
+        )}
+        {activeTab === "medications" && <MedicationPage shiftData={shiftData} user={user} />}
+        {activeTab === "serviceplan" && <div>Service Plan Component Here</div>}
+        {activeTab === "transportation" && (
+          <AddTransportation shiftId={shiftId} shiftData={shiftData} />
+        )}
+      </div>
+    </div>
+  </div>
+</div>
+
 {isModalOpen && selectedReport && (
   <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-    <div className="bg-white w-[550px] p-3 rounded shadow-lg relative max-h-[80vh] overflow-y-auto">
+    <div className="bg-white w-[600px] p-3 rounded shadow-lg relative max-h-[90vh] overflow-y-auto">
 
       {/* Close Button */}
       <button
@@ -440,9 +560,11 @@ const fetchShiftById = async (shiftId, report) => {
       {/* ⭐ Show shift date & times */}
       {selectedShiftInfo && (
         <div className="mb-4 text-sm text-light-black space-x-3 flex ">
-          <p><strong>Date:</strong> {String(selectedShiftInfo.startDate)}</p>
+         <p><strong>Date:</strong> {renderDate(selectedShiftInfo.startDate)}</p>
+
           <p><strong>Start Time:</strong> {selectedShiftInfo.startTime || "N/A"}</p>
           <p><strong>End Time:</strong> {selectedShiftInfo.endTime || "N/A"}</p>
+          <p><strong>Staff Name:</strong> {selectedShiftInfo.name || "N/A"}</p>
         </div>
       )}
 
