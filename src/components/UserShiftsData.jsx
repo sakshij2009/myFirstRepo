@@ -234,11 +234,11 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                   <div className="flex flex-col gap-[2px]">
                     <div className="flex justify-start gap-6">
                       <p className="font-normal text-[14px] leading-[20px]">Client</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientName}</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientName || emp.clientDetails?.name ||  "-"}</p>
                     </div>
                     <div className="flex justify-start gap-[8px]">
                       <p className="font-normal text-[14px] leading-[20px]">Client ID</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientId}</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientId || emp.clientDetails?.id || "-"}</p>
                     </div>
                   </div>
 
@@ -249,7 +249,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                     </div>
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Date</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.dateKey}</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{emp.startDate}</p>
                     </div>
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Timeline</p>
@@ -259,17 +259,17 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                     </div>
                     <div className="w-[160px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Category</p>
-                      <p className={getShiftCategoryStyle(emp.categoryName)} title={emp.categoryName}>
-                        {emp.categoryName}
+                      <p className={getShiftCategoryStyle(emp.categoryName || shift.shiftCategory)} title={emp.categoryName || shift.shiftCategory}>
+                        {emp.categoryName || emp.shiftCategory || "-"}
                       </p>
                     </div>
                     <div className="w-[75px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Type</p>
-                      <p className="font-bold text-[14px] leading-[20px]">Regular</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{emp.typeName || emp.shiftType || '-'}</p>
                     </div>
                     <div className="w-[120px]">
                       <p className="font-normal text-[14px] leading-[20px]">Agency</p>
-                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName}>
+                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName ||shift.clientDetails?.agencyName || "-"}>
                         {emp.agencyName}
                       </p>
                     </div>
@@ -285,24 +285,37 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
 
                   <div className="flex gap-2">
                     {/* Confirm Shift Button */}
-                    <div
-                      onClick={() => !isConfirmed && handleConfirm(emp.id)}
-                      className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px] font-medium text-[14px] leading-[20px]
-                        ${isConfirmed ? "bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed" : "bg-[#1D5F33] text-white border-[#1D5F33] cursor-pointer hover:bg-[#164a28]"}`}
-                    >
-                      <SiTicktick />
-                      <p>{isConfirmed ? "Confirmed" : "Confirm Shift"}</p>
-                    </div>
+                   {emp.shiftReport ? (
+                     <div
+                       onClick={() => handleViewReport(emp.id)}
+                       className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
+                                  border-dark-green text-dark-green bg-white cursor-pointer hover:bg-[#e6f5ea]"
+                     >
+                       <VscDebugStart className="text-[18px]" />
+                       <p>View Report</p>
+                     </div>
+                   ) : (
+                     <div
+                       onClick={() => handleViewReport(emp.id)}
+                       className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+                         ${emp.shiftConfirmed 
+                           ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer" 
+                           : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
+                     >
+                       <VscDebugStart className="text-[18px]" />
+                       <p>Make Report</p>
+                     </div>
+                   )}
 
                     {/* Make Report Button */}
-                    <div
+                    {/* <div
                       onClick={() => handleViewReport(emp.id)}
                       className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px] font-medium text-[14px] leading-[20px]
                         ${canMakeReport ? "border-[#1D5F33] text-[#1D5F33] bg-white hover:bg-[#e6f5ea] cursor-pointer" : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
                     >
                       <VscDebugStart className="text-[18px]" />
                       <p>Make Report</p>
-                    </div>
+                    </div> */}
 
                     {/* Transfer Shift Button */}
                     <div

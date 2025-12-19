@@ -211,7 +211,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
 
                     <div className="w-[75px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Type</p>
-                      <p className="font-bold text-[14px] leading-[20px]">Regular</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{shift.typeName || shift.shiftType}</p>
                     </div>
 
                     <div className="w-[80px]">
@@ -219,12 +219,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                       <span className={getStatusStyles(status)}>{status}</span>
                     </div>
 
-                    {/* <div className="w-[50px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Staff ID</p>
-                      <p className="font-bold text-[14px] leading-[20px]">
-                        {shift.userId || "-"}
-                      </p>
-                    </div> */}
+                  
 
                     <div className="w-[90px]">
                       <p className="flex font-normal text-[14px] leading-[20px]">Shift</p>

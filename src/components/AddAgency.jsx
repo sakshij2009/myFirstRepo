@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
-import { getDocs, collection, doc, setDoc, getDoc, query, where } from "firebase/firestore";
+import { getDocs, collection, doc, setDoc, getDoc, query, where, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { FaRegUserCircle, FaChevronDown } from "react-icons/fa";

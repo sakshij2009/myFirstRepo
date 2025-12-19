@@ -316,16 +316,34 @@ useEffect(() => {
 
       setUserShifts(regularShifts);
 
+    
       // ------------ TRANSPORTATION SHIFTS ------------
-      const transportShifts = allShifts.filter((shift) => {
-        const assigned =
-          shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
-          shift.userId === user?.userId;
+let transportShifts = allShifts.filter((shift) => {
+  const assigned =
+    shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
+    shift.userId === user?.userId;
 
-        return assigned && isTransportationShift(shift);
-      });
+  return assigned && isTransportationShift(shift);
+});
 
-      setUserTransportationShifts(transportShifts);
+// 🔥 Apply DATE FILTER same as normal shifts
+transportShifts = transportShifts.filter((shift) => {
+  const dateMatches =
+    selectedDates.length === 0 ||
+    selectedDates.some((date) => {
+      const formattedShiftDate = formatDateToDDMMYYYY(
+        shift.startDate?.toDate
+          ? shift.startDate.toDate()
+          : shift.startDate
+      );
+      return formattedShiftDate === formatDateToDDMMYYYY(date);
+    });
+
+  return dateMatches;
+});
+
+setUserTransportationShifts(transportShifts);
+
     } catch (error) {
       console.error("Error fetching user shifts:", error);
     }
@@ -1089,7 +1107,7 @@ useEffect(() => {
                       : "text-light-black font-bold"
                   }`}
                 >
-                  Shifts
+                  Shifts({userShifts.length})
                 </div>
                 <div
                   onClick={() => setShiftCategory("Calendar")}
@@ -1109,7 +1127,7 @@ useEffect(() => {
                       : "text-light-black font-bold"
                   }`}
                 >
-                  Transportations
+                  Transportations({userTransportationShift.length})
                 </div>
               </div>
               <div className="flex gap-4">

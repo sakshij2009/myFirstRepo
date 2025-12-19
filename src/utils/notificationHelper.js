@@ -26,6 +26,6 @@ export const sendNotification = async (receiverId, payload) => {
 
     console.log("✅ Notification sent successfully to", receiverId);
   } catch (err) {
-    console.error("❌ Error sending notification:", err);
+    console.error("❌ Error sending notification:", err); 
   }
 };

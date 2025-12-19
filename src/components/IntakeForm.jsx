@@ -2275,29 +2275,41 @@ const handleSubmit = async (values, { resetForm }) => {
                                 </span>
                               </div>
 
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Pickup Address
-                                </label>
-                                <Field
-                                  name={`transportationInfoList.${index}.pickupAddress`}
-                                  type="text"
-                                  placeholder="Enter pickup address"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                                />
-                              </div>
+                             <div>
+                              <label className="font-bold text-sm text-light-black">
+                                Pickup Address
+                              </label>
 
-                              <div>
+                              <GoogleAddressInput
+                                value={values.transportationInfoList[index].pickupAddress}
+                                placeholder="Enter pickup address"
+                                onChange={(val) =>
+                                  setFieldValue(
+                                    `transportationInfoList.${index}.pickupAddress`,
+                                    val
+                                  )
+                                }
+                              />
+                            </div>
+
+
+                             <div>
                                 <label className="font-bold text-sm text-light-black">
                                   Dropoff Address
                                 </label>
-                                <Field
-                                  name={`transportationInfoList.${index}.dropoffAddress`}
-                                  type="text"
+
+                                <GoogleAddressInput
+                                  value={values.transportationInfoList[index].dropoffAddress}
                                   placeholder="Enter dropoff address"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-sm"
+                                  onChange={(val) =>
+                                    setFieldValue(
+                                      `transportationInfoList.${index}.dropoffAddress`,
+                                      val
+                                    )
+                                  }
                                 />
                               </div>
+
 
                               <div>
                                 <label className="font-bold text-sm text-light-black">
@@ -2528,13 +2540,19 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <label className="font-bold text-sm text-light-black">
                                   Visit Address
                                 </label>
-                                <Field
-                                  name={`supervisedVisitations.${index}.visitAddress`}
-                                  type="text"
+
+                                <GoogleAddressInput
+                                  value={values.supervisedVisitations[index].visitAddress}
                                   placeholder="Enter visit address"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
+                                  onChange={(val) =>
+                                    setFieldValue(
+                                      `supervisedVisitations.${index}.visitAddress`,
+                                      val
+                                    )
+                                  }
                                 />
                               </div>
+
 
                               <div className="col-span-3">
                                 <label className="font-bold text-sm text-light-black">

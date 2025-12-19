@@ -149,79 +149,133 @@ const UserTransportationShifts = ({ filteredShifts }) => {
   // ----------------------------------------------------------
   // START RIDE
   // ----------------------------------------------------------
-  const handleStartRide = async (shift, clientForm, primaryPoint) => {
-    try {
-      const shiftRef = doc(db, "shifts", String(shift.id));
+// ----------------------------------------------------------
+// START RIDE  🚗
+// ----------------------------------------------------------
+const handleStartRide = async (shift, clientForm, primaryPoint) => {
+  try {
+    const shiftRef = doc(db, "shifts", String(shift.id));
 
-      // Mark ride started
-      await updateDoc(shiftRef, {
-        "transportation.driveStarted": true,
-        "transportation.driveStartTime": new Date().toISOString(),
-        "transportation.totalDistance": 0, // initialize distance
-        "transportation.lastLat": null,
-        "transportation.lastLng": null,
-      });
+    // ---------- Prepare Addresses ----------
+    const pickupAddress =
+      primaryPoint?.pickupLocation ||
+      clientForm?.pickupAddress ||
+      shift?.pickupLocation ||
+      "";
 
-      shift.transportation = {
-        ...(shift.transportation || {}),
-        driveStarted: true,
-        totalDistance: 0,
-        lastLat: null,
-        lastLng: null,
-      };
+    const visitAddress =
+      primaryPoint?.visitLocation ||
+      clientForm?.visitAddress ||
+      shift?.visitLocation ||
+      "";
 
-      setActiveShiftId(shift.id);
+    const dropAddress =
+      primaryPoint?.dropLocation ||
+      clientForm?.dropOffAddress ||
+      shift?.dropLocation ||
+      "";
 
-      // GPS tracking
-      if (!navigator.geolocation) {
-        alert("Location not supported");
-        return;
+    // ---------- Open Google Maps ----------
+    const openGoogleMapsNavigation = () => {
+      // Encode safe URLs
+      const pickup = encodeURIComponent(pickupAddress);
+      const visit = encodeURIComponent(visitAddress);
+      const drop = encodeURIComponent(dropAddress);
+
+      let url = "";
+
+      // Pickup → Visit → Drop
+      if (visitAddress && visitAddress.trim() !== "") {
+        url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&waypoints=${visit}&travelmode=driving`;
+      }
+      // Pickup → Drop only
+      else {
+        url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&travelmode=driving`;
       }
 
-      const watch = navigator.geolocation.watchPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
+      window.open(url, "_blank");
+    };
 
-          let lastLat = shift.transportation.lastLat;
-          let lastLng = shift.transportation.lastLng;
-
-          let newDistance = shift.transportation.totalDistance || 0;
-
-          // Only add if we have a last coordinate
-          if (lastLat != null && lastLng != null) {
-            const delta = getDistanceMeters(lastLat, lastLng, latitude, longitude);
-            if (delta < 500) {
-              newDistance += delta; // ignore abnormal jumps
-            }
-          }
-
-          await updateDoc(shiftRef, {
-            "transportation.currentLat": latitude,
-            "transportation.currentLng": longitude,
-            "transportation.totalDistance": newDistance,
-            "transportation.lastLat": latitude,
-            "transportation.lastLng": longitude,
-          });
-
-          shift.transportation.lastLat = latitude;
-          shift.transportation.lastLng = longitude;
-          shift.transportation.totalDistance = newDistance;
-
-          // Auto-detect pickup / visit / drop remains unchanged
-        },
-        (err) => {
-          console.error("GPS error:", err);
-          alert("Enable GPS to continue.");
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
-
-      setWatchId(watch);
-    } catch (err) {
-      console.error("Error starting ride:", err);
-      alert("Could not start ride.");
+    // ---------- Permission + Validation ----------
+    if (!pickupAddress || !dropAddress) {
+      alert("Pickup or Drop address missing.");
+      return;
     }
-  };
+
+    if (!navigator.geolocation) {
+      alert("Location not supported on this device.");
+      return;
+    }
+
+    // ---------- Firestore: Mark Ride Started ----------
+    await updateDoc(shiftRef, {
+      "transportation.driveStarted": true,
+      "transportation.driveStartTime": new Date().toISOString(),
+      "transportation.totalDistance": 0,
+      "transportation.lastLat": null,
+      "transportation.lastLng": null,
+    });
+
+    shift.transportation = {
+      ...(shift.transportation || {}),
+      driveStarted: true,
+      totalDistance: 0,
+      lastLat: null,
+      lastLng: null,
+    };
+
+    setActiveShiftId(shift.id);
+
+    // ---------- OPEN MAP NOW ----------
+    openGoogleMapsNavigation();
+
+    // ---------- Start GPS Tracking ----------
+    const watch = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+
+        let lastLat = shift.transportation.lastLat;
+        let lastLng = shift.transportation.lastLng;
+
+        let newDistance = shift.transportation.totalDistance || 0;
+
+        if (lastLat != null && lastLng != null) {
+          const delta = getDistanceMeters(lastLat, lastLng, latitude, longitude);
+
+          // ignore abnormal jumps
+          if (delta < 500) newDistance += delta;
+        }
+
+        await updateDoc(shiftRef, {
+          "transportation.currentLat": latitude,
+          "transportation.currentLng": longitude,
+          "transportation.totalDistance": newDistance,
+          "transportation.lastLat": latitude,
+          "transportation.lastLng": longitude,
+        });
+
+        shift.transportation.lastLat = latitude;
+        shift.transportation.lastLng = longitude;
+        shift.transportation.totalDistance = newDistance;
+      },
+      (err) => {
+        console.error("GPS error:", err); 
+        alert("Enable GPS to continue.");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000,
+      }
+    );
+
+    setWatchId(watch);
+  } catch (err) {
+    console.error("Error starting ride:", err);
+    alert("Could not start ride.");
+  }
+};
+
 
   // ----------------------------------------------------------
   // END RIDE
@@ -342,12 +396,11 @@ const UserTransportationShifts = ({ filteredShifts }) => {
         const seatType =
           primaryPoint?.seatType || clientForm.typeOfSeat || "N/A";
 
-        const transportMode =
-          primaryPoint?.transportationMode ||
-          clientForm.transportationMode ||
+        const shiftTimeline =
+          shift.startTime - shift.endTime
           "N/A";
 
-        const staffName = shift.name || shift.username || "N/A";
+        const shiftDate = shift.startDate || "N/A";
 
         const steps = buildSteps(shift, clientForm, primaryPoint);
 
@@ -487,23 +540,20 @@ const UserTransportationShifts = ({ filteredShifts }) => {
                 <div className="w-px h-6 bg-gray-400" />
 
                 <div className="flex gap-[4px]">
-                  <p className="font-normal">Seat Type:</p>
-                  <p className="font-bold">{seatType}</p>
+                  <p className="font-normal">Shift Date:</p>
+                  <p className="font-bold">{shiftDate}</p>
                 </div>
 
                 <div className="w-px h-6 bg-gray-400" />
 
                 <div className="flex gap-[4px]">
-                  <p className="font-normal">Transportations:</p>
-                  <p className="font-bold">{transportMode}</p>
+                  <p className="font-normal">Shift Timeline:</p>
+                  <p className="font-bold">{shiftTimeline}</p>
                 </div>
 
-                <div className="w-px h-6 bg-gray-400" />
+               
 
-                <div className="flex gap-[4px]">
-                  <p className="font-normal">Staff Name:</p>
-                  <p className="font-bold">{staffName}</p>
-                </div>
+                
               </div>
 
               <div className="flex gap-3 items-center">
@@ -530,14 +580,29 @@ const UserTransportationShifts = ({ filteredShifts }) => {
                     )}
 
                    {/* Make Report Button */}
-                        <div
-                          onClick={() => handleViewReport(shift.id)}
-                          className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px] font-medium text-[14px] leading-[20px]
-                            ${shift.shiftConfirmed ? "border-[#1D5F33] text-[#1D5F33] bg-white hover:bg-[#e6f5ea] cursor-pointer" : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
-                        >
-                          <VscDebugStart className="text-[18px]" />
-                          <p>Make Report</p>
-                        </div>                
+                        {/* Make / View Report */}
+{shift.shiftReport ? (
+  <div
+    onClick={() => handleViewReport(shift.id)}
+    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
+               border-dark-green text-dark-green bg-white cursor-pointer hover:bg-[#e6f5ea]"
+  >
+    <VscDebugStart className="text-[18px]" />
+    <p>View Report</p>
+  </div>
+) : (
+  <div
+    onClick={() => handleViewReport(shift.id)}
+    className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+      ${shift.shiftConfirmed 
+        ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer" 
+        : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
+  >
+    <VscDebugStart className="text-[18px]" />
+    <p>Make Report</p>
+  </div>
+)}
+                
 
                     {!rideCancelled && !driveEnded && (
                       <button
