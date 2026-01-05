@@ -269,22 +269,13 @@ const ShiftsData = ({ filteredShifts = [] }) => {
 
                     {/* View Report */}
                     {/* View Report */}
-                  <div
-                    className={` font-medium ${
-                      shift.shiftConfirmed
-                        ? "text-light-green cursor-pointer"
-                        : "text-[#72787E] cursor-not-allowed"
-                    }`}
-                    onClick={() => {
-                      if (!shift.shiftConfirmed) {
-                        alert("This staff hasn’t confirmed the shift yet. Report cannot be viewed.");
-                        return;
-                      }
-                      handleViewReport(shift.id);
-                    }}
-                  >
-                    View Report
-                  </div>
+                 <div
+  className="font-medium text-light-green cursor-pointer"
+  onClick={() => handleViewReport(shift.id)}
+>
+  View Report
+</div>
+
 
 
                     {/* Download Report */}

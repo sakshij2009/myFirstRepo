@@ -35,6 +35,22 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
 
   const navigate = useNavigate();
 
+   const formatDate = (timestamp) => {
+  if (!timestamp) return "-";
+
+  // Firebase Timestamp support
+  const date =
+    typeof timestamp?.toDate === "function"
+      ? timestamp.toDate()
+      : new Date(timestamp);
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
   // Fetch staff list on mount (you can change the where clause to fit your app)
   useEffect(() => {
     const fetchStaffMembers = async () => {
@@ -192,6 +208,17 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
   //   }
   // };
 
+  const handleConfirmShift = async (shiftId) => {
+  try {
+    await updateDoc(doc(db, "shifts", shiftId), {
+      shiftConfirmed: true,
+    });
+  } catch (error) {
+    console.error("Error confirming shift:", error);
+  }
+};
+
+
   // Pagination setup
   const ITEMS_PER_PAGE = 5;
   const totalPages = Math.max(1, Math.ceil(userShifts.length / ITEMS_PER_PAGE));
@@ -249,7 +276,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                     </div>
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Date</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.startDate}</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{formatDate(emp.startDate)}</p>
                     </div>
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Timeline</p>
@@ -259,7 +286,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                     </div>
                     <div className="w-[160px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Category</p>
-                      <p className={getShiftCategoryStyle(emp.categoryName || shift.shiftCategory)} title={emp.categoryName || shift.shiftCategory}>
+                      <p className={getShiftCategoryStyle(emp.categoryName || emp.shiftCategory)} title={emp.categoryName || emp.shiftCategory}>
                         {emp.categoryName || emp.shiftCategory || "-"}
                       </p>
                     </div>
@@ -269,7 +296,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
                     </div>
                     <div className="w-[120px]">
                       <p className="font-normal text-[14px] leading-[20px]">Agency</p>
-                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName ||shift.clientDetails?.agencyName || "-"}>
+                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName ||emp.clientDetails?.agencyName || "-"}>
                         {emp.agencyName}
                       </p>
                     </div>
@@ -285,6 +312,26 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
 
                   <div className="flex gap-2">
                     {/* Confirm Shift Button */}
+                     {/* Confirm Shift / Confirmed Status */}
+{emp.shiftConfirmed ? (
+  <div
+    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+               border-green-600 text-green-600 bg-green-50 cursor-default"
+  >
+   
+    <p>Confirmed</p>
+  </div>
+) : (
+  <div
+    onClick={() => handleConfirmShift(emp.id)}
+    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+               border-blue-600 text-blue-600 bg-white hover:bg-blue-50 cursor-pointer"
+  >
+    <VscDebugStart className="text-[18px]" />
+    <p>Confirm Shift</p>
+  </div>
+)}
+
                    {emp.shiftReport ? (
                      <div
                        onClick={() => handleViewReport(emp.id)}

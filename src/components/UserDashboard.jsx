@@ -68,6 +68,11 @@ const parseShiftDate = (dateVal, timeStr) => {
   }
 };
 
+// ================== TIME HELPERS ==================
+const minutesDiff = (a, b) => Math.floor((a - b) / 60000);
+const inRange = (now, start, end) => now >= start && now <= end;
+
+
 // Compare only hours/minutes of two Date objects
 const matchTime = (now, target) => {
   if (!now || !target) return false;
@@ -487,243 +492,271 @@ setUserTransportationShifts(transportShifts);
   };
 
   // =============== ACTIVE SHIFT (BASED ON userId + current time) ===============
-  const activeShift = useMemo(() => {
-    if (!userShifts.length || !user?.userId) return null;
+// =============== ACTIVE SHIFT (BASED ON userId + current time) ===============
+const activeShift = useMemo(() => {
+  if (!userShifts.length || !user?.userId) return null;
 
-    const now = new Date();
+  // ✅ Use Edmonton time, not browser local time
+  const now = new Date(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Edmonton",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date())
+  );
 
-    return userShifts.find((shift) => {
-      if (shift.userId !== user.userId) return false;
+  return userShifts.find((shift) => {
+    if (shift.userId !== user.userId) return false;
 
-      const start = parseShiftDate(shift.startDate, shift.startTime);
-      const end = parseShiftDate(shift.endDate, shift.endTime);
+    const start = parseShiftDate(shift.startDate, shift.startTime);
+    let end = parseShiftDate(shift.endDate, shift.endTime);
 
-      if (!start || !end) return false;
+    if (!start || !end) return false;
 
-      return now >= start && now <= end;
-    });
-  }, [userShifts, user?.userId, currentTime]);
+    // ✅ FIX: handle overnight shifts (e.g. 11 PM → 12 AM)
+    if (end <= start) {
+      end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    return now >= start && now <= end;
+  });
+}, [userShifts, user?.userId, currentTime]);
+
+
+const getEdmontonTimeString = (date = new Date()) => {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+};
+
 
   // =============== CLOCK IN / OUT HANDLERS ===============
 
   const handleClockIn = async () => {
-    if (lockClockIn) return; // locked by timing engine
+  if (!activeShift || lockClockIn) return;
 
-    try {
-      const { latitude, longitude } = await getUserLocation();
-      const address = await getAddressFromCoords(latitude, longitude);
+  const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
+  const now = new Date();
 
-      const nowStr = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  if (now < new Date(start.getTime() - 15 * 60000)) return;
 
-      // UI display uses actual click time
-      setClockInTime(nowStr);
-      setClockInLocation(address);
-      setClockInDone(true);
-      setLoginStatus("Clocked In ✅");
+  const { latitude, longitude } = await getUserLocation();
+  const address = await getAddressFromCoords(latitude, longitude);
 
-      // Firestore saves SCHEDULED time (rounded), not exact click
-      if (activeShift) {
-        await saveClockTimeToShift(activeShift, "clockIn");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Location access required to Clock In.");
-    }
-  };
+  // UI state (unchanged)
+  setClockInTime(
+    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
+  setClockInLocation(address);
+  setClockInDone(true);
 
-  const handleClockOut = async () => {
-    if (lockClockOut) return; // locked by timing engine
+  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT START)
+  await updateDoc(doc(db, "shifts", activeShift.id), {
+    clockIn: getEdmontonTimeString(start),
+    clockInLocation: address,
+    clockInTimeZone: "America/Edmonton",
+  });
+};
 
-    try {
-      const { latitude, longitude } = await getUserLocation();
-      const address = await getAddressFromCoords(latitude, longitude);
 
-      const nowStr = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+const handleClockOut = async () => {
+  if (!activeShift || lockClockOut) return;
 
-      // UI display uses actual click time
-      setClockOutTime(nowStr);
-      setClockOutLocation(address);
-      setClockOutDone(true);
-      setLoginStatus("Clocked Out 🚪");
+  const end = parseShiftDate(activeShift.endDate, activeShift.endTime);
+  const now = new Date();
 
-      // Firestore saves SCHEDULED end time
-      if (activeShift) {
-        await saveClockTimeToShift(activeShift, "clockOut");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Location access required to Clock Out.");
-    }
+  const { latitude, longitude } = await getUserLocation();
+  const address = await getAddressFromCoords(latitude, longitude);
 
-    setTimeout(() => {
-      setClockInDone(false);
-      setClockOutDone(false);
-    }, 1000);
-  };
+  // UI state (unchanged)
+  setClockOutTime(
+    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
+  setClockOutLocation(address);
+  setClockOutDone(true);
+
+  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT END)
+  await updateDoc(doc(db, "shifts", activeShift.id), {
+    clockOut: getEdmontonTimeString(end),
+    clockOutLocation: address,
+    clockOutTimeZone: "America/Edmonton",
+  });
+};
+
+
+const handleExtendShift = async () => {
+  if (!activeShift) return;
+
+  await updateDoc(doc(db, "shifts", activeShift.id), {
+    extendedShift: true,
+  });
+};
+
+// =============== REAL TIME TICKER (DO NOT REMOVE) ===============
+// =============== REAL TIME TICKER (FIXED) ===============
+useEffect(() => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "America/Edmonton",
+  });
+
+  const timer = setInterval(() => {
+    setCurrentTime(formatter.format(new Date())); // ✅ always string
+  }, 30 * 1000);
+
+  return () => clearInterval(timer);
+}, []);
+
+
+
 
   // =============== MAIN SHIFT REMINDER / LOCK / AUTO CLOCK-OUT ENGINE ===============
-  useEffect(() => {
-    if (!activeShift) return;
+// =============== MAIN SHIFT REMINDER / LOCK / AUTO CLOCK-OUT ENGINE ===============
+useEffect(() => {
+  if (!activeShift) return;
 
-    const now = new Date();
+  (async () => {
+    // Edmonton time
+    const now = new Date(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Edmonton",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(new Date())
+    );
 
     const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
-    const end = parseShiftDate(activeShift.endDate, activeShift.endTime);
+    let end = parseShiftDate(activeShift.endDate, activeShift.endTime);
 
     if (!start || !end) return;
 
-    const beforeStart15 = new Date(start.getTime() - 15 * 60 * 1000);
-    const afterStart15 = new Date(start.getTime() + 15 * 60 * 1000);
-    const lockClockInAt = new Date(afterStart15.getTime() + 1 * 60 * 1000); // 1 min after final warning
-
-    const beforeEnd15 = new Date(end.getTime() - 15 * 60 * 1000);
-    const afterEnd15 = new Date(end.getTime() + 15 * 60 * 1000);
-
-    // ------------- CLOCK-IN SIDE -------------
-
-    // 1) 15 min BEFORE start
-    if (matchTime(now, beforeStart15) && !activeShift.beforeStart15) {
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Upcoming Shift",
-        message: `Your shift starts at ${activeShift.startTime}.`,
-      });
-
-      updateShiftFlags(activeShift.id, { beforeStart15: true });
+    // Overnight shift fix
+    if (end <= start) {
+      end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
     }
 
-    // 2) At START time
-    if (matchTime(now, start) && !activeShift.startSent) {
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Shift Started",
-        message: "Your shift has started. Please clock in.",
-      });
+    const diffStart = minutesDiff(now, start);
+    const diffEnd = minutesDiff(now, end);
 
-      updateShiftFlags(activeShift.id, { startSent: true });
-    }
-
-    // 3A) 15 min AFTER start → Final Warning (no lock)
-    if (
-      matchTime(now, afterStart15) &&
-      !activeShift.afterStart15 &&
-      !clockInDone
-    ) {
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Final Reminder",
-        message: "You haven’t clocked in yet. Please clock in now.",
-      });
-
-      updateShiftFlags(activeShift.id, { afterStart15: true });
-    }
-
-    // 3B) 16 min AFTER start → Disable Clock-In & notify admin
-    if (
-      matchTime(now, lockClockInAt) &&
-      !activeShift.clockInLocked &&
-      !clockInDone
-    ) {
-      setLockClockIn(true);
-
-      // Notify user
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Clock-In Locked",
-        message:
-          "You did not clock in on time. Clock-In is now disabled for this shift.",
-      });
-
-      // Notify admin
-      if (adminId) {
-        sendNotification(adminId, {
-          type: "alert",
-          title: "Clock-In Missed",
-          message: `${activeShift.name} did not clock in by ${activeShift.startTime}. Clock-In has been disabled.`,
+    // ================= CLOCK-IN LOGIC =================
+    if (!clockInDone && !activeShift.clockInLocked) {
+      // BEFORE SHIFT (every 5 min)
+      if (diffStart >= -15 && diffStart < 0 && diffStart % 5 === 0) {
+        sendNotification(userDocId, {
+          type: "shift",
+          title: "Upcoming Shift",
+          message:
+            "Your shift is going to start soon. Please clock in at the time of work.",
         });
       }
 
-      updateShiftFlags(activeShift.id, { clockInLocked: true });
-    }
-
-    // ------------- CLOCK-OUT SIDE -------------
-
-    // 4) 15 min BEFORE end
-    if (matchTime(now, beforeEnd15) && !activeShift.beforeEnd15) {
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Shift Ending Soon",
-        message:
-          "Your shift ends in 15 minutes. Please prepare to clock out.",
-      });
-
-      updateShiftFlags(activeShift.id, { beforeEnd15: true });
-    }
-
-    // 5) At END time
-    if (matchTime(now, end) && !activeShift.endSent) {
-      sendNotification(userDocId, {
-        type: "shift",
-        title: "Shift Ended",
-        message: "Your shift has ended. Please clock out.",
-      });
-
-      updateShiftFlags(activeShift.id, { endSent: true });
-    }
-
-    // 6) 15 min AFTER end → AUTO CLOCK-OUT + lock Clock-Out
-    if (matchTime(now, afterEnd15) && !activeShift.afterEnd15) {
-      if (!clockOutDone) {
-        const autoTimeStr = now.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-
-        setClockOutTime(autoTimeStr);
-        setClockOutLocation("Auto clock-out by system");
-        setClockOutDone(true);
-        setLockClockOut(true); // now Clock-Out is locked
-
-        // Save scheduled clock-out time to Firestore
-        saveClockTimeToShift(activeShift, "clockOut").catch((e) =>
-          console.error("Error saving auto clock-out time:", e)
-        );
-
+      // EXACT START
+      if (diffStart === 0) {
         sendNotification(userDocId, {
           type: "shift",
-          title: "Auto Clock-Out",
-          message:
-            "You were auto clocked out because you did not clock out on time.",
+          title: "Shift Started",
+          message: "Your shift has started. Please clock in.",
+        });
+      }
+
+      // AFTER START (every 5 min)
+      if (diffStart > 0 && diffStart < 15 && diffStart % 5 === 0) {
+        const remaining = 15 - diffStart;
+        sendNotification(userDocId, {
+          type: "shift",
+          title: "Clock-In Reminder",
+          message: `Your shift has already started. Please clock in. Clock-in will be disabled in ${remaining} minutes.`,
+        });
+      }
+
+      // LOCK CLOCK-IN
+      if (diffStart >= 15) {
+        setLockClockIn(true);
+
+        await updateDoc(doc(db, "shifts", activeShift.id), {
+          clockInLocked: true,
         });
 
         if (adminId) {
           sendNotification(adminId, {
             type: "alert",
-            title: "Auto Clock-Out",
-            message: `${activeShift.name} did not clock out. System auto clocked-out the shift.`,
+            title: "Clock-In Missed",
+            message: `${activeShift.name} did not clock in for the shift.`,
           });
         }
       }
-
-      updateShiftFlags(activeShift.id, {
-        afterEnd15: true,
-        autoClockOutDone: true,
-      });
     }
-  }, [
-    activeShift,
-    currentTime,
-    clockInDone,
-    clockOutDone,
-    userDocId,
-    adminId,
-  ]);
+
+    // ================= CLOCK-OUT LOGIC =================
+    if (
+      !clockOutDone &&
+      !activeShift.extendedShift &&
+      !activeShift.clockOutLocked
+    ) {
+      // BEFORE END (every 5 min)
+      if (diffEnd >= -15 && diffEnd < 0 && diffEnd % 5 === 0) {
+        sendNotification(userDocId, {
+          type: "shift",
+          title: "Shift Ending Soon",
+          message: "Your shift is ending soon. Please clock out on time.",
+          actions: [
+            {
+              label: "Extend Shift",
+              action: "EXTEND_SHIFT",
+              shiftId: activeShift.id,
+            },
+          ],
+        });
+      }
+
+      // EXACT END
+      if (diffEnd === 0) {
+        sendNotification(userDocId, {
+          type: "shift",
+          title: "Shift Ended",
+          message: "Your shift has ended. Please clock out.",
+        });
+      }
+
+      // AUTO CLOCK-OUT AFTER 15 MIN
+      if (diffEnd >= 15) {
+        const { latitude, longitude } = await getUserLocation();
+        const address = await getAddressFromCoords(latitude, longitude);
+
+        await updateDoc(doc(db, "shifts", activeShift.id), {
+          clockOut: end.toISOString(),
+          clockOutLocation: address,
+          clockOutLocked: true,
+        });
+
+        setClockOutDone(true);
+        setLockClockOut(true);
+      }
+    }
+  })();
+}, [activeShift, currentTime]);
+
+
 
   return (
     <div className="flex flex-col gap-4 p-1 bg-[#EEEEEE] h-full w-full">
@@ -844,9 +877,9 @@ setUserTransportationShifts(transportShifts);
                   z-20
                 "
                   >
-                    Before 5,000 km, your transportation rate will be charged at
-                    72¢ per kilometer. After 5,000 km, the rate will increase to
-                    66¢ per kilometer.
+                    Clock-in is available 15 minutes before your shift starts and will be disabled 15 minutes after if not used.
+                     Clock-out times are rounded to the scheduled shift end within a 15-minute window.
+                      Please ensure timely clock-in and clock-out.
                     {/* CURVED ARROW */}
                     <svg
                       className="absolute -bottom-2 right-1 text-white drop-shadow-xl"

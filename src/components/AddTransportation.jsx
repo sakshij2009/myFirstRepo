@@ -14,6 +14,8 @@ const AddTransportation = ({ shiftId, shiftData }) => {
   const [uploadedReceipts, setUploadedReceipts] = useState([]);
   const [travelComments, setTravelComments] = useState("");
 
+  const [pickupAddress, setPickupAddress] = useState("");
+const [dropAddress, setDropAddress] = useState("");
   const [pickupScheduledAt, setPickupScheduledAt] = useState("");
   const [pickupDoneAt, setPickupDoneAt] = useState("");
   const [visitScheduledAt, setVisitScheduledAt] = useState("");
@@ -48,23 +50,71 @@ const AddTransportation = ({ shiftId, shiftData }) => {
 };
 
 
-  // Prefill data for Transportation shifts
-  useEffect(() => {
-    if (isTransportation && Array.isArray(shiftData?.shiftPoints) && shiftData.shiftPoints.length > 0) {
-      const t = shiftData.shiftPoints[0];
-      setStartPoint(t?.pickupLocation || "");
-      setVisitPoint(t?.visitLocation || "");
-      setEndPoint(t?.dropLocation || "");
-      setTotalKilometer(t?.totalKilometers || "");
-      setStaffKilometer(t?.staffTraveledKM || "");
-      setPickupScheduledAt(t?.pickupTime || "");
-      setPickupDoneAt(t?.pickupDoneAt || "");
-      setVisitScheduledAt(t?.visitScheduledAt || "");
-      setVisitDoneAt(t?.visitDoneAt || "");
-      setDropScheduledAt(t?.dropTime || "");
-      setDropDoneAt(t?.dropDoneAt || "");
-    }
-  }, [shiftData]);
+  // Prefill ONLY planned transportation data
+useEffect(() => {
+  if (
+    isTransportation &&
+    Array.isArray(shiftData?.shiftPoints) &&
+    shiftData.shiftPoints.length > 0
+  ) {
+    const t = shiftData.shiftPoints[0];
+
+    // ✅ Planned timings ONLY
+     setPickupAddress(t?.pickupLocation || "");
+    setVisitPoint(t?.visitLocation || "");
+    setDropAddress(t?.dropLocation || "");
+
+    setPickupScheduledAt(t?.pickupTime || "");
+    setPickupDoneAt(t?.pickupDoneAt || "");
+    setVisitScheduledAt(t?.visitScheduledAt || "");
+    setVisitDoneAt(t?.visitDoneAt || "");
+    setDropScheduledAt(t?.dropTime || "");
+    setDropDoneAt(t?.dropDoneAt || "");
+
+    // ❌ DO NOT set:
+    // totalKilometer
+    // staffKilometer
+    // startPoint
+    // endPoint
+  }
+}, [shiftData, isTransportation]);
+
+useEffect(() => {
+  if (
+    Array.isArray(shiftData?.extraShiftPoints) &&
+    shiftData.extraShiftPoints.length > 0
+  ) {
+    const lastDrive =
+      shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1];
+
+    setStartPoint(lastDrive.startLocation || "");
+    setEndPoint(lastDrive.endLocation || "");
+    setTotalKilometer(lastDrive.totalKilometer || "");
+    setStaffKilometer(lastDrive.staffTraveledKM || "");
+  } else {
+    // No actual drive yet
+    setStartPoint("");
+    setEndPoint("");
+    setTotalKilometer("");
+    setStaffKilometer("");
+  }
+}, [shiftData?.extraShiftPoints]);
+
+useEffect(() => {
+  setTravelComments(shiftData?.travelComments || "");
+}, [shiftData?.travelComments]);
+
+useEffect(() => {
+  if (Array.isArray(shiftData?.expenseReceiptUrls)) {
+    setUploadedReceipts(
+      shiftData.expenseReceiptUrls.map((r) => ({
+        name: r.name,
+        preview: r.url,   // for opening
+        url: r.url,       // stored URL
+      }))
+    );
+  }
+}, [shiftData?.expenseReceiptUrls]);
 
   // Haversine formula for non-transportation live tracking
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -184,53 +234,45 @@ const handleSubmit = async () => {
   try {
     const shiftRef = doc(db, "shifts", String(shiftId));
     const shiftSnap = await getDoc(shiftRef);
+
     if (!shiftSnap.exists()) {
       alert("Shift not found!");
       return;
     }
 
-    const shift = shiftSnap.data();
-
-    // 🚗 CASE 1: Transportation Shift
-   if (isTransportation) {
-  const receiptUrls = await uploadReceiptsToStorage();
-
-  const updatedShiftPoints = (shift.shiftPoints || []).map((point) => ({
-    ...point,
-    expenseReceiptUrls: [
-      ...(point.expenseReceiptUrls || []),
-      ...receiptUrls, // ✅ URLs only
-    ],
-    driveComments: travelComments || point.driveComments || "",
-    updatedAt: new Date(),
-  }));
-
-  await updateDoc(shiftRef, { shiftPoints: updatedShiftPoints });
-
-  alert("Receipts and comments updated for transportation shift.");
-  return;
-}
-
-
-    // 🧍 CASE 2: Non-Transportation (Extra Drive)
     const receiptUrls = await uploadReceiptsToStorage();
 
-const newExtraPoint = {
-  startLocation: startPoint,
-  endLocation: endPoint,
-  totalKilometer: Number(totalKilometer) || 0,
-  staffTraveledKM: Number(staffKilometer) || 0,
-  expenseReceiptUrls: receiptUrls, // ✅ URLs only
-  driveComments: travelComments,
-  createdAt: new Date(),
-};
+    const updatePayload = {};
 
-await updateDoc(shiftRef, {
-  extraShiftPoints: arrayUnion(newExtraPoint),
-});
+    // ✅ 1. Save extra drive ONLY if drive actually happened
+    if (startPoint && endPoint) {
+      const extraDrive = {
+        startLocation: startPoint,
+        endLocation: endPoint,
+        totalKilometer: Number(totalKilometer) || 0,
+        staffTraveledKM: Number(staffKilometer) || 0,
+        createdAt: new Date(),
+      };
 
+      updatePayload.extraShiftPoints = arrayUnion(extraDrive);
+    }
 
-    alert("Extra drive details saved successfully!");
+    // ✅ 2. Save common travel comments (overwrite)
+    if (travelComments) {
+      updatePayload.travelComments = travelComments;
+    }
+
+    // ✅ 3. Save receipts at SHIFT LEVEL
+    if (receiptUrls.length > 0) {
+      updatePayload.expenseReceiptUrls = arrayUnion(...receiptUrls);
+    }
+
+    // 🚀 Final update
+    if (Object.keys(updatePayload).length > 0) {
+      await updateDoc(shiftRef, updatePayload);
+    }
+
+    alert("Transportation details saved successfully!");
   } catch (error) {
     console.error("Error saving transportation data:", error);
     alert("Error saving transportation details!");
@@ -254,11 +296,11 @@ await updateDoc(shiftRef, {
       <hr className="border-light-gray" />
 
       {/* TRANSPORTATION SHIFT */}
-      {isTransportation ? (
+      {isTransportation && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
             <label className="font-semibold mb-1">Pickup Address</label>
-            <input value={startPoint} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
+            <input value={pickupAddress} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
             <p className="text-sm mt-1 font-bold">Scheduled At: {pickupScheduledAt || "N/A"}</p>
             <p className="text-sm  font-bold">Done At: {pickupDoneAt || "Pending"}</p>
           </div>
@@ -274,7 +316,7 @@ await updateDoc(shiftRef, {
 
           <div>
             <label className="font-semibold mb-1">Drop Address</label>
-            <input value={endPoint} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
+            <input value={dropAddress} readOnly className="w-full border border-gray rounded p-2 bg-gray-100" />
             <p className="text-sm mt-1  font-bold">Scheduled At: {dropScheduledAt || "N/A"}</p>
             <p className="text-sm  font-bold">Done At: {dropDoneAt || "Pending"}</p>
           </div>
@@ -286,8 +328,8 @@ await updateDoc(shiftRef, {
             <input value={staffKilometer}  className="w-full border border-gray rounded p-2 bg-gray-100" />
           </div>
         </div>
-      ) : (
-        <>
+      ) }
+        
           {/* NON-TRANSPORTATION SHIFT */}
           <div className="flex gap-3 items-center mb-4">
             {!tracking ? (
@@ -326,8 +368,8 @@ await updateDoc(shiftRef, {
           </div>
 
           
-        </>
-      )}
+        
+      
 
       <hr className="border-light-gray" />
 
