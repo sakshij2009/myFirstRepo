@@ -8,7 +8,7 @@ const UserCard = ({ user }) => {
 
   return (
     <div
-      className="relative w-80 h-52 cursor-pointer"
+      className="relative w-[320px] h-[400px] cursor-pointer perspective"
       onClick={() => setIsFlipped(!isFlipped)}
     >
       <motion.div
