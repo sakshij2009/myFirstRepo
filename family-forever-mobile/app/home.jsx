@@ -414,16 +414,19 @@ function ScheduleTab({ activeShift, onClockIn, onClockOut }) {
       {/* Header */}
       <Text style={styles.scheduleTitle}>Time Schedule</Text>
 
-      {/* Current Time */}
-      <View style={{ marginTop: 10 }}>
-        <Text style={styles.label}>CURRENT TIME</Text>
-        <Text style={styles.currentTime}>
-          {new Date().toLocaleTimeString("en-CA", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
+     {/* Current Time */}
+<View style={{ marginTop: 10 }}>
+  <Text style={styles.label}>CURRENT TIME</Text>
+  <Text style={styles.currentTime}>
+    {new Date().toLocaleTimeString("en-CA", {
+      timeZone: "America/Edmonton",   // ✅ Force Edmonton time
+      hour: "2-digit",
+      minute: "2-digit",
+     
+    })}
+  </Text>
+</View>
+
 
       {/* Clock In */}
       <View style={styles.scheduleRow}>

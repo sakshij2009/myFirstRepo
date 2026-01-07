@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import ReportTransportationTab from "./ReportTransportationTab";
 import { db } from "../src/firebase/config";
+import MedicationTab from "./MedicationTab";
 
 /* ---------- SMALL REUSABLE CARD FOR MORE ACTIONS ---------- */
 const ActionCard = ({
@@ -614,7 +615,7 @@ const calculateTotalHours = (clockIn, clockOut) => {
 {activeTab === "Medication" && (
   <View style={{ margin: 16 }}>
     <Text style={{ fontWeight: "700" }}>
-      Medication section will be added later
+       <MedicationTab shift={shift}  />
     </Text>
   </View>
 )}

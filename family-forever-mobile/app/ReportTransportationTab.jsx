@@ -12,7 +12,6 @@ import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import {
   doc,
-  getDoc,
   updateDoc,
   arrayUnion,
   arrayRemove,
@@ -23,6 +22,7 @@ import {
   getDownloadURL,
   deleteObject,
 } from "firebase/storage";
+import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { db, storage } from "../src/firebase/config";
 
 /* ---------------- HELPERS ---------------- */
@@ -45,8 +45,6 @@ const reverseGeocode = async (coords) => {
   return `${a.name || ""} ${a.street || ""}, ${a.city || ""}`;
 };
 
-
-
 /* ---------------- COMPONENT ---------------- */
 export default function ReportTransportationTab({ shift, shiftId }) {
   const isTransportation =
@@ -55,24 +53,19 @@ export default function ReportTransportationTab({ shift, shiftId }) {
 
   const planned = shift?.shiftPoints?.[0] || {};
 
-  /* EXTRA TRANSPORT TOGGLE */
-  const [showExtraTransport, setShowExtraTransport] = useState(
-    !isTransportation
-  );
-
   /* DRIVE STATE */
   const [isDriving, setIsDriving] = useState(false);
   const [prevCoords, setPrevCoords] = useState(null);
   const [startCoords, setStartCoords] = useState(null);
+  const [stopCoords, setStopCoords] = useState(null);
   const [endCoords, setEndCoords] = useState(null);
   const [distance, setDistance] = useState(0);
   const [locationSub, setLocationSub] = useState(null);
-  
 
   /* POINTS */
   const [startPoint, setStartPoint] = useState("");
+  const [stopPoint, setStopPoint] = useState("");
   const [endPoint, setEndPoint] = useState("");
-  
 
   /* RECEIPTS */
   const [receipts, setReceipts] = useState([]);
@@ -82,7 +75,8 @@ export default function ReportTransportationTab({ shift, shiftId }) {
 
   /* ---------------- START DRIVE ---------------- */
   const startDrive = async () => {
-     openRouteInMaps();
+    openRouteInMaps();
+
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission required", "Location permission denied");
@@ -112,22 +106,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
           );
 
           if (d < 0.01) return prev; // ignore GPS noise
-
           setDistance((old) => old + d);
-
-          // inside watchPositionAsync
-            const distanceToPickup = getDistanceKm(
-            pos.coords.latitude,
-            pos.coords.longitude,
-            planned.pickupLat,
-            planned.pickupLng
-            );
-
-            if (distanceToPickup < 0.05 && !pickupDone) {
-            updateDoc(shiftRef, {
-                "shiftPoints.0.pickupDoneAt": new Date(),
-            });
-            }
 
           return pos.coords;
         });
@@ -208,39 +187,21 @@ export default function ReportTransportationTab({ shift, shiftId }) {
   };
 
   /* ---------------- OPEN MAP WITH ROUTE ---------------- */
-const openRouteInMaps = () => {
-  const pickup =
-    planned.pickupLocation ||
-    shift.pickupLocation ||
-    "";
+  const openRouteInMaps = () => {
+    const pickup = planned.pickupLocation || shift.pickupLocation || "";
+    const drop = planned.dropLocation || shift.dropLocation || "";
 
-  const drop =
-    planned.dropLocation ||
-    shift.dropLocation ||
-    "";
+    if (!pickup || !drop) {
+      Alert.alert("Error", "Pickup or Drop address missing");
+      return;
+    }
 
-  const visit =
-    planned.visitLocation ||
-    shift.visitLocation ||
-    "";
+    const origin = encodeURIComponent(pickup);
+    const destination = encodeURIComponent(drop);
 
-  if (!pickup || !drop) {
-    Alert.alert("Error", "Pickup or Drop address missing");
-    return;
-  }
-
-  const origin = encodeURIComponent(pickup);
-  const destination = encodeURIComponent(drop);
-
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-
-  if (visit && visit.trim() !== "") {
-    url += `&waypoints=${encodeURIComponent(visit)}`;
-  }
-
-  Linking.openURL(url);
-};
-
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+    Linking.openURL(url);
+  };
 
   /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async () => {
@@ -249,15 +210,38 @@ const openRouteInMaps = () => {
       const payload = {};
 
       if (startCoords && endCoords) {
-        const totalKm = getDistanceKm(
-          startCoords.latitude,
-          startCoords.longitude,
-          endCoords.latitude,
-          endCoords.longitude
-        );
+        let totalKm = 0;
+
+        if (stopCoords) {
+          // Start → Stop → End
+          totalKm =
+            getDistanceKm(
+              startCoords.latitude,
+              startCoords.longitude,
+              stopCoords.latitude,
+              stopCoords.longitude
+            ) +
+            getDistanceKm(
+              stopCoords.latitude,
+              stopCoords.longitude,
+              endCoords.latitude,
+              endCoords.longitude
+            );
+        } else {
+          // Start → End
+          totalKm = getDistanceKm(
+            startCoords.latitude,
+            startCoords.longitude,
+            endCoords.latitude,
+            endCoords.longitude
+          );
+        }
 
         payload.extraShiftPoints = arrayUnion({
           startLocation: startPoint,
+          stopLocation: stopPoint || null,
+          stopLat: stopCoords?.latitude || null,
+          stopLng: stopCoords?.longitude || null,
           endLocation: endPoint,
           totalKilometer: Number(totalKm.toFixed(2)),
           staffTraveledKM: Number(distance.toFixed(2)),
@@ -279,151 +263,109 @@ const openRouteInMaps = () => {
     }
   };
 
-  /* ---------------- UI ---------------- */
   const totalKm =
-    startCoords && endCoords
-      ? getDistanceKm(
+  startCoords && endCoords
+    ? stopCoords
+      ? (
+          getDistanceKm(
+            startCoords.latitude,
+            startCoords.longitude,
+            stopCoords.latitude,
+            stopCoords.longitude
+          ) +
+          getDistanceKm(
+            stopCoords.latitude,
+            stopCoords.longitude,
+            endCoords.latitude,
+            endCoords.longitude
+          )
+        ).toFixed(2)
+      : getDistanceKm(
           startCoords.latitude,
           startCoords.longitude,
           endCoords.latitude,
           endCoords.longitude
         ).toFixed(2)
-      : "0.00";
+    : "0.00";
 
+
+  /* ---------------- UI ---------------- */
   return (
     <ScrollView style={{ padding: 16 }}>
-      {/* TRANSPORTATION PLANNED */}
       {isTransportation && (
         <>
-          
           <Text style={styles.label}>Pickup Address</Text>
-          <TextInput style={styles.input} value={planned.pickupLocation || ""} editable={false} />
-
-          <Text style={{ marginTop: 4, fontSize: 12 }}>
-            Scheduled At: {planned.pickupTime || "--"}
-            </Text>
-
-            <Text style={{ fontSize: 12 }}>
-            Done At: {planned.pickupDoneAt || "Pending"}
-            </Text>
-
+          <TextInput
+            style={styles.input}
+            value={planned.pickupLocation || ""}
+            editable={false}
+          />
 
           <Text style={styles.label}>Drop Address</Text>
-          <TextInput style={styles.input} value={planned.dropLocation || ""} editable={false} />
-
-          <Text style={{ marginTop: 4, fontSize: 12 }}>
-            Scheduled At: {planned.dropTime || "--"}
-            </Text>
-
-            <Text style={{ fontSize: 12 }}>
-            Done At: {planned.dropDoneAt || "Pending"}
-        </Text>
-
+          <TextInput
+            style={styles.input}
+            value={planned.dropLocation || ""}
+            editable={false}
+          />
 
           <Pressable
             onPress={isDriving ? endDrive : startDrive}
             style={{
-                backgroundColor: isDriving ? "#DC2626" : "#14532D",
-                padding: 14,
-                borderRadius: 6,
-                marginTop: 16,
+              backgroundColor: isDriving ? "#DC2626" : "#14532D",
+              padding: 14,
+              borderRadius: 6,
+              marginTop: 16,
             }}
-            >
-            <Text style={{ color: "#fff", textAlign: "center", fontWeight: "700" }}>
-                {isDriving ? "End Drive" : "Start Drive"}
-            </Text>
-            </Pressable>
-
-            <Text style={styles.label}>Total Kilometers</Text>
-                <TextInput
-                style={styles.input}
-                value={`${totalKm} km`}
-                editable={false}
-                />
-
-                <Text style={styles.label}>Kilometers Traveled by Staff</Text>
-                <TextInput
-                style={styles.input}
-                value={`${distance.toFixed(2)} km`}
-                editable={false}
-                />
-                 <Text style={styles.label}>Receipts</Text>
-          <Pressable style={styles.uploadBtn} onPress={pickReceipt}>
-            <Text>Upload Receipt</Text>
-          </Pressable>
-
-          {receipts.map((r, i) => (
-            <View key={i} style={{ marginTop: 8 }}>
-              <Text onPress={() => Linking.openURL(r.url || r.uri)}>{r.name}</Text>
-              <Pressable onPress={() => deleteReceipt(r)}>
-                <Text style={{ color: "red" }}>Delete</Text>
-              </Pressable>
-            </View>
-          ))}
-
-          {/* ---------- TRAVEL COMMENTS ---------- */}
-            <Text style={styles.label}>Travel Comments</Text>
-            <TextInput
-            multiline
-            value={comments}
-            onChangeText={setComments}
-            placeholder="Add travel notes or comments"
-            style={[styles.input, { height: 90 }]}
-            />
-
-
-          <Pressable style={styles.submitBtn} onPress={handleSubmit}>
-            <Text style={styles.driveText}>Submit</Text>
-          </Pressable>
-
-
-
-          {!showExtraTransport && (
-            <Pressable
-              style={styles.addBtn}
-              onPress={() => setShowExtraTransport(true)}
-            >
-              <Text>Add Extra Transportation</Text>
-            </Pressable>
-          )}
-        </>
-      )}
-
-      {/* EXTRA TRANSPORT */}
-      {showExtraTransport && (
-        <>
-        {isTransportation && <Pressable
-    onPress={() => setShowExtraTransport(false)}
-    style={{
-      alignSelf: "flex-end",
-      padding: 6,
-      marginBottom: 6,
-    }}
-  >
-    <Text style={{ fontSize: 18, color: "#DC2626" }}>✕</Text>
-  </Pressable>}
-          <Pressable
-            onPress={isDriving ? endDrive : startDrive}
-            style={[
-              styles.driveBtn,
-              { backgroundColor: isDriving ? "#DC2626" : "#14532D" },
-            ]}
           >
-            <Text style={styles.driveText}>
+            <Text style={{ color: "#fff", textAlign: "center", fontWeight: "700" }}>
               {isDriving ? "End Drive" : "Start Drive"}
             </Text>
           </Pressable>
 
-          <Text style={styles.label}>Starting Point</Text>
-          <TextInput style={styles.input} value={startPoint} editable={false} />
+          {/* ---------- ADD A STOP (GOOGLE AUTOCOMPLETE) ---------- */}
+          <Text style={styles.label}>Add a Stop</Text>
+          <GooglePlacesAutocomplete
+            placeholder="Enter stop location"
+            fetchDetails={true}
+            onPress={(data, details = null) => {
+              if (!details) return;
 
-          <Text style={styles.label}>Ending Point</Text>
-          <TextInput style={styles.input} value={endPoint} editable={false} />
+              const { lat, lng } = details.geometry.location;
+              setStopPoint(details.formatted_address);
+              setStopCoords({
+                latitude: lat,
+                longitude: lng,
+              });
+            }}
+            query={{
+              key: "AIzaSyAqsfeARorPkCqHI61693V1YDa8Gv49SpA",
+              language: "en",
+              components: "country:ca", // Canada only
+            }}
+            styles={{
+              textInput: {
+                borderWidth: 1,
+                borderColor: "#d1d5db",
+                borderRadius: 6,
+                padding: 10,
+                marginTop: 6,
+                backgroundColor: "#f9fafb",
+              },
+              listView: {
+                zIndex: 1000,
+              },
+            }}
+          />
+          <Text style={styles.label}>Total Kilometers</Text>
+           <TextInput
+            style={styles.input} 
+            value={`${totalKm} km`}
+             editable={false}
+          />
 
-          <Text style={styles.label}>Total Distance</Text>
-          <TextInput style={styles.input} value={`${totalKm} km`} editable={false} />
+         
 
-          <Text style={styles.label}>Staff KM</Text>
+          <Text style={styles.label}>Kilometers Traveled by Staff</Text>
           <TextInput
             style={styles.input}
             value={`${distance.toFixed(2)} km`}
@@ -444,16 +386,14 @@ const openRouteInMaps = () => {
             </View>
           ))}
 
-          {/* ---------- TRAVEL COMMENTS ---------- */}
-            <Text style={styles.label}>Travel Comments</Text>
-            <TextInput
+          <Text style={styles.label}>Travel Comments</Text>
+          <TextInput
             multiline
             value={comments}
             onChangeText={setComments}
             placeholder="Add travel notes or comments"
             style={[styles.input, { height: 90 }]}
-            />
-
+          />
 
           <Pressable style={styles.submitBtn} onPress={handleSubmit}>
             <Text style={styles.driveText}>Submit</Text>
@@ -482,18 +422,6 @@ const styles = {
     borderRadius: 6,
     marginTop: 6,
     alignItems: "center",
-  },
-  addBtn: {
-    marginTop: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  driveBtn: {
-    padding: 14,
-    borderRadius: 6,
-    marginVertical: 16,
   },
   driveText: {
     color: "#fff",
