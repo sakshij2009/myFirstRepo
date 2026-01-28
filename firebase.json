@@ -1,6 +1,7 @@
 {
   "hosting": {
     "public": "dist",
+    "site": "ffadmin-prod",
     "ignore": [
       "firebase.json",
       "**/.*",

@@ -443,7 +443,7 @@ const MedicationPage = ({ shiftData,user }) => {
         {/* Dates */}
         <div className="grid grid-cols-7 text-center text-sm">
           {Array.from({ length: firstDayIndex }).map((_, i) => (
-            <div key={`empty-${i}`} className="border-r border-b min-h-[80px]" />
+            <div key={`empty-${i}`} className="border-r border-b border-light-gray min-h-[80px]" />
           ))}
 
           {Array.from({ length: daysInMonth }, (_, i) => {

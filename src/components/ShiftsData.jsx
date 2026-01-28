@@ -123,6 +123,19 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     navigate(`/admin-dashboard/add/update-user-shift/${shiftId}`);
   };
 
+  const normalizeCategory = (category) => {
+  const c = (category || "").toLowerCase().trim();
+
+  // Anything that starts with supervised visitation should be treated as supervised visitation tab
+  if (c.includes("supervised visitation")) return "Supervised Visitation";
+
+  if (c.includes("emergent care")) return "Emergent Care";
+  if (c.includes("respite care")) return "Respite Care";
+
+  return category || "-";
+};
+
+
   return (
     <div className="flex flex-col gap-[24px] w-full ">
       {currentShifts.length === 0 ? (
@@ -201,12 +214,20 @@ const ShiftsData = ({ filteredShifts = [] }) => {
 
                     <div className="gap-2">
                       <p className="flex font-normal text-[14px] leading-[20px]">Shift Category</p>
-                      <p
-                        className={getShiftCategoryStyle(shift.categoryName || shift.shiftCategory)}
-                        title={shift.categoryName || shift.shiftCategory}
-                      >
-                        {shift.categoryName || shift.shiftCategory || "-"}
-                      </p>
+                     {(() => {
+                        const rawCategory = shift.categoryName || shift.shiftCategory;
+                        const normalized = normalizeCategory(rawCategory);
+
+                        return (
+                          <p
+                            className={getShiftCategoryStyle(normalized)}
+                            title={rawCategory}
+                          >
+                            {rawCategory || "-"}
+                          </p>
+                        );
+                      })()}
+
                     </div>
 
                     <div className="w-[75px]">

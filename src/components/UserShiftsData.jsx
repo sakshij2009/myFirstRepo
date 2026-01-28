@@ -119,94 +119,79 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
     setShowTransferModal(true);
   };
 
-  // // The main transfer function — creates transferRequests doc and sends notifications
-  // const handleTransferShift = async () => {
-  //   try {
-  //     if (!selectedStaff) {
-  //       alert("Please select a staff member to transfer the shift to.");
-  //       return;
-  //     }
-  //     if (!selectedShift) {
-  //       alert("Shift is not selected.");
-  //       return;
-  //     }
-  //     if (!user || !user.userId) {
-  //       console.error("Missing current user info. Pass `user` prop with userId and name.");
-  //       alert("You must be logged in to transfer a shift.");
-  //       return;
-  //     }
+const handleTransferShift = async () => {
+  try {
+    if (!selectedStaff) {
+      alert("Please select a staff member.");
+      return;
+    }
 
-  //     // 1) Create transfer request document
-  //     const transferRef = await addDoc(collection(db, "transferRequests"), {
-  //       shiftId: selectedShift.id,
-  //       fromUserId: user.userId,
-  //       fromUserName: user.name,
-  //       toUserId: selectedStaff.id,
-  //       toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
-  //       reason: transferReason || "",
-  //       status: "pending",
-  //       createdAt: Timestamp.now(),
-  //     });
+    if (!selectedShift || !user?.userId) {
+      alert("Invalid shift or user.");
+      return;
+    }
 
-  //     const transferId = transferRef.id;
-  //     console.log("Transfer request created:", transferId);
+    // 1️⃣ Create transfer request
+    const transferRef = await addDoc(collection(db, "transferRequests"), {
+      shiftId: selectedShift.id,
+      fromUserId: user.userId,
+      fromUserName: user.name,
+      toUserId: selectedStaff.id,
+      toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
+      reason: transferReason || "",
+      status: "pending",
+      createdAt: Timestamp.now(),
+    });
 
-  //     // 2) Find admin(s) and notify (assumes role == 'admin')
-  //     try {
-  //       const adminQ = query(collection(db, "users"), where("role", "==", "admin"));
-  //       const adminSnap = await getDocs(adminQ);
-  //       if (!adminSnap.empty) {
-  //         // notify first admin found (or you can loop and notify all)
-  //         const adminId = adminSnap.docs[0].id;
-  //         await sendNotification(adminId, {
-  //           type: "request",
-  //           title: "Shift Transfer Request",
-  //           message: `${user.name} has requested to transfer a shift to ${selectedStaff.name || selectedStaff.fullName || selectedStaff.email}.`,
-  //           senderId: user.userId,
-  //           meta: {
-  //             requestType: "transfer",
-  //             transferId,
-  //             shiftId: selectedShift.id,
-  //             fromUserId: user.userId,
-  //             toUserId: selectedStaff.id,
-  //           },
-  //         });
-  //       } else {
-  //         console.warn("No admin user found to notify.");
-  //       }
-  //     } catch (adminNotifyErr) {
-  //       console.error("Error finding / notifying admin:", adminNotifyErr);
-  //     }
+    const transferId = transferRef.id;
 
-  //     // 3) Notify the receiving staff
-  //     try {
-  //       await sendNotification(selectedStaff.id, {
-  //         type: "info",
-  //         title: "Incoming Shift Transfer",
-  //         message: `${user.name} has requested to transfer a shift to you.`,
-  //         senderId: user.userId,
-  //         meta: {
-  //           requestType: "transfer",
-  //           transferId,
-  //           shiftId: selectedShift.id,
-  //           fromUserId: user.userId,
-  //         },
-  //       });
-  //     } catch (staffNotifyErr) {
-  //       console.error("Error notifying receiving staff:", staffNotifyErr);
-  //     }
+    // 2️⃣ Notify RECEIVING STAFF (Approve / Reject)
+    await sendNotification(selectedStaff.id, {
+      type: "action",
+      title: "Shift Transfer Request",
+      message: `${user.name} wants to transfer a shift to you.`,
+      senderId: user.userId,
+      actions: ["approve", "reject"],
+      meta: {
+        requestType: "shift-transfer",
+        transferId,
+        shiftId: selectedShift.id,
+        fromUserId: user.userId,
+      },
+    });
 
-  //     // 4) UI feedback + cleanup
-  //     alert("Transfer request submitted successfully!");
-  //     setShowTransferModal(false);
-  //     setSelectedStaff(null);
-  //     setTransferReason("");
-  //     setSelectedShift(null);
-  //   } catch (error) {
-  //     console.error("❌ Error creating transfer request:", error);
-  //     alert("Failed to submit transfer. Try again.");
-  //   }
-  // };
+    // 3️⃣ Notify ADMIN (FYI)
+    const adminSnap = await getDocs(
+      query(collection(db, "users"), where("role", "==", "admin"))
+    );
+
+    if (!adminSnap.empty) {
+      const adminId = adminSnap.docs[0].id;
+
+      await sendNotification(adminId, {
+        type: "info",
+        title: "Shift Transfer Requested",
+        message: `${user.name} requested to transfer a shift to ${selectedStaff.name}.`,
+        senderId: user.userId,
+        meta: {
+          transferId,
+          shiftId: selectedShift.id,
+        },
+      });
+    }
+
+    alert("Transfer request sent successfully.");
+    setShowTransferModal(false);
+    setSelectedStaff(null);
+    setTransferReason("");
+    setSelectedShift(null);
+
+  } catch (err) {
+    console.error("Transfer error:", err);
+    alert("Failed to submit transfer request.");
+  }
+};
+
 
   const handleConfirmShift = async (shiftId) => {
   try {
@@ -483,10 +468,10 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
               </span>
             </div>
 
-            <div className="flex flex-col gap-[6px]">
+            {/* <div className="flex flex-col gap-[6px]">
               <label className="text-sm leading-5 font-bold">Report Reference Number</label>
               <p className="font-normal text-sm leading-5">01111</p>
-            </div>
+            </div> */}
 
             {/* Reason */}
             <div className="flex flex-col gap-[6px]">
@@ -502,7 +487,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
             {/* Transfer Button */}
             <div className="flex items-center justify-center">
               <button
-                // onClick={handleTransferShift}
+                 onClick={handleTransferShift}
                 className="flex items-center justify-center gap-[10px] bg-[#1D5F33] text-white py-2 px-3 w-fit rounded hover:bg-[#144527]"
               >
                 <BiTransfer /> Transfer Shift

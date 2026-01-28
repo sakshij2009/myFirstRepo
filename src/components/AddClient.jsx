@@ -77,7 +77,7 @@ const AddClient = ({ mode = "add", user }) => {
     agency: Yup.string().required("Agency required"),
     address: Yup.string().required("Address required"),
     dob: Yup.date().required("Date of Birth required"),
-    description: Yup.string().max(200, "Max 200 chars"),
+    description: Yup.string()
     // NEW: validate medications array
 
   });

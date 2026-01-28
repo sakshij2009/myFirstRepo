@@ -186,7 +186,9 @@ const router = useRouter();
       paddingHorizontal: 16,
       borderRadius: 8,
     }}
-    onPress={() => onTransfer?.(shift)}
+    onPress={() => {
+      //  console.log("Transfer clicked", shift?.id);
+      onTransfer?.(shift)}}
   >
     <Text style={{ color: "#F97316", fontWeight: "700" }}>
       Transfer Shift

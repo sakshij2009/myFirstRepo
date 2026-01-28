@@ -9,6 +9,7 @@ import CustomCalendar from "./CustomerCalender";
 import { FaPlus } from "react-icons/fa6";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TransportationShiftsData from "./TransportationShiftsData";
+import AdminShiftCalendar from "./AdminShiftCalender";
 
 const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails,initialShiftCategory }) => {
   const navigate = useNavigate();
@@ -93,10 +94,26 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
     }
   };
 
+  const normalizeCategory = (category) => {
+  const c = (category || "").toLowerCase().trim();
+
+  // ✅ Any supervised visitation variant goes into Supervised Visitation tab
+  if (c.includes("supervised visitation")) return "Supervised Visitation";
+
+  if (c.includes("emergent care")) return "Emergent Care";
+  if (c.includes("respite care")) return "Respite Care";
+  if (c.includes("transportation")) return "Transportation";
+
+  return category || "";
+};
+
+
 const filteredShifts = shifts.filter((shift) => {
   const status = getShiftStatus(shift.clockIn, shift.clockOut);
-  const shiftCategoryName =
-    shift.categoryName || shift.shiftCategory || "";
+  const rawCategory =
+  shift.categoryName || shift.shiftCategory || "";
+
+const normalizedShiftCategory = normalizeCategory(rawCategory);
   const clientName =
     shift.clientName ||
     shift.clientDetails?.name ||
@@ -114,9 +131,9 @@ const filteredShifts = shifts.filter((shift) => {
 
   // ---------------- CATEGORY ----------------
   const categoryMatches =
-    !shiftCategory ||
-    shiftCategory === "All" ||
-    shiftCategoryName.toLowerCase() === shiftCategory.toLowerCase();
+  !shiftCategory ||
+  shiftCategory === "All" ||
+  normalizedShiftCategory.toLowerCase() === shiftCategory.toLowerCase();
 
   // ---------------- DATE ----------------
   // ---------------- DATE ----------------
@@ -195,7 +212,6 @@ try {
   if (!passes) {
     console.log("❌ Filtered OUT:", {
       id: shift.id,
-      shiftCategoryName,
       clientName,
       status,
       statusMatches,
@@ -325,6 +341,17 @@ useEffect(() => {
 
       {/* Tabs */}
       <div className="flex items-center gap-6 border-b border-gray">
+        {/* 🔹 Shift Calendar Tab */}
+  <button
+    onClick={() => setShiftCategory("CALENDAR")}
+    className={`pb-2 text-sm font-medium cursor-pointer ${
+      shiftCategory === "CALENDAR"
+        ? "text-dark-green border-b-2 border-dark-green font-bold"
+        : "text-light-black font-bold"
+    }`}
+  >
+    Shift Calendar
+  </button>
         {categories.map((cat) => (
           <button
             key={cat.id}
@@ -341,6 +368,7 @@ useEffect(() => {
       </div>
 
       {/* Filters */}
+      {shiftCategory !== "CALENDAR" && (
       <div className="flex justify-between min-h-[32px] text-light-black relative">
         <div className="flex gap-[12px] items-center">
           {/* Search */}
@@ -417,21 +445,30 @@ useEffect(() => {
           )}
         </div>
       </div>
+      )}
 
       {/* ✅ Data Section */}
       <div className="flex p-1 h-auto">
-        {shiftCategory === "Transportation" ? (
+
+         {/* 🗓 CALENDAR VIEW */}
+  {shiftCategory === "CALENDAR" && (
+    <AdminShiftCalendar shifts={shifts} />
+  )}
+
+        {shiftCategory === "Transportation" && (
           <TransportationShiftsData
             filteredShifts={filteredShifts}
             handleViewReport={handleViewReport}
              openTransportDetails={openTransportDetails}
           />
-        ) : (
-          <ShiftsData
-            filteredShifts={filteredShifts}
-            handleViewReport={handleViewReport}
-          />
-        )}
+        ) }
+        
+         {shiftCategory !== "CALENDAR" && shiftCategory !== "Transportation" && (
+    <ShiftsData
+      filteredShifts={filteredShifts}
+      handleViewReport={handleViewReport}
+    />
+  )}
       </div>
     </div>
   );

@@ -7,17 +7,20 @@ import {
   orderBy,
   updateDoc,
   doc,
+  increment,
 } from "firebase/firestore";
-import { db } from "../firebase"; // make sure path is correct
+import { db } from "../firebase";
 import RequestNotificationCard from "./RequestNotificationCard";
 import InfoNotificationCard from "./InfoNotificationCard";
 import { useNavigate } from "react-router-dom";
+import { approveTransfer, rejectTransfer } from "../utils/transferHelper";
+import { sendNotification } from "../utils/notificationHelper";
 
 const NotificationSlider = ({ onClose, userId }) => {
   const [notifications, setNotifications] = useState([]);
   const navigate = useNavigate();
 
-// Fetch notifications in real-time
+  /* ================= FETCH NOTIFICATIONS ================= */
   useEffect(() => {
     if (!userId) return;
 
@@ -27,121 +30,152 @@ const NotificationSlider = ({ onClose, userId }) => {
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+      const notifs = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
       }));
-      setNotifications(notifs.filter(n => !n.read)); // ⬅️ REMOVE READ ONES
+
+      setNotifications(notifs.filter((n) => !n.read));
     });
 
     return () => unsub();
   }, [userId]);
 
-  // ========== NORMAL NOTIFICATION ==========
+  /* ================= MARK READ ================= */
   const handleMarkRead = async (notifId) => {
     const ref = doc(db, "notifications", userId, "userNotifications", notifId);
     await updateDoc(ref, { read: true });
-
-    // Remove from UI immediately
     setNotifications((prev) => prev.filter((n) => n.id !== notifId));
   };
 
-  // ========== REQUEST NOTIFICATIONS ==========
+  /* ================= APPROVE / DECLINE ================= */
   const handleRequestAction = async (notif, action) => {
     const notifId = notif.id;
-
-    // Detect request type
     const requestType = notif?.meta?.requestType;
 
-    // 1️⃣ If it's a LEAVE REQUEST
+    /* ========= LEAVE REQUEST ========= */
     if (requestType === "leave") {
-      const leaveId = notif.meta.leaveId;
+      const {
+        leaveId,
+        leaveType,
+        startDate,
+        endDate,
+        userId: staffId,
+      } = notif.meta;
 
-      const leaveRef = doc(db, "leaveRequests", leaveId);
-
-      await updateDoc(leaveRef, {
+      // 1️⃣ Update leave request status
+      await updateDoc(doc(db, "leaveRequests", leaveId), {
         status: action === "approve" ? "approved" : "declined",
+        actionedAt: new Date(),
       });
+
+      // 2️⃣ If approved → update leave balance
+      if (action === "approve") {
+        const start =
+          startDate?.toDate?.() || new Date(startDate);
+        const end =
+          endDate?.toDate?.() || new Date(endDate);
+
+        const days =
+          Math.floor(
+            (end.getTime() - start.getTime()) /
+              (1000 * 60 * 60 * 24)
+          ) + 1;
+
+        const leaveKey = leaveType.toLowerCase();
+
+        await updateDoc(doc(db, "users", staffId), {
+          [`leaveBalance.${leaveKey}.used`]: increment(days),
+          [`leaveBalance.${leaveKey}.remaining`]: increment(-days),
+        });
+
+        // 3️⃣ Notify staff (approved)
+        await sendNotification(staffId, {
+          type: "info",
+          title: "Leave Approved",
+          message: `Your ${leaveType} leave has been approved.`,
+          meta: {
+            requestType: "leave",
+            leaveId,
+            status: "approved",
+          },
+        });
+      } else {
+        // 4️⃣ Notify staff (declined)
+        await sendNotification(staffId, {
+          type: "info",
+          title: "Leave Rejected",
+          message: `Your ${leaveType} leave has been rejected.`,
+          meta: {
+            requestType: "leave",
+            leaveId,
+            status: "declined",
+          },
+        });
+      }
     }
 
-    // 2️⃣ TRANSFER SHIFT (example)
-    if (requestType === "transferShift") {
-      const shiftId = notif.meta.shiftId;
-
-      const shiftRef = doc(db, "shifts", shiftId);
-
-      await updateDoc(shiftRef, {
-        status: action === "approve" ? "approved" : "declined",
-      });
+    /* ========= SHIFT TRANSFER ========= */
+    if (requestType === "shift-transfer") {
+      if (action === "approve") {
+        await approveTransfer(notif.meta);
+      } else {
+        await rejectTransfer(notif.meta.transferId, notif.meta);
+      }
     }
 
-    // 🔥 Mark the notification itself as handled
-    const notifRef = doc(
-      db,
-      "notifications",
-      userId,
-      "userNotifications",
-      notifId
+    /* ========= MARK NOTIFICATION HANDLED ========= */
+    await updateDoc(
+      doc(db, "notifications", userId, "userNotifications", notifId),
+      {
+        read: true,
+        status: action === "approve" ? "approved" : "declined",
+      }
     );
 
-    await updateDoc(notifRef, {
-      read: true,
-      status: action === "approve" ? "approved" : "declined",
-    });
-
-    // Remove it from UI
     setNotifications((prev) => prev.filter((n) => n.id !== notifId));
   };
 
   const handleApprove = (notif) => handleRequestAction(notif, "approve");
   const handleDecline = (notif) => handleRequestAction(notif, "decline");
 
+  /* ================= VIEW DETAILS ================= */
   const handleViewDetails = (notif) => {
-  if (!notif?.meta) return;
+    if (!notif?.meta) return;
 
-  const { entity } = notif.meta;
+    switch (notif.meta.entity) {
+      case "Agency":
+        navigate("/admin-dashboard/agency");
+        break;
+      case "Client":
+        navigate("/admin-dashboard/clients");
+        break;
+      case "User":
+        navigate("/admin-dashboard/users");
+        break;
+      case "Shift":
+        navigate("/admin-dashboard");
+        break;
+      default:
+        console.warn("Unknown entity", notif.meta.entity);
+    }
+  };
 
-  switch (entity) {
-
-    case "Agency":
-      // Go to Manage Agency → Update Agency page
-      navigate("/admin-dashboard/agency");
-      break;
-
-    case "Client":
-      // Go to Manage Client → Update Client page
-      navigate("/admin-dashboard/clients");
-      break;
-
-    case "User":
-      // Go to Manage User → Update User page
-      navigate("/admin-dashboard/users");
-      break;
-
-    case "Shift":
-      // Go to view shift page
-      window.location.href = `/admin-dashboard`;
-      break;
-
-    default:
-      console.warn("Unknown entity type", entity);
-      break;
-  }
-};
-
-
+  /* ================= UI ================= */
   return (
     <div className="flex flex-col h-full p-6 bg-white shadow-lg rounded-l-xl">
       <div className="flex justify-between items-center border-b pb-3 mb-4">
         <h2 className="text-2xl font-bold">Notifications</h2>
         <button onClick={onClose}>
-          <IoClose className="text-2xl hover:text-red-500 transition-colors" />
+          <IoClose className="text-2xl hover:text-red-500" />
         </button>
       </div>
 
-      <div className="overflow-y-auto flex-1 space-y-4 ">
+      <div className="overflow-y-auto flex-1 space-y-4">
         {notifications.length === 0 && (
-          <p className="text-gray-500 text-center mt-10">No notifications</p>
+          <p className="text-gray-500 text-center mt-10">
+            No notifications
+          </p>
         )}
 
         {notifications.map((notif) =>
@@ -157,7 +191,7 @@ const NotificationSlider = ({ onClose, userId }) => {
               key={notif.id}
               notif={notif}
               onMarkRead={() => handleMarkRead(notif.id)}
-              onViewDetails={()=>handleViewDetails(notif)}
+              onViewDetails={() => handleViewDetails(notif)}
             />
           )
         )}

@@ -419,7 +419,7 @@ const handleDeleteClient = async (clientId) => {
                         <input
                           type="checkbox"
                           className="sr-only peer"
-                          checked={client.fileClosed}
+                         checked={client?.fileClosed === true}
                           onChange={(e) => handleToggle(client.id, e.target.checked)}
                         />
 

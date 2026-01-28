@@ -298,8 +298,11 @@ export default function MedicationTab({ shift }) {
 
   /* ---------------- UI ---------------- */
   return (
-    <ScrollView style={{ padding: 16 }}>
-      <Text style={styles.title}>Medication Administration Record</Text>
+    <ScrollView style={{ padding: 6 } } >
+      <View>
+        <Text style={styles.title}>Medication Administration Record</Text>
+      </View>
+      
 
       {/* Header Inputs */}
       <View style={styles.row}>
@@ -329,7 +332,11 @@ export default function MedicationTab({ shift }) {
       </View>
 
       {/* Medication Timing */}
-      <Text style={styles.sectionTitle}>Medication Timing & Type</Text>
+      
+       <View>
+        <Text style={styles.title}>Medication Timing & Type</Text>
+      </View> 
+
       <View style={styles.cardBlue}>
         {clientMedications.length > 0 ? (
           clientMedications.map((med, index) => (
@@ -351,7 +358,10 @@ export default function MedicationTab({ shift }) {
       </View>
 
       {/* Calendar */}
-      <Text style={styles.sectionTitle}>Monthly Medication Calendar</Text>
+      <View>
+         <Text style={styles.sectionTitle}>Monthly Medication Calendar</Text>
+      </View>
+      
 
       <View style={styles.calendar}>
         <View style={styles.calendarHeader}>
@@ -502,10 +512,34 @@ export default function MedicationTab({ shift }) {
 
 /* ---------------- STYLES ---------------- */
 const styles = {
-  title: { textAlign: "center", fontSize: 22, fontWeight: "700", marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginTop: 16, marginBottom: 6 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  field: { width: "48%" },
+  title: { 
+   marginTop: 10, 
+  fontSize: 18, 
+  fontWeight: "600", 
+  marginBottom: 12,
+  color: "#111827",   // 👈 REQUIRED
+},
+
+sectionTitle: { 
+  textAlign: "center",
+  fontSize: 18, 
+  fontWeight: "600", 
+  marginTop: 16, 
+  marginBottom: 6,
+  color: "#111827",   // 👈 REQUIRED
+},
+
+ row: { 
+  flexDirection: "column", 
+  flexWrap: "wrap", 
+  justifyContent: "space-between",
+  gap:10
+},
+
+field: { 
+  width: "100%",   // ensures perfect 2x2 grid
+},
+
   label: { fontSize: 12, fontWeight: "600", marginTop: 6 },
   input: {
     borderWidth: 1,
@@ -575,7 +609,7 @@ const styles = {
     borderColor: "#e5e7eb",
     borderRadius: 6,
     padding: 10,
-    width: "32%",
+    width: "100%",
   },
   exportBtn: {
     backgroundColor: "#e5e7eb",

@@ -9,16 +9,23 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
-import { db } from "../src/firebase/config";
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs ,addDoc} from "firebase/firestore";
+import { db } from "../src/firebase/config.jsx";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-
-
-
-
+import { registerForPushNotifications } from "../src/utils/registerForPushNotifications";
+import TransferShiftModal from "../app/TransferShiftModal.jsx";
+import { requestShiftTransfer } from "../src/utils/transferService.js";
 import ShiftCard from "../src/components/ShiftCard";
 import CalendarModal from "../src/components/CalendarModal";
+import EmergencyCallModal from "../src/components/EmergencyCallModel.jsx"
+import ApplyLeaveModal from "../src/components/ApplyLeaveModal.jsx";
+// import { useRouter } from "expo-router";
+import { sendNotification } from "../src/utils/notificationHelper.js";
+import MonthlyCalendar from "../src/components/MonthlyCalendar";
+
+
+
 
 /* ===================== */
 
@@ -31,16 +38,47 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const router = useRouter();
+const [showTransferModal, setShowTransferModal] = useState(false);
+const [selectedShift, setSelectedShift] = useState(null);
+
+const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+const [showDayOffModal, setShowDayOffModal] = useState(false);
 
 
-  /* ===== LOAD LOGGED IN USER ===== */
-  useEffect(() => {
-    const loadUser = async () => {
-      const stored = await AsyncStorage.getItem("user");
-      if (stored) setUser(JSON.parse(stored));
-    };
-    loadUser();
-  }, []);
+
+  
+/* ===== LOAD LOGGED IN USER ===== */
+useEffect(() => {
+  const loadUser = async () => {
+    const stored = await AsyncStorage.getItem("user");
+    if (!stored) return;
+
+   
+    setUser(JSON.parse(stored));
+    const parsed = JSON.parse(stored);
+
+
+    // 🔔 Register for notifications
+    if (parsed?.userId) {
+      await registerForPushNotifications(parsed.username);
+    }
+
+    // 🔥 Listen to user document in Firestore (real-time)
+    const userRef = doc(db, "users", parsed.userId);
+
+    // const unsubscribe = onSnapshot(userRef, (snap) => {
+    //   if (snap.exists()) {
+    //     setUser({ userId: parsed.userId, ...snap.data() });
+    //   }
+    // });
+
+    // return unsubscribe;
+  };
+
+  loadUser();
+}, []);
+
+
 
   /* ===== REAL-TIME SHIFTS FROM FIRESTORE ===== */
   useEffect(() => {
@@ -105,18 +143,25 @@ const confirmShift = async (shift) => {
 const parseShiftDate = (str) => {
   if (!str) return null;
 
-  // Expecting format: "07 Mar 2025"
-  const [day, month, year] = str.split(" ");
+  // "10-May-2025"
+  if (str.includes("-")) {
+    const [dd, mmm, yyyy] = str.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthIndex = months.indexOf((mmm || "").slice(0, 3));
+    if (monthIndex >= 0) return new Date(Number(yyyy), monthIndex, Number(dd));
+  }
 
-  const months = [
-    "Jan","Feb","Mar","Apr","May","Jun",
-    "Jul","Aug","Sep","Oct","Nov","Dec"
-  ];
+  // "07 Mar 2025"
+  if (str.includes(" ")) {
+    const [dd, mmm, yyyy] = str.split(" ");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthIndex = months.indexOf((mmm || "").slice(0, 3));
+    if (monthIndex >= 0) return new Date(Number(yyyy), monthIndex, Number(dd));
+  }
 
-  const monthIndex = months.indexOf(month);
-
-  return new Date(year, monthIndex, Number(day));
+  return null;
 };
+
 
 const filteredShifts = shifts.filter((s) => {
   const shiftDate = parseShiftDate(s.startDate);
@@ -151,6 +196,26 @@ const parseShiftDateTime = (dateStr, timeStr) => {
     0
   );
 };
+
+
+const handleTransferClick = (shift) => {
+  setSelectedShift(shift);
+  setShowTransferModal(true);
+};
+
+const handleSubmitTransfer = async (staff, reason) => {
+  await requestShiftTransfer({
+    shift: selectedShift,
+    fromUser: currentUser,
+    toStaff: staff,
+    reason,
+  });
+
+  setShowTransferModal(false);
+  setSelectedShift(null);
+  alert("Transfer request sent");
+};
+
 
 // Check if now is within shift window
 const isNowInShift = (shift) => {
@@ -267,7 +332,61 @@ const handleClockOut = async () => {
   }
 };
 
+const handleSubmitLeave = async ({ leaveType, reason, startDate, endDate }) => {
+  if (!leaveType || !reason.trim() || !startDate || !endDate) {
+    alert("Please fill all fields");
+    return;
+  }
 
+  try {
+    // 1️⃣ Save leave request
+    const leaveRef = await addDoc(collection(db, "leaveRequests"), {
+      userId: user.userId,
+      userName: user.name,
+      leaveType,
+      reason,
+      startDate,
+      endDate,
+      status: "pending",
+      createdAt: new Date(),
+    });
+
+    const leaveId = leaveRef.id;
+
+    // 2️⃣ Find admin
+    const adminQuery = query(
+      collection(db, "users"),
+      where("role", "==", "admin")
+    );
+    const adminSnap = await getDocs(adminQuery);
+
+    if (!adminSnap.empty) {
+      const adminId = adminSnap.docs[0].id;
+
+      // 3️⃣ Notify admin
+      await sendNotification(adminId, {
+        type: "request",
+        title: "Leave Request",
+        message: `${user.name} requested ${leaveType} leave`,
+        senderId: user.userId,
+
+        meta: {
+          requestType: "leave",
+          leaveId,
+          leaveType,
+          startDate,
+          endDate,
+        },
+      });
+    }
+
+    alert("Leave request sent");
+    setShowDayOffModal(false);
+  } catch (err) {
+    console.error("Leave submit error", err);
+    alert("Something went wrong. Try again.");
+  }
+};
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f6f7f8" }}>
@@ -285,12 +404,33 @@ const handleClockOut = async () => {
             </Text>
           </View>
 
-          <View style={styles.bell}>
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={18}
-              color="#fff"
-            />
+         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {/* 🔔 Bell */}
+            <View style={styles.bell}>
+              <MaterialCommunityIcons
+                name="bell-outline"
+                size={18}
+                color="#fff"
+              />
+            </View>
+
+            {/* 👤 Profile Avatar */}
+            <Pressable onPress={() => router.push("/profile")}>
+              <Image
+                source={
+                  user?.profilePhotoUrl
+                    ? { uri: user.profilePhotoUrl}
+                    : require("../assets/defaultuser.jpg") // fallback image
+                }
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                }}
+              />
+            </Pressable>
           </View>
         </View>
 
@@ -324,8 +464,45 @@ const handleClockOut = async () => {
           onClockOut={handleClockOut}
         />
       )}
-        {activeTab === "leave" && <LeaveTab />}
+      {activeTab === "leave" && (
+  <LeaveTab
+    onEmergency={() => setShowEmergencyModal(true)}
+    onDayOff={() => setShowDayOffModal(true)}
+  />
+)}
+
         {activeTab === "transport" && <TransportTab />}
+{/* ===== MONTHLY CALENDAR (INLINE) ===== */}
+<View style={styles.sectionHeader}>
+  <Text style={styles.sectionTitle}>Monthly Calendar</Text>
+
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+    <Pressable
+  onPress={() =>
+    router.push({
+      pathname: "/Availability",
+      params: {
+        userId: user?.userId,
+        // optional
+        userName: user?.name,
+      },
+    })
+  }
+>
+
+      <Text style={{ color: "#1f5f3b", fontWeight: "700" }}>
+        + Add Availability
+      </Text>
+    </Pressable>
+  </View>
+</View>
+
+<MonthlyCalendar
+  shifts={shifts}               // all shifts (it highlights dates)
+  selectedDate={selectedDate}   // current selected
+  onSelectDate={(d) => setSelectedDate(d)}
+/>
+
 
         {/* ===== UPCOMING SHIFTS HEADER ===== */}
         <View style={styles.sectionHeader}>
@@ -333,13 +510,13 @@ const handleClockOut = async () => {
             Upcoming Shifts
           </Text>
 
-          <Pressable onPress={() => setCalendarOpen(true)}>
+          {/* <Pressable onPress={() => setCalendarOpen(true)}>
             <MaterialCommunityIcons
               name="calendar-month-outline"
               size={22}
               color="#1f5f3b"
             />
-          </Pressable>
+          </Pressable> */}
         </View>
 
         {/* ===== SHIFTS LIST ===== */}
@@ -350,7 +527,7 @@ const handleClockOut = async () => {
         )}
 
         {filteredShifts.map((shift) => (
-          <ShiftCard key={shift.id} shift={shift}  onConfirm={confirmShift}  />
+          <ShiftCard key={shift.id} shift={shift}  onConfirm={confirmShift}   onTransfer={handleTransferClick}/>
         ))}
         {/* <Text style={{ fontSize: 18, fontWeight: "bold" }}>
             Shifts Loaded: {filteredShifts.length}
@@ -364,6 +541,15 @@ const handleClockOut = async () => {
 
       </ScrollView>
 
+      {/* ===== TRANSFER SHIFT MODAL ===== */}
+<TransferShiftModal
+  visible={showTransferModal}
+  onClose={() => setShowTransferModal(false)}
+  onSubmit={handleSubmitTransfer}
+/>
+
+
+
       {/* ===== CALENDAR MODAL ===== */}
       <CalendarModal
         visible={calendarOpen}
@@ -373,6 +559,17 @@ const handleClockOut = async () => {
           setCalendarOpen(false);
         }}
       />
+      <EmergencyCallModal
+  visible={showEmergencyModal}
+  onClose={() => setShowEmergencyModal(false)}
+/>
+<ApplyLeaveModal
+  visible={showDayOffModal}
+  onClose={() => setShowDayOffModal(false)}
+  onSubmit={handleSubmitLeave}
+/>
+
+
     </SafeAreaView>
   );
 
@@ -493,17 +690,82 @@ function ScheduleTab({ activeShift, onClockIn, onClockOut }) {
 }
 
 
-function LeaveTab() {
+function LeaveTab({ onEmergency, onDayOff }) {
   return (
     <View style={styles.card}>
-      <Text style={{ fontWeight: "600" }}>Apply Leave</Text>
-      {leaveRow("Casual Leaves", 3)}
-      {leaveRow("Sick Leaves", 2)}
-      {leaveRow("Paid Leaves", 0)}
-      {leaveRow("Earned Leaves", 1)}
+      <Text style={{ fontWeight: "700", fontSize: 16 }}>
+        Apply Leave
+      </Text>
+
+      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
+        UPCOMING LEAVE
+      </Text>
+
+      <Text style={{ fontSize: 20, fontWeight: "700" }}>
+        09-04-2025
+      </Text>
+
+      <View style={{ marginTop: 12 }}>
+        {leaveRow("Leaves Taken", 3)}
+        {/* {leaveRow("Sick Leaves", 2)}
+        {leaveRow("Paid Leaves", 0)}
+        {leaveRow("Earned Leaves", 1)} */}
+      </View>
+
+     
+
+      {/* Buttons */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          gap: 12,
+          marginTop: 14,
+        }}
+      >
+        <Pressable
+          onPress={onEmergency}
+          style={{
+            borderWidth: 1,
+            borderColor: "#DC2626",
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: "#DC2626", fontWeight: "600" }}>
+            Emergency Calls
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onDayOff}
+          style={{
+            backgroundColor: "#1f5f3b",
+            paddingHorizontal: 14,
+            paddingVertical: 6,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>
+            Day Off
+          </Text>
+        </Pressable>
+
+        
+      </View>
+       <View style={{
+          marginTop: 14
+        }}>
+        <Text  style={{ fontSize: 10, fontWeight: "700" }}>
+          *Note:You have to apply or inform for the leave two days before.
+        </Text>
+        
+      </View>
     </View>
   );
 }
+
 
 function TransportTab() {
   return (

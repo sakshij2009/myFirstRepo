@@ -7,6 +7,8 @@ export default function Layout() {
       <Stack.Screen name="login" />
       <Stack.Screen name="home" />
       <Stack.Screen name="report" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="Availability" />
     </Stack>
   );
 }
