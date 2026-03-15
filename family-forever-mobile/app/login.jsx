@@ -1,4 +1,14 @@
-import { View, Text, TextInput, Pressable, Image, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Image,
+  Dimensions,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+} from "react-native";
 import { useState } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -52,12 +62,19 @@ export default function Login() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#1f5f3b" }}>
-
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: "#1f5f3b" }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       {/* ===== TOP BRANDING ===== */}
       <View
         style={{
-          height: height * 0.42,
+          height: height * 0.38,
           justifyContent: "center",
           alignItems: "center",
         }}
@@ -201,15 +218,16 @@ export default function Login() {
       {/* ===== FOOTER TEXT ===== */}
       <Text
         style={{
-          position: "absolute",
-          bottom: 16,
-          alignSelf: "center",
+          textAlign: "center",
+          marginTop: 20,
+          marginBottom: 20,
           color: "#d1d5db",
           fontSize: 12,
         }}
       >
         From Humanity to Community
       </Text>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
