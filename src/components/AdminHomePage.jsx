@@ -14,6 +14,10 @@ import CriticalIncidentForm from "./CriticalIncidentForm";
 import ManageIntakeWorkers from "./ManageIntakeWorkers";
 import ManageIntakeForms from "./ManageIntakeForms";
 import Payroll from "./Payroll";
+import IntakeRequestsPage from "./IntakeRequestsPage";
+import StaffEvaluationPage from "./StaffEvaluationPage";
+import BillingPage from "./BillingPage";
+import GSTReportingPage from "./GSTReportingPage";
 
 // Form Components
 import AddUserForm from "./AddUserForm";
@@ -95,12 +99,14 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="shift-report/:id" element={<ShiftReport user={user} />} />
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
 
+            {/* Built pages */}
+            <Route path="intake-requests"  element={<IntakeRequestsPage />} />
+            <Route path="staff-evaluation" element={<StaffEvaluationPage />} />
+            <Route path="billing"          element={<BillingPage />} />
+            <Route path="gst-reporting"    element={<GSTReportingPage />} />
+
             {/* Under construction pages */}
             <Route path="services"         element={<UnderConstruction title="Services" />} />
-            <Route path="intake-requests"  element={<UnderConstruction title="Intake Requests" />} />
-            <Route path="staff-evaluation" element={<UnderConstruction title="Staff Evaluation" />} />
-            <Route path="billing"          element={<UnderConstruction title="Billing" />} />
-            <Route path="gst-reporting"    element={<UnderConstruction title="GST Reporting" />} />
             <Route path="reports"          element={<UnderConstruction title="Reports & Analytics" />} />
             <Route path="settings"         element={<UnderConstruction title="Settings" />} />
 

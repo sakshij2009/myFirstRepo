@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "mcp__claude_ai_Figma__get_figjam",
+      "mcp__claude_ai_Figma__get_design_context",
+      "Bash(node -e \"const d = JSON.parse\\(require\\(''fs''\\).readFileSync\\(''C:/Users/Sakshi Jamwal/.claude/projects/c--Users-Sakshi-Jamwal-Desktop-startup-FFAdmin-prod/52489b93-b532-49f8-82e7-e6a61bc8c4ea/tool-results/toolu_01PkTmtCy3vHAxNdRUQY2vWC.txt'',''utf8''\\)\\); require\\(''fs''\\).writeFileSync\\(''src/components/BillingPageFigma.tsx'', d[0].contents[0].text\\)\")"
     ]
   }
 }
