@@ -7,31 +7,36 @@
     "scheme": "familyforevermobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-     "icon": "./assets/icon.png",
+
+    "icon": "./assets/icon.png",
+
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.famforever.admin",
       "googleServicesFile": "./GoogleService-Info.plist",
-       "buildNumber": "3",
+      "buildNumber": "3",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-         "NSCameraUsageDescription": "This app needs access to the camera to update your profile photo.",
+        "NSCameraUsageDescription": "This app needs access to the camera to update your profile photo.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture."
-
       }
     },
+
     "android": {
+      "icon": "./assets/android-icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/adaptive-foreground.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.famforever.admin",
-       "versionCode": 2
+      "versionCode": 3
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/logo.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -48,14 +53,17 @@
       ],
       "@react-native-community/datetimepicker"
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
+
     "notification": {
       "icon": "./assets/logo.png",
       "color": "#1f5f3b"
     },
+
     "extra": {
       "router": {},
       "eas": {

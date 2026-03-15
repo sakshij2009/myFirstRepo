@@ -864,7 +864,7 @@ export default function CriticalIncidentModal({
               </Pressable>
 
               <Pressable onPress={handleSubmit} style={styles.submitBtn}>
-                <Text style={styles.submitBtnText}>Report Critical Incident</Text>
+                <Text style={styles.submitBtnText}>Submit</Text>
               </Pressable>
             </View>
           </View>

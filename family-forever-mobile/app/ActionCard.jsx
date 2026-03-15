@@ -529,3 +529,4 @@ const stylesForm = {
     color: "#fff",
   },
 };
+export default ActionCard;

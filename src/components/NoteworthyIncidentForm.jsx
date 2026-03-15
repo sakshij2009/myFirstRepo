@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field } from "formik";
 import * as Yup from "yup";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 const validationSchema = Yup.object({
@@ -30,29 +30,51 @@ const NoteworthyIncidentForm = ({
     date: "",
   });
 
-  // Load saved draft safely (coerce types)
+  // Load saved data from Firestore first, then check localStorage draft
   useEffect(() => {
-    try {
-      const savedDraft = localStorage.getItem(draftKey);
-      if (savedDraft) {
-        const restored = JSON.parse(savedDraft);
-        setInitialValues((prev) => ({
-          ...prev,
-          ...restored,
-          // keep explicit keys present
-          clientName: restored.clientName ?? prev.clientName,
-          clientId: restored.clientId ?? prev.clientId,
-          staffName: restored.staffName ?? prev.staffName,
-          noteworthyEvent: restored.noteworthyEvent ?? prev.noteworthyEvent,
-          employeeSignature: restored.employeeSignature ?? prev.employeeSignature,
-          date: restored.date ?? prev.date,
-        }));
+    const loadData = async () => {
+      try {
+        // First try to load from Firestore shift document
+        if (shiftId) {
+          const shiftSnap = await getDoc(doc(db, "shifts", String(shiftId)));
+          if (shiftSnap.exists() && shiftSnap.data().noteworthyEvent) {
+            const saved = shiftSnap.data().noteworthyEvent;
+            setInitialValues((prev) => ({
+              ...prev,
+              ...saved,
+              clientName: saved.clientName ?? prev.clientName,
+              clientId: saved.clientId ?? prev.clientId,
+              staffName: saved.staffName ?? prev.staffName,
+              noteworthyEvent: saved.noteworthyEvent ?? prev.noteworthyEvent,
+              employeeSignature: saved.employeeSignature ?? prev.employeeSignature,
+              date: saved.date ?? prev.date,
+            }));
+            return;
+          }
+        }
+
+        // Fallback: load from localStorage draft
+        const savedDraft = localStorage.getItem(draftKey);
+        if (savedDraft) {
+          const restored = JSON.parse(savedDraft);
+          setInitialValues((prev) => ({
+            ...prev,
+            ...restored,
+            clientName: restored.clientName ?? prev.clientName,
+            clientId: restored.clientId ?? prev.clientId,
+            staffName: restored.staffName ?? prev.staffName,
+            noteworthyEvent: restored.noteworthyEvent ?? prev.noteworthyEvent,
+            employeeSignature: restored.employeeSignature ?? prev.employeeSignature,
+            date: restored.date ?? prev.date,
+          }));
+        }
+      } catch (err) {
+        console.warn("Failed to load noteworthy data:", err);
       }
-    } catch (err) {
-      console.warn("Failed to restore draft:", err);
-    }
+    };
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey]);
+  }, [shiftId, draftKey]);
 
   // Save draft manually
   const handleSaveDraft = (values) => {
@@ -210,9 +232,8 @@ const NoteworthyIncidentForm = ({
                   as="textarea"
                   name="noteworthyEvent"
                   placeholder="Write down any Noteworthy Event for the client."
-                  className={`w-full border border-light-gray rounded p-2 h-40 focus:outline-none placeholder:text-[#72787E] placeholder:text-[14px] ${
-                    touched.noteworthyEvent && errors.noteworthyEvent ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border border-light-gray rounded p-2 h-40 focus:outline-none placeholder:text-[#72787E] placeholder:text-[14px] ${touched.noteworthyEvent && errors.noteworthyEvent ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {touched.noteworthyEvent && errors.noteworthyEvent && (
                   <p className="text-red-500 text-xs mt-1">{errors.noteworthyEvent}</p>
@@ -228,9 +249,8 @@ const NoteworthyIncidentForm = ({
                   name="employeeSignature"
                   type="text"
                   placeholder="Please write your name"
-                  className={`w-full border rounded-sm p-2 mt-1 placeholder:text-sm placeholder:text-gray-500 ${
-                    touched.employeeSignature && errors.employeeSignature ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full border rounded-sm p-2 mt-1 placeholder:text-sm placeholder:text-gray-500 ${touched.employeeSignature && errors.employeeSignature ? "border-red-500" : "border-gray-300"
+                    }`}
                 />
                 {touched.employeeSignature && errors.employeeSignature && (
                   <p className="text-red-500 text-xs mt-1">{errors.employeeSignature}</p>

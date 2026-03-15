@@ -34,6 +34,7 @@ const AddIntakeWorker = ({ mode = "add" }) => {
     email: "",
     invoiceEmail: "",
   });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const UPCS_EMAIL_OPTIONS = ["billing@upcs.com", "accounts@upcs.com"];
 
@@ -67,12 +68,12 @@ const AddIntakeWorker = ({ mode = "add" }) => {
             const docData = snap.docs[0].data();
             setInitialValues({
               name: docData.name || "",
-             role:
+              role:
                 docData.role?.toLowerCase().includes("intake")
-                ? "Intake Worker"
-                : docData.role?.toLowerCase().includes("parent")
-                ? "Parent"
-                : "",
+                  ? "Intake Worker"
+                  : docData.role?.toLowerCase().includes("parent")
+                    ? "Parent"
+                    : "",
               agency: docData.agency || "",
               phone: docData.phone || "",
               email: docData.email || "",
@@ -88,16 +89,27 @@ const AddIntakeWorker = ({ mode = "add" }) => {
     };
 
     fetchIntakeWorker();
-  }, [mode, id]);
+  }, [mode, id, refreshKey]);
 
   // Handle Add or Update
   const handleSubmit = async (values, { resetForm }) => {
     try {
       if (mode === "update") {
+        // Find the worker using the original email (from URL param)
         const q = query(collection(db, "intakeUsers"), where("email", "==", id));
         const snap = await getDocs(q);
 
         if (!snap.empty) {
+          // If admin changed the email, check that the new email isn't already taken
+          if (values.email !== id) {
+            const dupQ = query(collection(db, "intakeUsers"), where("email", "==", values.email));
+            const dupSnap = await getDocs(dupQ);
+            if (!dupSnap.empty) {
+              alert("Another intake worker already uses this email!");
+              return;
+            }
+          }
+
           const docRef = doc(db, "intakeUsers", snap.docs[0].id);
           await updateDoc(docRef, {
             ...values,
@@ -110,6 +122,14 @@ const AddIntakeWorker = ({ mode = "add" }) => {
             subtitle: `${values.name} (${values.role})`,
             viewText: "View Intake Worker",
           });
+
+          // If email was changed, navigate to the new URL so the param stays in sync
+          if (values.email !== id) {
+            navigate(`/admin-dashboard/add/update-intakeworker/${values.email}`, { replace: true });
+          } else {
+            // Re-fetch updated data so form shows current values
+            setRefreshKey((k) => k + 1);
+          }
         } else {
           alert("No matching intake worker found to update!");
         }
@@ -178,9 +198,8 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     name="name"
                     type="text"
                     placeholder="Enter full name"
-                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
-                      touched.name && errors.name ? "border-red-500" : "border-light-gray"
-                    }`}
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${touched.name && errors.name ? "border-red-500" : "border-light-gray"
+                      }`}
                   />
                   <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
                 </div>
@@ -191,9 +210,8 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                   <Field
                     as="select"
                     name="role"
-                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${
-                      touched.role && errors.role ? "border-red-500" : "border-light-gray"
-                    }`}
+                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${touched.role && errors.role ? "border-red-500" : "border-light-gray"
+                      }`}
                   >
                     <option value="">Select Role</option>
                     <option value="Intake Worker">Intake Worker</option>
@@ -215,11 +233,10 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                       name="agency"
                       type="text"
                       placeholder="Enter agency name"
-                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
-                        touched.agency && errors.agency
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${touched.agency && errors.agency
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     />
                     <ErrorMessage
                       name="agency"
@@ -236,9 +253,8 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     name="phone"
                     type="text"
                     placeholder="Enter phone number"
-                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
-                      touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
-                    }`}
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
+                      }`}
                   />
                   <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
                 </div>
@@ -250,10 +266,8 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     name="email"
                     type="email"
                     placeholder="Enter email address"
-                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
-                      touched.email && errors.email ? "border-red-500" : "border-light-gray"
-                    }`}
-                    disabled={mode === "update"} // Prevent changing email in update
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${touched.email && errors.email ? "border-red-500" : "border-light-gray"
+                      }`}
                   />
                   <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
                 </div>
@@ -266,11 +280,10 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     <Field
                       as="select"
                       name="invoiceEmail"
-                      className={`w-full border rounded-sm p-[10px] appearance-none ${
-                        touched.invoiceEmail && errors.invoiceEmail
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                      className={`w-full border rounded-sm p-[10px] appearance-none ${touched.invoiceEmail && errors.invoiceEmail
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     >
                       <option value="">Select Invoice Email</option>
                       {UPCS_EMAIL_OPTIONS.map((opt) => (
@@ -284,11 +297,10 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                       name="invoiceEmail"
                       type="email"
                       placeholder="Enter invoice email"
-                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
-                        touched.invoiceEmail && errors.invoiceEmail
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${touched.invoiceEmail && errors.invoiceEmail
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     />
                   )}
                   <ErrorMessage

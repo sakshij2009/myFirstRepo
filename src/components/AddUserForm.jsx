@@ -24,6 +24,7 @@ const AddUserForm = ({ mode = "add", user }) => {
   const [createdUser, setCreatedUser] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [initialValues, setInitialValues] = useState({
     name: "",
@@ -44,6 +45,24 @@ const AddUserForm = ({ mode = "add", user }) => {
     position: "",
 
     // ✅ NEW FIELDS
+    firstName: "",
+    lastName: "",
+    dob: "",
+    driverLicense: "",
+    driverLicenseExpiry: "",
+
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    emergencyContactRelation: "",
+
+    referenceName: "",
+    referenceEmail: "",
+    referencePhone: "",
+    referenceRelation: "",
+
+    healthCardNumber: "",
+    medicalConcerns: "",
+
     reasonOfLeaving: "",
     totalKMs: "",
     rateBefore5000km: "",
@@ -52,7 +71,7 @@ const AddUserForm = ({ mode = "add", user }) => {
 
   // Validation Schema (only used in add mode in your code)
   const validationSchema = Yup.object({
-    name: Yup.string().required("Name is required").min(3, "Min 3 chars"),
+    // name: Yup.string().required("Name is required").min(3, "Min 3 chars"),
     userId: Yup.string()
       .required("userId is required")
       .matches(/^[A-Za-z0-9]+$/, "Only alphanumeric allowed"),
@@ -70,6 +89,23 @@ const AddUserForm = ({ mode = "add", user }) => {
     position: Yup.string().required("Position is required"),
 
     // ✅ NEW FIELDS (kept optional so we don’t break your flow)
+    firstName: Yup.string().required("First Name is required"),
+    lastName: Yup.string().required("Last Name is required"),
+    dob: Yup.date().required("DOB is required"),
+    driverLicense: Yup.string().required("Driver License is required"),
+
+    emergencyContactName: Yup.string().required("Emergency Contact Name is required"),
+    emergencyContactPhone: Yup.string().required("Phone required").matches(/^[0-9]{10}$/, "10 digits"),
+    emergencyContactRelation: Yup.string().required("Relation is required"),
+
+    referenceName: Yup.string().required("Reference Name is required"),
+    referenceEmail: Yup.string().email("Invalid email").required("Email is required"),
+    referencePhone: Yup.string().required("Phone required").matches(/^[0-9]{10}$/, "10 digits"),
+    referenceRelation: Yup.string().required("Relation is required"),
+
+    healthCardNumber: Yup.string().required("Health Card Number is required"),
+    medicalConcerns: Yup.string().max(500, "Max 500 chars"),
+
     reasonOfLeaving: Yup.string().max(200, "Max 200 chars"),
     totalKMs: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
     rateBefore5000km: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
@@ -101,74 +137,74 @@ const AddUserForm = ({ mode = "add", user }) => {
 
             // ✅ Get last shift date and auto-set Date of Leaving
             // NOTE: rename collection/fields here if your shifts structure differs
-           let lastShiftDate = "";
+            let lastShiftDate = "";
 
-          try {
-            const shiftsRef = collection(db, "shifts");
+            try {
+              const shiftsRef = collection(db, "shifts");
 
-            // no orderBy => no index
-            const shiftsQ = query(
-              shiftsRef,
-              where("userId", "==", data.userId || id)
-            );
+              // no orderBy => no index
+              const shiftsQ = query(
+                shiftsRef,
+                where("userId", "==", data.userId || id)
+              );
 
-            const shiftsSnap = await getDocs(shiftsQ);
+              const shiftsSnap = await getDocs(shiftsQ);
 
-            const parseDate = (v) => {
-              if (!v) return null;
+              const parseDate = (v) => {
+                if (!v) return null;
 
-              // Firestore Timestamp
-              if (typeof v?.toDate === "function") return v.toDate();
+                // Firestore Timestamp
+                if (typeof v?.toDate === "function") return v.toDate();
 
-              // JS Date
-              if (v instanceof Date) return v;
+                // JS Date
+                if (v instanceof Date) return v;
 
-              // ISO string or parseable string
-              if (typeof v === "string") {
-                const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); // DD/MM/YYYY
-                if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-                const d = new Date(v);
-                return Number.isNaN(d.getTime()) ? null : d;
+                // ISO string or parseable string
+                if (typeof v === "string") {
+                  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); // DD/MM/YYYY
+                  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+                  const d = new Date(v);
+                  return Number.isNaN(d.getTime()) ? null : d;
+                }
+
+                // number (ms)
+                if (typeof v === "number") {
+                  const d = new Date(v);
+                  return Number.isNaN(d.getTime()) ? null : d;
+                }
+
+                return null;
+              };
+
+              if (!shiftsSnap.empty) {
+                const shifts = shiftsSnap.docs.map((d) => d.data());
+
+                // ✅ ONLY shifts that are fully worked (both clock-in and clock-out exist)
+                const worked = shifts
+                  .map((s) => {
+                    const clockIn = parseDate(s.clockIn);   // 🔁 rename if different
+                    const clockOut = parseDate(s.clockOut); // 🔁 rename if different
+
+                    return { s, clockIn, clockOut };
+                  })
+                  .filter(({ clockIn, clockOut }) => clockIn && clockOut);
+
+                if (worked.length) {
+                  // ✅ pick the latest by clockOut time (most reliable)
+                  const latestWorked = worked.reduce((best, cur) =>
+                    cur.clockOut.getTime() > best.clockOut.getTime() ? cur : best
+                  );
+
+                  // Date of leaving = date of last worked shift
+                  lastShiftDate = toDateInputValue(latestWorked.clockOut);
+                } else {
+                  // optional: if no worked shifts, keep empty or fallback
+                  lastShiftDate = "";
+                }
               }
-
-              // number (ms)
-              if (typeof v === "number") {
-                const d = new Date(v);
-                return Number.isNaN(d.getTime()) ? null : d;
-              }
-
-              return null;
-            };
-
-            if (!shiftsSnap.empty) {
-              const shifts = shiftsSnap.docs.map((d) => d.data());
-
-              // ✅ ONLY shifts that are fully worked (both clock-in and clock-out exist)
-              const worked = shifts
-                .map((s) => {
-                  const clockIn = parseDate(s.clockIn);   // 🔁 rename if different
-                  const clockOut = parseDate(s.clockOut); // 🔁 rename if different
-
-                  return { s, clockIn, clockOut };
-                })
-                .filter(({ clockIn, clockOut }) => clockIn && clockOut);
-
-              if (worked.length) {
-                // ✅ pick the latest by clockOut time (most reliable)
-                const latestWorked = worked.reduce((best, cur) =>
-                  cur.clockOut.getTime() > best.clockOut.getTime() ? cur : best
-                );
-
-                // Date of leaving = date of last worked shift
-                lastShiftDate = toDateInputValue(latestWorked.clockOut);
-              } else {
-                // optional: if no worked shifts, keep empty or fallback
-                lastShiftDate = "";
-              }
+            } catch (e) {
+              console.warn("Could not auto-fetch last worked shift date:", e?.message || e);
             }
-          } catch (e) {
-            console.warn("Could not auto-fetch last worked shift date:", e?.message || e);
-          }
 
 
             setInitialValues({
@@ -198,6 +234,24 @@ const AddUserForm = ({ mode = "add", user }) => {
               totalKMs: data.totalKMs ?? "",
               rateBefore5000km: data.rateBefore5000km ?? "",
               rateAfter5000km: data.rateAfter5000km ?? "",
+
+              firstName: data.firstName || (data.name ? data.name.split(" ")[0] : ""),
+              lastName: data.lastName || (data.name ? data.name.split(" ").slice(1).join(" ") : ""),
+              dob: data.dob || "",
+              driverLicense: data.driverLicense || "",
+              driverLicenseExpiry: data.driverLicenseExpiry || "",
+
+              emergencyContactName: data.emergencyContactName || "",
+              emergencyContactPhone: data.emergencyContactPhone || "",
+              emergencyContactRelation: data.emergencyContactRelation || "",
+
+              referenceName: data.referenceName || "",
+              referenceEmail: data.referenceEmail || "",
+              referencePhone: data.referencePhone || "",
+              referenceRelation: data.referenceRelation || "",
+
+              healthCardNumber: data.healthCardNumber || "",
+              medicalConcerns: data.medicalConcerns || "",
             });
 
             if (data.profilePhotoUrl) setAvatarPreview(data.profilePhotoUrl);
@@ -211,7 +265,7 @@ const AddUserForm = ({ mode = "add", user }) => {
     };
 
     fetchUser();
-  }, [mode, id]);
+  }, [mode, id, refreshKey]);
 
   // Avatar change
   const handleAvatarChange = (event, setFieldValue) => {
@@ -238,6 +292,10 @@ const AddUserForm = ({ mode = "add", user }) => {
         photoURL = await getDownloadURL(storageRef);
       }
 
+      // Combine First and Last Name
+      const fullName = `${values.firstName} ${values.lastName}`.trim();
+      const submissionData = { ...values, name: fullName };
+
       if (mode === "update") {
         const q = query(collection(db, "users"), where("userId", "==", id));
         const snap = await getDocs(q);
@@ -246,7 +304,7 @@ const AddUserForm = ({ mode = "add", user }) => {
           const userDoc = snap.docs[0].id;
 
           await updateDoc(doc(db, "users", userDoc), {
-            ...values,
+            ...submissionData,
             profilePhotoUrl: photoURL,
             updatedAt: new Date(),
           });
@@ -259,10 +317,13 @@ const AddUserForm = ({ mode = "add", user }) => {
           });
 
           setCreatedUser(values);
+
+          // Re-fetch updated data so form shows current values
+          setRefreshKey((k) => k + 1);
         }
       } else {
         await setDoc(doc(db, "users", values.username), {
-          ...values,
+          ...submissionData,
           profilePhotoUrl: photoURL,
           createdAt: new Date(),
           isSuspended: false,
@@ -371,18 +432,71 @@ const AddUserForm = ({ mode = "add", user }) => {
 
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4">
-              {/* Name */}
+              {/* First Name */}
               <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Name</label>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">First Name</label>
                 <Field
-                  name="name"
+                  name="firstName"
                   type="text"
-                  placeholder="Please enter the name of user"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.name && errors.name ? "border-red-500" : "border-light-gray"
-                  }`}
+                  placeholder="Enter First Name"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.firstName && errors.firstName ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
-                <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                <ErrorMessage name="firstName" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Last Name */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Last Name</label>
+                <Field
+                  name="lastName"
+                  type="text"
+                  placeholder="Enter Last Name"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.lastName && errors.lastName ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="lastName" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* DOB */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Date of Birth</label>
+                <Field
+                  name="dob"
+                  type="date"
+                  className={`w-full border rounded-sm p-[10px]  
+                    ${values.dob === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
+                    ${touched.dob && errors.dob ? "border-red-500" : "border-light-gray"}
+                  `}
+                />
+                <ErrorMessage name="dob" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Driver License */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Driver License Number</label>
+                <Field
+                  name="driverLicense"
+                  type="text"
+                  placeholder="Enter Driver License Number"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.driverLicense && errors.driverLicense ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="driverLicense" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Driver License Expiry */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Driver License Expiry Date</label>
+                <Field
+                  name="driverLicenseExpiry"
+                  type="date"
+                  className={`w-full border rounded-sm p-[10px]
+                    ${values.driverLicenseExpiry === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
+                    ${touched.driverLicenseExpiry && errors.driverLicenseExpiry ? "border-red-500" : "border-light-gray"}
+                  `}
+                />
+                <ErrorMessage name="driverLicenseExpiry" component="div" className="text-red-500 text-xs mt-1" />
               </div>
 
               {/* User Id */}
@@ -392,9 +506,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="userId"
                   type="text"
                   placeholder="Please enter a specific ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.userId && errors.userId ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.userId && errors.userId ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -406,9 +519,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="username"
                   type="text"
                   placeholder="Please enter a specific username"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.username && errors.username ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.username && errors.username ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="username" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -420,9 +532,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="password"
                   type="text"
                   placeholder="Please enter a specific password"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.password && errors.password ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.password && errors.password ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -434,9 +545,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="email"
                   type="email"
                   placeholder="Please enter the e-mail ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.email && errors.email ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.email && errors.email ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -448,9 +558,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="phone"
                   type="text"
                   placeholder="Please enter the phone no"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -516,9 +625,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   as="textarea"
                   name="reasonOfLeaving"
                   placeholder="Enter reason of leaving"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-24 ${
-                    touched.reasonOfLeaving && errors.reasonOfLeaving ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-24 ${touched.reasonOfLeaving && errors.reasonOfLeaving ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="reasonOfLeaving" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -530,9 +638,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="position"
                   type="text"
                   placeholder="Please enter the position of user"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.position && errors.position ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.position && errors.position ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="position" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -546,9 +653,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="dailyShiftHours"
                   type="number"
                   placeholder="Enter the Daily allowed hours"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.dailyShiftHours && errors.dailyShiftHours ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.dailyShiftHours && errors.dailyShiftHours ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="dailyShiftHours" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -560,9 +666,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="salaryPerHour"
                   type="number"
                   placeholder="Please enter the specific amount"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.salaryPerHour && errors.salaryPerHour ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.salaryPerHour && errors.salaryPerHour ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="salaryPerHour" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -574,9 +679,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="totalKMs"
                   type="number"
                   placeholder="Enter total kms"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.totalKMs && errors.totalKMs ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.totalKMs && errors.totalKMs ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="totalKMs" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -590,9 +694,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="rateBefore5000km"
                   type="number"
                   placeholder="Enter rate before 5000km"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.rateBefore5000km && errors.rateBefore5000km ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.rateBefore5000km && errors.rateBefore5000km ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="rateBefore5000km" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -606,11 +709,148 @@ const AddUserForm = ({ mode = "add", user }) => {
                   name="rateAfter5000km"
                   type="number"
                   placeholder="Enter rate after 5000km"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.rateAfter5000km && errors.rateAfter5000km ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.rateAfter5000km && errors.rateAfter5000km ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="rateAfter5000km" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* ======================= */}
+              {/* Emergency Contact Info */}
+              {/* ======================= */}
+              <div className="col-span-2 mt-4">
+                <p className="font-bold text-lg text-light-black border-b pb-2">Emergency Contact Information</p>
+              </div>
+
+              {/* Emergency Contact Name */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Emergency Contact Person</label>
+                <Field
+                  name="emergencyContactName"
+                  type="text"
+                  placeholder="Enter Contact Person Name"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.emergencyContactName && errors.emergencyContactName ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="emergencyContactName" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Emergency Contact Phone */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Emergency Contact Phone</label>
+                <Field
+                  name="emergencyContactPhone"
+                  type="text"
+                  placeholder="Enter Contact Phone"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.emergencyContactPhone && errors.emergencyContactPhone ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="emergencyContactPhone" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Relation */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Relationship to Employee</label>
+                <Field
+                  name="emergencyContactRelation"
+                  type="text"
+                  placeholder="Enter Relationship"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.emergencyContactRelation && errors.emergencyContactRelation ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="emergencyContactRelation" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* ======================= */}
+              {/* Reference Information */}
+              {/* ======================= */}
+              <div className="col-span-2 mt-4">
+                <p className="font-bold text-lg text-light-black border-b pb-2">Reference Information</p>
+              </div>
+
+              {/* Reference Name */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Reference Name</label>
+                <Field
+                  name="referenceName"
+                  type="text"
+                  placeholder="Enter Reference Name"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.referenceName && errors.referenceName ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="referenceName" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Reference Email */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Reference Email</label>
+                <Field
+                  name="referenceEmail"
+                  type="email"
+                  placeholder="Enter Reference Email"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.referenceEmail && errors.referenceEmail ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="referenceEmail" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Reference Phone */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Reference Phone</label>
+                <Field
+                  name="referencePhone"
+                  type="text"
+                  placeholder="Enter Reference Phone"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.referencePhone && errors.referencePhone ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="referencePhone" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Reference Relation */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Relationship to Reference</label>
+                <Field
+                  name="referenceRelation"
+                  type="text"
+                  placeholder="Enter Relationship"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.referenceRelation && errors.referenceRelation ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="referenceRelation" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* ======================= */}
+              {/* Health Information */}
+              {/* ======================= */}
+              <div className="col-span-2 mt-4">
+                <p className="font-bold text-lg text-light-black border-b pb-2">Health Information</p>
+              </div>
+
+              {/* Health Card Number */}
+              <div>
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Health Card Number</label>
+                <Field
+                  name="healthCardNumber"
+                  type="text"
+                  placeholder="Enter Health Card Number"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.healthCardNumber && errors.healthCardNumber ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="healthCardNumber" component="div" className="text-red-500 text-xs mt-1" />
+              </div>
+
+              {/* Medical Concerns */}
+              <div className="col-span-2">
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Medical Concerns / Allergies</label>
+                <Field
+                  as="textarea"
+                  name="medicalConcerns"
+                  placeholder="Enter any medical concerns or allergies"
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-24 ${touched.medicalConcerns && errors.medicalConcerns ? "border-red-500" : "border-light-gray"
+                    }`}
+                />
+                <ErrorMessage name="medicalConcerns" component="div" className="text-red-500 text-xs mt-1" />
               </div>
 
               {/* Address */}
@@ -655,9 +895,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                   as="textarea"
                   name="description"
                   placeholder="Write the description of the User"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50 ${
-                    touched.description && errors.description ? "border-red-500" : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50 ${touched.description && errors.description ? "border-red-500" : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
               </div>

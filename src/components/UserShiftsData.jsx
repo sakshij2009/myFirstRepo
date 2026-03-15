@@ -35,21 +35,21 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
 
   const navigate = useNavigate();
 
-   const formatDate = (timestamp) => {
-  if (!timestamp) return "-";
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "-";
 
-  // Firebase Timestamp support
-  const date =
-    typeof timestamp?.toDate === "function"
-      ? timestamp.toDate()
-      : new Date(timestamp);
+    // Firebase Timestamp support
+    const date =
+      typeof timestamp?.toDate === "function"
+        ? timestamp.toDate()
+        : new Date(timestamp);
 
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   // Fetch staff list on mount (you can change the where clause to fit your app)
   useEffect(() => {
@@ -119,89 +119,89 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
     setShowTransferModal(true);
   };
 
-const handleTransferShift = async () => {
-  try {
-    if (!selectedStaff) {
-      alert("Please select a staff member.");
-      return;
-    }
+  const handleTransferShift = async () => {
+    try {
+      if (!selectedStaff) {
+        alert("Please select a staff member.");
+        return;
+      }
 
-    if (!selectedShift || !user?.userId) {
-      alert("Invalid shift or user.");
-      return;
-    }
+      if (!selectedShift || !user?.userId) {
+        alert("Invalid shift or user.");
+        return;
+      }
 
-    // 1️⃣ Create transfer request
-    const transferRef = await addDoc(collection(db, "transferRequests"), {
-      shiftId: selectedShift.id,
-      fromUserId: user.userId,
-      fromUserName: user.name,
-      toUserId: selectedStaff.id,
-      toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
-      reason: transferReason || "",
-      status: "pending",
-      createdAt: Timestamp.now(),
-    });
-
-    const transferId = transferRef.id;
-
-    // 2️⃣ Notify RECEIVING STAFF (Approve / Reject)
-    await sendNotification(selectedStaff.id, {
-      type: "action",
-      title: "Shift Transfer Request",
-      message: `${user.name} wants to transfer a shift to you.`,
-      senderId: user.userId,
-      actions: ["approve", "reject"],
-      meta: {
-        requestType: "shift-transfer",
-        transferId,
+      // 1️⃣ Create transfer request
+      const transferRef = await addDoc(collection(db, "transferRequests"), {
         shiftId: selectedShift.id,
         fromUserId: user.userId,
-      },
-    });
+        fromUserName: user.name,
+        toUserId: selectedStaff.id,
+        toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
+        reason: transferReason || "",
+        status: "pending",
+        createdAt: Timestamp.now(),
+      });
 
-    // 3️⃣ Notify ADMIN (FYI)
-    const adminSnap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "admin"))
-    );
+      const transferId = transferRef.id;
 
-    if (!adminSnap.empty) {
-      const adminId = adminSnap.docs[0].id;
-
-      await sendNotification(adminId, {
-        type: "info",
-        title: "Shift Transfer Requested",
-        message: `${user.name} requested to transfer a shift to ${selectedStaff.name}.`,
+      // 2️⃣ Notify RECEIVING STAFF (Approve / Reject)
+      await sendNotification(selectedStaff.id, {
+        type: "action",
+        title: "Shift Transfer Request",
+        message: `${user.name} wants to transfer a shift to you.`,
         senderId: user.userId,
+        actions: ["approve", "reject"],
         meta: {
+          requestType: "shift-transfer",
           transferId,
           shiftId: selectedShift.id,
+          fromUserId: user.userId,
         },
       });
+
+      // 3️⃣ Notify ADMIN (FYI)
+      const adminSnap = await getDocs(
+        query(collection(db, "users"), where("role", "==", "admin"))
+      );
+
+      if (!adminSnap.empty) {
+        const adminId = adminSnap.docs[0].id;
+
+        await sendNotification(adminId, {
+          type: "info",
+          title: "Shift Transfer Requested",
+          message: `${user.name} requested to transfer a shift to ${selectedStaff.name}.`,
+          senderId: user.userId,
+          meta: {
+            transferId,
+            shiftId: selectedShift.id,
+          },
+        });
+      }
+
+      alert("Transfer request sent successfully.");
+      setShowTransferModal(false);
+      setSelectedStaff(null);
+      setTransferReason("");
+      setSelectedShift(null);
+
+    } catch (err) {
+      console.error("Transfer error:", err);
+      alert("Failed to submit transfer request.");
     }
-
-    alert("Transfer request sent successfully.");
-    setShowTransferModal(false);
-    setSelectedStaff(null);
-    setTransferReason("");
-    setSelectedShift(null);
-
-  } catch (err) {
-    console.error("Transfer error:", err);
-    alert("Failed to submit transfer request.");
-  }
-};
+  };
 
 
   const handleConfirmShift = async (shiftId) => {
-  try {
-    await updateDoc(doc(db, "shifts", shiftId), {
-      shiftConfirmed: true,
-    });
-  } catch (error) {
-    console.error("Error confirming shift:", error);
-  }
-};
+    try {
+      await updateDoc(doc(db, "shifts", shiftId), {
+        shiftConfirmed: true,
+      });
+    } catch (error) {
+      console.error("Error confirming shift:", error);
+    }
+  };
 
 
   // Pagination setup
@@ -246,7 +246,7 @@ const handleTransferShift = async () => {
                   <div className="flex flex-col gap-[2px]">
                     <div className="flex justify-start gap-6">
                       <p className="font-normal text-[14px] leading-[20px]">Client</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientName || emp.clientDetails?.name ||  "-"}</p>
+                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientName || emp.clientDetails?.name || "-"}</p>
                     </div>
                     <div className="flex justify-start gap-[8px]">
                       <p className="font-normal text-[14px] leading-[20px]">Client ID</p>
@@ -255,10 +255,7 @@ const handleTransferShift = async () => {
                   </div>
 
                   <div className="flex flex-row gap-[24px] justify-end">
-                    <div className="w-[100px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Report Number</p>
-                      <p className="font-bold text-[14px] leading-[20px] truncate">01</p>
-                    </div>
+
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Date</p>
                       <p className="font-bold text-[14px] leading-[20px]">{formatDate(emp.startDate)}</p>
@@ -281,7 +278,7 @@ const handleTransferShift = async () => {
                     </div>
                     <div className="w-[120px]">
                       <p className="font-normal text-[14px] leading-[20px]">Agency</p>
-                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName ||emp.clientDetails?.agencyName || "-"}>
+                      <p className="truncate font-bold text-[14px] leading-[20px]" title={emp.agencyName || emp.clientDetails?.agencyName || "-"}>
                         {emp.agencyName}
                       </p>
                     </div>
@@ -297,47 +294,47 @@ const handleTransferShift = async () => {
 
                   <div className="flex gap-2">
                     {/* Confirm Shift Button */}
-                     {/* Confirm Shift / Confirmed Status */}
-{emp.shiftConfirmed ? (
-  <div
-    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+                    {/* Confirm Shift / Confirmed Status */}
+                    {emp.shiftConfirmed ? (
+                      <div
+                        className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
                border-green-600 text-green-600 bg-green-50 cursor-default"
-  >
-   
-    <p>Confirmed</p>
-  </div>
-) : (
-  <div
-    onClick={() => handleConfirmShift(emp.id)}
-    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
-               border-blue-600 text-blue-600 bg-white hover:bg-blue-50 cursor-pointer"
-  >
-    <VscDebugStart className="text-[18px]" />
-    <p>Confirm Shift</p>
-  </div>
-)}
+                      >
 
-                   {emp.shiftReport ? (
-                     <div
-                       onClick={() => handleViewReport(emp.id)}
-                       className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
+                        <p>Confirmed</p>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => handleConfirmShift(emp.id)}
+                        className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+               border-blue-600 text-blue-600 bg-white hover:bg-blue-50 cursor-pointer"
+                      >
+                        <VscDebugStart className="text-[18px]" />
+                        <p>Confirm Shift</p>
+                      </div>
+                    )}
+
+                    {emp.shiftReport ? (
+                      <div
+                        onClick={() => handleViewReport(emp.id)}
+                        className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
                                   border-dark-green text-dark-green bg-white cursor-pointer hover:bg-[#e6f5ea]"
-                     >
-                       <VscDebugStart className="text-[18px]" />
-                       <p>View Report</p>
-                     </div>
-                   ) : (
-                     <div
-                       onClick={() => handleViewReport(emp.id)}
-                       className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
-                         ${emp.shiftConfirmed 
-                           ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer" 
-                           : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
-                     >
-                       <VscDebugStart className="text-[18px]" />
-                       <p>Make Report</p>
-                     </div>
-                   )}
+                      >
+                        <VscDebugStart className="text-[18px]" />
+                        <p>View Report</p>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => handleViewReport(emp.id)}
+                        className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+                         ${emp.shiftConfirmed
+                            ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer"
+                            : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
+                      >
+                        <VscDebugStart className="text-[18px]" />
+                        <p>Make Report</p>
+                      </div>
+                    )}
 
                     {/* Make Report Button */}
                     {/* <div
@@ -416,10 +413,7 @@ const handleTransferShift = async () => {
                   <p className="font-normal text-sm leading-5">Client</p>
                   <p className="font-bold text-sm leading-5">{selectedShift?.clientName}</p>
                 </div>
-                <div className="flex flex-col">
-                  <p className="font-normal text-sm leading-5">Report Number</p>
-                  <p className="font-bold text-sm leading-5">#S001</p>
-                </div>
+
                 <div className="flex flex-col">
                   <p className="font-normal text-sm leading-5">Date</p>
                   <p className="font-bold text-sm leading-5">{selectedShift?.dateKey}</p>
@@ -487,7 +481,7 @@ const handleTransferShift = async () => {
             {/* Transfer Button */}
             <div className="flex items-center justify-center">
               <button
-                 onClick={handleTransferShift}
+                onClick={handleTransferShift}
                 className="flex items-center justify-center gap-[10px] bg-[#1D5F33] text-white py-2 px-3 w-fit rounded hover:bg-[#144527]"
               >
                 <BiTransfer /> Transfer Shift

@@ -22,14 +22,15 @@ import {
 import { useNavigate } from "react-router-dom";
 import TransportationDetails from "./TransportationDetails";
 import { useLocation } from "react-router-dom";
+import { checkDriverLicenseExpiry } from "../utils/driverLicenseExpiryChecker";
 
 
 // ✅ Helper: get date range for filter
-const getDateRange = (filter) => {
-  const now = new Date();
-  if (filter === "weekly") return { start: startOfWeek(now), end: endOfWeek(now) };
-  if (filter === "monthly") return { start: startOfMonth(now), end: endOfMonth(now) };
-  if (filter === "yearly") return { start: startOfYear(now), end: endOfYear(now) };
+const getDateRange = (filter, now) => {
+  const ref = now || new Date();
+  if (filter === "weekly") return { start: startOfWeek(ref), end: endOfWeek(ref) };
+  if (filter === "monthly") return { start: startOfMonth(ref), end: endOfMonth(ref) };
+  if (filter === "yearly") return { start: startOfYear(ref), end: endOfYear(ref) };
   return { start: null, end: null };
 };
 
@@ -37,7 +38,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-const [initialShiftCategory, setInitialShiftCategory] = useState(null);
+  const [initialShiftCategory, setInitialShiftCategory] = useState(null);
 
   const [activeTab, setActiveTab] = useState("shifts");
   const scrollRef = useRef(null);
@@ -48,39 +49,45 @@ const [initialShiftCategory, setInitialShiftCategory] = useState(null);
   const [stats, setStats] = useState({
     clients: 0,
     shifts: 0,
+    agencies: 0,
     revenue: 0,
     expenses: 0,
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-  const [userDocId, setUserDocId] = useState("familyforeverAdmin#1"); 
+  const [userDocId, setUserDocId] = useState("familyforeverAdmin#1");
 
-const [showTransportDetails, setShowTransportDetails] = useState(false);
-const [selectedTransportShift, setSelectedTransportShift] = useState(null);
-
-
-useEffect(() => {
-  if (location.state?.shiftCategory) {
-    setInitialShiftCategory(location.state.shiftCategory);
-  }
-}, [location.state]);
+  const [showTransportDetails, setShowTransportDetails] = useState(false);
+  const [selectedTransportShift, setSelectedTransportShift] = useState(null);
 
 
-
-// OPEN TRANSPORT SLIDER
-const openTransportDetails = (shift) => {
-  setSelectedTransportShift(shift);
-  setShowTransportDetails(true);
-};
-
-// CLOSE TRANSPORT SLIDER
-const closeTransportDetails = () => {
-  setShowTransportDetails(false);
-  setTimeout(() => setSelectedTransportShift(null), 300);
-};
+  useEffect(() => {
+    if (location.state?.shiftCategory) {
+      setInitialShiftCategory(location.state.shiftCategory);
+    }
+  }, [location.state]);
 
 
+
+  // OPEN TRANSPORT SLIDER
+  const openTransportDetails = (shift) => {
+    setSelectedTransportShift(shift);
+    setShowTransportDetails(true);
+  };
+
+  // CLOSE TRANSPORT SLIDER
+  const closeTransportDetails = () => {
+    setShowTransportDetails(false);
+    setTimeout(() => setSelectedTransportShift(null), 300);
+  };
+
+
+
+  // 🔔 Driver License Expiry: run every time admin loads (only fires work on Mondays)
+  useEffect(() => {
+    checkDriverLicenseExpiry();
+  }, []);
 
   // 🔴 Real-time listener for unread notifications
   useEffect(() => {
@@ -103,51 +110,76 @@ const closeTransportDetails = () => {
     fetchStats(filter);
   }, [filter]);
 
-  const fetchStats = async (filter) => {
+  // ✅ Robust date extractor (handles Firestore Timestamps, Date objects, strings, {seconds} objects)
+  const extractDate = (val) => {
+    if (!val) return null;
+    // Firestore Timestamp
+    if (typeof val.toDate === "function") return val.toDate();
+    // Already a Date
+    if (val instanceof Date && !isNaN(val)) return val;
+    // Object with seconds (Firestore-like)
+    if (typeof val === "object" && val.seconds) return new Date(val.seconds * 1000);
+    // String
+    if (typeof val === "string") {
+      const cleaned = val.replace(/,/g, "").replace(/\s+/g, " ").trim();
+      const parsed = Date.parse(cleaned);
+      if (!isNaN(parsed)) return new Date(parsed);
+      // Try "05 DEC 2024" style
+      const parts = cleaned.split(" ");
+      if (parts.length >= 3) {
+        const [day, month, year] = parts;
+        const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
+        if (!isNaN(monthIndex)) return new Date(Number(year), monthIndex, Number(day));
+      }
+    }
+    return null;
+  };
+
+  const fetchStats = async (currentFilter) => {
     try {
-      const { start, end } = getDateRange(filter);
+      // Get Alberta "now" for date range
+      const nowStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+      const [y, m, d] = nowStr.split("-").map(Number);
+      const albertaNow = new Date(y, m - 1, d, 12, 0, 0); // noon to avoid boundary issues
 
-      const clientQuery = query(
-        collection(db, "dev_clients"),
-        where("createdAt", ">=", start),
-        where("createdAt", "<=", end)
-      );
-      const clientSnap = await getDocs(clientQuery);
+      const { start, end } = getDateRange(currentFilter, albertaNow);
 
-      const shiftQuery = query(
-        collection(db, "dev_shifts"),
-        where("createdAt", ">=", start),
-        where("createdAt", "<=", end)
-      );
-      const shiftSnap = await getDocs(shiftQuery);
+      // Fetch all from real collections
+      const [clientSnap, shiftSnap, agencySnap] = await Promise.all([
+        getDocs(collection(db, "clients")),
+        getDocs(collection(db, "shifts")),
+        getDocs(collection(db, "agencies")),
+      ]);
 
-      const revenueQuery = query(
-        collection(db, "revenue"),
-        where("createdAt", ">=", start),
-        where("createdAt", "<=", end)
-      );
-      const revenueSnap = await getDocs(revenueQuery);
-      const totalRevenue = revenueSnap.docs.reduce(
-        (sum, doc) => sum + (doc.data().amount || 0),
-        0
-      );
+      // Client-side date filtering for shifts
+      const allShifts = shiftSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const filteredShifts = allShifts.filter(shift => {
+        const shiftDate = extractDate(shift.startDate) || extractDate(shift.createdAt);
+        if (!shiftDate) return false;
+        return shiftDate >= start && shiftDate <= end;
+      });
 
-      const expenseQuery = query(
-        collection(db, "expenses"),
-        where("createdAt", ">=", start),
-        where("createdAt", "<=", end)
-      );
-      const expenseSnap = await getDocs(expenseQuery);
-      const totalExpenses = expenseSnap.docs.reduce(
-        (sum, doc) => sum + (doc.data().amount || 0),
-        0
-      );
+      // Client-side date filtering for clients
+      const allClients = clientSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const filteredClients = allClients.filter(client => {
+        const clientDate = extractDate(client.createdAt);
+        if (!clientDate) return true; // If no createdAt, include by default
+        return clientDate >= start && clientDate <= end;
+      });
 
       setStats({
-        clients: clientSnap.size,
-        shifts: shiftSnap.size,
-        revenue: totalRevenue,
-        expenses: totalExpenses,
+        clients: filteredClients.length,
+        shifts: filteredShifts.length,
+        agencies: agencySnap.size, // Total agencies (not date-filtered)
+        revenue: 0,
+        expenses: 0,
+      });
+
+      console.log(`📊 ADMIN ANALYTICS [${currentFilter}]`, {
+        period: `${start.toLocaleDateString()} → ${end.toLocaleDateString()}`,
+        totalClients: filteredClients.length,
+        totalShifts: filteredShifts.length,
+        totalAgencies: agencySnap.size,
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -224,6 +256,7 @@ const closeTransportDetails = () => {
         {[
           { title: "Total Clients", value: stats.clients },
           { title: "Total Shifts", value: stats.shifts },
+          { title: "Total Agencies", value: stats.agencies },
           { title: "Total Revenue", value: `$${stats.revenue}` },
           { title: "Total Expenses", value: `$${stats.expenses}` },
         ].map((card, idx) => (
@@ -252,20 +285,19 @@ const closeTransportDetails = () => {
       <div className="bg-[#E4E4E4] gap-4 pt-4 pr-6 pb-4 pl-6 rounded-[4px] h-full min-h-[600px] w-full">
         <DashboardContentPage
           // activeTab={activeTab}
-           key={initialShiftCategory || "default"} 
+          key={initialShiftCategory || "default"}
           handleOpenForm={handleOpenForm}
           handleViewReport={handleViewReport}
           openTransportDetails={openTransportDetails}
-           initialShiftCategory={initialShiftCategory} 
+          initialShiftCategory={initialShiftCategory}
         />
       </div>
 
       {/* ✅ Notification Slider */}
       {showNotifications && (
         <div
-          className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${
-            showNotifications ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${showNotifications ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           <NotificationSlider
             onClose={() => setShowNotifications(false)}
@@ -276,12 +308,11 @@ const closeTransportDetails = () => {
       {/* ✅ TRANSPORTATION DETAILS SLIDER */}
       {showTransportDetails && (
         <div
-          className={`fixed top-0 right-0 h-full w-[450px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${
-            showTransportDetails ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`fixed top-0 right-0 h-full w-[450px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${showTransportDetails ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           <TransportationDetails
-            shift={selectedTransportShift}               
+            shift={selectedTransportShift}
             onClose={closeTransportDetails}
           />
         </div>

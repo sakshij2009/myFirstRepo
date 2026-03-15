@@ -34,9 +34,15 @@ export default function Login() {
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
-        const userData = snapshot.docs[0].data();
+        const userDoc = snapshot.docs[0];
+        const userData = { ...userDoc.data(), userId: userDoc.data().userId || userDoc.id, firestoreId: userDoc.id };
         await AsyncStorage.setItem("user", JSON.stringify(userData));
-        router.replace("/home");
+        // Route based on role
+        if (userData.role?.toLowerCase() === "admin") {
+          router.replace("/admin/dashboard");
+        } else {
+          router.replace("/home");
+        }
       } else {
         setError("Invalid email or password");
       }
@@ -92,7 +98,7 @@ export default function Login() {
           Welcome
         </Text>
 
-        <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 16,textAlign: "center" }}>
+        <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 16, textAlign: "center" }}>
           Sign in with your Family Forever Account.
         </Text>
 
@@ -119,36 +125,36 @@ export default function Login() {
           Password
         </Text>
         <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: "#d1d5db",
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            marginBottom: 12,
+          }}
+        >
+          <TextInput
+            placeholder="Enter your password"
+            placeholderTextColor="#9ca3af"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
             style={{
-                flexDirection: "row",
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: "#d1d5db",
-                borderRadius: 8,
-                paddingHorizontal: 12,
-                marginBottom: 12,
+              flex: 1,
+              paddingVertical: 12,
             }}
-            >
-            <TextInput
-                placeholder="Enter your password"
-                placeholderTextColor="#9ca3af"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                style={{
-                flex: 1,
-                paddingVertical: 12,
-                }}
-            />
+          />
 
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color="#6b7280"
-                />
-            </Pressable>
-            </View>
+          <Pressable onPress={() => setShowPassword(!showPassword)}>
+            <Ionicons
+              name={showPassword ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color="#6b7280"
+            />
+          </Pressable>
+        </View>
 
 
         {error ? (

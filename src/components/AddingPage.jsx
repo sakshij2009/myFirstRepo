@@ -4,10 +4,10 @@ import { HiOutlineBuildingOffice } from "react-icons/hi2";
 import { MdAssignmentAdd } from "react-icons/md";
 import { FaUserFriends } from "react-icons/fa";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
-import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
+// import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
 
-const AddingPage = ({user}) => {
-  const [showModel, setShowModel] = useState(false);
+const AddingPage = ({ user }) => {
+  // const [showModel, setShowModel] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,20 +28,19 @@ const AddingPage = ({user}) => {
     <div className="flex flex-col gap-6  h-full">
       <div className="flex gap-6 h-auto">
         {/* ✅ Sidebar */}
-       {user?.role=="admin" ?  <div className="flex flex-col bg-white w-1/6 p-4 gap-3 rounded-md">
+        {user?.role == "admin" ? <div className="flex flex-col bg-white w-1/6 p-4 gap-3 rounded-md">
           {sidebarItems.map((item, index) => (
             <div
               key={index}
-              className={`flex p-3 rounded-md border gap-3 items-center cursor-pointer transition-all duration-200 ${
-                item.path && isActive(item.path)
+              className={`flex p-3 rounded-md border gap-3 items-center cursor-pointer transition-all duration-200 ${item.path && isActive(item.path)
                   ? "bg-dark-green border-green text-[#F5FAFA]"
                   : "border-light-green text-light-black bg-transparent hover:bg-[#f4f4f4]"
-              }`}
+                }`}
               onClick={() => {
                 if (item.path) {
                   navigate(item.path);
                 } else if (item.label === "Add Intake Form") {
-                  setShowModel(true);
+                  navigate("/admin-dashboard/add/add-intake-form?type=Intake Worker");
                 }
               }}
             >
@@ -49,10 +48,10 @@ const AddingPage = ({user}) => {
               <p className="font-bold text-base leading-6">{item.label}</p>
             </div>
           ))}
-        </div>: <div></div>}
+        </div> : <div></div>}
 
-        {/* ✅ Intake Form Selection Modal */}
-        {showModel && (
+        {/* ✅ Intake Form Selection Modal - REMOVED for default Intake Worker */}
+        {/* {showModel && (
           <IntakeFormChoiceModel
             setShowModal={setShowModel}
             handleOpenForm={(formTypePath) => {
@@ -60,12 +59,11 @@ const AddingPage = ({user}) => {
               navigate(`/admin-dashboard/add/${formTypePath}`);
             }}
           />
-        )}
+        )} */}
 
         {/* ✅ Right content: dynamic form outlet */}
-        <div className={`flex flex-col gap-4 rounded-md  w-5/6 ${
-           user?.role == "admin" ? "w-5/6 p-4" : "w-full pr-5"
-        }`}>
+        <div className={`flex flex-col gap-4 rounded-md  w-5/6 ${user?.role == "admin" ? "w-5/6 p-4" : "w-full pr-5"
+          }`}>
           <Outlet />
         </div>
       </div>

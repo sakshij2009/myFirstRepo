@@ -149,12 +149,11 @@ export default function NoteworthyEventModal({
               <View style={styles.submitIcon}>
                 <MaterialCommunityIcons name="pencil-outline" size={18} color="#F97316" />
               </View>
-              <Text style={styles.submitTitle}>Critical Incident Report Submission</Text>
+              <Text style={styles.submitTitle}>Noteworthy Event</Text>
             </View>
 
             <Text style={styles.submitText}>
-              This report must be submitted immediately upon completion. Management will be automatically notified.
-              Ensure all sections are complete and accurate as this is a legal document.
+             This form is used to record significant or critical incidents involving a client.
             </Text>
 
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
@@ -164,8 +163,8 @@ export default function NoteworthyEventModal({
 
               <Pressable onPress={handleSubmit} style={styles.submitBtn}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <MaterialCommunityIcons name="alert-outline" size={18} color="#fff" />
-                  <Text style={styles.submitBtnText}>Noteworthy Event</Text>
+                  
+                  <Text style={styles.submitBtnText}>Submit</Text>
                 </View>
               </Pressable>
             </View>

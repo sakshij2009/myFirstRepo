@@ -10,16 +10,16 @@ import { sendNotification } from "../utils/notificationHelper";
 import { useNavigate, useParams } from "react-router-dom";
 
 
-const AddAgency = ({  mode = "add", user }) => {
+const AddAgency = ({ mode = "add", user }) => {
 
- const{id}=useParams();
- const navigate=useNavigate();
+  const { id } = useParams();
+  const navigate = useNavigate();
 
   const [slider, setSlider] = useState({
     show: false,
     title: "",
     subtitle: "",
-   
+
   });
 
   const [createdAgency, setCreatedAgency] = useState(null);
@@ -28,16 +28,13 @@ const AddAgency = ({  mode = "add", user }) => {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [agencyType, setAgencyType] = useState([]);
   const [initialValues, setInitialValues] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // List of all services with labels
   const serviceList = [
     { name: "Emergent Care", key: "emergentBillingCare" },
     { name: "Respite Care", key: "respiteCareBilling" },
-    { name: "Administration", key: "administrationsBilling" },
     { name: "Transportation", key: "transportationsBilling" },
-    { name: "Shadow Shift", key: "shadowShiftBilling" },
-    { name: "Supervised Visitation",
-      key: "supervisedVisitationsBilling"},
     {
       name: "Supervised Visitation + Transportation",
       key: "supervisedVisitationsTransportationBilling",
@@ -62,45 +59,45 @@ const AddAgency = ({  mode = "add", user }) => {
   }, []);
 
   useEffect(() => {
-  const fetchAgency = async () => {
-    
-    if (mode === "update" && id) {
-      try {
-        const docRef = doc(db, "agencies", id);
-        const docSnap = await getDoc(docRef);
+    const fetchAgency = async () => {
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          // console.log(data);
-          setInitialValues({
-            agencyType: data.agencyType || "",
-            name: data.name || "",
-            email: data.email || "",
-            phone: data.phone || "",
-            address: data.address || "",
-            description: data.description || "",
-            avatar: null,
-             rateList: serviceList.map((service) => {
-            const matched = data.rateList?.find((rate) => rate.name === service.name);
-            return {
-              name: service.name,
-              billingRate: matched ? matched.rate || matched.billingRate || "" : "",
-              kmRate: matched ? matched.kmRate || "" : "",
-            };
-          }),
-          });
+      if (mode === "update" && id) {
+        try {
+          const docRef = doc(db, "agencies", id);
+          const docSnap = await getDoc(docRef);
 
-          if (data.avatar) setAvatarPreview(data.avatar);
-        } else {
-          console.error("❌ No agency found with ID:", id);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            // console.log(data);
+            setInitialValues({
+              agencyType: data.agencyType || "",
+              name: data.name || "",
+              email: data.email || "",
+              phone: data.phone || "",
+              address: data.address || "",
+              description: data.description || "",
+              avatar: null,
+              rateList: serviceList.map((service) => {
+                const matched = data.rateList?.find((rate) => rate.name === service.name);
+                return {
+                  name: service.name,
+                  billingRate: matched ? matched.rate || matched.billingRate || "" : "",
+                  kmRate: matched ? matched.kmRate || "" : "",
+                };
+              }),
+            });
+
+            if (data.avatar) setAvatarPreview(data.avatar);
+          } else {
+            console.error("❌ No agency found with ID:", id);
+          }
+        } catch (err) {
+          console.error("Error fetching agency:", err);
         }
-      } catch (err) {
-        console.error("Error fetching agency:", err);
       }
-    }
-  };
-  fetchAgency();
-}, [mode, id]);
+    };
+    fetchAgency();
+  }, [mode, id, refreshKey]);
 
 
 
@@ -120,14 +117,8 @@ const AddAgency = ({  mode = "add", user }) => {
     ),
     rateList: Yup.array().of(
       Yup.object().shape({
-        billingRate: Yup.number()
-          .typeError("Must be a number")
-          .required("Billing rate is required")
-          .min(0, "Cannot be negative"),
-        kmRate: Yup.number()
-          .typeError("Must be a number")
-          .required("Kilometer rate is required")
-          .min(0, "Cannot be negative"),
+        billingRate: Yup.string().required("Billing rate is required"),
+        kmRate: Yup.string().required("Kilometer rate is required"),
       })
     ),
   });
@@ -147,91 +138,94 @@ const AddAgency = ({  mode = "add", user }) => {
   };
 
   // Submit form
-const handleSubmit = async (values, { resetForm }) => {
-  try {
-    let photoURL = avatarPreview || "";
+  const handleSubmit = async (values, { resetForm }) => {
+    try {
+      let photoURL = avatarPreview || "";
 
-    if (values.avatar) {
-      const storageRef = ref(storage, `agency-images/${values.avatar.name}`);
-      await uploadBytes(storageRef, values.avatar);
-      photoURL = await getDownloadURL(storageRef);
-    }
+      if (values.avatar) {
+        const storageRef = ref(storage, `agency-images/${values.avatar.name}`);
+        await uploadBytes(storageRef, values.avatar);
+        photoURL = await getDownloadURL(storageRef);
+      }
 
-    const agencyId = mode === "update" ? id : Date.now().toString();
+      const agencyId = mode === "update" ? id : Date.now().toString();
 
-    // ✅ Attach proper service names to rateList before saving
-    const rateListWithNames = serviceList.map((service, index) => ({
-      name: service.name,
-      billingRate: values.rateList[index]?.billingRate || 0,
-      kmRate: values.rateList[index]?.kmRate || 0,
-    }));
+      // ✅ Attach proper service names to rateList before saving
+      const rateListWithNames = serviceList.map((service, index) => ({
+        name: service.name,
+        billingRate: values.rateList[index]?.billingRate || 0,
+        kmRate: values.rateList[index]?.kmRate || 0,
+      }));
 
-    const dataToSave = {
-      id: agencyId,
-      ...values,
-      rateList: rateListWithNames, // ✅ Updated rateList with names
-      avatar: photoURL,
-      updatedAt: new Date(),
-      ...(mode === "add" && { createdAt: new Date() }),
-    };
+      const dataToSave = {
+        id: agencyId,
+        ...values,
+        rateList: rateListWithNames, // ✅ Updated rateList with names
+        avatar: photoURL,
+        updatedAt: new Date(),
+        ...(mode === "add" && { createdAt: new Date() }),
+      };
 
-    if (mode === "update") {
-      const q = query(collection(db, "agencies"), where("id", "==", id));
-      const snapshot = await getDocs(q);
+      if (mode === "update") {
+        const q = query(collection(db, "agencies"), where("id", "==", id));
+        const snapshot = await getDocs(q);
 
-      if (!snapshot.empty) {
-        const docId = snapshot.docs[0].id;
-        await updateDoc(doc(db, "agencies", docId), dataToSave);
+        if (!snapshot.empty) {
+          const docId = snapshot.docs[0].id;
+          await updateDoc(doc(db, "agencies", docId), dataToSave);
+          setSlider({
+            show: true,
+            title: "Agency Updated Successfully!",
+            subtitle: `${values.name} ${values.agencyType}`,
+          });
+
+          // Re-fetch updated data so form shows current values
+          setRefreshKey((k) => k + 1);
+        }
+      } else {
+        await setDoc(doc(db, "agencies", agencyId), dataToSave);
         setSlider({
           show: true,
-          title: "Agency Updated Successfully!",
+          title: "Agency Added Successfully!",
           subtitle: `${values.name} ${values.agencyType}`,
         });
       }
-    } else {
-      await setDoc(doc(db, "agencies", agencyId), dataToSave);
+
+      // ✅ Notify admins (unchanged)
+      const q = query(collection(db, "users"), where("role", "==", "admin"));
+      const adminsSnapshot = await getDocs(q);
+      const admins = adminsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+      for (const admin of admins) {
+        await sendNotification(admin.id, {
+          type: "info",
+          title: mode === "add" ? "New Agency Created" : "Agency Updated",
+          message:
+            mode === "add"
+              ? `A new agency "${values.name}" has been added.`
+              : `Agency "${values.name}" has been updated.`,
+          senderId: user.name,
+          meta: {
+            agencyId: agencyId,
+            agencyName: values.name,
+            entity: "Agency",
+          },
+        });
+      }
+
+      setCreatedAgency(dataToSave);
+      resetForm();
+      setAvatarPreview(null);
+    } catch (error) {
+      console.error("Error saving agency:", error);
       setSlider({
         show: true,
-        title: "Agency Added Successfully!",
-        subtitle: `${values.name} ${values.agencyType}`,
+        title: "Error Saving Agency!",
+        subtitle: "Please try again.",
+        viewText: "",
       });
     }
-
-    // ✅ Notify admins (unchanged)
-    const q = query(collection(db, "users"), where("role", "==", "admin"));
-    const adminsSnapshot = await getDocs(q);
-    const admins = adminsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-    for (const admin of admins) {
-      await sendNotification(admin.id, {
-        type: "info",
-        title: mode === "add" ? "New Agency Created" : "Agency Updated",
-        message:
-          mode === "add"
-            ? `A new agency "${values.name}" has been added.`
-            : `Agency "${values.name}" has been updated.`,
-        senderId: user.name,
-        meta: {
-          agencyId: agencyId,
-          agencyName: values.name,
-          entity: "Agency",
-        },
-      });
-    }
-
-    setCreatedAgency(dataToSave);
-    resetForm();
-    setAvatarPreview(null);
-  } catch (error) {
-    console.error("Error saving agency:", error);
-    setSlider({
-      show: true,
-      title: "Error Saving Agency!",
-      subtitle: "Please try again.",
-      viewText: "",
-    });
-  }
-};
+  };
 
 
   // if (mode === "update" && !initialValues) {
@@ -241,13 +235,13 @@ const handleSubmit = async (values, { resetForm }) => {
   return (
     <div className="flex flex-col gap-4">
       <div>
-         <p className="font-bold text-2xl leading-7 text-light-black">
-           {mode === "update" ? "Update Agency" : "Add Agency"}
+        <p className="font-bold text-2xl leading-7 text-light-black">
+          {mode === "update" ? "Update Agency" : "Add Agency"}
         </p>
       </div>
       <hr className="border-t border-gray" />
       <Formik
-         initialValues={
+        initialValues={
           initialValues || {
             agencyType: "",
             name: "",
@@ -263,7 +257,7 @@ const handleSubmit = async (values, { resetForm }) => {
           }
         }
         enableReinitialize
-        validationSchema={mode=="add" ? validationSchema:""}
+        validationSchema={mode == "add" ? validationSchema : ""}
         onSubmit={handleSubmit}
       >
         {({ touched, errors, values, setFieldValue }) => (
@@ -308,40 +302,40 @@ const handleSubmit = async (values, { resetForm }) => {
 
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4">
-             
-              {/* Agency type */}
-            <div className="relative">
-              <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                Agency Type
-              </label>
 
-              <Field
-                as="select"
-                name="agencyType"
-                className={`w-full border rounded-sm p-[10px] appearance-none pr-10
+              {/* Agency type */}
+              <div className="relative">
+                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
+                  Agency Type
+                </label>
+
+                <Field
+                  as="select"
+                  name="agencyType"
+                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
                   ${values.agencyType === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}  
                   ${touched.agencyType && errors.agencyType ? "border-red-500" : "border-light-gray"}
                 `}
-              >
-                <option value="">Select Agency Type</option>
-                {agencyType.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name}
-                  </option>
-                ))}
-              </Field>
+                >
+                  <option value="">Select Agency Type</option>
+                  {agencyType.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Field>
 
-              {/* Custom dropdown arrow */}
-              <span className="absolute right-3 top-[63%] -translate-y-1/2 pointer-events-none">
-                <FaChevronDown className="text-light-green w-4 h-4" />
-              </span>
+                {/* Custom dropdown arrow */}
+                <span className="absolute right-3 top-[63%] -translate-y-1/2 pointer-events-none">
+                  <FaChevronDown className="text-light-green w-4 h-4" />
+                </span>
 
-              <ErrorMessage
-                name="agencyType"
-                component="div"
-                className="text-red-500 text-xs mt-1"
-              />
-            </div>
+                <ErrorMessage
+                  name="agencyType"
+                  component="div"
+                  className="text-red-500 text-xs mt-1"
+                />
+              </div>
 
 
               {/* File Name */}
@@ -353,11 +347,10 @@ const handleSubmit = async (values, { resetForm }) => {
                   name="name"
                   type="text"
                   placeholder="Please enter a specific ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.name && errors.name
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${touched.name && errors.name
+                    ? "border-red-500"
+                    : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage
                   name="name"
@@ -375,11 +368,10 @@ const handleSubmit = async (values, { resetForm }) => {
                   name="email"
                   type="email"
                   placeholder="Please enter the email ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.email && errors.email
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${touched.email && errors.email
+                    ? "border-red-500"
+                    : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage
                   name="email"
@@ -397,11 +389,10 @@ const handleSubmit = async (values, { resetForm }) => {
                   name="phone"
                   type="text"
                   placeholder="Please enter the phone number"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.phone && errors.phone
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${touched.phone && errors.phone
+                    ? "border-red-500"
+                    : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage
                   name="phone"
@@ -419,11 +410,10 @@ const handleSubmit = async (values, { resetForm }) => {
                   name="address"
                   type="text"
                   placeholder="Please enter the agency address"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.address && errors.address
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${touched.address && errors.address
+                    ? "border-red-500"
+                    : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage
                   name="address"
@@ -441,11 +431,10 @@ const handleSubmit = async (values, { resetForm }) => {
                   as="textarea"
                   name="description"
                   placeholder="Write the description of the agency"
-                  className={`w-full border rounded-sm p-[10px] h-32 placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.description && errors.description
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
+                  className={`w-full border rounded-sm p-[10px] h-32 placeholder:text-sm placeholder:text-[#72787E] ${touched.description && errors.description
+                    ? "border-red-500"
+                    : "border-light-gray"
+                    }`}
                 />
                 <ErrorMessage
                   name="description"
@@ -453,77 +442,77 @@ const handleSubmit = async (values, { resetForm }) => {
                   className="text-red-500 text-xs mt-1"
                 />
               </div>
-               {/* Agency Service Rates */}
-            <div className="col-span-2">
-              <h3 className="font-bold text-lg mb-4 text-light-black">Agency Service Rates</h3>
-              <FieldArray name="rateList">
-                {() => (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 text-light-black">
-                    {serviceList.map((service, index) => (
-                      <div
-                        key={service.key}
-                        className="border border-light-gray p-2 rounded-lg  "
-                      >
-                        <h3 className=" text-base font-bold text-[14px] leading-[20px]">
-                          {service.name}
-                        </h3>
-                        <div className="flex gap-4 ">
-                        {/* Billing Rate */}
-                        <div className="w-1/2">
-                          <label className="block text-sm font-medium mb-1">
-                            Billing Rate
-                          </label>
-                          <Field
-                            name={`rateList[${index}].billingRate`}
-                            type="number"
-                            placeholder="0.00"
-                            className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
-                          />
-                          <ErrorMessage
-                            name={`rateList[${index}].billingRate`}
-                            component="div"
-                            className="text-red-500 text-xs mt-1"
-                          />
-                        </div>
+              {/* Agency Service Rates */}
+              <div className="col-span-2">
+                <h3 className="font-bold text-lg mb-4 text-light-black">Agency Service Rates</h3>
+                <FieldArray name="rateList">
+                  {() => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 text-light-black">
+                      {serviceList.map((service, index) => (
+                        <div
+                          key={service.key}
+                          className="border border-light-gray p-2 rounded-lg  "
+                        >
+                          <h3 className=" text-base font-bold text-[14px] leading-[20px]">
+                            {service.name}
+                          </h3>
+                          <div className="flex gap-4 ">
+                            {/* Billing Rate */}
+                            <div className="w-1/2">
+                              <label className="block text-sm font-medium mb-1">
+                                Billing Rate
+                              </label>
+                              <Field
+                                name={`rateList[${index}].billingRate`}
+                                type="text"
+                                placeholder=""
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
+                              />
+                              <ErrorMessage
+                                name={`rateList[${index}].billingRate`}
+                                component="div"
+                                className="text-red-500 text-xs mt-1"
+                              />
+                            </div>
 
-                        {/* Kilometer Rate */}
-                        <div className="w-1/2">
-                          <label className="block text-sm font-medium mb-1">
-                            Km Rate
-                          </label>
-                          <Field
-                            name={`rateList[${index}].kmRate`}
-                            type="number"
-                            placeholder="0.00"
-                            className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
-                          />
-                          <ErrorMessage
-                            name={`rateList[${index}].kmRate`}
-                            component="div"
-                            className="text-red-500 text-xs mt-1"
-                          />
+                            {/* Kilometer Rate */}
+                            <div className="w-1/2">
+                              <label className="block text-sm font-medium mb-1">
+                                Km Rate
+                              </label>
+                              <Field
+                                name={`rateList[${index}].kmRate`}
+                                type="text"
+                                placeholder=""
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
+                              />
+                              <ErrorMessage
+                                name={`rateList[${index}].kmRate`}
+                                component="div"
+                                className="text-red-500 text-xs mt-1"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </FieldArray>
-            </div>
-             {/* Submit Button */}
-            <div className="col-span-2 flex justify-center">
-              <button
-                type="submit"
-                className="bg-dark-green text-white px-3 py-[6px] rounded-[6px] cursor-pointer"
-              >
-                {mode === "update" ? "Update Agency" : "Add Agency"}
-              </button>
-            </div>
+                      ))}
+                    </div>
+                  )}
+                </FieldArray>
+              </div>
+              {/* Submit Button */}
+              <div className="col-span-2 flex justify-center">
+                <button
+                  type="submit"
+                  className="bg-dark-green text-white px-3 py-[6px] rounded-[6px] cursor-pointer"
+                >
+                  {mode === "update" ? "Update Agency" : "Add Agency"}
+                </button>
+              </div>
             </div>
 
-           
 
-           
+
+
           </Form>
         )}
 

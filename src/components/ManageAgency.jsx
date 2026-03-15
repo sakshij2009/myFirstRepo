@@ -31,33 +31,33 @@ const ManageAgency = () => {
 
   // ✅ Fetch all agencies
   useEffect(() => {
-  const fetchAgencies = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, "agencies"));
-      let agencyList = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+    const fetchAgencies = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "agencies"));
+        let agencyList = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
-      // ✅ Sort by createdAt (latest first)
-      agencyList.sort((a, b) => {
-        const dateA = a.createdAt?.toMillis
-          ? a.createdAt.toMillis()
-          : new Date(a.createdAt || 0).getTime();
-        const dateB = b.createdAt?.toMillis
-          ? b.createdAt.toMillis()
-          : new Date(b.createdAt || 0).getTime();
-        return dateB - dateA; // latest first
-      });
+        // ✅ Sort by createdAt (latest first)
+        agencyList.sort((a, b) => {
+          const dateA = a.createdAt?.toMillis
+            ? a.createdAt.toMillis()
+            : new Date(a.createdAt || 0).getTime();
+          const dateB = b.createdAt?.toMillis
+            ? b.createdAt.toMillis()
+            : new Date(b.createdAt || 0).getTime();
+          return dateB - dateA; // latest first
+        });
 
-      setAgencies(agencyList);
-    } catch (error) {
-      console.error("Error fetching agencies:", error);
-    }
-  };
+        setAgencies(agencyList);
+      } catch (error) {
+        console.error("Error fetching agencies:", error);
+      }
+    };
 
-  fetchAgencies();
-}, []);
+    fetchAgencies();
+  }, []);
 
 
   // ✅ Delete agency
@@ -101,7 +101,7 @@ const ManageAgency = () => {
   });
 
   // ✅ Pagination
-  const ITEMS_PER_PAGE = 7;
+  const ITEMS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredAgencies.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentAgencies = filteredAgencies.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -299,9 +299,8 @@ const ManageAgency = () => {
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
-                  currentPage === page ? "bg-light-green text-white" : ""
-                }`}
+                className={`px-3 py-1 border border-[#C5C5C5] rounded ${currentPage === page ? "bg-light-green text-white" : ""
+                  }`}
               >
                 {page}
               </button>

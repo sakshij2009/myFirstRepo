@@ -18,10 +18,17 @@ const Login = ({ setUser }) => {   // ✅ added setUser here
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       const user = JSON.parse(savedUser);
-      if (user.role === "admin") {
+      console.log("Login: Found saved user:", user.role);
+
+      const role = user.role ? user.role.toLowerCase() : "";
+
+      if (role === "admin") {
         navigate("/admin-dashboard");
-      } else {
+      } else if (role === "user") {
         navigate("/user-dashboard");
+      } else {
+        // Unknown or mismatch -> clear to prevent loop
+        localStorage.removeItem("user");
       }
     }
   }, [navigate]);
@@ -53,10 +60,17 @@ const Login = ({ setUser }) => {   // ✅ added setUser here
         setUser(userData);
 
         // Redirect by role
-        if (userData.role === "admin") {
+        const role = userData.role ? userData.role.toLowerCase() : "";
+
+        if (role === "admin") {
           navigate("/admin-dashboard");
-        } else {
+        } else if (role === "user") {
           navigate("/user-dashboard");
+        } else {
+          console.error("Unknown role:", role);
+          setError("Unauthorized: Unknown role.");
+          localStorage.removeItem("user");
+          setUser(null);
         }
 
       } else {
@@ -100,26 +114,26 @@ const Login = ({ setUser }) => {   // ✅ added setUser here
           </div>
 
           <div className='flex flex-col gap-1'>
-          <p className='flex font-bold text-[14px] leading-[20px] tracking-normal'>Password</p>
+            <p className='flex font-bold text-[14px] leading-[20px] tracking-normal'>Password</p>
 
-          <div className="relative w-full">
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder='Enter your password'
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className='border border-gray-300 rounded p-[10px] w-full placeholder:font-normal text-[14px] leading-[20px] tracking-normal'
-            />
+            <div className="relative w-full">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder='Enter your password'
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className='border border-gray-300 rounded p-[10px] w-full placeholder:font-normal text-[14px] leading-[20px] tracking-normal'
+              />
 
-            {/* Eye Icon */}
-            <span
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
-            >
-              {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
-            </span>
+              {/* Eye Icon */}
+              <span
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
+              >
+                {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+              </span>
+            </div>
           </div>
-        </div>
 
 
           {error && <p className="text-red-500 text-sm">{error}</p>}

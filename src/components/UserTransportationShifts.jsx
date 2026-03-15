@@ -12,7 +12,7 @@ import { sendNotification } from "../utils/notificationHelper";
 import { VscDebugStart } from "react-icons/vsc";
 import { useNavigate } from "react-router-dom";
 
-const UserTransportationShifts = ({ filteredShifts }) => {
+const UserTransportationShifts = ({ filteredShifts, user }) => {
   const [intakeForms, setIntakeForms] = useState({});
   const [watchId, setWatchId] = useState(null);
   const [activeShiftId, setActiveShiftId] = useState(null);
@@ -140,8 +140,8 @@ const UserTransportationShifts = ({ filteredShifts }) => {
     const a =
       Math.sin(dLat / 2) ** 2 +
       Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) ** 2;
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
@@ -149,132 +149,132 @@ const UserTransportationShifts = ({ filteredShifts }) => {
   // ----------------------------------------------------------
   // START RIDE
   // ----------------------------------------------------------
-// ----------------------------------------------------------
-// START RIDE  🚗
-// ----------------------------------------------------------
-const handleStartRide = async (shift, clientForm, primaryPoint) => {
-  try {
-    const shiftRef = doc(db, "shifts", String(shift.id));
+  // ----------------------------------------------------------
+  // START RIDE  🚗
+  // ----------------------------------------------------------
+  const handleStartRide = async (shift, clientForm, primaryPoint) => {
+    try {
+      const shiftRef = doc(db, "shifts", String(shift.id));
 
-    // ---------- Prepare Addresses ----------
-    const pickupAddress =
-      primaryPoint?.pickupLocation ||
-      clientForm?.pickupAddress ||
-      shift?.pickupLocation ||
-      "";
+      // ---------- Prepare Addresses ----------
+      const pickupAddress =
+        primaryPoint?.pickupLocation ||
+        clientForm?.pickupAddress ||
+        shift?.pickupLocation ||
+        "";
 
-    const visitAddress =
-      primaryPoint?.visitLocation ||
-      clientForm?.visitAddress ||
-      shift?.visitLocation ||
-      "";
+      const visitAddress =
+        primaryPoint?.visitLocation ||
+        clientForm?.visitAddress ||
+        shift?.visitLocation ||
+        "";
 
-    const dropAddress =
-      primaryPoint?.dropLocation ||
-      clientForm?.dropOffAddress ||
-      shift?.dropLocation ||
-      "";
+      const dropAddress =
+        primaryPoint?.dropLocation ||
+        clientForm?.dropOffAddress ||
+        shift?.dropLocation ||
+        "";
 
-    // ---------- Open Google Maps ----------
-    const openGoogleMapsNavigation = () => {
-      // Encode safe URLs
-      const pickup = encodeURIComponent(pickupAddress);
-      const visit = encodeURIComponent(visitAddress);
-      const drop = encodeURIComponent(dropAddress);
+      // ---------- Open Google Maps ----------
+      const openGoogleMapsNavigation = () => {
+        // Encode safe URLs
+        const pickup = encodeURIComponent(pickupAddress);
+        const visit = encodeURIComponent(visitAddress);
+        const drop = encodeURIComponent(dropAddress);
 
-      let url = "";
+        let url = "";
 
-      // Pickup → Visit → Drop
-      if (visitAddress && visitAddress.trim() !== "") {
-        url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&waypoints=${visit}&travelmode=driving`;
-      }
-      // Pickup → Drop only
-      else {
-        url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&travelmode=driving`;
-      }
-
-      window.open(url, "_blank");
-    };
-
-    // ---------- Permission + Validation ----------
-    if (!pickupAddress || !dropAddress) {
-      alert("Pickup or Drop address missing.");
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      alert("Location not supported on this device.");
-      return;
-    }
-
-    // ---------- Firestore: Mark Ride Started ----------
-    await updateDoc(shiftRef, {
-      "transportation.driveStarted": true,
-      "transportation.driveStartTime": new Date().toISOString(),
-      "transportation.totalDistance": 0,
-      "transportation.lastLat": null,
-      "transportation.lastLng": null,
-    });
-
-    shift.transportation = {
-      ...(shift.transportation || {}),
-      driveStarted: true,
-      totalDistance: 0,
-      lastLat: null,
-      lastLng: null,
-    };
-
-    setActiveShiftId(shift.id);
-
-    // ---------- OPEN MAP NOW ----------
-    openGoogleMapsNavigation();
-
-    // ---------- Start GPS Tracking ----------
-    const watch = navigator.geolocation.watchPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-
-        let lastLat = shift.transportation.lastLat;
-        let lastLng = shift.transportation.lastLng;
-
-        let newDistance = shift.transportation.totalDistance || 0;
-
-        if (lastLat != null && lastLng != null) {
-          const delta = getDistanceMeters(lastLat, lastLng, latitude, longitude);
-
-          // ignore abnormal jumps
-          if (delta < 500) newDistance += delta;
+        // Pickup → Visit → Drop
+        if (visitAddress && visitAddress.trim() !== "") {
+          url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&waypoints=${visit}&travelmode=driving`;
+        }
+        // Pickup → Drop only
+        else {
+          url = `https://www.google.com/maps/dir/?api=1&origin=${pickup}&destination=${drop}&travelmode=driving`;
         }
 
-        await updateDoc(shiftRef, {
-          "transportation.currentLat": latitude,
-          "transportation.currentLng": longitude,
-          "transportation.totalDistance": newDistance,
-          "transportation.lastLat": latitude,
-          "transportation.lastLng": longitude,
-        });
+        window.open(url, "_blank");
+      };
 
-        shift.transportation.lastLat = latitude;
-        shift.transportation.lastLng = longitude;
-        shift.transportation.totalDistance = newDistance;
-      },
-      (err) => {
-        console.error("GPS error:", err); 
-        alert("Enable GPS to continue.");
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000,
+      // ---------- Permission + Validation ----------
+      if (!pickupAddress || !dropAddress) {
+        alert("Pickup or Drop address missing.");
+        return;
       }
-    );
 
-    setWatchId(watch);
-  } catch (err) {
-    console.error("Error starting ride:", err);
-    alert("Could not start ride.");
-  }
-};
+      if (!navigator.geolocation) {
+        alert("Location not supported on this device.");
+        return;
+      }
+
+      // ---------- Firestore: Mark Ride Started ----------
+      await updateDoc(shiftRef, {
+        "transportation.driveStarted": true,
+        "transportation.driveStartTime": new Date().toISOString(),
+        "transportation.totalDistance": 0,
+        "transportation.lastLat": null,
+        "transportation.lastLng": null,
+      });
+
+      shift.transportation = {
+        ...(shift.transportation || {}),
+        driveStarted: true,
+        totalDistance: 0,
+        lastLat: null,
+        lastLng: null,
+      };
+
+      setActiveShiftId(shift.id);
+
+      // ---------- OPEN MAP NOW ----------
+      openGoogleMapsNavigation();
+
+      // ---------- Start GPS Tracking ----------
+      const watch = navigator.geolocation.watchPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+
+          let lastLat = shift.transportation.lastLat;
+          let lastLng = shift.transportation.lastLng;
+
+          let newDistance = shift.transportation.totalDistance || 0;
+
+          if (lastLat != null && lastLng != null) {
+            const delta = getDistanceMeters(lastLat, lastLng, latitude, longitude);
+
+            // ignore abnormal jumps
+            if (delta < 500) newDistance += delta;
+          }
+
+          await updateDoc(shiftRef, {
+            "transportation.currentLat": latitude,
+            "transportation.currentLng": longitude,
+            "transportation.totalDistance": newDistance,
+            "transportation.lastLat": latitude,
+            "transportation.lastLng": longitude,
+          });
+
+          shift.transportation.lastLat = latitude;
+          shift.transportation.lastLng = longitude;
+          shift.transportation.totalDistance = newDistance;
+        },
+        (err) => {
+          console.error("GPS error:", err);
+          alert("Enable GPS to continue.");
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000,
+        }
+      );
+
+      setWatchId(watch);
+    } catch (err) {
+      console.error("Error starting ride:", err);
+      alert("Could not start ride.");
+    }
+  };
 
 
   // ----------------------------------------------------------
@@ -351,6 +351,31 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
 
   return (
     <div className="flex flex-col gap-[24px] w-full">
+
+      {/* KM Rate Summary Bar */}
+      {(user?.totalKMs || user?.rateBefore5000km || user?.rateAfter5000km) && (
+        <div className="flex gap-4 flex-wrap">
+          {user?.totalKMs && (
+            <div className="flex flex-col bg-white min-w-[180px] h-[78px] gap-[7px] rounded-[8px] border border-gray p-[10px]">
+              <p className="font-normal text-[12px] text-gray-500">Total KMs</p>
+              <p className="font-bold text-[28px] text-light-black">{user.totalKMs}</p>
+            </div>
+          )}
+          {user?.rateBefore5000km && (
+            <div className="flex flex-col bg-white min-w-[180px] h-[78px] gap-[7px] rounded-[8px] border border-gray p-[10px]">
+              <p className="font-normal text-[12px] text-gray-500">Rate (before 5000km)</p>
+              <p className="font-bold text-[28px] text-light-black">${user.rateBefore5000km}/km</p>
+            </div>
+          )}
+          {user?.rateAfter5000km && (
+            <div className="flex flex-col bg-white min-w-[180px] h-[78px] gap-[7px] rounded-[8px] border border-gray p-[10px]">
+              <p className="font-normal text-[12px] text-gray-500">Rate (after 5000km)</p>
+              <p className="font-bold text-[28px] text-light-black">${user.rateAfter5000km}/km</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {filteredShift.map((shift) => {
         const primaryPoint = Array.isArray(shift.shiftPoints)
           ? shift.shiftPoints[0]
@@ -398,7 +423,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
 
         const shiftTimeline =
           shift.startTime - shift.endTime
-          "N/A";
+        "N/A";
 
         const shiftDate = shift.startDate || "N/A";
 
@@ -491,11 +516,10 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
 
                         {idx < steps.length - 1 && (
                           <div
-                            className={`flex-1 border-t-2 ${
-                              step.done
+                            className={`flex-1 border-t-2 ${step.done
                                 ? "border-green-800"
                                 : "border-gray-300"
-                            }`}
+                              }`}
                           />
                         )}
                       </React.Fragment>
@@ -551,9 +575,9 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
                   <p className="font-bold">{shiftTimeline}</p>
                 </div>
 
-               
 
-                
+
+
               </div>
 
               <div className="flex gap-3 items-center">
@@ -579,30 +603,30 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
                       </button>
                     )}
 
-                   {/* Make Report Button */}
-                        {/* Make / View Report */}
-{shift.shiftReport ? (
-  <div
-    onClick={() => handleViewReport(shift.id)}
-    className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
+                    {/* Make Report Button */}
+                    {/* Make / View Report */}
+                    {shift.shiftReport ? (
+                      <div
+                        onClick={() => handleViewReport(shift.id)}
+                        className="flex items-center gap-2 px-3 py-[6px] border rounded-[6px] 
                border-dark-green text-dark-green bg-white cursor-pointer hover:bg-[#e6f5ea]"
-  >
-    <VscDebugStart className="text-[18px]" />
-    <p>View Report</p>
-  </div>
-) : (
-  <div
-    onClick={() => handleViewReport(shift.id)}
-    className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
-      ${shift.shiftConfirmed 
-        ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer" 
-        : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
-  >
-    <VscDebugStart className="text-[18px]" />
-    <p>Make Report</p>
-  </div>
-)}
-                
+                      >
+                        <VscDebugStart className="text-[18px]" />
+                        <p>View Report</p>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => handleViewReport(shift.id)}
+                        className={`flex items-center gap-2 px-3 py-[6px] border rounded-[6px]
+      ${shift.shiftConfirmed
+                            ? "border-dark-green text-dark-green bg-white hover:bg-[#e6f5ea] cursor-pointer"
+                            : "border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed"}`}
+                      >
+                        <VscDebugStart className="text-[18px]" />
+                        <p>Make Report</p>
+                      </div>
+                    )}
+
 
                     {!rideCancelled && !driveEnded && (
                       <button
@@ -620,8 +644,8 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
                     {shiftCancelled
                       ? "Shift Cancelled"
                       : rideCancelled
-                      ? "Ride Cancelled"
-                      : "Ride Completed"}
+                        ? "Ride Cancelled"
+                        : "Ride Completed"}
                   </span>
                 )}
               </div>
@@ -629,7 +653,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
           </div>
         );
       })}
-       {/* Pagination Controls */}
+      {/* Pagination Controls */}
       {totalPages > 1 && (
         <div className="flex justify-end items-center gap-1 py-[10px] px-4 rounded">
           <button onClick={() => goToPage(1)} disabled={currentPage === 1} className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white">«</button>
@@ -648,7 +672,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
         </div>
       )}
     </div>
-    
+
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ShiftsData from "../components/ShiftsData";
-import IntakeFormChoiceModel from "../components/IntakeFormChoiceModel";
+// import IntakeFormChoiceModel from "../components/IntakeFormChoiceModel";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { IoChevronDown } from "react-icons/io5";
@@ -11,33 +11,64 @@ import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TransportationShiftsData from "./TransportationShiftsData";
 import AdminShiftCalendar from "./AdminShiftCalender";
 
-const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails,initialShiftCategory }) => {
+const LAST_TAB_KEY = "admin_last_shift_category";
+const LAST_SEARCH_KEY = "admin_last_search";
+const LAST_DATES_KEY = "admin_last_dates";
+const LAST_STATUS_KEY = "admin_last_status";
+
+const DashboardContentPage = ({ activeTab, handleViewReport, openTransportDetails, initialShiftCategory }) => {
   const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
-  const [shiftStatus, setShiftStatus] = useState("");
+  const [shiftStatus, setShiftStatus] = useState(
+    localStorage.getItem(LAST_STATUS_KEY) || ""
+  );
   const [shiftCategory, setShiftCategory] = useState(
-  initialShiftCategory || ""
-);
+    // Priority: navigation state > localStorage > empty (will default to first category on load)
+    initialShiftCategory ||
+    localStorage.getItem(LAST_TAB_KEY) ||
+    ""
+  );
 
   const [statusOpen, setStatusOpen] = useState(false);
-  const [selectedDates, setSelectedDates] = useState([new Date()]);
+  // ✅ Get "today" in Alberta timezone
+  const getAlbertaToday = () => {
+    const now = new Date();
+    const albertaStr = now.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+    const [y, m, d] = albertaStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const restoreDates = () => {
+    const saved = localStorage.getItem(LAST_DATES_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved).map((d) => new Date(d));
+        if (parsed.length > 0 && !isNaN(parsed[0])) return parsed;
+      } catch { /* ignore */ }
+    }
+    return [getAlbertaToday()];
+  };
+
+  const [selectedDates, setSelectedDates] = useState(restoreDates);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [shifts, setShifts] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(
+    localStorage.getItem(LAST_SEARCH_KEY) || ""
+  );
+  // const [showModal, setShowModal] = useState(false);
 
   const statusOptions = ["All", "InProgress", "Completed", "Incomplete"];
 
 
-//  useEffect(() => {
-//   if (
-//     initialShiftCategory &&
-//     categories.some(c => c.name === initialShiftCategory)
-//   ) {
-//     setShiftCategory(initialShiftCategory);
-//   }
-// }, [initialShiftCategory, categories]);
+  //  useEffect(() => {
+  //   if (
+  //     initialShiftCategory &&
+  //     categories.some(c => c.name === initialShiftCategory)
+  //   ) {
+  //     setShiftCategory(initialShiftCategory);
+  //   }
+  // }, [initialShiftCategory, categories]);
 
 
 
@@ -59,7 +90,7 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
     };
     fetchEmployees();
   }, []);
-  
+
 
   // Helper functions
   const getShiftStatus = (clockIn, clockOut) => {
@@ -95,175 +126,196 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
   };
 
   const normalizeCategory = (category) => {
-  const c = (category || "").toLowerCase().trim();
+    const c = (category || "").toLowerCase().trim();
 
-  // ✅ Any supervised visitation variant goes into Supervised Visitation tab
-  if (c.includes("supervised visitation")) return "Supervised Visitation";
+    // ✅ Any supervised visitation variant goes into Supervised Visitation tab
+    if (c.includes("supervised visitation")) return "Supervised Visitation";
 
-  if (c.includes("emergent care")) return "Emergent Care";
-  if (c.includes("respite care")) return "Respite Care";
-  if (c.includes("transportation")) return "Transportation";
+    if (c.includes("emergent care")) return "Emergent Care";
+    if (c.includes("respite care")) return "Respite Care";
+    if (c.includes("transportation")) return "Transportation";
 
-  return category || "";
-};
+    return category || "";
+  };
 
 
-const filteredShifts = shifts.filter((shift) => {
-  const status = getShiftStatus(shift.clockIn, shift.clockOut);
-  const rawCategory =
-  shift.categoryName || shift.shiftCategory || "";
+  const filteredShifts = shifts.filter((shift) => {
+    const status = getShiftStatus(shift.clockIn, shift.clockOut);
+    const rawCategory =
+      shift.categoryName || shift.shiftCategory || "";
 
-const normalizedShiftCategory = normalizeCategory(rawCategory);
-  const clientName =
-    shift.clientName ||
-    shift.clientDetails?.name ||
-    shift.clientDetails?.clientName ||
-    "";
-  const clientId =
-    shift.clientId ||
-    shift.clientDetails?.id ||
-    shift.clientDetails?.clientId ||
-    "";
+    const normalizedShiftCategory = normalizeCategory(rawCategory);
+    const clientName =
+      shift.clientName ||
+      shift.clientDetails?.name ||
+      shift.clientDetails?.clientName ||
+      "";
+    const clientId =
+      shift.clientId ||
+      shift.clientDetails?.id ||
+      shift.clientDetails?.clientId ||
+      "";
 
-  // ---------------- STATUS ----------------
-  const statusMatches =
-    !shiftStatus || status === shiftStatus;
+    // ---------------- STATUS ----------------
+    const statusMatches =
+      !shiftStatus || status === shiftStatus;
 
-  // ---------------- CATEGORY ----------------
-  const categoryMatches =
-  !shiftCategory ||
-  shiftCategory === "All" ||
-  normalizedShiftCategory.toLowerCase() === shiftCategory.toLowerCase();
+    // ---------------- CATEGORY ----------------
+    const categoryMatches =
+      !shiftCategory ||
+      shiftCategory === "All" ||
+      normalizedShiftCategory.toLowerCase() === shiftCategory.toLowerCase();
 
-  // ---------------- DATE ----------------
-  // ---------------- DATE ----------------
-let dateMatches = true;
-try {
-  if (selectedDates.length > 0) {
-    let shiftStart = null;
+    // ---------------- DATE ----------------
+    // ---------------- DATE ----------------
+    let dateMatches = true;
+    try {
+      if (selectedDates.length > 0) {
+        let shiftStart = null;
 
-    // ✅ 1. Handle Firestore Timestamp
-    if (shift.startDate?.toDate) {
-      shiftStart = shift.startDate.toDate();
+        // ✅ 1. Handle Firestore Timestamp
+        if (shift.startDate?.toDate) {
+          shiftStart = shift.startDate.toDate();
 
-    // ✅ 2. Handle already a Date object
-    } else if (shift.startDate instanceof Date) {
-      shiftStart = shift.startDate;
+          // ✅ 2. Handle already a Date object
+        } else if (shift.startDate instanceof Date) {
+          shiftStart = shift.startDate;
 
-    // ✅ 3. Handle string formats like "05 DEC 2024", "05 December 2024", "DEC 05 2024"
-    } else if (typeof shift.startDate === "string") {
-      // Normalize common formats before parsing
-      const cleaned = shift.startDate
-        .replace(/,/g, "") // remove commas
-        .replace(/\s+/g, " ") // normalize spaces
-        .trim();
+          // ✅ 3. Handle string formats like "05 DEC 2024", "05 December 2024", "DEC 05 2024"
+        } else if (typeof shift.startDate === "string") {
+          // Normalize common formats before parsing
+          const cleaned = shift.startDate
+            .replace(/,/g, "") // remove commas
+            .replace(/\s+/g, " ") // normalize spaces
+            .trim();
 
-      // Try different possible date formats
-      const parsed = Date.parse(cleaned);
+          // Try different possible date formats
+          const parsed = Date.parse(cleaned);
 
-      if (!isNaN(parsed)) {
-        shiftStart = new Date(parsed);
-      } else {
-        // Try manual parsing like "05 DEC 2024"
-        const parts = cleaned.split(" ");
-        if (parts.length >= 3) {
-          const [day, month, year] = parts;
-          const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
-          if (!isNaN(monthIndex)) {
-            shiftStart = new Date(Number(year), monthIndex, Number(day));
+          if (!isNaN(parsed)) {
+            shiftStart = new Date(parsed);
+          } else {
+            // Try manual parsing like "05 DEC 2024"
+            const parts = cleaned.split(" ");
+            if (parts.length >= 3) {
+              const [day, month, year] = parts;
+              const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
+              if (!isNaN(monthIndex)) {
+                shiftStart = new Date(Number(year), monthIndex, Number(day));
+              }
+            }
           }
         }
+
+        // ✅ Compare normalized day, month, and year
+        if (shiftStart && !isNaN(shiftStart)) {
+          const shiftDay = shiftStart.getDate();
+          const shiftMonth = shiftStart.getMonth();
+          const shiftYear = shiftStart.getFullYear();
+
+          dateMatches = selectedDates.some((selectedDate) => {
+            return (
+              selectedDate.getDate() === shiftDay &&
+              selectedDate.getMonth() === shiftMonth &&
+              selectedDate.getFullYear() === shiftYear
+            );
+          });
+        } else {
+          console.warn("⚠️ Invalid startDate for shift:", shift.id, shift.startDate);
+          dateMatches = false;
+        }
       }
-    }
-
-    // ✅ Compare normalized day, month, and year
-    if (shiftStart && !isNaN(shiftStart)) {
-      const shiftDay = shiftStart.getDate();
-      const shiftMonth = shiftStart.getMonth();
-      const shiftYear = shiftStart.getFullYear();
-
-      dateMatches = selectedDates.some((selectedDate) => {
-        return (
-          selectedDate.getDate() === shiftDay &&
-          selectedDate.getMonth() === shiftMonth &&
-          selectedDate.getFullYear() === shiftYear
-        );
-      });
-    } else {
-      console.warn("⚠️ Invalid startDate for shift:", shift.id, shift.startDate);
+    } catch (err) {
+      console.error("❌ Date filter error:", err);
       dateMatches = false;
     }
-  }
-} catch (err) {
-  console.error("❌ Date filter error:", err);
-  dateMatches = false;
-}
 
 
-  // ---------------- SEARCH ----------------
-  const searchMatches =
-    !searchTerm ||
-    clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    clientId.toString().toLowerCase().includes(searchTerm.toLowerCase());
+    // ---------------- SEARCH ----------------
+    const searchMatches =
+      !searchTerm ||
+      clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      clientId.toString().toLowerCase().includes(searchTerm.toLowerCase());
 
-  const passes =
-    statusMatches && categoryMatches && dateMatches && searchMatches;
+    const passes =
+      statusMatches && categoryMatches && dateMatches && searchMatches;
 
-  if (!passes) {
-    console.log("❌ Filtered OUT:", {
-      id: shift.id,
-      clientName,
-      status,
-      statusMatches,
-      categoryMatches,
-      dateMatches,
-      searchMatches,
-      startDate: shift.startDate,
-      selectedDates,
-    });
-  } else {
-    console.log("✅ Shift PASSES:", shift.id);
-  }
+    if (!passes) {
+      console.log("❌ Filtered OUT:", {
+        id: shift.id,
+        clientName,
+        status,
+        statusMatches,
+        categoryMatches,
+        dateMatches,
+        searchMatches,
+        startDate: shift.startDate,
+        selectedDates,
+      });
+    } else {
+      console.log("✅ Shift PASSES:", shift.id);
+    }
 
-  return passes;
-});
+    return passes;
+  });
 
 
 
   // Fetch shift categories
-useEffect(() => {
-  const fetchCategories = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, "shiftCategories"));
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "shiftCategories"));
 
-      let categoryList = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+        let categoryList = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
-      categoryList = categoryList.filter(
-        (cat) =>
-          cat.name !== "Supervised Visitation + Transportation" &&
-          cat.name !== "Shadow Shift" &&
-          cat.name !== "Administration"
-      );
+        categoryList = categoryList.filter(
+          (cat) =>
+            cat.name !== "Supervised Visitation + Transportation" &&
+            cat.name !== "Shadow Shift" &&
+            cat.name !== "Administration"
+        );
 
-      setCategories(categoryList);
 
-      // ✅ set default ONLY if navigation did not provide category
-     if (!initialShiftCategory && !shiftCategory && categoryList.length > 0) {
-  setShiftCategory(categoryList[0].name);
-}
+        setCategories(categoryList);
 
-    } catch (error) {
-      console.error("Error fetching shift categories:", error);
+        // ✅ set default ONLY if no nav state, no localStorage tab, and no current selection
+        if (!initialShiftCategory && !localStorage.getItem(LAST_TAB_KEY) && !shiftCategory && categoryList.length > 0) {
+          setShiftCategory(categoryList[0].name);
+        }
+
+      } catch (error) {
+        console.error("Error fetching shift categories:", error);
+      }
+    };
+
+    fetchCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist last selected tab to localStorage
+  useEffect(() => {
+    if (shiftCategory) {
+      localStorage.setItem(LAST_TAB_KEY, shiftCategory);
     }
-  };
+  }, [shiftCategory]);
 
-  fetchCategories();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
- 
+  // Persist search, dates, status to localStorage (cleared when browser tab closes)
+  useEffect(() => {
+    localStorage.setItem(LAST_SEARCH_KEY, searchTerm);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    localStorage.setItem(LAST_DATES_KEY, JSON.stringify(selectedDates.map((d) => d.toISOString())));
+  }, [selectedDates]);
+
+  useEffect(() => {
+    localStorage.setItem(LAST_STATUS_KEY, shiftStatus);
+  }, [shiftStatus]);
+
 
   // Calendar formatting
   const formatDDMMYYYY = (date) => {
@@ -274,7 +326,7 @@ useEffect(() => {
 
   const { calendarBadge, isThisWeek } = useMemo(() => {
     if (!selectedDates.length) {
-      const today = new Date();
+      const today = getAlbertaToday();
       return { calendarBadge: formatDDMMYYYY(today), isThisWeek: true };
     }
 
@@ -289,7 +341,7 @@ useEffect(() => {
       badgeText = `${first} - ${last}`;
     }
 
-    const today = new Date();
+    const today = getAlbertaToday();
     const weekStart = startOfWeek(today, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
@@ -318,7 +370,7 @@ useEffect(() => {
               className="flex justify-center items-center text-white border gap-[10px] py-[6px] px-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
               onClick={() => {
                 if (btn.label === "Add Intake Forms") {
-                  setShowModal(true);
+                  navigate("/admin-dashboard/add/add-intake-form?type=Intake Worker");
                 } else {
                   navigate(btn.path);
                 }
@@ -331,36 +383,34 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* Intake Modal */}
-      {showModal && (
+      {/* Intake Modal - REMOVED */}
+      {/* {showModal && (
         <IntakeFormChoiceModel
           setShowModal={setShowModal}
-          
+
         />
-      )}
+      )} */}
 
       {/* Tabs */}
       <div className="flex items-center gap-6 border-b border-gray">
         {/* 🔹 Shift Calendar Tab */}
-  <button
-    onClick={() => setShiftCategory("CALENDAR")}
-    className={`pb-2 text-sm font-medium cursor-pointer ${
-      shiftCategory === "CALENDAR"
-        ? "text-dark-green border-b-2 border-dark-green font-bold"
-        : "text-light-black font-bold"
-    }`}
-  >
-    Shift Calendar
-  </button>
+        <button
+          onClick={() => setShiftCategory("CALENDAR")}
+          className={`pb-2 text-sm font-medium cursor-pointer ${shiftCategory === "CALENDAR"
+            ? "text-dark-green border-b-2 border-dark-green font-bold"
+            : "text-light-black font-bold"
+            }`}
+        >
+          Shift Calendar
+        </button>
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setShiftCategory(cat.name)}
-            className={`pb-2 text-sm font-medium cursor-pointer ${
-              shiftCategory === cat.name
-                ? "text-dark-green border-b-2 border-dark-green font-bold"
-                : "text-light-black font-bold"
-            }`}
+            className={`pb-2 text-sm font-medium cursor-pointer ${shiftCategory === cat.name
+              ? "text-dark-green border-b-2 border-dark-green font-bold"
+              : "text-light-black font-bold"
+              }`}
           >
             {cat.name}
           </button>
@@ -369,106 +419,128 @@ useEffect(() => {
 
       {/* Filters */}
       {shiftCategory !== "CALENDAR" && (
-      <div className="flex justify-between min-h-[32px] text-light-black relative">
-        <div className="flex gap-[12px] items-center">
-          {/* Search */}
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-[#C5C5C5] rounded-[4px] w-[342px] focus:outline-none p-2 bg-white placeholder-[#C5C5C5] placeholder:text-[12px]"
-            placeholder="Search with Name, Client ID"
-          />
+        <div className="flex justify-between min-h-[32px] text-light-black relative">
+          <div className="flex gap-[12px] items-center">
+            {/* Search */}
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="border border-[#C5C5C5] rounded-[4px] w-[342px] focus:outline-none p-2 bg-white placeholder-[#C5C5C5] placeholder:text-[12px]"
+              placeholder="Search with Name, Client ID"
+            />
 
-          {/* Calendar */}
-          <div className="relative flex gap-3 items-center">
-            <p className="font-bold text-[16px] leading-[24px]">Calendar</p>
+            {/* Calendar */}
+            <div className="relative flex gap-3 items-center">
+              <p className="font-bold text-[16px] leading-[24px]">Calendar</p>
+              <button
+                type="button"
+                onClick={() => setCalendarOpen((v) => !v)}
+                className="flex items-center gap-2 px-3 py-[6px] rounded border border-light-green text-light-green"
+              >
+                <span className="text-sm font-medium">{calendarBadge}</span>
+                <IoChevronDown />
+              </button>
+
+              {calendarOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setCalendarOpen(false)} />
+                  <div className="absolute z-50 top-10 left-0 shadow-lg rounded bg-white">
+                    <CustomCalendar
+                      selectedDates={selectedDates}
+                      onDatesChange={(dates) => setSelectedDates(dates)}
+                      onClose={() => setCalendarOpen(false)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-[12px] items-center">
+              {isThisWeek && <p className="font-bold text-[16px] leading-[24px]">This Week</p>}
+              <div className="w-px h-6 bg-gray-400"></div>
+              <p className="font-normal text-base">Showed Results ({filteredShifts.length})</p>
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex gap-[12px] items-center relative">
+            <p className="font-bold text-base leading-6">Status</p>
             <button
-              type="button"
-              onClick={() => setCalendarOpen((v) => !v)}
-              className="flex items-center gap-2 px-3 py-[6px] rounded border border-light-green text-light-green"
+              onClick={() => setStatusOpen(!statusOpen)}
+              className="flex items-center gap-1 text-light-green"
             >
-              <span className="text-sm font-medium">{calendarBadge}</span>
-              <IoChevronDown />
+              {shiftStatus || "All"} <IoChevronDown />
             </button>
-
-            {calendarOpen && (
+            {statusOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setCalendarOpen(false)} />
-                <div className="absolute z-50 top-10 left-0 shadow-lg rounded bg-white">
-                  <CustomCalendar
-                    selectedDates={selectedDates}
-                    onDatesChange={(dates) => setSelectedDates(dates)}
-                    onClose={() => setCalendarOpen(false)}
-                  />
+                <div onClick={() => setStatusOpen(false)} className="fixed inset-0 z-40" />
+                <div className="absolute right-[4px] top-[40px] w-40 bg-white border border-gray-200 shadow-lg rounded-md z-50">
+                  <ul className="py-1">
+                    {statusOptions.map((status) => (
+                      <li
+                        key={status}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-light-black text-sm"
+                        onClick={() => {
+                          setShiftStatus(status === "All" ? "" : status);
+                          setStatusOpen(false);
+                        }}
+                      >
+                        {status}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </>
             )}
           </div>
-
-          <div className="flex gap-[12px] items-center">
-            {isThisWeek && <p className="font-bold text-[16px] leading-[24px]">This Week</p>}
-            <div className="w-px h-6 bg-gray-400"></div>
-            <p className="font-normal text-base">Showed Results ({filteredShifts.length})</p>
-          </div>
         </div>
-
-        {/* Status Filter */}
-        <div className="flex gap-[12px] items-center relative">
-          <p className="font-bold text-base leading-6">Status</p>
-          <button
-            onClick={() => setStatusOpen(!statusOpen)}
-            className="flex items-center gap-1 text-light-green"
-          >
-            {shiftStatus || "All"} <IoChevronDown />
-          </button>
-          {statusOpen && (
-            <>
-              <div onClick={() => setStatusOpen(false)} className="fixed inset-0 z-40" />
-              <div className="absolute right-[4px] top-[40px] w-40 bg-white border border-gray-200 shadow-lg rounded-md z-50">
-                <ul className="py-1">
-                  {statusOptions.map((status) => (
-                    <li
-                      key={status}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-light-black text-sm"
-                      onClick={() => {
-                        setShiftStatus(status === "All" ? "" : status);
-                        setStatusOpen(false);
-                      }}
-                    >
-                      {status}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
       )}
 
       {/* ✅ Data Section */}
       <div className="flex p-1 h-auto">
 
-         {/* 🗓 CALENDAR VIEW */}
-  {shiftCategory === "CALENDAR" && (
-    <AdminShiftCalendar shifts={shifts} />
-  )}
+        {/* 🗓 CALENDAR VIEW */}
+        {shiftCategory === "CALENDAR" && (
+          <AdminShiftCalendar
+            shifts={shifts}
+            onShiftClick={(shift) => {
+              const rawCategory = shift.categoryName || shift.shiftCategory || "";
+              const normalized = normalizeCategory(rawCategory);
+              setShiftCategory(normalized);
+
+              let shiftDate = null;
+              if (shift.startDate?.toDate) {
+                shiftDate = shift.startDate.toDate();
+              } else if (shift.startDate instanceof Date) {
+                shiftDate = shift.startDate;
+              } else if (typeof shift.startDate === "string") {
+                const cleaned = shift.startDate.replace(/,/g, "").replace(/\s+/g, " ").trim();
+                const parsed = Date.parse(cleaned);
+                if (!isNaN(parsed)) shiftDate = new Date(parsed);
+              }
+              if (shiftDate) {
+                setSelectedDates([new Date(shiftDate.getFullYear(), shiftDate.getMonth(), shiftDate.getDate())]);
+              }
+            }}
+          />
+        )}
 
         {shiftCategory === "Transportation" && (
           <TransportationShiftsData
             filteredShifts={filteredShifts}
             handleViewReport={handleViewReport}
-             openTransportDetails={openTransportDetails}
+            openTransportDetails={openTransportDetails}
           />
-        ) }
-        
-         {shiftCategory !== "CALENDAR" && shiftCategory !== "Transportation" && (
-    <ShiftsData
-      filteredShifts={filteredShifts}
-      handleViewReport={handleViewReport}
-    />
-  )}
+        )}
+
+        {shiftCategory !== "CALENDAR" && shiftCategory !== "Transportation" && (
+          <ShiftsData
+            filteredShifts={filteredShifts}
+            handleViewReport={handleViewReport}
+            isAdmin={true}
+          />
+        )}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { db } from "../firebase";
 import IntakeLogin from "./IntakeLogin";
 import IntakeFormDashboard from "./IntakeFormDashboard";
 import IntakeFormPage from "./IntakeFormPage";
+import ShiftReport from "./ShiftReport";
 
 const IntakeFormMainPage = () => {
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -56,17 +57,17 @@ const IntakeFormMainPage = () => {
 
   return (
     <Routes>
-      {/* LOGIN PAGE (Only accessible if NOT logged in) */}
+      {/* LOGIN PAGE */}
       <Route
         path="login"
         element={
-         loading ? (
-      <p>Loading...</p>
-    ) : firebaseUser ? (
-      <Navigate to="/intake-form/dashboard" replace />
-    ) : (
-      <IntakeLogin />
-    )
+          loading ? (
+            <p className="p-10 text-center">Loading...</p>
+          ) : firebaseUser && userData ? (
+            <Navigate to="/intake-form/dashboard" replace />
+          ) : (
+            <IntakeLogin />
+          )
         }
       />
 
@@ -74,12 +75,22 @@ const IntakeFormMainPage = () => {
       <Route
         path="dashboard"
         element={
-          firebaseUser && userData ? (
-            <IntakeFormDashboard
-              user={userData} // pass Firestore data (name, role)
-              onLogout={handleLogout}
-              onAddIntake={() => navigate("/intake-form/add")}
-            />
+          firebaseUser ? (
+            userData ? (
+              <IntakeFormDashboard
+                user={userData}
+                onLogout={handleLogout}
+                onAddIntake={() => navigate("/intake-form/add")}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-screen gap-4">
+                <p className="text-xl font-bold text-red-500">Access Denied: User Profile Not Found</p>
+                <p>You are logged in as {firebaseUser.email}, but no Intake Worker profile was found with this email.</p>
+                <button onClick={handleLogout} className="bg-dark-green text-white px-4 py-2 rounded">
+                  Logout
+                </button>
+              </div>
+            )
           ) : (
             <Navigate to="/intake-form/login" replace />
           )
@@ -102,19 +113,33 @@ const IntakeFormMainPage = () => {
       />
 
       {/* UPDATE / VIEW INTAKE PAGE (Protected Route) */}
-<Route
-  path="update-intake-form/:id"
-  element={
-    firebaseUser && userData ? (
-      <IntakeFormPage
-        user={userData}
-        onBack={() => navigate("/intake-form/dashboard")}
+      <Route
+        path="update-intake-form/:id"
+        element={
+          firebaseUser && userData ? (
+            <IntakeFormPage
+              user={userData}
+              onBack={() => navigate("/intake-form/dashboard")}
+            />
+          ) : (
+            <Navigate to="/intake-form/login" replace />
+          )
+        }
       />
-    ) : (
-      <Navigate to="/intake-form/login" replace />
-    )
-  }
-/>
+
+      {/* VIEW SHIFT REPORT (Protected Route) */}
+      <Route
+        path="shift-report/:id"
+        element={
+          firebaseUser && userData ? (
+            <ShiftReport
+              user={userData}
+            />
+          ) : (
+            <Navigate to="/intake-form/login" replace />
+          )
+        }
+      />
 
 
       {/* DEFAULT: Redirect unknown paths to login */}

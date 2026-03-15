@@ -12,8 +12,13 @@ export default function Index() {
         const storedUser = await AsyncStorage.getItem("user");
 
         if (storedUser) {
-          // ✅ User already logged in
-          router.replace("/home");
+          // ✅ Route based on role
+          const parsed = JSON.parse(storedUser);
+          if (parsed.role?.toLowerCase() === "admin") {
+            router.replace("/admin/dashboard");
+          } else {
+            router.replace("/home");
+          }
         } else {
           // ❌ No user found
           router.replace("/login");

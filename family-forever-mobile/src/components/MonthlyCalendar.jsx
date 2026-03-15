@@ -77,6 +77,17 @@ export default function MonthlyCalendar({
         </Pressable>
       </View>
 
+      {/* Days Header (Mon-Sun) */}
+      <View style={{ flexDirection: "row", marginBottom: 8 }}>
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+          <View key={day} style={{ width: `${100 / 7}%`, alignItems: "center" }}>
+            <Text style={{ fontSize: 11, fontWeight: "600", color: "#6B7280" }}>
+              {day}
+            </Text>
+          </View>
+        ))}
+      </View>
+
       {/* Days grid (7 columns) */}
       <View style={styles.grid}>
         {grid.map((cell, idx) => {
@@ -95,31 +106,31 @@ export default function MonthlyCalendar({
               ]}
             >
               {/* green dot like screenshot */}
-            <View
-  style={[
-    styles.dayCircle,
-    hasShift && { backgroundColor: "#1f5f3b" },
-    selected && {
-      backgroundColor: "#CFE8D7",
-      borderWidth: 1,
-      borderColor: "#8FC6A5",
-    },
-  ]}
->
-  <Text
-    style={[
-      styles.dayText,
-      hasShift && { color: "#fff" },
-      selected && !hasShift && { color: "#0F172A", fontWeight: "900" },
-    ]}
-  >
-    {cell.getDate()}
-  </Text>
-</View>
+              <View
+                style={[
+                  styles.dayCircle,
+                  hasShift && { backgroundColor: "#1f5f3b" },
+                  selected && {
+                    backgroundColor: "#CFE8D7",
+                    borderWidth: 1,
+                    borderColor: "#8FC6A5",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dayText,
+                    hasShift && { color: "#fff" },
+                    selected && !hasShift && { color: "#0F172A", fontWeight: "900" },
+                  ]}
+                >
+                  {cell.getDate()}
+                </Text>
+              </View>
 
 
 
-              
+
             </Pressable>
           );
         })}
@@ -130,12 +141,30 @@ export default function MonthlyCalendar({
 
 /* ================= helpers ================= */
 
-// Supports: "10-May-2025" AND "07 Mar 2025"
+// Supports: "10-May-2025", "07 Mar 2025", "YYYY-MM-DD", Firestore Timestamp
 function parseShiftDateLoose(str) {
   if (!str) return null;
 
-  // Try "10-May-2025"
+  // 1. Handle Firestore Timestamp (has .toDate())
+  if (typeof str.toDate === "function") {
+    return str.toDate();
+  }
+
+  // 2. Handle JS Date object
+  if (str instanceof Date) {
+    return str;
+  }
+
+  if (typeof str !== "string") return null;
+
+  // Try "10-May-2025" or "YYYY-MM-DD"
   if (str.includes("-")) {
+    // Check if it's "YYYY-MM-DD"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [yyyy, mm, dd] = str.split("-").map(Number);
+      return new Date(yyyy, mm - 1, dd);
+    }
+
     const parts = str.split("-");
     if (parts.length === 3) {
       const [dd, mmm, yyyy] = parts;
@@ -163,7 +192,7 @@ function parseShiftDateLoose(str) {
 }
 
 function monthFromName(m) {
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const mm = (m || "").slice(0, 3);
   return months.indexOf(mm);
 }
@@ -234,25 +263,25 @@ const styles = {
     alignItems: "center",
     borderRadius: 10,
   },
- dayCell: {
-  width: `${100 / 7}%`,
-  paddingVertical: 10,
-  alignItems: "center",
-},
+  dayCell: {
+    width: `${100 / 7}%`,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
 
-dayCircle: {
-  width: 38,
-  height: 38,
-  borderRadius: 19,
-  alignItems: "center",
-  justifyContent: "center",
-},
+  dayCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-dayText: {
-  fontSize: 13,
-  color: "#111827",
-  fontWeight: "700",
-},
+  dayText: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "700",
+  },
 
   dayText: {
     fontSize: 12,

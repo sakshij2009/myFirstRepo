@@ -3,12 +3,13 @@ import { NavLink } from "react-router-dom";
 
 const SideBar = () => {
   const sidebarItems = [
-     { label: "Dashboard", path: "/admin-dashboard/dashboard", icon: "/images/dashboard.png" },
+    { label: "Dashboard", path: "/admin-dashboard/dashboard", icon: "/images/dashboard.png" },
     { label: "Manage Agency", path: "/admin-dashboard/agency", icon: "/images/agency.png" },
     { label: "Manage Client", path: "/admin-dashboard/clients", icon: "/images/client.png" },
-    { label: "Manage User", path: "/admin-dashboard/users", icon: "/images/client.png" },
+    { label: "Manage Staff", path: "/admin-dashboard/users", icon: "/images/client.png" },
     { label: "Manage IntakeWorkers", path: "/admin-dashboard/intake-workers", icon: "/images/client.png" },
-     { label: "Manage IntakeForms", path: "/admin-dashboard/intake-forms", icon: "/images/client.png" },
+    { label: "Manage IntakeForms", path: "/admin-dashboard/intake-forms", icon: "/images/client.png" },
+    { label: "Payroll", path: "/admin-dashboard/payroll", icon: "/images/billing.png" },
     { label: "Billing", path: "/admin-dashboard/billing", icon: "/images/billing.png" },
     // { label: "Bootcamp", path: "/admin-dashboard/bootcamp", icon: "/images/bootcamp.png" },
   ];

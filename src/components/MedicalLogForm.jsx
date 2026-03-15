@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field } from "formik";
 import * as Yup from "yup";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import { CustomTimePicker } from "./CustomTimePicker";
 
 const validationSchema = Yup.object({
   dateOfContact: Yup.date().required("Please provide date of contact"),
@@ -32,21 +33,44 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
     date: "",
   });
 
-  // ✅ 2. Load saved draft safely
+  // ✅ 2. Load saved data from Firestore first, then check localStorage draft
   useEffect(() => {
-    const savedDraft = localStorage.getItem(draftKey);
-    if (savedDraft) {
-      const restored = JSON.parse(savedDraft);
-      setInitialValues((prev) => ({
-        ...prev,
-        ...restored,
-        program: Array.isArray(restored.program) ? restored.program : [],
-        typeOfContact: Array.isArray(restored.typeOfContact)
-          ? restored.typeOfContact
-          : [],
-      }));
-    }
-  }, [draftKey]);
+    const loadData = async () => {
+      try {
+        // First try to load from Firestore shift document
+        if (shiftId) {
+          const shiftSnap = await getDoc(doc(db, "shifts", shiftId));
+          if (shiftSnap.exists() && shiftSnap.data().contactLogEvent) {
+            const saved = shiftSnap.data().contactLogEvent;
+            setInitialValues((prev) => ({
+              ...prev,
+              ...saved,
+              program: Array.isArray(saved.program) ? saved.program : [],
+              typeOfContact: Array.isArray(saved.typeOfContact) ? saved.typeOfContact : [],
+            }));
+            return; // Firestore data found, skip localStorage
+          }
+        }
+
+        // Fallback: load from localStorage draft
+        const savedDraft = localStorage.getItem(draftKey);
+        if (savedDraft) {
+          const restored = JSON.parse(savedDraft);
+          setInitialValues((prev) => ({
+            ...prev,
+            ...restored,
+            program: Array.isArray(restored.program) ? restored.program : [],
+            typeOfContact: Array.isArray(restored.typeOfContact)
+              ? restored.typeOfContact
+              : [],
+          }));
+        }
+      } catch (err) {
+        console.warn("Error loading contact log data:", err);
+      }
+    };
+    loadData();
+  }, [shiftId, draftKey]);
 
   // ✅ 3. Save draft locally
   const handleSaveDraft = (values) => {
@@ -56,25 +80,25 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
 
   // ✅ 4. Submit & attach inside existing shift doc
   const handleSubmit = async (values, { resetForm }) => {
-  try {
-    const data = {
-      ...values,
-      submittedAt: serverTimestamp(),
-    };
+    try {
+      const data = {
+        ...values,
+        submittedAt: serverTimestamp(),
+      };
 
-    // ✅ Correct — merge new form data inside existing shift
-    const shiftRef = doc(db, "shifts", shiftId);
-    await setDoc(shiftRef, { [formType]: data }, { merge: true });
+      // ✅ Correct — merge new form data inside existing shift
+      const shiftRef = doc(db, "shifts", shiftId);
+      await setDoc(shiftRef, { [formType]: data }, { merge: true });
 
-    localStorage.removeItem(draftKey);
-    alert("Form submitted successfully!");
-    resetForm();
-    onSuccess && onSuccess();
-  } catch (error) {
-    console.error("Error submitting form:", error);
-    alert("Failed to submit the form. Try again.");
-  }
-};
+      localStorage.removeItem(draftKey);
+      alert("Form submitted successfully!");
+      resetForm();
+      onSuccess && onSuccess();
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      alert("Failed to submit the form. Try again.");
+    }
+  };
 
 
   return (
@@ -145,11 +169,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                     <Field
                       type="date"
                       name="dateOfContact"
-                      className={`w-full border rounded p-2 mt-1 focus:outline-gray ${
-                        errors.dateOfContact && touched.dateOfContact
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                      className={`w-full border rounded p-2 mt-1 focus:outline-gray ${errors.dateOfContact && touched.dateOfContact
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     />
                   </div>
 
@@ -160,11 +183,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                     <Field
                       name="personContacted"
                       placeholder="Enter person contacted"
-                      className={`w-full border rounded p-2 mt-1 focus:outline-gray ${
-                        errors.personContacted && touched.personContacted
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                      className={`w-full border rounded p-2 mt-1 focus:outline-gray ${errors.personContacted && touched.personContacted
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     />
                   </div>
 
@@ -172,14 +194,13 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                     <label className="font-bold text-sm text-gray-800">
                       Time of Contact
                     </label>
-                    <Field
-                      name="timeOfContact"
-                      type="time"
-                      className={`w-full border rounded-sm p-2 mt-1 focus:outline-gray ${
-                        errors.timeOfContact && touched.timeOfContact
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
+                    <CustomTimePicker
+                      value={values.timeOfContact || ""}
+                      onChange={(val) => setFieldValue("timeOfContact", val)}
+                      className={`mt-1 focus:outline-gray ${errors.timeOfContact && touched.timeOfContact
+                        ? "border-red-500"
+                        : "border-light-gray"
+                        }`}
                     />
                   </div>
 
@@ -284,11 +305,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                 as="textarea"
                 name="details"
                 placeholder="Write down description of the incident"
-                className={`w-full border rounded-sm p-3 h-32 focus:outline-none ${
-                  errors.details && touched.details
-                    ? "border-red-500"
-                    : "border-light-gray"
-                }`}
+                className={`w-full border rounded-sm p-3 h-32 focus:outline-none ${errors.details && touched.details
+                  ? "border-red-500"
+                  : "border-light-gray"
+                  }`}
               />
               {errors.details && touched.details && (
                 <p className="text-red-500 text-xs mt-1">
@@ -306,11 +326,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                 as="textarea"
                 name="followUp"
                 placeholder="Write down follow-up actions required"
-                className={`w-full border rounded-sm p-3 h-32 focus:outline-none ${
-                  errors.followUp && touched.followUp
-                    ? "border-red-500"
-                    : "border-light-gray"
-                }`}
+                className={`w-full border rounded-sm p-3 h-32 focus:outline-none ${errors.followUp && touched.followUp
+                  ? "border-red-500"
+                  : "border-light-gray"
+                  }`}
               />
               {errors.followUp && touched.followUp && (
                 <p className="text-red-500 text-xs mt-1">
@@ -329,11 +348,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                   name="employeeSignature"
                   type="text"
                   placeholder="Enter employee name"
-                  className={`w-full border rounded-sm p-2 mt-1 placeholder:text-sm placeholder:text-gray-500 ${
-                    touched.employeeSignature && errors.employeeSignature
-                      ? "border-red-500"
-                      : "border-gray-300"
-                  }`}
+                  className={`w-full border rounded-sm p-2 mt-1 placeholder:text-sm placeholder:text-gray-500 ${touched.employeeSignature && errors.employeeSignature
+                    ? "border-red-500"
+                    : "border-gray-300"
+                    }`}
                 />
                 {touched.employeeSignature && errors.employeeSignature && (
                   <p className="text-red-500 text-xs mt-1">
@@ -347,11 +365,10 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
                 <Field
                   name="date"
                   type="date"
-                  className={`w-full border rounded-sm p-2 mt-1 ${
-                    touched.date && errors.date
-                      ? "border-red-500"
-                      : "border-gray-300"
-                  }`}
+                  className={`w-full border rounded-sm p-2 mt-1 ${touched.date && errors.date
+                    ? "border-red-500"
+                    : "border-gray-300"
+                    }`}
                 />
               </div>
             </div>

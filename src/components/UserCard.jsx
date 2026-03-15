@@ -8,7 +8,8 @@ const UserCard = ({ user }) => {
 
   return (
     <div
-      className="relative w-[320px] h-[400px] cursor-pointer perspective"
+      className="relative cursor-pointer"
+      style={{ width: 340, height: 500, perspective: 1000 }}
       onClick={() => setIsFlipped(!isFlipped)}
     >
       <motion.div
@@ -17,7 +18,7 @@ const UserCard = ({ user }) => {
         transition={{ duration: 0.6, ease: 'easeInOut' }}
       >
         {/* Front side */}
-        <div className="absolute w-full h-full [backface-visibility:hidden]">
+        <div className="absolute w-full h-full [backface-visibility:hidden] overflow-visible">
           <UserCardFront user={user} />
         </div>
 

@@ -27,45 +27,89 @@ import UserTransportationShifts from "./UserTransportationShifts";
 
 // ================== UTIL HELPERS FOR SHIFT TIMES ==================
 
-// Convert shift's date + time into a JS Date
-// Handles: "01 Jan 2025" + "21:00" and also Timestamp / Date edge cases
-const parseShiftDate = (dateVal, timeStr) => {
-  if (!dateVal || !timeStr) return null;
+// Helper: Get raw date components from various input formats
+const getRawDateComponents = (dateVal) => {
+  if (!dateVal) return null;
 
-  let baseDate;
+  if (typeof dateVal.toDate === "function") {
+    const d = dateVal.toDate();
+    return { y: d.getFullYear(), m: d.getMonth(), d: d.getDate() };
+  }
+  if (dateVal instanceof Date) {
+    return { y: dateVal.getFullYear(), m: dateVal.getMonth(), d: dateVal.getDate() };
+  }
+  if (typeof dateVal !== "string") return null;
 
-  try {
-    if (typeof dateVal === "string") {
-      // Example: "01 Jan 2025"
-      baseDate = new Date(dateVal);
-    } else if (dateVal.toDate) {
-      // Firestore Timestamp
-      baseDate = dateVal.toDate();
-    } else if (dateVal instanceof Date) {
-      baseDate = dateVal;
-    } else {
-      return null;
-    }
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+    const [y, m, d] = dateVal.split("-").map(Number);
+    return { y, m: m - 1, d };
+  }
 
-    if (Number.isNaN(baseDate.getTime())) return null;
-
-    const [hoursStr, minsStr] = timeStr.split(":");
-    const hours = parseInt(hoursStr, 10) || 0;
-    const minutes = parseInt(minsStr, 10) || 0;
-
-    return new Date(
-      baseDate.getFullYear(),
-      baseDate.getMonth(),
-      baseDate.getDate(),
-      hours,
-      minutes,
-      0,
-      0
-    );
-  } catch (e) {
-    console.error("Error parsing shift date/time:", e);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  let parts;
+  if (dateVal.includes("-")) parts = dateVal.split("-");
+  else if (dateVal.includes(" ")) parts = dateVal.split(" ");
+  else {
+    // Fallback: attempt native Date parsing
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) return { y: d.getFullYear(), m: d.getMonth(), d: d.getDate() };
     return null;
   }
+
+  if (parts.length === 3) {
+    const d = Number(parts[0]);
+    const mi = months.indexOf((parts[1] || "").slice(0, 3));
+    const y = Number(parts[2]);
+    if (mi >= 0) return { y, m: mi, d };
+  }
+
+  // Fallback: native Date
+  const fallback = new Date(dateVal);
+  if (!isNaN(fallback.getTime())) return { y: fallback.getFullYear(), m: fallback.getMonth(), d: fallback.getDate() };
+  return null;
+};
+
+// Convert shift's date + time into a JS Date IN ALBERTA TIMEZONE
+// This ensures correct behavior regardless of the user's browser timezone
+const parseShiftDate = (dateVal, timeStr) => {
+  if (!dateVal) return null;
+
+  const comp = getRawDateComponents(dateVal);
+  if (!comp) return null;
+
+  let { y, m, d } = comp;
+  let h = 0, min = 0;
+
+  if (timeStr) {
+    let [hourStr, minStr] = timeStr.split(":");
+    h = parseInt(hourStr, 10) || 0;
+    min = parseInt(minStr, 10) || 0;
+
+    if (timeStr.toLowerCase().includes("pm") && h !== 12) h += 12;
+    if (timeStr.toLowerCase().includes("am") && h === 12) h = 0;
+  }
+
+  // 1. Create as if UTC
+  const utcTs = Date.UTC(y, m, d, h, min);
+
+  // 2. DST Check (Alberta: 2nd Sun Mar → 1st Sun Nov)
+  const march1 = new Date(Date.UTC(y, 2, 1));
+  const firstSunMar = 1 + ((7 - march1.getUTCDay()) % 7);
+  const secondSunMar = firstSunMar + 7;
+  const dstStart = Date.UTC(y, 2, secondSunMar, 2, 0);
+
+  const nov1 = new Date(Date.UTC(y, 10, 1));
+  const firstSunNov = 1 + ((7 - nov1.getUTCDay()) % 7);
+  const dstEnd = Date.UTC(y, 10, firstSunNov, 2, 0);
+
+  const isDst = (utcTs >= dstStart && utcTs < dstEnd);
+
+  // 3. Offset (MDT = UTC-6, MST = UTC-7)
+  const offsetHours = isDst ? 6 : 7;
+  const finalTs = utcTs + (offsetHours * 60 * 60 * 1000);
+
+  return new Date(finalTs);
 };
 
 // ================== TIME HELPERS ==================
@@ -93,8 +137,18 @@ const UserDashboard = ({ user }) => {
   const [shiftStatus, setShiftStatus] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [userShifts, setUserShifts] = useState([]);
-  const[userTransportationShift,setUserTransportationShifts]=useState([]);
-  const [selectedDates, setSelectedDates] = useState([new Date()]);
+  const [allUserShifts, setAllUserShifts] = useState([]); // Unfiltered — for analytics cards
+  const [statsFilter, setStatsFilter] = useState("weekly"); // weekly | monthly | yearly
+  const [userTransportationShift, setUserTransportationShifts] = useState([]);
+  // ✅ Get "today" in Alberta timezone
+  const getAlbertaToday = () => {
+    const now = new Date();
+    const albertaStr = now.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+    const [y, m, d] = albertaStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const [selectedDates, setSelectedDates] = useState([getAlbertaToday()]);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [callsModelOpen, setCallsModelOpen] = useState(false);
   const [dayOffOpen, setDayOffOpen] = useState(false);
@@ -243,121 +297,131 @@ const UserDashboard = ({ user }) => {
   };
 
   // ------------ SHIFT TYPE HELPERS ------------
-const cleanText = (str) =>
-  (str || "")
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^\w+]/g, "");
+  const cleanText = (str) =>
+    (str || "")
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^\w+]/g, "");
 
-const isTransportationShift = (shift) => {
-  const type = cleanText(shift.typeName);
-  const cat = cleanText(shift.categoryName);
+  const isTransportationShift = (shift) => {
+    const type = cleanText(shift.typeName);
+    const cat = cleanText(shift.categoryName);
 
-  return (
-    type.includes("transportation") ||
-    cat.includes("transportation")
-  );
-};
-
-const isSupervisedVisitationShift = (shift) => {
-  const type = cleanText(shift.typeName);
-  const cat = cleanText(shift.categoryName);
-
-  return (
-    type.includes("supervisedvisitation") ||
-    cat.includes("supervisedvisitation")
-  );
-};
-
-// 🔹 Firestore fetch — Get shifts assigned to the logged-in user & filter by status
-useEffect(() => {
-  const fetchUserShifts = async () => {
-    if (!user?.name && !user?.uid) return;
-    try {
-      const shiftsRef = collection(db, "shifts");
-      const snapshot = await getDocs(shiftsRef);
-      const allShifts = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
-
-      // 🔸 Shifts assigned to this user
-      let regularShifts = allShifts.filter(
-        (shift) =>
-          shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
-          shift.userId === user?.userId
-      );
-
-      // 🔥 Remove transportation shifts from main list
-      regularShifts = regularShifts.filter(
-        (shift) => !isTransportationShift(shift)
-      );
-
-      // 🔥 Status filter applies only on non-transportation shifts
-      if (shiftStatus && shiftStatus !== "all") {
-        regularShifts = regularShifts.filter((shift) => {
-          if (shiftStatus === "Confirmed")
-            return shift.shiftConfirmed === true;
-          if (shiftStatus === "UnConfirmed")
-            return shift.shiftConfirmed === false;
-          return true;
-        });
-      }
-
-      // 🔥 Date filter (applies to main shifts)
-      regularShifts = regularShifts.filter((shift) => {
-        const dateMatches =
-          selectedDates.length === 0 ||
-          selectedDates.some((date) => {
-            const formattedShiftDate = formatDateToDDMMYYYY(
-              shift.startDate?.toDate
-                ? shift.startDate.toDate()
-                : shift.startDate
-            );
-            return formattedShiftDate === formatDateToDDMMYYYY(date);
-          });
-        return dateMatches;
-      });
-
-      setUserShifts(regularShifts);
-
-    
-      // ------------ TRANSPORTATION SHIFTS ------------
-let transportShifts = allShifts.filter((shift) => {
-  const assigned =
-    shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
-    shift.userId === user?.userId;
-
-  return assigned && isTransportationShift(shift);
-});
-
-// 🔥 Apply DATE FILTER same as normal shifts
-transportShifts = transportShifts.filter((shift) => {
-  const dateMatches =
-    selectedDates.length === 0 ||
-    selectedDates.some((date) => {
-      const formattedShiftDate = formatDateToDDMMYYYY(
-        shift.startDate?.toDate
-          ? shift.startDate.toDate()
-          : shift.startDate
-      );
-      return formattedShiftDate === formatDateToDDMMYYYY(date);
-    });
-
-  return dateMatches;
-});
-
-setUserTransportationShifts(transportShifts);
-
-    } catch (error) {
-      console.error("Error fetching user shifts:", error);
-    }
+    return (
+      type.includes("transportation") ||
+      cat.includes("transportation")
+    );
   };
 
-  fetchUserShifts();
-}, [user, shiftStatus, selectedDates]);
+  const isSupervisedVisitationShift = (shift) => {
+    const type = cleanText(shift.typeName);
+    const cat = cleanText(shift.categoryName);
 
-// (Remove your old userTransportShifts variable completely)
+    return (
+      type.includes("supervisedvisitation") ||
+      cat.includes("supervisedvisitation")
+    );
+  };
+
+  // 🔹 Firestore fetch — Get shifts assigned to the logged-in user & filter by status
+  useEffect(() => {
+    const fetchUserShifts = async () => {
+      if (!user?.name && !user?.uid) return;
+      try {
+        const shiftsRef = collection(db, "shifts");
+        const snapshot = await getDocs(shiftsRef);
+        const allShifts = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
+
+        // 🔸 Shifts assigned to this user
+        let regularShifts = allShifts.filter(
+          (shift) =>
+            shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
+            shift.userId === user?.userId
+        );
+
+        // 🔥 Remove transportation shifts from main list
+        regularShifts = regularShifts.filter(
+          (shift) => !isTransportationShift(shift)
+        );
+
+        // ✅ Save ALL user shifts (regular + transportation, no date/status filter) for analytics cards
+        // Must be set HERE before type/status/date filters reduce the list
+        const allForAnalytics = allShifts.filter(
+          (shift) =>
+            shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
+            shift.userId === user?.userId
+        );
+        setAllUserShifts(allForAnalytics);
+        console.log("📊 ALL User Shifts for Analytics (incl. transport):", allForAnalytics.length);
+
+        // 🔥 Status filter applies only on non-transportation shifts
+        if (shiftStatus && shiftStatus !== "all") {
+          regularShifts = regularShifts.filter((shift) => {
+            if (shiftStatus === "Confirmed")
+              return shift.shiftConfirmed === true;
+            if (shiftStatus === "UnConfirmed")
+              return shift.shiftConfirmed === false;
+            return true;
+          });
+        }
+
+        // 🔥 Date filter (applies to main shifts)
+        regularShifts = regularShifts.filter((shift) => {
+          const dateMatches =
+            selectedDates.length === 0 ||
+            selectedDates.some((date) => {
+              const formattedShiftDate = formatDateToDDMMYYYY(
+                shift.startDate?.toDate
+                  ? shift.startDate.toDate()
+                  : shift.startDate
+              );
+              return formattedShiftDate === formatDateToDDMMYYYY(date);
+            });
+          return dateMatches;
+        });
+
+        setUserShifts(regularShifts);
+
+
+        // ------------ TRANSPORTATION SHIFTS ------------
+        let transportShifts = allShifts.filter((shift) => {
+          const assigned =
+            shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
+            shift.userId === user?.userId;
+
+          return assigned && isTransportationShift(shift);
+        });
+
+        // 🔥 Apply DATE FILTER same as normal shifts
+        transportShifts = transportShifts.filter((shift) => {
+          const dateMatches =
+            selectedDates.length === 0 ||
+            selectedDates.some((date) => {
+              const formattedShiftDate = formatDateToDDMMYYYY(
+                shift.startDate?.toDate
+                  ? shift.startDate.toDate()
+                  : shift.startDate
+              );
+              return formattedShiftDate === formatDateToDDMMYYYY(date);
+            });
+
+          return dateMatches;
+        });
+
+        setUserTransportationShifts(transportShifts);
+
+      } catch (error) {
+        console.error("Error fetching user shifts:", error);
+      }
+    };
+
+    fetchUserShifts();
+  }, [user, shiftStatus, selectedDates]);
+
+  // (Remove your old userTransportShifts variable completely)
 
 
   // Calendar formatting
@@ -492,13 +556,86 @@ setUserTransportationShifts(transportShifts);
   };
 
   // =============== ACTIVE SHIFT (BASED ON userId + current time) ===============
-// =============== ACTIVE SHIFT (BASED ON userId + current time) ===============
-const activeShift = useMemo(() => {
-  if (!userShifts.length || !user?.userId) return null;
+  const activeShift = useMemo(() => {
+    if (!userShifts.length || !user?.userId) return null;
 
-  // ✅ Use Edmonton time, not browser local time
-  const now = new Date(
-    new Intl.DateTimeFormat("en-CA", {
+    const now = new Date();
+
+    return userShifts.find((shift) => {
+      if (shift.userId !== user.userId) return false;
+
+      const start = parseShiftDate(shift.startDate, shift.startTime);
+      let end = parseShiftDate(shift.endDate, shift.endTime);
+
+      if (!start || !end) return false;
+
+      // Handle overnight shifts
+      if (end <= start) {
+        end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+      }
+
+      // Allow 60 mins early clock-in
+      const startBuffer = new Date(start.getTime() - 60 * 60 * 1000);
+
+      // If NOW < Start-60m: Too Early
+      if (now < startBuffer) return false;
+
+      // If NOW > End AND NOT clocked in: Shift Over (reset buttons)
+      if (now > end && !shift.clockIn) return false;
+
+      // If Clocked In: Extend active window to End+12h (overtime)
+      if (shift.clockIn) {
+        const overtimeEnd = new Date(end.getTime() + 12 * 60 * 60 * 1000);
+        if (now > overtimeEnd) return false;
+      }
+
+      return true;
+    });
+  }, [userShifts, user?.userId, currentTime]);
+
+  // ✅ Sync local UI state from Firestore (survives page refresh)
+  useEffect(() => {
+    if (!activeShift) {
+      // No active shift: reset everything
+      setClockInDone(false);
+      setClockOutDone(false);
+      setLockClockIn(false);
+      setLockClockOut(false);
+      setClockInTime(null);
+      setClockOutTime(null);
+      setClockInLocation("____");
+      setClockOutLocation("____");
+      return;
+    }
+
+    // Sync from Firestore fields
+    if (activeShift.clockIn) {
+      setClockInDone(true);
+      // Format the stored time for display
+      const ciDate = new Date(activeShift.clockIn);
+      if (!isNaN(ciDate)) {
+        setClockInTime(ciDate.toLocaleTimeString("en-CA", {
+          timeZone: "America/Edmonton", hour: "2-digit", minute: "2-digit"
+        }));
+      }
+      if (activeShift.clockInLocation) setClockInLocation(activeShift.clockInLocation);
+    }
+    if (activeShift.clockOut) {
+      setClockOutDone(true);
+      const coDate = new Date(activeShift.clockOut);
+      if (!isNaN(coDate)) {
+        setClockOutTime(coDate.toLocaleTimeString("en-CA", {
+          timeZone: "America/Edmonton", hour: "2-digit", minute: "2-digit"
+        }));
+      }
+      if (activeShift.clockOutLocation) setClockOutLocation(activeShift.clockOutLocation);
+    }
+    if (activeShift.clockInLocked) setLockClockIn(true);
+    if (activeShift.clockOutLocked) setLockClockOut(true);
+  }, [activeShift]);
+
+  const getEdmontonTimeString = (date = new Date()) => {
+    return new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/Edmonton",
       year: "numeric",
       month: "2-digit",
@@ -507,254 +644,243 @@ const activeShift = useMemo(() => {
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
-    }).format(new Date())
-  );
-
-  return userShifts.find((shift) => {
-    if (shift.userId !== user.userId) return false;
-
-    const start = parseShiftDate(shift.startDate, shift.startTime);
-    let end = parseShiftDate(shift.endDate, shift.endTime);
-
-    if (!start || !end) return false;
-
-    // ✅ FIX: handle overnight shifts (e.g. 11 PM → 12 AM)
-    if (end <= start) {
-      end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-    }
-
-    return now >= start && now <= end;
-  });
-}, [userShifts, user?.userId, currentTime]);
-
-
-const getEdmontonTimeString = (date = new Date()) => {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Edmonton",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date);
-};
+    }).format(date);
+  };
 
 
   // =============== CLOCK IN / OUT HANDLERS ===============
 
   const handleClockIn = async () => {
-  if (!activeShift || lockClockIn) return;
+    if (!activeShift || lockClockIn) return;
 
-  const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
-  const now = new Date();
+    const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
+    const now = new Date();
 
-  if (now < new Date(start.getTime() - 15 * 60000)) return;
+    if (now < new Date(start.getTime() - 60 * 60000)) return;
 
-  const { latitude, longitude } = await getUserLocation();
-  const address = await getAddressFromCoords(latitude, longitude);
+    const { latitude, longitude } = await getUserLocation();
+    const address = await getAddressFromCoords(latitude, longitude);
 
-  // UI state (unchanged)
-  setClockInTime(
-    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
-  setClockInLocation(address);
-  setClockInDone(true);
+    // UI state (unchanged)
+    setClockInTime(
+      now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+    setClockInLocation(address);
+    setClockInDone(true);
 
-  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT START)
-  await updateDoc(doc(db, "shifts", activeShift.id), {
-    clockIn: getEdmontonTimeString(start),
-    clockInLocation: address,
-    clockInTimeZone: "America/Edmonton",
-  });
-};
+    // ✅ STORE ACTUAL TIME AS ISO STRING (Consistent with Mobile App)
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      clockIn: new Date().toISOString(),
+      clockInLocation: address,
+      clockInTimeZone: "America/Edmonton",
+    });
+  };
+
+  const handleClockOut = async () => {
+    if (!activeShift || lockClockOut) return;
+
+    const end = parseShiftDate(activeShift.endDate, activeShift.endTime);
+    const now = new Date();
+
+    const { latitude, longitude } = await getUserLocation();
+    const address = await getAddressFromCoords(latitude, longitude);
+
+    // UI state (unchanged)
+    setClockOutTime(
+      now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+    setClockOutLocation(address);
+    setClockOutDone(true);
+
+    // ✅ STORE ACTUAL TIME AS ISO STRING (Consistent with Mobile App)
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      clockOut: new Date().toISOString(),
+      clockOutLocation: address,
+      clockOutTimeZone: "America/Edmonton",
+    });
+  };
 
 
-const handleClockOut = async () => {
-  if (!activeShift || lockClockOut) return;
+  const handleExtendShift = async () => {
+    if (!activeShift) return;
 
-  const end = parseShiftDate(activeShift.endDate, activeShift.endTime);
-  const now = new Date();
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      extended: true,
+      extendedShift: true, // Keep for backward compat
+      extendedAt: new Date().toISOString(),
+    });
+  };
 
-  const { latitude, longitude } = await getUserLocation();
-  const address = await getAddressFromCoords(latitude, longitude);
+  // =============== REAL TIME TICKER (DO NOT REMOVE) ===============
+  // =============== REAL TIME TICKER (FIXED) ===============
+  useEffect(() => {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "America/Edmonton",
+    });
 
-  // UI state (unchanged)
-  setClockOutTime(
-    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
-  setClockOutLocation(address);
-  setClockOutDone(true);
+    const timer = setInterval(() => {
+      setCurrentTime(formatter.format(new Date())); // ✅ always string
+    }, 30 * 1000);
 
-  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT END)
-  await updateDoc(doc(db, "shifts", activeShift.id), {
-    clockOut: getEdmontonTimeString(end),
-    clockOutLocation: address,
-    clockOutTimeZone: "America/Edmonton",
-  });
-};
-
-
-const handleExtendShift = async () => {
-  if (!activeShift) return;
-
-  await updateDoc(doc(db, "shifts", activeShift.id), {
-    extendedShift: true,
-  });
-};
-
-// =============== REAL TIME TICKER (DO NOT REMOVE) ===============
-// =============== REAL TIME TICKER (FIXED) ===============
-useEffect(() => {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZone: "America/Edmonton",
-  });
-
-  const timer = setInterval(() => {
-    setCurrentTime(formatter.format(new Date())); // ✅ always string
-  }, 30 * 1000);
-
-  return () => clearInterval(timer);
-}, []);
+    return () => clearInterval(timer);
+  }, []);
 
 
 
 
   // =============== MAIN SHIFT REMINDER / LOCK / AUTO CLOCK-OUT ENGINE ===============
-// =============== MAIN SHIFT REMINDER / LOCK / AUTO CLOCK-OUT ENGINE ===============
-useEffect(() => {
-  if (!activeShift) return;
+  // =============== MAIN SHIFT REMINDER / LOCK / AUTO CLOCK-OUT ENGINE ===============
+  useEffect(() => {
+    if (!activeShift) return;
 
-  (async () => {
-    // Edmonton time
-    const now = new Date(
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "America/Edmonton",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).format(new Date())
-    );
+    (async () => {
+      // Edmonton time
+      const now = new Date(
+        new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Edmonton",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date())
+      );
 
-    const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
-    let end = parseShiftDate(activeShift.endDate, activeShift.endTime);
+      const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
+      let end = parseShiftDate(activeShift.endDate, activeShift.endTime);
 
-    if (!start || !end) return;
+      if (!start || !end) return;
 
-    // Overnight shift fix
-    if (end <= start) {
-      end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-    }
-
-    const diffStart = minutesDiff(now, start);
-    const diffEnd = minutesDiff(now, end);
-
-    // ================= CLOCK-IN LOGIC =================
-    if (!clockInDone && !activeShift.clockInLocked) {
-      // BEFORE SHIFT (every 5 min)
-      if (diffStart >= -15 && diffStart < 0 && diffStart % 5 === 0) {
-        sendNotification(userDocId, {
-          type: "shift",
-          title: "Upcoming Shift",
-          message:
-            "Your shift is going to start soon. Please clock in at the time of work.",
-        });
+      // Overnight shift fix
+      if (end <= start) {
+        end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
       }
 
-      // EXACT START
-      if (diffStart === 0) {
-        sendNotification(userDocId, {
-          type: "shift",
-          title: "Shift Started",
-          message: "Your shift has started. Please clock in.",
-        });
-      }
+      const diffStart = minutesDiff(now, start);
+      const diffEnd = minutesDiff(now, end);
 
-      // AFTER START (every 5 min)
-      if (diffStart > 0 && diffStart < 15 && diffStart % 5 === 0) {
-        const remaining = 15 - diffStart;
-        sendNotification(userDocId, {
-          type: "shift",
-          title: "Clock-In Reminder",
-          message: `Your shift has already started. Please clock in. Clock-in will be disabled in ${remaining} minutes.`,
-        });
-      }
-
-      // LOCK CLOCK-IN
-      if (diffStart >= 15) {
-        setLockClockIn(true);
-
-        await updateDoc(doc(db, "shifts", activeShift.id), {
-          clockInLocked: true,
-        });
-
-        if (adminId) {
-          sendNotification(adminId, {
-            type: "alert",
-            title: "Clock-In Missed",
-            message: `${activeShift.name} did not clock in for the shift.`,
+      // ================= CLOCK-IN LOGIC =================
+      if (!activeShift.clockIn && !activeShift.clockInLocked) {
+        // BEFORE SHIFT (every 5 min)
+        if (diffStart >= -15 && diffStart < 0 && diffStart % 5 === 0) {
+          sendNotification(userDocId, {
+            type: "shift",
+            title: "Upcoming Shift",
+            message:
+              "Your shift is going to start soon. Please clock in at the time of work.",
           });
         }
+
+        // EXACT START
+        if (diffStart === 0) {
+          sendNotification(userDocId, {
+            type: "shift",
+            title: "Shift Started",
+            message: "Your shift has started. Please clock in.",
+          });
+        }
+
+        // AFTER START (every 5 min)
+        if (diffStart > 0 && diffStart < 15 && diffStart % 5 === 0) {
+          const remaining = 15 - diffStart;
+          sendNotification(userDocId, {
+            type: "shift",
+            title: "Clock-In Reminder",
+            message: `Your shift has already started. Please clock in. Clock-in will be disabled in ${remaining} minutes.`,
+          });
+        }
+
+        // LOCK CLOCK-IN (15 mins after start)
+        if (diffStart >= 15) {
+          setLockClockIn(true);
+
+          await updateDoc(doc(db, "shifts", activeShift.id), {
+            clockInLocked: true,
+          });
+
+          // Final notification: Contact Admin
+          sendNotification(userDocId, {
+            type: "alert",
+            title: "Shift Locked 🔒",
+            message: "You missed the clock-in window. Please contact Admin.",
+          });
+
+          if (adminId) {
+            sendNotification(adminId, {
+              type: "alert",
+              title: "Clock-In Missed",
+              message: `${activeShift.name} did not clock in for the shift.`,
+            });
+          }
+        }
       }
-    }
 
-    // ================= CLOCK-OUT LOGIC =================
-    if (
-      !clockOutDone &&
-      !activeShift.extendedShift &&
-      !activeShift.clockOutLocked
-    ) {
-      // BEFORE END (every 5 min)
-      if (diffEnd >= -15 && diffEnd < 0 && diffEnd % 5 === 0) {
-        sendNotification(userDocId, {
-          type: "shift",
-          title: "Shift Ending Soon",
-          message: "Your shift is ending soon. Please clock out on time.",
-          actions: [
-            {
-              label: "Extend Shift",
-              action: "EXTEND_SHIFT",
-              shiftId: activeShift.id,
-            },
-          ],
-        });
+      // ================= CLOCK-OUT LOGIC =================
+      if (
+        !activeShift.clockOut &&
+        !activeShift.extended &&
+        !activeShift.extendedShift &&
+        !activeShift.clockOutLocked
+      ) {
+        // BEFORE END (every 5 min)
+        if (diffEnd >= -15 && diffEnd < 0 && diffEnd % 5 === 0) {
+          sendNotification(userDocId, {
+            type: "shift",
+            title: "Shift Ending Soon",
+            message: "Your shift is ending soon. Do you want to extend?",
+            actions: [
+              {
+                label: "Yes, Extend Shift",
+                action: "EXTEND_SHIFT",
+                shiftId: activeShift.id,
+              },
+            ],
+          });
+        }
+
+        // EXACT END
+        if (diffEnd === 0) {
+          sendNotification(userDocId, {
+            type: "shift",
+            title: "Shift Ended",
+            message: "Your shift has ended. Please clock out or extend.",
+          });
+        }
+
+        // AUTO CLOCK-OUT AFTER 15 MIN
+        if (diffEnd >= 15) {
+          try {
+            const { latitude, longitude } = await getUserLocation();
+            const address = await getAddressFromCoords(latitude, longitude);
+
+            await updateDoc(doc(db, "shifts", activeShift.id), {
+              clockOut: end.toISOString(),
+              clockOutLocation: address,
+              clockOutLocked: true,
+              autoClockedOut: true,
+            });
+          } catch (err) {
+            // If location fails, still auto-clock-out
+            await updateDoc(doc(db, "shifts", activeShift.id), {
+              clockOut: end.toISOString(),
+              clockOutLocation: "Auto Clock Out (System)",
+              clockOutLocked: true,
+              autoClockedOut: true,
+            });
+          }
+
+          setClockOutDone(true);
+          setLockClockOut(true);
+        }
       }
-
-      // EXACT END
-      if (diffEnd === 0) {
-        sendNotification(userDocId, {
-          type: "shift",
-          title: "Shift Ended",
-          message: "Your shift has ended. Please clock out.",
-        });
-      }
-
-      // AUTO CLOCK-OUT AFTER 15 MIN
-      if (diffEnd >= 15) {
-        const { latitude, longitude } = await getUserLocation();
-        const address = await getAddressFromCoords(latitude, longitude);
-
-        await updateDoc(doc(db, "shifts", activeShift.id), {
-          clockOut: end.toISOString(),
-          clockOutLocation: address,
-          clockOutLocked: true,
-        });
-
-        setClockOutDone(true);
-        setLockClockOut(true);
-      }
-    }
-  })();
-}, [activeShift, currentTime]);
+    })();
+  }, [activeShift, currentTime]);
 
 
 
@@ -769,14 +895,18 @@ useEffect(() => {
         <div className="flex gap-4 items-center">
           <div className="flex gap-[8px] items-center flex-wrap">
             <p className="font-bold text-[16px] leading-[24px]">Filter</p>
-            <select className="border-[2px] rounded-[6px] font-medium text-[14px] leading-[20px] gap-[10px] focus:outline-none text-light-green p-1 w-full sm:w-auto">
-              <option value="" className="text-light-black">
+            <select
+              value={statsFilter}
+              onChange={(e) => setStatsFilter(e.target.value)}
+              className="border-[2px] rounded-[6px] font-medium text-[14px] leading-[20px] gap-[10px] focus:outline-none text-light-green p-1 w-full sm:w-auto"
+            >
+              <option value="weekly" className="text-light-black">
                 Weekly
               </option>
-              <option value="car" className="text-light-black">
+              <option value="monthly" className="text-light-black">
                 Monthly
               </option>
-              <option value="bike" className="text-light-black">
+              <option value="yearly" className="text-light-black">
                 Yearly
               </option>
             </select>
@@ -803,33 +933,167 @@ useEffect(() => {
         onMouseLeave={handleMouseLeave}
         onMouseUp={handleMouseUp}
       >
-        {[
-          "Total Shifts Pending",
-          "Total Shifts Completed",
-          "OverTime Hours",
-          "Average Working Hours",
-        ].map((title, idx) => (
-          <div
-            key={idx}
-            className="flex flex-col bg-white min-w-[180px] sm:min-w-[220px] md:min-w-[251px] h-[78px] gap-[7px] opacity-100 rounded-[8px] border border-gray p-[10px] flex-shrink-0"
-          >
-            <div className="flex gap-[8px]">
-              <img
-                src="/images/people.png"
-                alt=""
-                className="w-[16px] h-[16px]"
-              />
-              <h3 className="font-normal text-[12px] leading-[16px]">
-                {title}
-              </h3>
+        {(() => {
+          // ✅ Robust date extractor — uses SAME logic as the working shift list filter
+          const getShiftDate = (shift) => {
+            try {
+              const sd = shift.startDate;
+              if (!sd) return null;
+
+              let d;
+              // 1. Firestore Timestamp
+              if (sd.toDate) {
+                d = sd.toDate();
+              }
+              // 2. Already a Date
+              else if (sd instanceof Date) {
+                d = sd;
+              }
+              // 3. String — try native parsing
+              else if (typeof sd === "string") {
+                d = new Date(sd);
+                // If native fails, try Date.parse
+                if (isNaN(d.getTime())) {
+                  const parsed = Date.parse(sd);
+                  d = !isNaN(parsed) ? new Date(parsed) : null;
+                }
+              }
+              // 4. Firestore-like object with seconds
+              else if (sd.seconds) {
+                d = new Date(sd.seconds * 1000);
+              }
+              else {
+                return null;
+              }
+
+              if (!d || isNaN(d.getTime())) return null;
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            } catch {
+              return null;
+            }
+          };
+
+          // ✅ Period boundaries
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          let periodStart, periodEnd;
+
+          if (statsFilter === "weekly") {
+            const day = today.getDay();
+            const diff = day === 0 ? 6 : day - 1;
+            periodStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - diff);
+            periodEnd = new Date(periodStart);
+            periodEnd.setDate(periodEnd.getDate() + 6);
+          } else if (statsFilter === "monthly") {
+            periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          } else {
+            periodStart = new Date(today.getFullYear(), 0, 1);
+            periodEnd = new Date(today.getFullYear(), 11, 31);
+          }
+          periodStart.setHours(0, 0, 0, 0);
+          periodEnd.setHours(23, 59, 59, 999);
+
+          // 🔍 DEBUG: Log everything
+          console.log(`📊 ANALYTICS [${statsFilter}]`, {
+            periodStart: periodStart.toDateString(),
+            periodEnd: periodEnd.toDateString(),
+            totalAllUserShifts: allUserShifts.length,
+          });
+
+          // Show first 5 shifts' raw startDate for debugging
+          allUserShifts.slice(0, 5).forEach((s, i) => {
+            const sd = s.startDate;
+            const parsed = getShiftDate(s);
+            console.log(`  Shift ${i}: id=${s.id}`, {
+              rawStartDate: sd,
+              rawType: typeof sd,
+              hasToDate: !!(sd?.toDate),
+              hasSeconds: !!(sd?.seconds),
+              parsedDate: parsed ? parsed.toDateString() : "FAILED",
+              inRange: parsed ? (parsed >= periodStart && parsed <= periodEnd) : false,
+            });
+          });
+
+          // ✅ Filter shifts within the selected period
+          const allShifts = allUserShifts.filter(s => {
+            const shiftDate = getShiftDate(s);
+            if (!shiftDate) return false;
+            return shiftDate >= periodStart && shiftDate <= periodEnd;
+          });
+
+          console.log(`📊 Filtered: ${allShifts.length} shifts in ${statsFilter} period`);
+
+          // ✅ Completed = past shifts, Pending = today + future
+          const completedShifts = allShifts.filter(s => {
+            const d = getShiftDate(s);
+            return d && d < today;
+          });
+          const pendingShifts = allShifts.filter(s => {
+            const d = getShiftDate(s);
+            return d && d >= today;
+          });
+
+          // Calculate overtime & avg working hours
+          let totalOvertimeMs = 0;
+          let totalWorkedMs = 0;
+          let shiftsWithHours = 0;
+
+          completedShifts.forEach(s => {
+            const start = parseShiftDate(s.startDate, s.startTime);
+            let end = parseShiftDate(s.endDate, s.endTime);
+            if (!start || !end) return;
+            if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+
+            const scheduled = end.getTime() - start.getTime();
+            const ci = s.clockIn ? new Date(s.clockIn) : null;
+            const co = s.clockOut ? new Date(s.clockOut) : null;
+
+            let worked = scheduled; // default to scheduled
+            if (ci && co && !isNaN(ci) && !isNaN(co)) {
+              worked = co.getTime() - ci.getTime();
+            }
+
+            totalWorkedMs += worked;
+            shiftsWithHours++;
+            if (worked > scheduled) totalOvertimeMs += (worked - scheduled);
+          });
+
+          const overtimeHrs = (totalOvertimeMs / (1000 * 60 * 60)).toFixed(1);
+          const avgHrs = shiftsWithHours > 0
+            ? (totalWorkedMs / shiftsWithHours / (1000 * 60 * 60)).toFixed(1)
+            : "0";
+
+          const cards = [
+            { title: "Total Shifts Pending", value: pendingShifts.length },
+            { title: "Total Shifts Completed", value: completedShifts.length },
+            { title: "OverTime Hours", value: overtimeHrs },
+            { title: "Average Working Hours", value: avgHrs },
+          ];
+
+          return cards.map((card, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col bg-white min-w-[180px] sm:min-w-[220px] md:min-w-[251px] h-[78px] gap-[7px] opacity-100 rounded-[8px] border border-gray p-[10px] flex-shrink-0"
+            >
+              <div className="flex gap-[8px]">
+                <img
+                  src="/images/people.png"
+                  alt=""
+                  className="w-[16px] h-[16px]"
+                />
+                <h3 className="font-normal text-[12px] leading-[16px]">
+                  {card.title}
+                </h3>
+              </div>
+              <div className="flex justify-between items-center w-full">
+                <p className="font-bold text-[32px] leading-[36px] text-light-black">
+                  {card.value}
+                </p>
+              </div>
             </div>
-            <div className="flex justify-between items-center w-full">
-              <p className="font-bold text-[32px] leading-[36px] text-light-black">
-                20
-              </p>
-            </div>
-          </div>
-        ))}
+          ));
+        })()}
       </div>
 
       <hr className="border-t border-gray-300" />
@@ -878,8 +1142,8 @@ useEffect(() => {
                 "
                   >
                     Clock-in is available 15 minutes before your shift starts and will be disabled 15 minutes after if not used.
-                     Clock-out times are rounded to the scheduled shift end within a 15-minute window.
-                      Please ensure timely clock-in and clock-out.
+                    Clock-out times are rounded to the scheduled shift end within a 15-minute window.
+                    Please ensure timely clock-in and clock-out.
                     {/* CURVED ARROW */}
                     <svg
                       className="absolute -bottom-2 right-1 text-white drop-shadow-xl"
@@ -944,48 +1208,46 @@ useEffect(() => {
                 </div>
               </div>
 
-            <hr className="border-t border-gray-300" />
+              <hr className="border-t border-gray-300" />
 
-            {/* Buttons */}
-            <div className="flex gap-[20px] justify-end">
-              {/* Clock In Button */}
-              <button
-                onClick={handleClockIn}
-                disabled={clockInDone || lockClockIn}
-                className={`flex items-center gap-2 py-[6px] px-3 rounded text-[14px] border transition ${
-                  clockInDone || lockClockIn
+              {/* Buttons */}
+              <div className="flex gap-[20px] justify-end">
+                {/* Clock In Button */}
+                <button
+                  onClick={handleClockIn}
+                  disabled={!!(activeShift?.clockIn) || lockClockIn || !activeShift}
+                  className={`flex items-center gap-2 py-[6px] px-3 rounded text-[14px] border transition ${!!(activeShift?.clockIn) || lockClockIn || !activeShift
                     ? "bg-gray-100 text-gray-400 border-gray-400 cursor-not-allowed"
                     : "bg-[#1D5F33] text-white border-[#1D5F33]"
-                }`}
-              >
-                <CgEnter />{" "}
-                {clockInDone
-                  ? "Clocked In"
-                  : lockClockIn
-                  ? "Clock-In Locked"
-                  : "Clock In"}
-              </button>
+                    }`}
+                >
+                  <CgEnter />{" "}
+                  {activeShift?.clockIn
+                    ? "Clocked In"
+                    : lockClockIn
+                      ? "Contact Admin"
+                      : "Clock In"}
+                </button>
 
-              {/* Clock Out Button */}
-              <button
-                onClick={handleClockOut}
-                disabled={clockOutDone || lockClockOut}
-                className={`flex items-center gap-2 py-[6px] px-3 rounded text-[14px] border transition ${
-                  clockOutDone || lockClockOut
+                {/* Clock Out Button — Always active if clocked in */}
+                <button
+                  onClick={handleClockOut}
+                  disabled={!activeShift?.clockIn || !!(activeShift?.clockOut) || lockClockOut}
+                  className={`flex items-center gap-2 py-[6px] px-3 rounded text-[14px] border transition ${!activeShift?.clockIn || !!(activeShift?.clockOut) || lockClockOut
                     ? "bg-gray-100 text-gray-400 border-gray-400 cursor-not-allowed"
                     : "bg-white text-red-600 border-red-500"
-                }`}
-              >
-                <TbLogout2 />{" "}
-                {clockOutDone
-                  ? "Clocked Out"
-                  : lockClockOut
-                  ? "Clock-Out Locked"
-                  : "Clock Out"}
-              </button>
+                    }`}
+                >
+                  <TbLogout2 />{" "}
+                  {activeShift?.clockOut
+                    ? "Clocked Out"
+                    : !activeShift?.clockIn
+                      ? "Clock Out"
+                      : "Clock Out"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
           {/* Apply Leave */}
           <div className="flex flex-col bg-white rounded-[6px] p-4 gap-4 w-70">
@@ -994,39 +1256,16 @@ useEffect(() => {
               <p className="font-bold text-[16px] leading-[20px]">Apply Leave</p>
             </div>
             <div className="flex flex-col">
-              <p className="font-bold text-[10px] leading-[20px] text-[#809191] ">
+              <p className="font-bold text-[10px] leading-[20px] text-[#809191]">
                 UPCOMING LEAVE
               </p>
-              <p className="font-bold text-[24px] leading-[24px]">
-                02-09-2025
-              </p>
+              <p className="font-bold text-[24px] leading-[24px]">--</p>
             </div>
             <hr className="border-t border-gray-300" />
-
             <div className="flex flex-col gap-1">
-              <div className="flex justify-between">
-                <p className="font-normal text-[14px] leading-[20px]">
-                  Casual Leaves
-                </p>
-                <p className="font-bold text-[14px] leading-[20px]">3</p>
-              </div>
-              <div className="flex justify-between">
-                <p className="font-normal text-[14px] leading-[20px]">
-                  Sick Leaves
-                </p>
-                <p className="font-bold text-[14px] leading-[20px]">3</p>
-              </div>
-              <div className="flex justify-between">
-                <p className="font-normal text-[14px] leading-[20px]">
-                  Earned Leaves
-                </p>
-                <p className="font-bold text-[14px] leading-[20px]">3</p>
-              </div>
-              <div className="flex justify-between">
-                <p className="font-normal text-[14px] leading-[20px]">
-                  Paid Leaves
-                </p>
-                <p className="font-bold text-[14px] leading-[20px]">3</p>
+              <div className="flex justify-between mb-18">
+                <p className="font-normal text-[14px] leading-[20px]">Leaves Taken</p>
+                <p className="font-bold text-[14px] leading-[20px]">0</p>
               </div>
             </div>
             <hr className="border-t border-gray-300" />
@@ -1060,12 +1299,31 @@ useEffect(() => {
               </p>
 
               <div className="flex justify-between items-center">
-                <p className="font-bold text-[24px] leading-[24px] flex items-end gap-1">
-                  72
-                  <span className="text-[#809191] text-[10px] justify-end">
-                    4500 KM
-                  </span>
-                </p>
+                <div className="flex flex-col">
+                  {/* Show correct rate based on total KMs */}
+                  {(() => {
+                    const totalKMs = Number(user?.totalKMs) || 0;
+                    const rateBefore = user?.rateBefore5000km;
+                    const rateAfter = user?.rateAfter5000km;
+                    const isOver5000 = totalKMs >= 5000;
+                    const activeRate = isOver5000 ? rateAfter : rateBefore;
+
+                    return (
+                      <>
+                        <p className="font-bold text-[24px] leading-[24px] flex items-end gap-1">
+                          {activeRate ?? "—"}
+                          {/* <span className="text-[#809191] text-[10px]">
+                            ¢/km · {isOver5000 ? "after 5,000km" : "before 5,000km"}
+                          </span> */}
+                        </p>
+                        {/* Total KMs shown small below */}
+                        <p className="text-[10px] text-[#809191] mt-[2px]">
+                          Total KMs: <span className="font-semibold">{totalKMs} km</span>
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
 
                 {/* Info Tooltip */}
                 <div className="relative group">
@@ -1088,9 +1346,9 @@ useEffect(() => {
                   z-20
                 "
                   >
-                    Before 5,000 km, your transportation rate will be charged at
-                    72¢ per kilometer. After 5,000 km, the rate will increase to
-                    66¢ per kilometer.
+                    Before 5,000 km, your transportation rate will be charged at{" "}
+                    {user?.rateBefore5000km ?? "—"}¢ per kilometer. After 5,000 km, the rate
+                    will increase to {user?.rateAfter5000km ?? "—"}¢ per kilometer.
                     {/* CURVED ARROW */}
                     <svg
                       className="absolute -bottom-2 right-1 text-white drop-shadow-xl"
@@ -1112,18 +1370,25 @@ useEffect(() => {
                 <p className="font-normal text-[14px] leading-[20px]">
                   Total Rides
                 </p>
-                <p className="font-bold text-[14px] leading-[20px]">50</p>
+                {/* Count of ALL transportation shifts for this user (unfiltered by date) */}
+                <p className="font-bold text-[14px] leading-[20px]">
+                  {allUserShifts.filter(isTransportationShift).length}
+                </p>
               </div>
 
               <div className="flex justify-between">
                 <p className="font-normal text-[14px] leading-[20px]">
                   CRA Mileage Status
                 </p>
-                <p className="font-bold text-[14px] leading-[20px]">4500</p>
+                {/* Total KMs from user profile */}
+                <p className="font-bold text-[14px] leading-[20px]">
+                  {Number(user?.totalKMs) || 0} km
+                </p>
               </div>
             </div>
             <hr className="border-t border-gray-300" />
           </div>
+
         </div>
 
         {/* Bottom section: Shifts / Calendar */}
@@ -1134,31 +1399,28 @@ useEffect(() => {
               <div className="flex gap-5">
                 <div
                   onClick={() => setShiftCategory("Shifts")}
-                  className={`pb-2 text-sm font-medium cursor-pointer ${
-                    shiftCategory === "Shifts"
-                      ? "text-dark-green border-b-2 border-dark-green font-bold"
-                      : "text-light-black font-bold"
-                  }`}
+                  className={`pb-2 text-sm font-medium cursor-pointer ${shiftCategory === "Shifts"
+                    ? "text-dark-green border-b-2 border-dark-green font-bold"
+                    : "text-light-black font-bold"
+                    }`}
                 >
                   Shifts({userShifts.length})
                 </div>
                 <div
                   onClick={() => setShiftCategory("Calendar")}
-                  className={`pb-2 text-sm font-medium cursor-pointer ${
-                    shiftCategory === "Calender"
-                      ? "text-dark-green border-b-2 border-dark-green font-bold"
-                      : "text-light-black font-bold"
-                  }`}
+                  className={`pb-2 text-sm font-medium cursor-pointer ${shiftCategory === "Calender"
+                    ? "text-dark-green border-b-2 border-dark-green font-bold"
+                    : "text-light-black font-bold"
+                    }`}
                 >
                   Calendar
                 </div>
                 <div
                   onClick={() => setShiftCategory("Transportation")}
-                  className={`pb-2 text-sm font-medium cursor-pointer ${
-                    shiftCategory === "Transportation"
-                      ? "text-dark-green border-b-2 border-dark-green font-bold"
-                      : "text-light-black font-bold"
-                  }`}
+                  className={`pb-2 text-sm font-medium cursor-pointer ${shiftCategory === "Transportation"
+                    ? "text-dark-green border-b-2 border-dark-green font-bold"
+                    : "text-light-black font-bold"
+                    }`}
                 >
                   Transportations({userTransportationShift.length})
                 </div>
@@ -1238,18 +1500,18 @@ useEffect(() => {
 
           {/* All shifts grid */}
           <div className="min-h-[400px]">
-          {shiftCategory === "Shifts" && (
-            <UserShiftsData userShifts={userShifts} />
-          )}
+            {shiftCategory === "Shifts" && (
+              <UserShiftsData userShifts={userShifts} />
+            )}
 
-          {shiftCategory === "Calendar" && (
-            <ShiftCalendar user={user} />
-          )}
+            {shiftCategory === "Calendar" && (
+              <ShiftCalendar user={user} />
+            )}
 
-          {shiftCategory === "Transportation" && (
-            <UserTransportationShifts filteredShifts={userTransportationShift} />
-          )}
-        </div>
+            {shiftCategory === "Transportation" && (
+              <UserTransportationShifts filteredShifts={userTransportationShift} user={user} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1295,7 +1557,7 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Leave modal */}
+      {/* Day Off modal */}
       {dayOffOpen && (
         <div className="fixed inset-0 bg-black/40 z-10 flex items-center justify-center">
           <div className="flex flex-col gap-2 rounded-[8px] bg-white w-[565px] overflow-y-scroll max-h-[630px]">
@@ -1306,6 +1568,7 @@ useEffect(() => {
 
             {/* Form Body */}
             <div className="flex flex-col gap-4 text-light-black p-4">
+
               {/* Leave Type */}
               <div className="flex flex-col gap-[6px]">
                 <label className="font-bold text-[14px] leading-[20px]">
@@ -1317,10 +1580,7 @@ useEffect(() => {
                   className="border border-light-gray rounded p-[10px] text-[14px] font-normal"
                 >
                   <option value="">Select Leave Type</option>
-                  <option value="Casual">Casual Leave</option>
-                  <option value="Earned">Earned Leave</option>
-                  <option value="Sick">Sick Leave</option>
-                  <option value="Paid">Paid Leave</option>
+                  <option value="Casual">Casual</option>
                 </select>
               </div>
 
@@ -1336,7 +1596,7 @@ useEffect(() => {
                     <CustomCalendar
                       selectedDates={selectedDates}
                       onDatesChange={setSelectedDates}
-                      onClose={() => {}}
+                      onClose={() => { }}
                     />
                   </div>
 
@@ -1367,8 +1627,8 @@ useEffect(() => {
                         value={
                           selectedDates?.[selectedDates.length - 1]
                             ? selectedDates[
-                                selectedDates.length - 1
-                              ].toLocaleDateString()
+                              selectedDates.length - 1
+                            ].toLocaleDateString()
                             : "End Date"
                         }
                         readOnly
@@ -1416,9 +1676,8 @@ useEffect(() => {
       {/* ✅ Notification Slider */}
       {showNotifications && (
         <div
-          className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${
-            showNotifications ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-lg z-50 transform transition-transform duration-500 ${showNotifications ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           <NotificationSlider
             onClose={() => setShowNotifications(false)}

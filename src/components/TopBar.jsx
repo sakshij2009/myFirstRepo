@@ -5,14 +5,14 @@ import { MdLogout } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
 import UserCard from "./UserCard";
 
-const TopBar = ({ user ,onLogout}) => {
+const TopBar = ({ user, onLogout }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
   // ✅ Handle logout and redirect
-   const handleLogout = () => {
+  const handleLogout = () => {
     if (onLogout) {
       onLogout(); // use parent prop if provided
     } else {
@@ -78,14 +78,15 @@ const TopBar = ({ user ,onLogout}) => {
             <img
               src={user.profilePhotoUrl}
               alt={user.name || "User"}
-              className={`block w-full h-full object-center ${
-                user?.role === "admin" ? "object-contain" : "object-cover"
-              }`}
+              className={`block w-full h-full object-center ${user?.role === "admin" ? "object-contain" : "object-cover"
+                }`}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-dark-green font-bold text-lg md:text-xl">
-              {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
-            </div>
+            <img
+              src="/images/profile.jpeg"
+              alt="Default User"
+              className="w-full h-full object-cover"
+            />
           )}
         </div>
 
@@ -95,7 +96,7 @@ const TopBar = ({ user ,onLogout}) => {
             ref={dropdownRef}
             className="bg-white rounded flex flex-col text-light-black absolute right-3 top-20 shadow-2xl z-50 w-44"
           >
-            {user?.role === "user" && (
+            {user?.role?.toLowerCase() === "user" && (
               <div
                 className="flex gap-2 py-2 px-3 items-center text-sm hover:bg-gray-100 hover:text-dark-green cursor-pointer"
                 onClick={() => setIsModalOpen(true)}
@@ -127,7 +128,7 @@ const TopBar = ({ user ,onLogout}) => {
             onClick={() => setIsModalOpen(false)}
           >
             <div
-              className="relative rounded-xl shadow-lg w-[374px] h-[270px]"
+              className="relative"
               onClick={(e) => e.stopPropagation()}
             >
               <UserCard user={user} />

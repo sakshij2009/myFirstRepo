@@ -226,12 +226,11 @@ export default function MedicalContactLogModal({ visible, onClose, shift, onSubm
               <View style={styles.submitIcon}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#2563EB" />
               </View>
-              <Text style={styles.submitTitle}>Critical Incident Report Submission</Text>
+              <Text style={styles.submitTitle}>Medical Contact Log</Text>
             </View>
 
             <Text style={styles.submitText}>
-              This report must be submitted immediately upon completion. Management will be automatically notified.
-              Ensure all sections are complete and accurate as this is a legal document.
+              Use this form to document medical-related contacts, incidents, or communications involving a client.
             </Text>
 
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>

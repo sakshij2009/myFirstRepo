@@ -10,6 +10,8 @@ import ManageAgency from "./ManageAgency";
 import ManageClients from "./ManageClients";
 import ShiftReport from "./ShiftReport";
 import CriticalIncidentForm from "./CriticalIncidentForm";
+import Payroll from "./Payroll";
+import Billing from "./Billing";
 
 // Form Components
 import AddUserForm from "./AddUserForm";
@@ -22,7 +24,7 @@ import ManageIntakeForms from "./ManageIntakeForms";
 import AddIntakeWorkerForm from "./AddIntakeWorker";
 import AddIntakeWorker from "./AddIntakeWorker";
 
-const AdminHomePage = ({ user ,setUser}) => {
+const AdminHomePage = ({ user, setUser }) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -50,29 +52,31 @@ const AdminHomePage = ({ user ,setUser}) => {
             <Route path="clients" element={<ManageClients />} />
             <Route path="users" element={<ManageUser />} />
             <Route path="agency" element={<ManageAgency />} />
-             <Route path="intake-workers" element={<ManageIntakeWorkers/>} />
-             <Route path="intake-forms" element={<ManageIntakeForms/>} />
-            <Route path="shift-report/:id" element={<ShiftReport user={user}/>} />
+            <Route path="intake-workers" element={<ManageIntakeWorkers />} />
+            <Route path="intake-forms" element={<ManageIntakeForms />} />
+            <Route path="shift-report/:id" element={<ShiftReport user={user} />} />
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
+            <Route path="payroll" element={<Payroll />} />
+            <Route path="billing" element={<Billing />} />
 
             {/* ✅ Adding Page (Route-based Forms) */}
-            <Route path="add" element={<AddingPage  user={user}/>}>
-              <Route path="add-user" element={<AddUserForm mode="add" user={user}/>} />
-              <Route path="update-user/:id" element={<AddUserForm mode="update" user={user}/>} />
-              <Route path="add-user-shift" element={<AddUserShift mode="add" user={user}/>} />
-              <Route path="update-user-shift/:id" element={<AddUserShift mode="update" user={user}/>} />
-              <Route path="add-agency" element={<AddAgency mode="add" user={user}/>} />
-              <Route path="update-agency/:id" element={<AddAgency mode="update" user={user}/>} />
-              <Route path="add-client" element={<AddClient mode="add" user={user}/>} />
-              <Route path="update-client/:id" element={<AddClient mode="update" user={user}/>} />
-              <Route path="add-intake-form" element={<IntakeForm mode="add" user={user}/>} />
-              <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user}/>} />
-               <Route path="add-intakeworker" element={<AddIntakeWorker mode="add" user={user}/>} />
-              <Route path="update-intakeworker/:id" element={<AddIntakeWorker mode="update" user={user}/>} />
+            <Route path="add" element={<AddingPage user={user} />}>
+              <Route path="add-user" element={<AddUserForm mode="add" user={user} />} />
+              <Route path="update-user/:id" element={<AddUserForm mode="update" user={user} />} />
+              <Route path="add-user-shift" element={<AddUserShift mode="add" user={user} />} />
+              <Route path="update-user-shift/:id" element={<AddUserShift mode="update" user={user} />} />
+              <Route path="add-agency" element={<AddAgency mode="add" user={user} />} />
+              <Route path="update-agency/:id" element={<AddAgency mode="update" user={user} />} />
+              <Route path="add-client" element={<AddClient mode="add" user={user} />} />
+              <Route path="update-client/:id" element={<AddClient mode="update" user={user} />} />
+              <Route path="add-intake-form" element={<IntakeForm mode="add" user={user} />} />
+              <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user} />} />
+              <Route path="add-intakeworker" element={<AddIntakeWorker mode="add" user={user} />} />
+              <Route path="update-intakeworker/:id" element={<AddIntakeWorker mode="update" user={user} />} />
 
             </Route>
 
-            
+
 
 
             {/* ✅ Default fallback to dashboard */}

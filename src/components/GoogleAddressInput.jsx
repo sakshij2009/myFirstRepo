@@ -37,7 +37,7 @@ const GoogleAddressInput = ({ value, onChange, onLocationSelect, placeholder }) 
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full border border-light-gray rounded-sm p-[10px]"
+      className="w-full border border-light-gray rounded-sm p-[10px] text-sm h-[42px]"
     />
   );
 };

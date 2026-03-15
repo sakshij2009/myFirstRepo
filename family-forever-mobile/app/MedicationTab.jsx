@@ -1,619 +1,486 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  Pressable,
-  Modal,
-  Alert,
-} from "react-native";
-import {
-  collection,
-  getDocs,
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore";
-import { db } from "../src/firebase/config";
+  View, Text, ScrollView, Pressable, TextInput,
+  Modal, StyleSheet, ActivityIndicator, Alert, Dimensions
+} from 'react-native';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../src/firebase/config';
 
-/* ---------------- COMPONENT ---------------- */
+const { width, height } = Dimensions.get('window');
+
+const TAG_COLORS = {
+  Morning: '#FFF4E6',
+  Afternoon: '#E3F2FD',
+  Night: '#F3E5F5',
+  Emergency: '#FFEBEE',
+};
+
+const TAG_TEXT_COLORS = {
+  Morning: '#E65100',
+  Afternoon: '#1565C0',
+  Night: '#6A1B9A',
+  Emergency: '#C62828',
+};
+
 export default function MedicationTab({ shift }) {
-  const today = new Date();
+  const todayDate = new Date();
 
   const [currentDate, setCurrentDate] = useState({
-    month: today.getMonth(),
-    year: today.getFullYear(),
+    month: todayDate.getMonth(),
+    year: todayDate.getFullYear(),
   });
 
-  const [medications, setMedications] = useState({});
-  const [showModal, setShowModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [witnessName, setWitnessName] = useState("");
-  const [timeBasedMeds, setTimeBasedMeds] = useState([]);
+  const [showBottomSheet, setShowBottomSheet] = useState(false);
+  const [activeTab, setActiveTab] = useState('add');
 
-  const [healthcareNumber, setHealthcareNumber] = useState("");
-  const [pharmacyInfo, setPharmacyInfo] = useState(null);
+  // Data State
+  const [medications, setMedications] = useState({}); // { 1: [{}], 12: [{}] }
   const [clientMedications, setClientMedications] = useState([]);
+  const [healthcareNumber, setHealthcareNumber] = useState('');
+  const [pharmacyInfo, setPharmacyInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const staffName = shift?.name || shift?.user || "Unknown Staff";
+  // Form State
+  const [medicationForm, setMedicationForm] = useState({
+    name: '', dosage: '', time: '', tag: 'Morning',
+    errorField: '', staff: '', witness: '', reason: ''
+  });
 
   const clientId = shift?.clientId || shift?.clientDetails?.id;
   const clientName = shift?.clientName || shift?.clientDetails?.name;
+  const staffName = shift?.name || shift?.user || "Unknown Staff";
 
-  /* ---------------- FETCH CLIENT MEDICATION DATA ---------------- */
+  /* --- DATA FETCHING (Merged from old logic) --- */
   useEffect(() => {
-    const fetchClientMedicationData = async () => {
-      if (!clientId) return;
-      try {
-        const clientRef = doc(db, "clients", clientId);
-        const clientSnap = await getDoc(clientRef);
-
-        if (clientSnap.exists()) {
-          const clientData = clientSnap.data();
-          if (clientData.pharmacy) setPharmacyInfo(clientData.pharmacy);
-          if (Array.isArray(clientData.medications)) {
-            setClientMedications(clientData.medications);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching client medications:", error);
-      }
-    };
-
-    fetchClientMedicationData();
-  }, [clientId]);
-
-  /* ---------------- FETCH HEALTHCARE NUMBER (ACH) ---------------- */
-  useEffect(() => {
-    const fetchHealthcareNumber = async () => {
-      if (!clientName) return;
-
-      const targetName = clientName?.trim().toLowerCase();
-      if (!targetName) return;
-
-      try {
-        const snapshot = await getDocs(collection(db, "InTakeForms"));
-        let found = null;
-
-        snapshot.forEach((docSnap) => {
-          if (found) return;
-          const data = docSnap.data();
-
-          // 1️⃣ medicalInfoList
-          if (Array.isArray(data.medicalInfoList)) {
-            const match = data.medicalInfoList.find(
-              (m) =>
-                m.clientName?.trim().toLowerCase() === targetName &&
-                m.healthCareNo
-            );
-            if (match?.healthCareNo) {
-              found = match.healthCareNo;
-              return;
-            }
-          }
-
-          // 2️⃣ clients MAP
-          if (data.clients && typeof data.clients === "object") {
-            Object.values(data.clients).forEach((c) => {
-              if (found) return;
-              const name = c.fullName || c.name || "";
-              if (
-                name.trim().toLowerCase() === targetName &&
-                c.healthCareNo
-              ) {
-                found = c.healthCareNo;
-              }
-            });
-          }
-
-          // 3️⃣ inTakeClients ARRAY
-          if (Array.isArray(data.inTakeClients)) {
-            const match = data.inTakeClients.find(
-              (c) =>
-                c.name?.trim().toLowerCase() === targetName &&
-                c.healthCareNumber
-            );
-            if (match?.healthCareNumber) {
-              found = match.healthCareNumber;
-              return;
-            }
-          }
-
-          // 4️⃣ fallback
-          if (
-            data.clientName?.trim().toLowerCase() === targetName &&
-            data.healthCareNumber
-          ) {
-            found = data.healthCareNumber;
-          }
-        });
-
-        setHealthcareNumber(found || "Not Available");
-      } catch (err) {
-        console.error("Error fetching healthcare number:", err);
-        setHealthcareNumber("Error Loading");
-      }
-    };
-
-    fetchHealthcareNumber();
-  }, [clientName]);
-
-  /* ---------------- FETCH MONTHLY MEDICATION RECORDS ---------------- */
-  useEffect(() => {
-    const fetchMedications = async () => {
-      if (!clientId) return;
-      try {
-        const docRef = doc(db, "medicationRecords", clientId);
-        const docSnap = await getDoc(docRef);
-
-        const monthKey = `${currentDate.year}-${String(
-          currentDate.month + 1
-        ).padStart(2, "0")}`;
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.records && data.records[monthKey]) {
-            setMedications(data.records[monthKey]);
-          } else {
-            setMedications({});
-          }
-        }
-      } catch (err) {
-        console.error("Error loading medication data:", err);
-      }
-    };
-    fetchMedications();
-  }, [clientId, currentDate]);
-
-  /* ---------------- CALENDAR HELPERS ---------------- */
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const getDaysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
-  const getFirstDayOfMonth = (m, y) => {
-    const day = new Date(y, m, 1).getDay();
-    return day === 0 ? 6 : day - 1;
-  };
-
-  const daysInMonth = getDaysInMonth(currentDate.month, currentDate.year);
-  const firstDayIndex = getFirstDayOfMonth(currentDate.month, currentDate.year);
-
-  const handlePrevMonth = () =>
-    setCurrentDate((p) =>
-      p.month === 0
-        ? { month: 11, year: p.year - 1 }
-        : { ...p, month: p.month - 1 }
-    );
-
-  const handleNextMonth = () =>
-    setCurrentDate((p) =>
-      p.month === 11
-        ? { month: 0, year: p.year + 1 }
-        : { ...p, month: p.month + 1 }
-    );
-
-  const monthName = new Date(
-    currentDate.year,
-    currentDate.month
-  ).toLocaleString("default", { month: "long" });
-
-  const isTodayOrPast = (day) =>
-    new Date(currentDate.year, currentDate.month, day) <= today;
-
-  /* ---------------- UNIQUE TIMES ---------------- */
-  const uniqueTimes = Array.from(
-    new Set(
-      clientMedications
-        .flatMap((m) =>
-          (m.timing || "")
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        )
-    )
-  );
-
-  /* ---------------- TIME CLICK ---------------- */
-  const handleTimeClick = (day, time) => {
-    const medsAtThisTime = clientMedications.filter((m) =>
-      (m.timing || "")
-        .split(",")
-        .map((t) => t.trim().toLowerCase())
-        .includes(time.trim().toLowerCase())
-    );
-
-    setTimeBasedMeds(medsAtThisTime);
-    setSelectedDay(day);
-    setSelectedTime(time);
-    setWitnessName("");
-    setShowModal(true);
-  };
-
-  /* ---------------- TOGGLE GIVEN ---------------- */
-  const toggleMedGiven = (index) => {
-    setTimeBasedMeds((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, given: !m.given } : m))
-    );
-  };
-
-  /* ---------------- SAVE MODAL ---------------- */
-  const handleModalSubmit = async () => {
-    if (!selectedDay || !selectedTime) return;
-
-    const updated = { ...medications };
-    if (!updated[selectedDay]) updated[selectedDay] = {};
-    updated[selectedDay][selectedTime] = timeBasedMeds
-      .filter((m) => m.given)
-      .map((m) => ({
-        medicationName: m.medicationName,
-        dosage: m.dosage,
-        givenBy: staffName,
-        witness: witnessName,
-        given: true,
-      }));
-
-    setMedications(updated);
-    setShowModal(false);
-    await handleSaveToFirestore(updated);
-  };
-
-  const handleSaveToFirestore = async (updatedMeds = medications) => {
-    try {
-      if (!clientId || !clientName) {
-        Alert.alert("Error", "Client info missing!");
+    const fetchAllData = async () => {
+      if (!clientId) {
+        setLoading(false);
         return;
       }
+      try {
+        // 1. Fetch Client Profile (Meds & Pharmacy)
+        const clientRef = doc(db, "clients", clientId);
+        const clientSnap = await getDoc(clientRef);
+        if (clientSnap.exists()) {
+          const cData = clientSnap.data();
+          if (cData.pharmacy) setPharmacyInfo(cData.pharmacy);
+          if (Array.isArray(cData.medications)) setClientMedications(cData.medications);
+        }
 
-      const docRef = doc(db, "medicationRecords", clientId);
-      const docSnap = await getDoc(docRef);
+        // 2. Fetch Medication Records for Month
+        const docRef = doc(db, "medicationRecords", clientId);
+        const docSnap = await getDoc(docRef);
+        const monthKey = `${currentDate.year}-${String(currentDate.month + 1).padStart(2, "0")}`;
 
-      const monthKey = `${currentDate.year}-${String(
-        currentDate.month + 1
-      ).padStart(2, "0")}`;
+        if (docSnap.exists() && docSnap.data().records && docSnap.data().records[monthKey]) {
+          setMedications(docSnap.data().records[monthKey]);
+        } else {
+          setMedications({});
+        }
 
-      const existingData = docSnap.exists() ? docSnap.data() : {};
-      const updatedRecords = {
-        ...(existingData.records || {}),
-        [monthKey]: updatedMeds,
-      };
+      } catch (e) {
+        console.error("Error loading meds", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAllData();
+  }, [clientId, currentDate]);
 
-      await setDoc(
-        docRef,
-        {
-          clientId,
-          clientName,
-          healthCareNumber: healthcareNumber || "",
-          records: updatedRecords,
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      );
+  /* --- CALENDAR LOGIC --- */
+  const monthName = new Date(currentDate.year, currentDate.month).toLocaleString("default", { month: "long" });
+  const displayMonth = `${monthName.toUpperCase()} ${currentDate.year}`;
+  const daysInMonth = Array.from({ length: new Date(currentDate.year, currentDate.month + 1, 0).getDate() }, (_, i) => i + 1);
+  const firstDayOfWeek = new Date(currentDate.year, currentDate.month, 1).getDay() || 7; // Mon=1
+  const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-      Alert.alert("Success", "Medication record saved successfully!");
-    } catch (err) {
-      console.error("Error saving medication:", err);
-      Alert.alert("Error", "Failed to save record.");
+  const calendarGrid = [];
+  let currentWeek = [];
+
+  for (let i = 1; i < firstDayOfWeek; i++) currentWeek.push(null);
+  daysInMonth.forEach((day) => {
+    currentWeek.push(day);
+    if (currentWeek.length === 7) {
+      calendarGrid.push([...currentWeek]);
+      currentWeek = [];
+    }
+  });
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) currentWeek.push(null);
+    calendarGrid.push(currentWeek);
+  }
+
+  const handleDayClick = (day) => {
+    if (day) {
+      setSelectedDay(day);
+      setShowBottomSheet(true);
+      setActiveTab('add');
+      setMedicationForm({
+        name: '', dosage: '', time: '', tag: 'Morning',
+        errorField: '', staff: staffName, witness: '', reason: ''
+      });
     }
   };
 
-  /* ---------------- UI ---------------- */
+  const handleSubmitMedication = async () => {
+    if (!selectedDay || !medicationForm.name || !medicationForm.dosage || !medicationForm.time) {
+      Alert.alert("Missing Fields", "Please enter Medicine Name, Dosage, and Time");
+      return;
+    }
+
+    const newMedication = { ...medicationForm, given: true, givenAt: new Date().toISOString() };
+    const updatedMeds = { ...medications };
+    updatedMeds[selectedDay] = [...(updatedMeds[selectedDay] || []), newMedication];
+
+    // Optimistic Update
+    setMedications(updatedMeds);
+    setShowBottomSheet(false);
+
+    try {
+      const docRef = doc(db, "medicationRecords", clientId);
+      const monthKey = `${currentDate.year}-${String(currentDate.month + 1).padStart(2, "0")}`;
+
+      const docSnap = await getDoc(docRef);
+      const existingData = docSnap.exists() ? docSnap.data() : {};
+      const updatedRecords = { ...(existingData.records || {}), [monthKey]: updatedMeds };
+
+      await setDoc(docRef, {
+        clientId, clientName,
+        records: updatedRecords,
+        updatedAt: new Date(),
+      }, { merge: true });
+
+      Alert.alert("Success", "Medication added successfully!");
+    } catch (e) {
+      console.log("Save error", e);
+      Alert.alert("Error", "Failed to save medication to database.");
+    }
+  };
+
+  const administrationCodes = [
+    { code: '*A*', description: 'Administered, Per Instructions' },
+    { code: '*', description: 'Client not in program' },
+    { code: '*E*', description: 'Medication Error' },
+    { note: '** note: E requires an incident report **' },
+  ];
+
+  if (loading) return <View style={{ padding: 20 }}><ActivityIndicator size="large" color="#2D5F3F" /></View>;
+
   return (
-    <ScrollView style={{ padding: 6 } } >
-      <View>
-        <Text style={styles.title}>Medication Administration Record</Text>
-      </View>
-      
+    <View style={s.container}>
 
-      {/* Header Inputs */}
-      <View style={styles.row}>
-        <View style={styles.field}>
-          <Text style={styles.label}>Client Name</Text>
-          <TextInput value={clientName || ""} style={styles.input} />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Month/Yr of the Record</Text>
-          <TextInput
-            value={`${monthName} / ${currentDate.year}`}
-            style={[styles.input, { backgroundColor: "#f3f4f6" }]}
-            editable={false}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>ACH#</Text>
-          <TextInput value={healthcareNumber} style={styles.input} />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Doctor’s Name</Text>
-          <TextInput placeholder="Enter doctor's name" style={styles.input} />
-        </View>
-      </View>
-
-      {/* Medication Timing */}
-      
-       <View>
-        <Text style={styles.title}>Medication Timing & Type</Text>
-      </View> 
-
-      <View style={styles.cardBlue}>
-        {clientMedications.length > 0 ? (
-          clientMedications.map((med, index) => (
-            <View key={index} style={{ marginBottom: 10 }}>
-              <Text style={styles.medTitle}>
-                {med.medicationName || "Unnamed Medication"}
-              </Text>
-              {med.dosage && <Text>Dosage: {med.dosage}</Text>}
-              {med.timing && <Text>Timing: {med.timing}</Text>}
-              {med.reasonOfMedication && (
-                <Text>Reason: {med.reasonOfMedication}</Text>
-              )}
-              {med.cautions && <Text>Cautions: {med.cautions}</Text>}
+      {/* Header Card */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Medication Administration Record</Text>
+        <View style={s.grid}>
+          {['Client Name', 'Month/Yr of the Record', 'ACH#', "Doctor's Name"].map((label, i) => (
+            <View key={i} style={s.gridItem}>
+              <Text style={s.label}>{label}</Text>
+              <TextInput
+                value={
+                  label === 'Client Name' ? clientName :
+                    label === 'Month/Yr of the Record' ? displayMonth :
+                      label === 'ACH#' ? healthcareNumber : ""
+                }
+                editable={label === "Doctor's Name"}
+                placeholder={`Enter ${label.toLowerCase()}`}
+                style={[s.input, label !== "Doctor's Name" && { backgroundColor: '#F3F4F6' }]}
+              />
             </View>
-          ))
-        ) : (
-          <Text>No medication information available.</Text>
+          ))}
+        </View>
+      </View>
+
+      {/* Medication Timing & Type */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Medication Timing & Type</Text>
+        {clientMedications.length > 0 ? clientMedications.map((med, index) => (
+          <View key={index} style={s.medBlock}>
+            <Text style={s.medTitle}>{med.medicationName || "Unnamed Medication"}</Text>
+            <View style={s.bulletRow}>
+              <Text style={s.bullet}>•</Text>
+              <Text style={s.bulletText}><Text style={{ fontWeight: '700' }}>Dosage:</Text> {med.dosage}</Text>
+            </View>
+            <View style={s.bulletRow}>
+              <Text style={s.bullet}>•</Text>
+              <Text style={s.bulletText}><Text style={{ fontWeight: '700' }}>Timing example:</Text> {med.timing}</Text>
+            </View>
+          </View>
+        )) : (
+          <Text style={s.noData}>No prescribed medications found for {clientName}.</Text>
         )}
       </View>
 
-      {/* Calendar */}
-      <View>
-         <Text style={styles.sectionTitle}>Monthly Medication Calendar</Text>
-      </View>
-      
-
-      <View style={styles.calendar}>
-        <View style={styles.calendarHeader}>
-          <Pressable onPress={handlePrevMonth}>
-            <Text>{"<"}</Text>
+      {/* Monthly Medication Calendar */}
+      <View style={s.cardZeroPad}>
+        <View style={s.calHeader}>
+          <Pressable onPress={() => setCurrentDate(p => p.month === 0 ? { month: 11, year: p.year - 1 } : { ...p, month: p.month - 1 })}>
+            <Feather name="chevron-left" size={24} color="#2F6B4F" />
           </Pressable>
-          <Text style={{ fontWeight: "700" }}>
-            {monthName.toUpperCase()} {currentDate.year}
+          <Text style={s.calTitle}>{displayMonth}</Text>
+          <Pressable onPress={() => setCurrentDate(p => p.month === 11 ? { month: 0, year: p.year + 1 } : { ...p, month: p.month + 1 })}>
+            <Feather name="chevron-right" size={24} color="#2F6B4F" />
+          </Pressable>
+        </View>
+
+        <View style={s.calBody}>
+          <View style={s.daysHeaderRow}>
+            {daysOfWeek.map((day) => <Text key={day} style={s.dayHeaderText}>{day}</Text>)}
+          </View>
+
+          {calendarGrid.map((week, wIndex) => (
+            <View key={wIndex} style={s.calRow}>
+              {week.map((day, dIndex) => {
+                const isToday = day === todayDate.getDate() && currentDate.month === todayDate.getMonth() && currentDate.year === todayDate.getFullYear();
+                const meds = day ? medications[day] : null;
+                const hasMeds = meds && meds.length > 0;
+
+                return (
+                  <Pressable
+                    key={dIndex}
+                    onPress={() => handleDayClick(day)}
+                    disabled={!day}
+                    style={[
+                      s.calCell,
+                      !day && { borderWidth: 0 },
+                      isToday && { backgroundColor: '#E8F5EE', borderColor: '#2F6B4F' }
+                    ]}
+                  >
+                    {day && (
+                      <>
+                        <Text style={[s.calDayText, isToday && { color: '#2F6B4F' }]}>{day}</Text>
+
+                        {hasMeds ? (
+                          <View style={s.medTagsContainer}>
+                            {meds.slice(0, 2).map((m, idx) => (
+                              <View key={idx} style={[s.medTag, { backgroundColor: TAG_COLORS[m.tag] }]}>
+                                <Text style={[s.medTagText, { color: TAG_TEXT_COLORS[m.tag] }]} numberOfLines={1}>
+                                  {m.name}
+                                </Text>
+                              </View>
+                            ))}
+                            {meds.length > 2 && <Text style={s.moreMeds}>+{meds.length - 2}</Text>}
+                          </View>
+                        ) : (
+                          <View style={s.addMedBtn}>
+                            <Text style={s.addMedText}>+</Text>
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Administration Codes */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Administration Codes</Text>
+        <Text style={s.codeText}><Text style={{ fontWeight: '700' }}>Initials:</Text> Administered, Per Instructions</Text>
+        {administrationCodes.map((item, index) => (
+          <Text key={index} style={[s.codeText, item.note && { fontStyle: 'italic', color: '#9CA3AF' }]}>
+            {item.code && <Text style={{ fontWeight: '700' }}>{item.code} </Text>}
+            {item.description || item.note}
           </Text>
-          <Pressable onPress={handleNextMonth}>
-            <Text>{">"}</Text>
-          </Pressable>
+        ))}
+      </View>
+
+      {/* Pharmacy Info */}
+      <View style={s.card}>
+        <View style={s.titleRow}>
+          <Text style={s.emoji}>💊</Text>
+          <Text style={s.cardTitle}>Pharmacy Information</Text>
         </View>
-
-        <View style={styles.weekRow}>
-          {weekDays.map((d) => (
-            <Text key={d} style={styles.weekDay}>
-              {d}
-            </Text>
-          ))}
+        <View style={s.pharmFlex}>
+          <Text style={s.pharmLabel}>Name:</Text><Text style={s.pharmValue}>{pharmacyInfo?.pharmacyName || 'N/A'}</Text>
         </View>
-
-        <View style={styles.daysGrid}>
-          {Array.from({ length: firstDayIndex }).map((_, i) => (
-            <View key={`empty-${i}`} style={styles.dayCell} />
-          ))}
-
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const day = i + 1;
-            const showDay = isTodayOrPast(day);
-            const medsForDay = medications[day] || {};
-
-            return (
-              <View key={day} style={styles.dayCell}>
-                <Text>{day}</Text>
-
-                <View style={{ marginTop: 6 }}>
-                  {showDay &&
-                    uniqueTimes.map((time) => (
-                      <Pressable
-                        key={time}
-                        onPress={() => handleTimeClick(day, time)}
-                        style={styles.timeBtn}
-                      >
-                        <Text style={{ fontSize: 10 }}>{time}</Text>
-                      </Pressable>
-                    ))}
-                </View>
-
-                {Object.entries(medsForDay).map(([time, meds]) => (
-                  <Text key={time} style={{ fontSize: 10, color: "green" }}>
-                    {time}:{" "}
-                    {meds.map((m) => m.medicationName).join(", ")}
-                  </Text>
-                ))}
-              </View>
-            );
-          })}
+        <View style={s.pharmFlex}>
+          <Text style={s.pharmLabel}>E-Mail:</Text><Text style={s.pharmValue}>{pharmacyInfo?.pharmacyEmail || 'N/A'}</Text>
+        </View>
+        <View style={s.pharmFlex}>
+          <Text style={s.pharmLabel}>Number:</Text><Text style={s.pharmValue}>{pharmacyInfo?.pharmacyPhone || 'N/A'}</Text>
+        </View>
+        <View style={s.pharmFlex}>
+          <Text style={s.pharmLabel}>Address:</Text><Text style={s.pharmValue}>{pharmacyInfo?.pharmacyAddress || 'N/A'}</Text>
         </View>
       </View>
 
-      {/* Modal */}
-      <Modal visible={showModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>
-              Day {selectedDay} - {selectedTime}
-            </Text>
+      {/* Authorization */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>Authorization Administration (Trained):</Text>
+        <Text style={s.label}>Name</Text>
+        <TextInput style={[s.input, { marginBottom: 10 }]} placeholder="Enter name" />
+        <View style={s.sigBox}><Text style={s.sigText}>Sign Here</Text></View>
+      </View>
 
-            {timeBasedMeds.map((med, i) => (
-              <Pressable
-                key={i}
-                onPress={() => toggleMedGiven(i)}
-                style={styles.checkboxRow}
-              >
-                <Text>
-                  {med.given ? "☑" : "☐"} {med.medicationName} ({med.dosage})
-                </Text>
-              </Pressable>
-            ))}
+      {/* Bottom Sheet Modal */}
+      <Modal visible={showBottomSheet} transparent animationType="slide">
+        <Pressable style={s.modalOverlay} onPress={() => setShowBottomSheet(false)}>
+          <Pressable style={s.bottomSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={s.sheetHandle} />
 
-            <Text style={styles.label}>Staff Name</Text>
-            <TextInput value={staffName} editable={false} style={styles.input} />
-
-            <Text style={styles.label}>Witness Name</Text>
-            <TextInput
-              value={witnessName}
-              onChangeText={setWitnessName}
-              style={styles.input}
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable
-                onPress={() => setShowModal(false)}
-                style={styles.cancelBtn}
-              >
-                <Text>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={handleModalSubmit} style={styles.submitBtn}>
-                <Text style={{ color: "#fff" }}>Submit</Text>
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>Medications – {monthName} {selectedDay}</Text>
+              <Pressable onPress={() => setShowBottomSheet(false)}>
+                <Feather name="x" size={24} color="#666" />
               </Pressable>
             </View>
-          </View>
-        </View>
+
+            <View style={s.sheetTabs}>
+              <Pressable onPress={() => setActiveTab('add')} style={[s.sheetTabBtn, activeTab === 'add' && s.sheetTabActive]}>
+                <Text style={[s.sheetTabText, activeTab === 'add' && s.sheetTabTextActive]}>Add</Text>
+              </Pressable>
+              <Pressable onPress={() => setActiveTab('history')} style={[s.sheetTabBtn, activeTab === 'history' && s.sheetTabActive]}>
+                <Text style={[s.sheetTabText, activeTab === 'history' && s.sheetTabTextActive]}>History</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={s.sheetContent}>
+              {activeTab === 'add' ? (
+                <View style={s.form}>
+                  <View style={s.noticeBox}>
+                    <Text style={s.noticeText}>Medications should be administered half an hour before and half an hour after the shift.</Text>
+                  </View>
+
+                  <Text style={s.sheetLabel}>Medicine Name</Text>
+                  <TextInput style={s.input} placeholder="Search medicine name..." value={medicationForm.name} onChangeText={(t) => setMedicationForm({ ...medicationForm, name: t })} />
+
+                  <Text style={s.sheetLabel}>Dosage</Text>
+                  <TextInput style={s.input} placeholder="e.g., 500 Mg, 2 tablets" value={medicationForm.dosage} onChangeText={(t) => setMedicationForm({ ...medicationForm, dosage: t })} />
+
+                  <Text style={s.sheetLabel}>Time</Text>
+                  <TextInput style={s.input} placeholder="HH:MM (e.g., 09:00)" value={medicationForm.time} onChangeText={(t) => setMedicationForm({ ...medicationForm, time: t })} />
+
+                  <Text style={s.sheetLabel}>Tag Selector</Text>
+                  <View style={s.tagRow}>
+                    {['Morning', 'Afternoon', 'Night', 'Emergency'].map(tag => (
+                      <Pressable
+                        key={tag}
+                        onPress={() => setMedicationForm({ ...medicationForm, tag })}
+                        style={[s.formTag, { backgroundColor: TAG_COLORS[tag] }, medicationForm.tag !== tag && { opacity: 0.5 }]}
+                      >
+                        <Text style={[s.formTagText, { color: TAG_TEXT_COLORS[tag] }]}>{tag}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <Text style={s.sheetLabel}>Staff Name</Text>
+                  <TextInput style={s.input} value={medicationForm.staff} onChangeText={(t) => setMedicationForm({ ...medicationForm, staff: t })} />
+
+                  <Text style={s.sheetLabel}>Witness Name</Text>
+                  <TextInput style={s.input} placeholder="Enter the name of witness" value={medicationForm.witness} onChangeText={(t) => setMedicationForm({ ...medicationForm, witness: t })} />
+
+                  <Text style={s.sheetLabel}>Reason</Text>
+                  <TextInput
+                    style={[s.input, { height: 80, textAlignVertical: 'top' }]}
+                    multiline placeholder="Detailed reason..."
+                    value={medicationForm.reason}
+                    onChangeText={(t) => setMedicationForm({ ...medicationForm, reason: t })}
+                  />
+
+                  <Pressable style={s.submitMedsBtn} onPress={handleSubmitMedication}>
+                    <Text style={s.submitMedsText}>Add Medication</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={s.historyContainer}>
+                  {medications[selectedDay] && medications[selectedDay].length > 0 ? (
+                    medications[selectedDay].map((med, idx) => (
+                      <View key={idx} style={s.historyCard}>
+                        <View style={[s.formTag, { backgroundColor: TAG_COLORS[med.tag] }]}><Text style={[s.formTagText, { color: TAG_TEXT_COLORS[med.tag] }]}>{med.tag}</Text></View>
+                        <Text style={s.historyTitle}>{med.name}</Text>
+                        <Text style={s.historyDesc}>{med.dosage} • {med.time}</Text>
+                        <Text style={s.historyMeta}>Staff: {med.staff}</Text>
+                        {med.witness ? <Text style={s.historyMeta}>Witness: {med.witness}</Text> : null}
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={s.noData}>No medications recorded for this day</Text>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+          </Pressable>
+        </Pressable>
       </Modal>
 
-      {/* Footer */}
-      <View style={styles.row}>
-        <View style={styles.card}>
-          <Text style={{ fontWeight: "700" }}>Administration Codes</Text>
-          <Text>"X": Client not in program</Text>
-          <Text>"E": Medication Error</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={{ fontWeight: "700" }}>Pharmacy Information</Text>
-          {pharmacyInfo ? (
-            <>
-              <Text>Name: {pharmacyInfo.pharmacyName || "N/A"}</Text>
-              <Text>Email: {pharmacyInfo.pharmacyEmail || "N/A"}</Text>
-              <Text>Number: {pharmacyInfo.pharmacyPhone || "N/A"}</Text>
-              <Text>Address: {pharmacyInfo.pharmacyAddress || "N/A"}</Text>
-            </>
-          ) : (
-            <Text>No pharmacy info found.</Text>
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={{ fontWeight: "700" }}>
-            Authorization Administration (Trained)
-          </Text>
-          <TextInput placeholder="Name" style={styles.input} />
-          <TextInput placeholder="Credentials" style={styles.input} />
-        </View>
-      </View>
-
-      {/* {user?.role === "admin" && (
-        <View style={{ alignItems: "flex-end", marginTop: 16 }}>
-          <Pressable style={styles.exportBtn}>
-            <Text>Export</Text>
-          </Pressable>
-        </View>
-      )} */}
-    </ScrollView>
+      <View style={{ height: 20 }} />
+    </View>
   );
 }
 
-/* ---------------- STYLES ---------------- */
-const styles = {
-  title: { 
-   marginTop: 10, 
-  fontSize: 18, 
-  fontWeight: "600", 
-  marginBottom: 12,
-  color: "#111827",   // 👈 REQUIRED
-},
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  card: { backgroundColor: '#fff', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#E3E8E6', marginBottom: 16 },
+  cardZeroPad: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E3E8E6', marginBottom: 16, overflow: 'hidden' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  gridItem: { width: '48%' },
+  label: { fontSize: 12, fontWeight: '600', color: '#666', marginBottom: 6 },
+  input: { backgroundColor: '#F7F9F8', borderWidth: 1, borderColor: '#E3E8E6', padding: 12, borderRadius: 8, fontSize: 13, color: '#1a1a1a' },
 
-sectionTitle: { 
-  textAlign: "center",
-  fontSize: 18, 
-  fontWeight: "600", 
-  marginTop: 16, 
-  marginBottom: 6,
-  color: "#111827",   // 👈 REQUIRED
-},
+  medBlock: { borderBottomWidth: 1, borderBottomColor: '#E3E8E6', paddingBottom: 12, marginBottom: 12 },
+  medTitle: { fontSize: 14, fontWeight: '700', color: '#2F6B4F', marginBottom: 8 },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4 },
+  bullet: { fontSize: 14, color: '#666', marginRight: 6 },
+  bulletText: { fontSize: 12, color: '#666', flex: 1 },
+  noData: { fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: 16 },
 
- row: { 
-  flexDirection: "column", 
-  flexWrap: "wrap", 
-  justifyContent: "space-between",
-  gap:10
-},
+  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 16, borderBottomWidth: 1, borderBottomColor: '#E3E8E6' },
+  calTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+  calBody: { padding: 12, paddingBottom: 16 },
+  daysHeaderRow: { flexDirection: 'row', marginBottom: 8 },
+  dayHeaderText: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600', color: '#666' },
+  calRow: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  calCell: { flex: 1, minHeight: 60, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E3E8E6', borderRadius: 8, padding: 4, position: 'relative' },
+  calDayText: { fontSize: 11, fontWeight: '600', color: '#1a1a1a', position: 'absolute', top: 4, left: 6 },
+  medTagsContainer: { position: 'absolute', bottom: 4, left: 4, right: 4, gap: 2 },
+  medTag: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 10 },
+  medTagText: { fontSize: 8, fontWeight: '600' },
+  moreMeds: { fontSize: 9, color: '#2F6B4F', fontWeight: '700', paddingLeft: 4 },
+  addMedBtn: { position: 'absolute', bottom: 4, right: 4, width: 20, height: 20, backgroundColor: '#2F6B4F', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  addMedText: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: -2 },
 
-field: { 
-  width: "100%",   // ensures perfect 2x2 grid
-},
+  codeText: { fontSize: 12, color: '#666', marginBottom: 6 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  emoji: { fontSize: 18 },
+  pharmFlex: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  pharmLabel: { fontSize: 13, color: '#666', fontWeight: '500' },
+  pharmValue: { fontSize: 13, color: '#333', fontWeight: '600' },
+  sigBox: { height: 100, backgroundColor: '#F7F9F8', borderWidth: 1, borderColor: '#E3E8E6', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  sigText: { color: '#9CA3AF', fontStyle: 'italic' },
 
-  label: { fontSize: 12, fontWeight: "600", marginTop: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 6,
-    padding: 8,
-    marginTop: 4,
-    backgroundColor: "#fff",
-  },
-  cardBlue: {
-    backgroundColor: "#EFF6FF",
-    borderWidth: 1,
-    borderColor: "#D8E9FF",
-    borderRadius: 6,
-    padding: 10,
-  },
-  medTitle: { fontWeight: "700", color: "#2563eb" },
-  calendar: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 6, marginTop: 8 },
-  calendarHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 10,
-    borderBottomWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  weekRow: { flexDirection: "row" },
-  weekDay: { flex: 1, textAlign: "center", fontWeight: "700", padding: 6 },
-  daysGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: {
-    width: "14.28%",
-    borderWidth: 0.5,
-    borderColor: "#e5e7eb",
-    padding: 4,
-    minHeight: 80,
-  },
-  timeBtn: {
-    borderWidth: 1,
-    borderColor: "#93c5fd",
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    marginVertical: 2,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "#fff",
-    width: "90%",
-    borderRadius: 8,
-    padding: 16,
-  },
-  modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 10 },
-  checkboxRow: { paddingVertical: 6 },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 12,
-    gap: 8,
-  },
-  cancelBtn: { padding: 10, backgroundColor: "#e5e7eb", borderRadius: 6 },
-  submitBtn: { padding: 10, backgroundColor: "#16a34a", borderRadius: 6 },
-  card: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 6,
-    padding: 10,
-    width: "100%",
-  },
-  exportBtn: {
-    backgroundColor: "#e5e7eb",
-    padding: 10,
-    borderRadius: 6,
-  },
-};
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, height: height * 0.85 },
+  sheetHandle: { width: 40, height: 4, backgroundColor: '#E3E8E6', borderRadius: 2, alignSelf: 'center', marginTop: 12 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#E3E8E6' },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#2b3232' },
+  sheetTabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E3E8E6', paddingHorizontal: 16 },
+  sheetTabBtn: { paddingVertical: 12, marginRight: 20, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  sheetTabActive: { borderBottomColor: '#2F6B4F' },
+  sheetTabText: { fontSize: 14, fontWeight: '600', color: '#666' },
+  sheetTabTextActive: { color: '#2F6B4F' },
+
+  sheetContent: { flex: 1, padding: 16 },
+  form: { gap: 16, paddingBottom: 40 },
+  noticeBox: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#d8e9ff', padding: 12, borderRadius: 8 },
+  noticeText: { color: '#2f5ce9', fontSize: 12 },
+  sheetLabel: { fontSize: 13, fontWeight: '700', color: '#2b3232', marginBottom: -8 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  formTag: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
+  formTagText: { fontSize: 12, fontWeight: '700' },
+  submitMedsBtn: { backgroundColor: '#2F6B4F', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  submitMedsText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  historyContainer: { gap: 12 },
+  historyCard: { backgroundColor: '#F7F9F8', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E3E8E6', alignItems: 'flex-start' },
+  historyTitle: { fontSize: 16, fontWeight: '700', color: '#2b3232', marginTop: 8, marginBottom: 4 },
+  historyDesc: { fontSize: 13, color: '#666', marginBottom: 4 },
+  historyMeta: { fontSize: 12, color: '#666', fontWeight: '500' }
+});

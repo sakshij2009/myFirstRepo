@@ -152,12 +152,11 @@ export default function FollowThroughModal({ visible, onClose, shift, onSubmit }
               <View style={styles.submitIcon}>
                 <MaterialCommunityIcons name="file-document-outline" size={18} color="#16A34A" />
               </View>
-              <Text style={styles.submitTitle}>Critical Incident Report Submission</Text>
+              <Text style={styles.submitTitle}>Follow through</Text>
             </View>
 
             <Text style={styles.submitText}>
-              This report must be submitted immediately upon completion. Management will be automatically notified.
-              Ensure all sections are complete and accurate as this is a legal document.
+              Use this form to document follow-up actions, outcomes, or ongoing tasks related to a client.
             </Text>
 
             <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
@@ -167,8 +166,8 @@ export default function FollowThroughModal({ visible, onClose, shift, onSubmit }
 
               <Pressable onPress={handleSubmit} style={styles.submitBtn}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <MaterialCommunityIcons name="alert-outline" size={18} color="#fff" />
-                  <Text style={styles.submitBtnText}>Follow Through</Text>
+                  
+                  <Text style={styles.submitBtnText}>Submit</Text>
                 </View>
               </Pressable>
             </View>

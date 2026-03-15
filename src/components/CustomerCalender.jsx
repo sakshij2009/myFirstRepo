@@ -1,283 +1,187 @@
-import React, { useEffect, useMemo, useState } from "react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { IoChevronDown } from "react-icons/io5";
+import React, { useEffect, useState } from "react";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
 
-const sameDay = (a, b) => a.toDateString() === b.toDateString();
-const sameMonth = (a, b) =>
-  a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-
-const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
-const getDatesBetween = (a, b) => {
-  const start = startOfDay(a) <= startOfDay(b) ? startOfDay(a) : startOfDay(b);
-  const end = startOfDay(a) <= startOfDay(b) ? startOfDay(b) : startOfDay(a);
-  const dates = [];
-  let curr = new Date(start);
-  while (curr <= end) {
-    dates.push(new Date(curr));
-    curr.setDate(curr.getDate() + 1);
-  }
-  return dates;
-};
-
-const isBetween = (date, start, end) => {
-  const d = startOfDay(date).getTime();
-  return d > startOfDay(start).getTime() && d < startOfDay(end).getTime();
-};
-
-function CustomDropdown({ options, value, onChange }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="bg-white text-black rounded-md px-2 py-1 flex items-center focus:outline-none border-0"
-      >
-        {options[value]}
-        <span className="ml-2 text-green-600">
-          <IoChevronDown />
-        </span>
-      </button>
-      {open && (
-        <ul className="absolute mt-1 bg-white rounded-md z-10 max-h-60 overflow-y-auto border-0">
-          {options.map((opt, idx) => (
-            <li
-              key={idx}
-              onClick={() => {
-                onChange(idx);
-                setOpen(false);
-              }}
-              className="px-3 py-1 text-black cursor-pointer hover:bg-green-100 rounded-md"
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CustomYearDropdown({ years, value, onChange }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative ml-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="bg-white text-black rounded-md px-2 py-1 flex items-center focus:outline-none border-0"
-      >
-        {value}
-        <span className="ml-2 text-green-600">
-          <IoChevronDown />
-        </span>
-      </button>
-      {open && (
-        <ul className="absolute mt-1 bg-white rounded-md z-10 max-h-60 overflow-y-auto border-0">
-          {years.map((year) => (
-            <li
-              key={year}
-              onClick={() => {
-                onChange(year);
-                setOpen(false);
-              }}
-              className="px-3 py-1 text-black cursor-pointer hover:bg-green-100 rounded-md"
-            >
-              {year}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/**
- * Props:
- * - selectedDates: Date[]
- * - onDatesChange: (Date[]) => void
- * - selectionMode: "single" | "multiple" (default "multiple")
- * - onClose: () => void
- */
 export default function CustomCalendar({
   selectedDates = [],
   onDatesChange,
   selectionMode = "multiple",
   onClose,
 }) {
-  const [tempDates, setTempDates] = useState(
-    selectedDates.length ? selectedDates : [new Date()] // default to today
+  const getAlbertaToday = () => {
+    const now = new Date();
+    const albertaStr = now.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" });
+    const [y, m, d] = albertaStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+
+  const albertaToday = getAlbertaToday();
+
+  const [internalMode, setInternalMode] = useState(
+    selectionMode === "single" ? "single" : selectionMode === "range" ? "range" : "multiple"
   );
-  const [currentViewDate, setCurrentViewDate] = useState(new Date());
+
+  // For range mode we store { from, to }; for others we store Date | Date[]
+  const [tempDates, setTempDates] = useState(
+    selectedDates.length ? selectedDates : [albertaToday]
+  );
 
   useEffect(() => {
-    setTempDates(selectedDates);
+    setTempDates(selectedDates.length ? selectedDates : [getAlbertaToday()]);
   }, [selectedDates]);
 
-  const handleDateClick = (date) => {
-  setTempDates((prev) => {
-    const today = startOfDay(new Date());
-
-    if (!prev || prev.length === 0) {
-      return [date];
+  // Expand a { from, to } range into every date in between
+  const expandRange = (range) => {
+    if (!range?.from) return [];
+    if (!range.to) return [range.from];
+    const dates = [];
+    const cur = new Date(range.from);
+    while (cur <= range.to) {
+      dates.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
     }
-
-    const exists = prev.some((d) => sameDay(d, date));
-
-    if (exists) {
-      // If clicking the first or last date
-      const first = prev[0];
-      const last = prev[prev.length - 1];
-
-      if (sameDay(date, first)) {
-        return [last]; // shrink to last
-      }
-      if (sameDay(date, last)) {
-        return [first]; // shrink to first
-      }
-      // If middle date clicked → just shrink to that single date
-      return [date];
-    }
-
-    if (prev.length === 1) {
-      // If only one selected, create range
-      return getDatesBetween(prev[0], date);
-    }
-
-    // Already a range
-    const first = prev[0];
-    const last = prev[prev.length - 1];
-
-    if (date < first) {
-      // Extend backwards
-      return getDatesBetween(date, last);
-    } else if (date > last) {
-      // Extend forwards
-      return getDatesBetween(first, date);
-    } else {
-      // Inside range → decide which side to keep
-      const distToFirst = Math.abs(date - first);
-      const distToLast = Math.abs(date - last);
-
-      if (distToFirst < distToLast) {
-        // Closer to start → make [date..last]
-        return getDatesBetween(date, last);
-      } else {
-        // Closer to end → make [first..date]
-        return getDatesBetween(first, date);
-      }
-    }
-  });
-};
-
-
+    return dates;
+  };
 
   const handleDone = () => {
-    onDatesChange?.(tempDates);
-    onClose?.();
+    if (onDatesChange) {
+      if (!tempDates) {
+        onDatesChange([]);
+      } else if (internalMode === "range") {
+        // Convert { from, to } to flat array
+        onDatesChange(expandRange(tempDates));
+      } else if (Array.isArray(tempDates)) {
+        onDatesChange(tempDates);
+      } else {
+        onDatesChange([tempDates]);
+      }
+    }
+    if (onClose) onClose();
   };
 
   const handleCancel = () => {
-    setTempDates(selectedDates);
-    onClose?.();
+    setTempDates(selectedDates.length ? selectedDates : [getAlbertaToday()]);
+    if (onClose) onClose();
   };
 
-  const today = startOfDay(new Date());
+  const handleSelect = (dates) => {
+    if (!dates) {
+      setTempDates(internalMode === "range" ? {} : []);
+      return;
+    }
+    setTempDates(dates);
+  };
 
-const isHighlighted = (date) => {
-  if (!tempDates || tempDates.length === 0) {
-    return sameDay(date, today);
-  }
-  return tempDates.some((d) => sameDay(d, date));
-};
+  const modeLabel = {
+    single: "Select Date",
+    multiple: "Select Dates",
+    range: "Select Date Range",
+  };
 
+  // Helper to switch modes cleanly
+  const switchMode = (mode) => {
+    setInternalMode(mode);
+    if (mode === "single") {
+      // Keep first selected date
+      const first = Array.isArray(tempDates) ? tempDates[0] : tempDates?.from ?? tempDates;
+      setTempDates(first || albertaToday);
+    } else if (mode === "multiple") {
+      // Convert single / range to array
+      if (Array.isArray(tempDates)) {
+        setTempDates(tempDates);
+      } else if (tempDates?.from) {
+        setTempDates(expandRange(tempDates));
+      } else {
+        setTempDates([tempDates].filter(Boolean));
+      }
+    } else if (mode === "range") {
+      // Convert to { from, to }
+      if (Array.isArray(tempDates) && tempDates.length > 0) {
+        setTempDates({ from: tempDates[0], to: tempDates[tempDates.length - 1] });
+      } else if (tempDates && !Array.isArray(tempDates)) {
+        setTempDates({ from: tempDates, to: undefined });
+      } else {
+        setTempDates({ from: albertaToday, to: undefined });
+      }
+    }
+  };
 
-  const monthNames = useMemo(
-    () => [
-      "January","February","March","April","May","June",
-      "July","August","September","October","November","December",
-    ],
-    []
-  );
+  const btnBase = "px-3 py-1 text-xs font-semibold transition-colors";
+  const btnActive = "bg-dark-green text-white";
+  const btnInactive = "bg-white text-dark-green hover:bg-green-50";
 
   return (
-    <DatePicker
-      inline
-      selected={tempDates[0] || null}
-      onChange={(date) => handleDateClick(date)}
-      dayClassName={(date) => {
-        const inView = sameMonth(date, currentViewDate);
+    <div className="bg-white p-5 rounded-md shadow-lg min-w-[360px]">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold text-light-black">
+          {modeLabel[internalMode]}
+        </h2>
 
-        
+        {/* Three-way Mode Toggle: Single | Multiple | Range */}
+        <div className="flex border border-dark-green rounded overflow-hidden">
+          <button
+            type="button"
+            onClick={() => switchMode("single")}
+            className={`${btnBase} ${internalMode === "single" ? btnActive : btnInactive}`}
+          >
+            Single
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("multiple")}
+            className={`${btnBase} border-l border-dark-green ${internalMode === "multiple" ? btnActive : btnInactive}`}
+          >
+            Multiple
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("range")}
+            className={`${btnBase} border-l border-dark-green ${internalMode === "range" ? btnActive : btnInactive}`}
+          >
+            Range
+          </button>
+        </div>
+      </div>
 
-        if (selectionMode === "multiple" && tempDates.length > 1) {
-          const min = tempDates.reduce((a, b) => (a < b ? a : b));
-          const max = tempDates.reduce((a, b) => (a > b ? a : b));
-
-          if (sameDay(date, min) || sameDay(date, max)) {
-            return "!bg-green-600 !text-white !font-medium !rounded-full";
+      <div className="flex justify-center flex-col items-center">
+        <DayPicker
+          mode={internalMode}
+          selected={tempDates}
+          onSelect={handleSelect}
+          className="custom-daypicker-green"
+          defaultMonth={
+            Array.isArray(tempDates) && tempDates.length > 0
+              ? tempDates[0]
+              : tempDates?.from ?? tempDates ?? albertaToday
           }
-          if (isBetween(date, min, max)) {
-            return "!bg-green-200 !text-green-700 !rounded-full";
-          }
-        }
+        />
+      </div>
 
-        if (isHighlighted(date) ) {
-          return "!bg-green-600 !text-white !font-medium !rounded-full";
-        }
+      {/* Range hint */}
+      {internalMode === "range" && (
+        <p className="text-xs text-gray-400 text-center -mt-2 mb-2">
+          Click a start date, then an end date
+        </p>
+      )}
 
-        if (!inView) {
-          return "!text-gray-400";
-        }
-        return undefined;
-      }}
-      calendarClassName="!bg-white !p-2 !rounded-lg [&_.react-datepicker__header]:!bg-white [&_.react-datepicker__header]:!border-0"
-      renderCustomHeader={({ date, decreaseMonth, increaseMonth, changeMonth, changeYear }) => {
-        if (!sameMonth(date, currentViewDate)) {
-          setTimeout(() => setCurrentViewDate(date), 0);
-        }
-        return (
-          <div className="flex justify-between items-center px-2 py-1 text-black bg-white">
-            <button type="button" onClick={decreaseMonth} className="text-green-600 font-bold">
-              {"<"}
-            </button>
-            <div className="flex items-center">
-              <CustomDropdown
-                options={monthNames}
-                value={date.getMonth()}
-                onChange={(val) => changeMonth(val)}
-              />
-              <CustomYearDropdown
-                years={Array.from({ length: 20 }, (_, i) => 2015 + i)}
-                value={date.getFullYear()}
-                onChange={(val) => changeYear(val)}
-              />
-            </div>
-            <button type="button" onClick={increaseMonth} className="text-green-600 font-bold">
-              {">"}
-            </button>
-          </div>
-        );
-      }}
-    >
-      <div className="flex justify-end px-1 py-2 bg-white">
+      <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
         <button
-          type="button"
           onClick={handleCancel}
-          className="px-3 py-[6px] text-green-600 font-medium text-sm leading-5 tracking-normal"
+          className="px-4 py-1 border border-gray-400 rounded text-sm text-gray-600 hover:bg-gray-50"
+          type="button"
         >
           Cancel
         </button>
+
         <button
-          type="button"
           onClick={handleDone}
-          className="px-3 py-[6px] bg-green-600 text-white rounded font-medium text-sm leading-5 tracking-normal ml-2"
+          className="px-4 py-1 bg-dark-green text-white rounded text-sm hover:opacity-90"
+          type="button"
         >
           Done
         </button>
       </div>
-    </DatePicker>
+    </div>
   );
 }
+

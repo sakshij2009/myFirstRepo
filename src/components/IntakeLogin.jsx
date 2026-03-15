@@ -16,7 +16,8 @@ const IntakeLogin = () => {
 
   // SIGNUP FIELDS
   const [name, setName] = useState("");
-  const [role, setRole] = useState("");
+  // const [role, setRole] = useState(""); // REMOVED - Defaulting to Intake Worker
+  const [role] = useState("Intake Worker");
   const [agency, setAgency] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -29,41 +30,62 @@ const IntakeLogin = () => {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-   const UPCS_EMAIL_OPTIONS = [
-    "billing@upcs.com",
-    "accounts@upcs.com",
+  const UPCS_EMAIL_OPTIONS = [
+    "invoicewest@upcs.org",
+    "invoiceparkland@upcs.org",
   ];
 
   const isUPCSAgency =
     agency.trim().toLowerCase().startsWith("upcs");
 
-  
+
   // Detect magic link login
   useEffect(() => {
     if (isSignInWithEmailLink(auth, window.location.href)) {
-      let storedEmail = window.localStorage.getItem("emailForSignIn");
+      // 1️⃣ Try reading email from URL query param (set when admin/user sent the link)
+      const urlParams = new URLSearchParams(window.location.search);
+      let storedEmail = urlParams.get("email");
 
+      // 2️⃣ Fall back to localStorage (same-device self-login flow)
       if (!storedEmail) {
-        storedEmail = window.prompt("Please confirm your email:");
+        storedEmail = window.localStorage.getItem("emailForSignIn");
       }
 
-      signInWithEmailLink(auth, storedEmail, window.location.href)
+      // 3️⃣ Last resort: ask the user (should almost never be needed now)
+      if (!storedEmail) {
+        storedEmail = window.prompt("Please enter the exact email address this link was sent to:");
+      }
+
+      if (!storedEmail) return; // user cancelled the prompt
+
+      signInWithEmailLink(auth, storedEmail.trim().toLowerCase(), window.location.href)
         .then(async () => {
           window.localStorage.removeItem("emailForSignIn");
 
           const q = query(
             collection(db, "intakeUsers"),
-            where("email", "==", storedEmail)
+            where("email", "==", storedEmail.trim().toLowerCase())
           );
           const snap = await getDocs(q);
 
           if (!snap.empty) {
             navigate("/intake-form/dashboard");
           } else {
-            setError("User not found in database.");
+            // User authenticated but no profile -> Show Signup/Completion form
+            setIsLogin(false);
+            setEmail(storedEmail.trim().toLowerCase());
+            setMessage("Email verification successful! Please complete your profile.");
           }
         })
-        .catch((err) => setError("Sign-in failed: " + err.message));
+        .catch((err) => {
+          console.error("Link Sign-In Error:", err);
+          if (err.code === "auth/invalid-action-code") {
+            setError("");
+            setIsLogin(true);
+          } else {
+            setError("Sign-in failed. The link may have expired or already been used. Please request a new one.");
+          }
+        });
     }
   }, [navigate]);
 
@@ -84,8 +106,6 @@ const IntakeLogin = () => {
       return;
     }
 
-    
-
     try {
       const q = query(collection(db, "intakeUsers"), where("email", "==", email));
       const snapshot = await getDocs(q);
@@ -105,17 +125,23 @@ const IntakeLogin = () => {
         createdAt: new Date(),
       });
 
-      alert("Signup successful! Please log in using your email.");
-
-      // Clear fields
+      // Reset fields
       setName("");
-      setRole("");
       setAgency("");
       setPhone("");
       setEmail("");
       setInvoiceEmail("");
 
-      setIsLogin(true);
+      if (auth.currentUser) {
+        // Came via magic link and just finished registering
+        alert("Profile saved! Redirecting to dashboard...");
+        window.location.reload();
+      } else {
+        // Normal signup
+        alert("Profile saved successfully! Please log in.");
+        setIsLogin(true);
+        setMessage("Account created successfully. Please log in.");
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -145,13 +171,15 @@ const IntakeLogin = () => {
         return;
       }
 
+      // Embed email in the redirect URL so the worker's browser auto-detects it
+      const encodedEmail = encodeURIComponent(loginEmail.trim().toLowerCase());
       const actionCodeSettings = {
-        url: "http://localhost:5173/intake-form/login",
+        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
         handleCodeInApp: true,
       };
 
-      await sendSignInLinkToEmail(auth, loginEmail, actionCodeSettings);
-      window.localStorage.setItem("emailForSignIn", loginEmail);
+      await sendSignInLinkToEmail(auth, loginEmail.trim().toLowerCase(), actionCodeSettings);
+      window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
 
       setMessage("Login link sent! Please check your email.");
     } catch (err) {
@@ -208,8 +236,8 @@ const IntakeLogin = () => {
               placeholder="Enter full name"
             />
 
-            {/* ROLE DROPDOWN */}
-            <div className="flex flex-col gap-1 w-full">
+            {/* ROLE DROPDOWN - REMOVED, Defaulting to Intake Worker */}
+            {/* <div className="flex flex-col gap-1 w-full">
               <label className="font-bold text-[14px]">Role</label>
               <select
                 value={role}
@@ -220,17 +248,15 @@ const IntakeLogin = () => {
                 <option value="Intake Worker">Intake Worker</option>
                 <option value="Parent">Parent</option>
               </select>
-            </div>
+            </div> */}
 
-            {/* AGENCY FIELD — only if role is Intake Worker */}
-            {role === "Intake Worker" && (
-              <InputField
-                label="Name of Agency / Organisation"
-                value={agency}
-                onChange={setAgency}
-                placeholder="Enter agency name"
-              />
-            )}
+            {/* AGENCY FIELD — Always show for Intake Worker (which is now default) */}
+            <InputField
+              label="Name of Agency / Organisation"
+              value={agency}
+              onChange={setAgency}
+              placeholder="Enter agency name"
+            />
 
             <InputField
               label="Phone Number"
@@ -247,35 +273,35 @@ const IntakeLogin = () => {
               placeholder="Enter email address"
               type="email"
             />
-{/* INVOICE EMAIL FIELD */}
-{isUPCSAgency ? (
-  <div className="w-full">
-    <label className="font-semibold text-sm w-full">
-      Invoice E-mail
-    </label>
+            {/* INVOICE EMAIL FIELD */}
+            {isUPCSAgency ? (
+              <div className="w-full">
+                <label className="font-semibold text-sm w-full">
+                  Invoice E-mail
+                </label>
 
-    <select
-      value={invoiceEmail}
-      onChange={(e) => setInvoiceEmail(e.target.value)}
-      className="border border-gray p-2 rounded w-full"
-    >
-      <option value="">Select Invoice Email</option>
-      {UPCS_EMAIL_OPTIONS.map((email) => (
-        <option key={email} value={email}>
-          {email}
-        </option>
-      ))}
-    </select>
-  </div>
-) : (
-  <InputField
-    label="Invoice E-mail"
-    value={invoiceEmail}
-    onChange={setInvoiceEmail}
-    placeholder="Enter invoice email"
-    type="email"
-  />
-)}
+                <select
+                  value={invoiceEmail}
+                  onChange={(e) => setInvoiceEmail(e.target.value)}
+                  className="border border-gray p-2 rounded w-full"
+                >
+                  <option value="">Select Invoice Email</option>
+                  {UPCS_EMAIL_OPTIONS.map((email) => (
+                    <option key={email} value={email}>
+                      {email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <InputField
+                label="Invoice E-mail"
+                value={invoiceEmail}
+                onChange={setInvoiceEmail}
+                placeholder="Enter invoice email"
+                type="email"
+              />
+            )}
 
             <button
               onClick={handleSignup}

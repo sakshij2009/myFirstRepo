@@ -9,7 +9,7 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
   const [isCaseWorker, setIsCaseWorker] = useState(false);
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isEditable, setIsEditable] = useState(true); // 👈 new state
+  // New forms are always editable; existing forms respect the admin-controlled flag
 
   const { id: routeId } = useParams();
   const location = useLocation();
@@ -24,9 +24,14 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
     }
   }, [user]);
 
+  // Track editability separately from loading
+  const [isEditable, setIsEditable] = useState(!isUpdateMode); // new form = always editable
+
   useEffect(() => {
     const fetchForm = async () => {
       if (!isUpdateMode || !formId) {
+        // "Add" mode → editable, no Firestore fetch needed
+        setIsEditable(true);
         setLoading(false);
         return;
       }
@@ -38,19 +43,22 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setFormData({ id: formId, ...data });
-          setIsEditable(data.isEditable ?? true); // ✅ use Firestore value
+          // ✅ Use admin-controlled flag; default to true if field not yet set
+          setIsEditable(data.isEditable ?? true);
         } else {
           console.warn("⚠️ Intake form not found:", formId);
+          setIsEditable(true);
         }
       } catch (err) {
         console.error("❌ Error fetching form data:", err);
+        setIsEditable(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchForm();
-  }, [formId, isUpdateMode]);
+  }, [formId, isUpdateMode, user]);
 
   if (loading) {
     return (

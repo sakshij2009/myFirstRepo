@@ -11,9 +11,21 @@ import UserHomePage from "./components/UserHomePage";
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const user = JSON.parse(localStorage.getItem("user"));
 
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) {
+    console.log("ProtectedRoute: No user found. Redirecting to /");
+    return <Navigate to="/" replace />;
+  }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  const role = user.role ? user.role.toLowerCase() : "";
+  const allowed = allowedRoles ? allowedRoles.map(r => r.toLowerCase()) : [];
+
+  console.log(`ProtectedRoute: Role=${role}, Allowed=${allowed}`);
+
+  if (allowed.length > 0 && !allowed.includes(role)) {
+    console.log(`ProtectedRoute: Role mismatch! ${role} not in ${allowed}. Redirecting to /`);
+    // Consider clearing user if role is mismatch to prevent loop? 
+    // localStorage.removeItem("user"); 
+    // No, maybe they are just at wrong URL. But here they are redirected to / which redirects them back...
     return <Navigate to="/" replace />;
   }
 
@@ -38,17 +50,17 @@ function App() {
   }, []);
 
   // Sync user state inside same tab
- useEffect(() => {
-  const updatedUser = localStorage.getItem("user");
-  setUser(updatedUser ? JSON.parse(updatedUser) : null);
-}, []);
+  useEffect(() => {
+    const updatedUser = localStorage.getItem("user");
+    setUser(updatedUser ? JSON.parse(updatedUser) : null);
+  }, []);
 
 
   return (
     <Router>
       <Routes>
         {/* 🌐 Main Public Login */}
-        <Route path="/" element={<Login setUser={setUser}/>} />
+        <Route path="/" element={<Login setUser={setUser} />} />
 
         {/* 🌐 Intake Form Application (with its own internal routes) */}
         <Route path="/intake-form/*" element={<IntakeFormMainPage />} />
@@ -58,7 +70,7 @@ function App() {
           path="/admin-dashboard/*"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
-              <AdminHomePage user={user} setUser={setUser}/>
+              <AdminHomePage user={user} setUser={setUser} />
             </ProtectedRoute>
           }
         />

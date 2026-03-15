@@ -1,22 +1,43 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { FaPlus } from "react-icons/fa6";
 import { IoIosSearch } from "react-icons/io";
 import { IoChevronDown } from "react-icons/io5";
 import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import { MdBadge } from "react-icons/md";
+import UserCard from "./UserCard";
 
 const ManageUser = () => {
   const [search, setSearch] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
+  const [role, setRole] = useState("");
+  const dropdownRef = useRef(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showIdCard, setShowIdCard] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setStatusOpen(false);
+        setshiftHoursOpen(false);
+        setStatusFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   const [gender, setGender] = useState("");
   const [shiftHours, setShiftHours] = useState("");
-  const [shiftType, setShiftType] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Active");
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
+  const statusOptions = ["All", "Active", "Suspended"];
   const [users, setUsers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [shiftHoursOpen, setshiftHoursOpen] = useState(false);
-  const [shiftTypeOpen, setShiftTypeOpen] = useState(false);
-  const [shiftTypeOptions, setShiftTypeOptions] = useState([]);
 
   const navigate = useNavigate();
 
@@ -24,48 +45,36 @@ const ManageUser = () => {
   const shiftHoursOption = ["All", "12:00 Hours", "9:00 Hours", "6:00 Hours"];
 
   // ✅ Fetch Users
- useEffect(() => {
-  const fetchUsers = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, "users"));
-      const userList = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          suspended: data.isSuspended ?? false, // ✅ default false
-        };
-      });
-
-      // ✅ Sort newest first
-      const sortedList = userList.sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt.seconds ? a.createdAt.seconds * 1000 : a.createdAt) : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt.seconds ? b.createdAt.seconds * 1000 : b.createdAt) : 0;
-        return dateB - dateA;
-      });
-
-      setUsers(sortedList);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  };
-  fetchUsers();
-}, []);
-
-
-  // ✅ Fetch shift types dynamically
   useEffect(() => {
-    const fetchShiftTypes = async () => {
+    const fetchUsers = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "shiftTypes"));
-        const typeList = querySnapshot.docs.map((doc) => doc.data().name);
-        setShiftTypeOptions(typeList);
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const userList = querySnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            suspended: data.isSuspended ?? false, // ✅ default false
+          };
+        });
+
+        // ✅ Sort newest first
+        const sortedList = userList.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt.seconds ? a.createdAt.seconds * 1000 : a.createdAt) : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt.seconds ? b.createdAt.seconds * 1000 : b.createdAt) : 0;
+          return dateB - dateA;
+        });
+
+        setUsers(sortedList);
       } catch (error) {
-        console.error("Error fetching shift types:", error);
+        console.error("Error fetching users:", error);
       }
     };
-    fetchShiftTypes();
+    fetchUsers();
   }, []);
+
+
+
 
   // ✅ Delete user
   const handleDeleteUser = async (userId) => {
@@ -82,27 +91,27 @@ const ManageUser = () => {
     }
   };
 
-    // ✅ Toggle suspension
+  // ✅ Toggle suspension
   // ✅ Handle suspension toggle
-const handleSuspendToggle = async (userId, currentStatus) => {
-  try {
-    const userRef = doc(db, "users", userId);
-    const newStatus = !currentStatus;
+  const handleSuspendToggle = async (userId, currentStatus) => {
+    try {
+      const userRef = doc(db, "users", userId);
+      const newStatus = !currentStatus;
 
-    // ✅ Update Firestore
-    await updateDoc(userRef, { isSuspended: newStatus });
+      // ✅ Update Firestore
+      await updateDoc(userRef, { isSuspended: newStatus });
 
-    // ✅ Update UI instantly
-    setUsers((prevUsers) =>
-      prevUsers.map((u) =>
-        u.id === userId ? { ...u, isSuspended: newStatus } : u
-      )
-    );
-  } catch (error) {
-    console.error("Error updating suspension:", error);
-    alert("Failed to update suspension status. Please try again.");
-  }
-};
+      // ✅ Update UI instantly
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u.id === userId ? { ...u, isSuspended: newStatus } : u
+        )
+      );
+    } catch (error) {
+      console.error("Error updating suspension:", error);
+      alert("Failed to update suspension status. Please try again.");
+    }
+  };
 
 
 
@@ -112,18 +121,24 @@ const handleSuspendToggle = async (userId, currentStatus) => {
     const genderMatches = !gender || gender === "All" || user.gender === gender;
     const shiftHourMatches =
       !shiftHours || shiftHours === "All" || user.shiftHours === shiftHours;
-    const shiftTypeMatches =
-      !shiftType || shiftType === "All" || user.shiftType === shiftType;
+
+    let statusMatches = true;
+    if (statusFilter === "Active") {
+      statusMatches = !user.isSuspended;
+    } else if (statusFilter === "Suspended") {
+      statusMatches = user.isSuspended;
+    }
+
     const searchMatches =
       !search ||
       user.name?.toLowerCase().includes(search.toLowerCase()) ||
       user.userId?.toString().toLowerCase().includes(search.toLowerCase());
 
-    return genderMatches && shiftHourMatches && shiftTypeMatches && searchMatches;
+    return genderMatches && shiftHourMatches && statusMatches && searchMatches;
   });
 
   // ✅ Pagination logic
-  const ITEMS_PER_PAGE = 7;
+  const ITEMS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentUsers = filteredUsers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -172,19 +187,19 @@ const handleSuspendToggle = async (userId, currentStatus) => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="border border-[#C5C5C5] rounded-[4px] w-[342px] focus:outline-none pt-2 pr-3 pb-2 pl-6 bg-[#FFFFFF] placeholder-[#809191] placeholder:text-[12px]"
-              placeholder="Search with Name, Client ID"
+              placeholder="Search with Name"
             />
             {search === "" && <IoIosSearch className="absolute top-3.5 left-2 text-[#809191]" />}
           </div>
         </div>
 
-        {/* Gender, Shift, and Type filters */}
-        <div className="relative flex gap-3">
+        {/* Gender, Shift, Type, and Role filters */}
+        <div className="relative flex gap-3" ref={dropdownRef}>
           {/* Gender */}
           <div className="flex gap-[14px] items-center">
             <p className="font-bold text-base leading-6 text-light-black">Gender</p>
             <button
-              onClick={() => setStatusOpen(true)}
+              onClick={() => setStatusOpen(!statusOpen)}
               className="flex items-center gap-1 text-light-green cursor-pointer"
             >
               {gender || "All"} <IoChevronDown />
@@ -195,21 +210,21 @@ const handleSuspendToggle = async (userId, currentStatus) => {
           <div className="flex gap-[14px] items-center">
             <p className="font-bold text-base leading-6 text-light-black">Shift Hours</p>
             <button
-              onClick={() => setshiftHoursOpen(true)}
+              onClick={() => setshiftHoursOpen(!shiftHoursOpen)}
               className="flex items-center gap-1 text-light-green cursor-pointer"
             >
               {shiftHours || "All"} <IoChevronDown />
             </button>
           </div>
 
-          {/* Shift Type */}
+          {/* Status Filter */}
           <div className="flex gap-[14px] items-center">
-            <p className="font-bold text-base leading-6 text-light-black">Shift Type</p>
+            <p className="font-bold text-base leading-6 text-light-black">Status</p>
             <button
-              onClick={() => setShiftTypeOpen(true)}
+              onClick={() => setStatusFilterOpen(!statusFilterOpen)}
               className="flex items-center gap-1 text-light-green cursor-pointer"
             >
-              {shiftType || "All"} <IoChevronDown />
+              {statusFilter} <IoChevronDown />
             </button>
           </div>
 
@@ -252,19 +267,19 @@ const handleSuspendToggle = async (userId, currentStatus) => {
             </div>
           )}
 
-          {shiftTypeOpen && (
+          {statusFilterOpen && (
             <div className="absolute right-[3px] top-[40px] w-30 bg-white shadow-lg rounded-md z-50">
               <ul className="py-2">
-                {["All", ...shiftTypeOptions].map((type) => (
+                {statusOptions.map((status) => (
                   <li
-                    key={type}
+                    key={status}
                     className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-green-600"
                     onClick={() => {
-                      setShiftType(type === "All" ? "" : type);
-                      setShiftTypeOpen(false);
+                      setStatusFilter(status);
+                      setStatusFilterOpen(false);
                     }}
                   >
-                    {type}
+                    {status}
                   </li>
                 ))}
               </ul>
@@ -297,11 +312,10 @@ const handleSuspendToggle = async (userId, currentStatus) => {
                   <td className="px-4 py-3 max-w-30">{user.username}</td>
                   <td className="px-4 py-3 text-center w-50">
                     <span
-                      className={`px-3 py-1 rounded-[4px] border ${
-                        user.gender === "Male"
-                          ? "bg-[#9CDBFB] text-[#005C92] border-[#00A8FF]"
-                          : "bg-[#FEE9EE] text-[#940730] border-[#FCA7BC]"
-                      }`}
+                      className={`px-3 py-1 rounded-[4px] border ${user.gender === "Male"
+                        ? "bg-[#9CDBFB] text-[#005C92] border-[#00A8FF]"
+                        : "bg-[#FEE9EE] text-[#940730] border-[#FCA7BC]"
+                        }`}
                     >
                       {user.gender}
                     </span>
@@ -317,14 +331,12 @@ const handleSuspendToggle = async (userId, currentStatus) => {
                         onChange={() => handleSuspendToggle(user.id, user.isSuspended || false)} // ✅ Update when toggled
                       />
                       <div
-                        className={`w-11 h-6 rounded-full transition-colors ${
-                          user.isSuspended ? "bg-dark-green" : "bg-gray-300"
-                        }`}
+                        className={`w-11 h-6 rounded-full transition-colors ${user.isSuspended ? "bg-dark-green" : "bg-gray-300"
+                          }`}
                       ></div>
                       <div
-                        className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                          user.isSuspended ? "translate-x-5" : ""
-                        }`}
+                        className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform ${user.isSuspended ? "translate-x-5" : ""
+                          }`}
                       ></div>
                     </label>
                   </td>
@@ -339,6 +351,15 @@ const handleSuspendToggle = async (userId, currentStatus) => {
                           navigate(`/admin-dashboard/add/update-user/${user.userId}`)
                         }
                       />
+                      <div className="w-px h-6 bg-gray"></div>
+                      {/* ID Card Button */}
+                      <button
+                        title="View ID Card"
+                        onClick={() => { setSelectedUser(user); setShowIdCard(true); }}
+                        className="text-dark-green hover:text-light-green cursor-pointer"
+                      >
+                        <MdBadge className="h-[18px] w-[18px]" />
+                      </button>
                       <div className="w-px h-6 bg-gray"></div>
                       <img
                         src="/images/delete.png"
@@ -378,9 +399,8 @@ const handleSuspendToggle = async (userId, currentStatus) => {
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
-                  currentPage === page ? "bg-light-green text-white" : ""
-                }`}
+                className={`px-3 py-1 border border-[#C5C5C5] rounded ${currentPage === page ? "bg-light-green text-white" : ""
+                  }`}
               >
                 {page}
               </button>
@@ -398,6 +418,31 @@ const handleSuspendToggle = async (userId, currentStatus) => {
             className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50"
           >
             »
+          </button>
+        </div>
+      )}
+
+      {/* ✅ ID Card Modal — uses existing UserCard (flip animation: front + back) */}
+      {showIdCard && selectedUser && (
+        <div
+          className="fixed inset-0 bg-black/60 flex flex-col items-center justify-center z-50 gap-4"
+          onClick={() => setShowIdCard(false)}
+        >
+          {/* Hint */}
+          <p className="text-white text-sm opacity-75 pointer-events-none select-none">
+            Click card to flip • Click outside to close
+          </p>
+
+          {/* Card — stop propagation so clicking card doesn't close modal */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <UserCard user={selectedUser} />
+          </div>
+
+          <button
+            onClick={() => setShowIdCard(false)}
+            className="mt-2 px-6 py-2 bg-white text-dark-green font-semibold rounded-full shadow hover:bg-gray-100 text-sm"
+          >
+            Close
           </button>
         </div>
       )}

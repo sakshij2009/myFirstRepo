@@ -18,9 +18,45 @@ export default function ShiftCard({ shift, onConfirm, onTransfer }) {
     }
   };
 
+  const formatDate = (val) => {
+    if (!val) return "--";
+    // 1. Firestore Timestamp
+    if (typeof val.toDate === "function") {
+      return val.toDate().toLocaleDateString("en-CA", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+    // 2. JS Date
+    if (val instanceof Date) {
+      return val.toLocaleDateString("en-CA", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+    // 3. String
+    return val;
+  };
+
+  const formatTime = (val) => {
+    if (!val) return "--";
+    if (typeof val.toDate === "function") {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "UTC",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(val.toDate());
+    }
+    return val;
+  }
+
+  // ... colors ...
   const colors = getCategoryStyle();
   const isThreeButtons = shift?.shiftConfirmed;
-const router = useRouter();
+  const router = useRouter();
 
   return (
     <View
@@ -45,7 +81,7 @@ const router = useRouter();
         />
 
         <View style={{ flex: 1 }}>
-            
+
           <Text style={{ fontWeight: "700", fontSize: 15 }}>
             {shift?.clientName || shift?.clientDetails?.name || "Client"}
           </Text>
@@ -74,7 +110,7 @@ const router = useRouter();
         <View style={{ flex: 1 }}>
           <Text style={{ color: "#6b7280" }}>Date</Text>
           <Text style={{ fontWeight: "600" }}>
-            {shift?.startDate || "--"}
+            {formatDate(shift?.startDate)}
           </Text>
 
           <Text style={{ color: "#6b7280", marginTop: 12 }}>
@@ -102,7 +138,7 @@ const router = useRouter();
         <View style={{ flex: 1 }}>
           <Text style={{ color: "#6b7280" }}>Shift Timeline</Text>
           <Text style={{ fontWeight: "600" }}>
-            {(shift?.startTime || "--")} - {(shift?.endTime || "--")}
+            {formatTime(shift?.startTime)} - {formatTime(shift?.endTime)}
           </Text>
 
           <Text style={{ color: "#6b7280", marginTop: 12 }}>Agency</Text>
@@ -123,78 +159,79 @@ const router = useRouter();
         }}
       />
 
-     
 
 
-{/* ===== BUTTONS ===== */}
-<View
-  style={{
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-  }}
->
-  {/* IF NOT CONFIRMED → SHOW CONFIRM BUTTON */}
-  {!shift?.shiftConfirmed && (
-    <Pressable
-      style={{
-        backgroundColor: "#1f5f3b",
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-      }}
-      onPress={() => onConfirm?.(shift)}
-    >
-      <Text style={{ color: "#fff", fontWeight: "700" }}>
-        Confirm Shift
-      </Text>
-    </Pressable>
-  )}
 
-  {/* IF CONFIRMED → SHOW MAKE REPORT BUTTON */}
-  {shift?.shiftConfirmed && (
-  <Pressable
-    style={{
-      borderWidth: 1,
-      borderColor: "#2563eb",
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-    }}
-    onPress={() =>
-      router.push({
-        pathname: "/report",
-        params: {
-          shiftId: shift?.shiftID || shift?.id
-        }
-      })
-    }
-  >
-    <Text style={{ color: "#2563eb", fontWeight: "700" }}>
-      Make Report
-    </Text>
-  </Pressable>
-)}
+      {/* ===== BUTTONS ===== */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          gap: 10,
+        }}
+      >
+        {/* IF NOT CONFIRMED → SHOW CONFIRM BUTTON */}
+        {!shift?.shiftConfirmed && (
+          <Pressable
+            style={{
+              backgroundColor: "#1f5f3b",
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+            }}
+            onPress={() => onConfirm?.(shift)}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>
+              Confirm Shift
+            </Text>
+          </Pressable>
+        )}
+
+        {/* IF CONFIRMED → SHOW MAKE REPORT BUTTON */}
+        {shift?.shiftConfirmed && (
+          <Pressable
+            style={{
+              borderWidth: 1,
+              borderColor: "#2563eb",
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+            }}
+            onPress={() =>
+              router.push({
+                pathname: "/report",
+                params: {
+                  shiftId: shift?.shiftID || shift?.id
+                }
+              })
+            }
+          >
+            <Text style={{ color: "#2563eb", fontWeight: "700" }}>
+              Make Report
+            </Text>
+          </Pressable>
+        )}
 
 
-  {/* TRANSFER ALWAYS SHOWS */}
-  <Pressable
-    style={{
-      borderWidth: 1,
-      borderColor: "#F97316",
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-    }}
-    onPress={() => {
-      //  console.log("Transfer clicked", shift?.id);
-      onTransfer?.(shift)}}
-  >
-    <Text style={{ color: "#F97316", fontWeight: "700" }}>
-      Transfer Shift
-    </Text>
-  </Pressable>
-</View>
+        {/* TRANSFER ALWAYS SHOWS */}
+        <Pressable
+          style={{
+            borderWidth: 1,
+            borderColor: "#F97316",
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            borderRadius: 8,
+          }}
+          onPress={() => {
+            //  console.log("Transfer clicked", shift?.id);
+            onTransfer?.(shift)
+          }}
+        >
+          <Text style={{ color: "#F97316", fontWeight: "700" }}>
+            Transfer Shift
+          </Text>
+        </Pressable>
+      </View>
 
 
 

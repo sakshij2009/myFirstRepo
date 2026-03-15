@@ -205,91 +205,91 @@ export default function Availability() {
   };
 
   const isDayEmpty = (day) =>
-  !Object.values(day).some(period =>
-    Object.values(period).some(Boolean)
-  );
+    !Object.values(day).some(period =>
+      Object.values(period).some(Boolean)
+    );
 
   const clone = (obj) => JSON.parse(JSON.stringify(obj || {}));
 
 
 
   /* ===== SAVE ===== */
- 
 
-const saveAvailability = async () => {
-  try {
-    console.log("SAVE BUTTON PRESSED");
 
-    if (!userId) {
-      Alert.alert("Error", "User not found. Please login again.");
-      return;
-    }
+  const saveAvailability = async () => {
+    try {
+      console.log("SAVE BUTTON PRESSED");
 
-    const q = query(collection(db, "users"), where("userId", "==", userId));
-    const qs = await getDocs(q);
-
-    if (qs.empty) {
-      Alert.alert("Error", "User record not found.");
-      return;
-    }
-
-    const userDoc = qs.docs[0];
-    const userRef = userDoc.ref;
-
-    const todayKey = toDateKey(new Date());
-    const existing = userDoc.data().availability || {};
-    const updates = {};
-
-    Object.keys(existing).forEach((k) => {
-      if (k < todayKey) {
-        updates[`availability.${k}`] = deleteField();
+      if (!userId) {
+        Alert.alert("Error", "User not found. Please login again.");
+        return;
       }
-    });
 
-    const dayData = draftAvailability[selectedKey];
+      const q = query(collection(db, "users"), where("userId", "==", userId));
+      const qs = await getDocs(q);
 
-    if (!dayData || isDayEmpty(dayData)) {
-      updates[`availability.${selectedKey}`] = deleteField();
-    } else {
-      updates[`availability.${selectedKey}`] = dayData;
+      if (qs.empty) {
+        Alert.alert("Error", "User record not found.");
+        return;
+      }
+
+      const userDoc = qs.docs[0];
+      const userRef = userDoc.ref;
+
+      const todayKey = toDateKey(new Date());
+      const existing = userDoc.data().availability || {};
+      const updates = {};
+
+      Object.keys(existing).forEach((k) => {
+        if (k < todayKey) {
+          updates[`availability.${k}`] = deleteField();
+        }
+      });
+
+      const dayData = draftAvailability[selectedKey];
+
+      if (!dayData || isDayEmpty(dayData)) {
+        updates[`availability.${selectedKey}`] = deleteField();
+      } else {
+        updates[`availability.${selectedKey}`] = dayData;
+      }
+
+      updates.updatedAt = serverTimestamp();
+
+      await updateDoc(userRef, updates);
+
+      // ✅ ADD THIS BLOCK HERE (updates UI immediately)
+      const nextSaved = clone(savedAvailability);
+
+      // remove old past keys locally too
+      Object.keys(existing).forEach((k) => {
+        if (k < todayKey) delete nextSaved[k];
+      });
+
+      if (!dayData || isDayEmpty(dayData)) {
+        delete nextSaved[selectedKey];
+      } else {
+        nextSaved[selectedKey] = dayData;
+      }
+
+      setSavedAvailability(nextSaved);
+      setDraftAvailability(clone(nextSaved));
+      // ✅ END BLOCK
+
+      Alert.alert("Saved", "Availability updated successfully");
+    } catch (err) {
+      console.error("SAVE ERROR:", err);
+      Alert.alert("Error", "Failed to save availability");
     }
+  };
 
-    updates.updatedAt = serverTimestamp();
-
-    await updateDoc(userRef, updates);
-
-    // ✅ ADD THIS BLOCK HERE (updates UI immediately)
-    const nextSaved = clone(savedAvailability);
-
-    // remove old past keys locally too
-    Object.keys(existing).forEach((k) => {
-      if (k < todayKey) delete nextSaved[k];
-    });
-
-    if (!dayData || isDayEmpty(dayData)) {
-      delete nextSaved[selectedKey];
-    } else {
-      nextSaved[selectedKey] = dayData;
-    }
-
-    setSavedAvailability(nextSaved);
-    setDraftAvailability(clone(nextSaved));
-    // ✅ END BLOCK
-
-    Alert.alert("Saved", "Availability updated successfully");
-  } catch (err) {
-    console.error("SAVE ERROR:", err);
-    Alert.alert("Error", "Failed to save availability");
-  }
-};
- 
   /* ===================== */
   /* UI */
   /* ===================== */
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f8fafc" }}>
-      <ScrollView   keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 110 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 110 }}>
         {/* Header */}
         <View
           style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}
@@ -314,7 +314,21 @@ const saveAvailability = async () => {
             </Pressable>
           </View>
 
-          <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 10 }}>
+          {/* Days Header */}
+          <View style={{ flexDirection: "row", marginTop: 10, marginBottom: 5 }}>
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <View
+                key={day}
+                style={{ width: "14.28%", alignItems: "center" }}
+              >
+                <Text style={{ fontWeight: "700", color: "#64748b", fontSize: 12 }}>
+                  {day}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 5 }}>
             {calendarCells.map(({ date, inMonth }) => {
               const key = toDateKey(date);
               const past = isPastDate(date);
@@ -341,12 +355,12 @@ const saveAvailability = async () => {
                   key={key}
                   disabled={past}
                   onPress={() => {
-  if (past) return;
+                    if (past) return;
 
-  // ✅ discard unsaved edits when switching dates
-  setDraftAvailability(clone(savedAvailability));
-  setSelectedDate(date);
-}}
+                    // ✅ discard unsaved edits when switching dates
+                    setDraftAvailability(clone(savedAvailability));
+                    setSelectedDate(date);
+                  }}
 
                   style={{
                     width: "14.28%",

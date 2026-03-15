@@ -1,28 +1,30 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getFirestore, collection, query, getDocs } from "firebase/firestore";
 
-export default function AdminShiftCalendar() {
+export default function AdminShiftCalendar({ onShiftClick }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [shifts, setShifts] = useState([]);
-  const [expandedUsers, setExpandedUsers] = useState({});
+  const [expandedClients, setExpandedClients] = useState({});
 
   const CATEGORY_COLORS = {
-    emergent: "bg-red-100 text-red-700",
-    respite: "bg-green-100 text-green-700",
-    transportation: "bg-blue-100 text-blue-700",
-    supervised: "bg-yellow-100 text-yellow-700",
-    default: "bg-gray-100 text-gray-700",
+    emergent:      { bg: "bg-red-100",    text: "text-red-800",    hover: "hover:bg-red-200"    },
+    respite:       { bg: "bg-green-100",  text: "text-green-800",  hover: "hover:bg-green-200"  },
+    transportation:{ bg: "bg-blue-100",   text: "text-blue-800",   hover: "hover:bg-blue-200"   },
+    supervised:    { bg: "bg-yellow-100", text: "text-yellow-800", hover: "hover:bg-yellow-200" },
+    default:       { bg: "bg-gray-100",   text: "text-gray-700",   hover: "hover:bg-gray-200"   },
   };
 
   const detectCategory = (shift) => {
     const c = (shift.categoryName || "").toLowerCase();
-    if (c.includes("emergent")) return CATEGORY_COLORS.emergent;
-    if (c.includes("respite")) return CATEGORY_COLORS.respite;
+    if (c.includes("emergent"))  return CATEGORY_COLORS.emergent;
+    if (c.includes("respite"))   return CATEGORY_COLORS.respite;
     if (c.includes("transport")) return CATEGORY_COLORS.transportation;
-    if (c.includes("supervised")) return CATEGORY_COLORS.supervised;
+    if (c.includes("supervised"))return CATEGORY_COLORS.supervised;
     return CATEGORY_COLORS.default;
   };
+
+  const getClientColor = (clientShifts) => detectCategory(clientShifts[0]);
 
   // 🔥 FETCH ALL SHIFTS (ADMIN)
   const fetchShifts = async () => {
@@ -37,7 +39,7 @@ export default function AdminShiftCalendar() {
     fetchShifts();
   }, []);
 
-  // 🧩 GROUP BY DATE → USER
+  // 🧩 GROUP BY DATE → CLIENT
   const groupedShifts = () => {
     const map = {};
 
@@ -46,13 +48,19 @@ export default function AdminShiftCalendar() {
         ? shift.startDate.toDate()
         : new Date(shift.startDate);
 
+      if (isNaN(d)) return;
+
       const dateKey = d.toISOString().split("T")[0];
-      const userKey = shift.name  ;
+      const clientKey =
+        shift.clientName ||
+        shift.clientDetails?.name ||
+        shift.clientDetails?.clientName ||
+        "Unknown Client";
 
       if (!map[dateKey]) map[dateKey] = {};
-      if (!map[dateKey][userKey]) map[dateKey][userKey] = [];
+      if (!map[dateKey][clientKey]) map[dateKey][clientKey] = [];
 
-      map[dateKey][userKey].push(shift);
+      map[dateKey][clientKey].push(shift);
     });
 
     return map;
@@ -79,9 +87,9 @@ export default function AdminShiftCalendar() {
 
   const monthDays = getMonthDays();
 
-  const toggleUser = (dateKey, userKey) => {
-    const key = `${dateKey}_${userKey}`;
-    setExpandedUsers((prev) => ({
+  const toggleClient = (dateKey, clientKey) => {
+    const key = `${dateKey}_${clientKey}`;
+    setExpandedClients((prev) => ({
       ...prev,
       [key]: !prev[key],
     }));
@@ -97,7 +105,22 @@ export default function AdminShiftCalendar() {
 
   return (
     <div className="w-full bg-white rounded-lg p-4 shadow-sm">
-      
+
+      {/* COLOR LEGEND — top */}
+      <div className="mb-3 flex gap-4 items-center text-sm flex-wrap">
+        {[
+          { colors: CATEGORY_COLORS.emergent,       label: "Emergent" },
+          { colors: CATEGORY_COLORS.respite,        label: "Respite" },
+          { colors: CATEGORY_COLORS.transportation, label: "Transportation" },
+          { colors: CATEGORY_COLORS.supervised,     label: "Supervised" },
+        ].map(({ colors, label }) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className={`w-4 h-4 rounded-sm ${colors.bg}`}></span>
+            <span className={colors.text}>{label}</span>
+          </div>
+        ))}
+      </div>
+
       {/* HEADER */}
       <div className="flex justify-between items-center mb-4">
         <button onClick={prevMonth}><ChevronLeft /></button>
@@ -118,41 +141,47 @@ export default function AdminShiftCalendar() {
       <div className="grid grid-cols-7 border border-gray-200">
         {monthDays.map((day, idx) => {
           const dateKey = day ? day.toISOString().split("T")[0] : null;
-          const usersForDay = dateKey ? shiftMap[dateKey] || {} : {};
+          const clientsForDay = dateKey ? shiftMap[dateKey] || {} : {};
 
           return (
             <div key={idx} className="min-h-[150px] border-r border-b border-gray-200 p-1 flex flex-col">
               {day && <div className="text-sm font-bold">{day.getDate()}</div>}
 
-              {/* USERS */}
+              {/* CLIENTS */}
               <div className="mt-1 flex flex-col gap-1">
-                {Object.entries(usersForDay).map(([userKey, userShifts]) => {
-                  const expandKey = `${dateKey}_${userKey}`;
-                  const isOpen = expandedUsers[expandKey];
+                {Object.entries(clientsForDay).map(([clientKey, clientShifts]) => {
+                  const expandKey = `${dateKey}_${clientKey}`;
+                  const isOpen = expandedClients[expandKey];
+
+                  const clientColor = getClientColor(clientShifts);
 
                   return (
-                    <div key={userKey} className="border border-gray-500 rounded bg-gray-50">
-                      {/* USER HEADER */}
+                    <div key={clientKey} className="rounded overflow-hidden border border-gray-200">
+                      {/* CLIENT HEADER — full bg color visible at top always */}
                       <div
-                        onClick={() => toggleUser(dateKey, userKey)}
-                        className="cursor-pointer px-2 py-1 text-sm font-semibold bg-gray-100 hover:bg-gray-300 flex justify-between"
+                        onClick={() => toggleClient(dateKey, clientKey)}
+                        className={`cursor-pointer px-2 py-1 text-xs font-semibold flex justify-between items-center ${clientColor.bg} ${clientColor.text} ${clientColor.hover}`}
                       >
-                        <span>{userKey}</span>
-                        <span>{isOpen ? "▲" : "▼"}</span>
+                        <span className="truncate">{clientKey}</span>
+                        <span className="ml-1 shrink-0">{isOpen ? "▲" : "▼"}</span>
                       </div>
 
                       {/* SHIFTS */}
                       {isOpen && (
                         <div className="p-1 flex flex-col gap-1">
-                          {userShifts.map((shift) => (
-                            <div
-                              key={shift.id}
-                              className={`rounded px-2 py-1 text-xs font-semibold ${detectCategory(shift)}`}
-                            >
-                              <div>{shift.clientName || shift.name}</div>
-                              <div>{shift.startTime} → {shift.endTime}</div>
-                            </div>
-                          ))}
+                          {clientShifts.map((shift) => {
+                            const shiftColor = detectCategory(shift);
+                            return (
+                              <div
+                                key={shift.id}
+                                onClick={() => onShiftClick && onShiftClick(shift)}
+                                className={`rounded px-2 py-1 text-xs cursor-pointer ${shiftColor.bg} ${shiftColor.text} ${shiftColor.hover}`}
+                              >
+                                <div className="font-semibold">{shift.name || "—"}</div>
+                                <div className="opacity-75">{shift.startTime} → {shift.endTime}</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -163,28 +192,6 @@ export default function AdminShiftCalendar() {
           );
         })}
       </div>
-      {/* COLOR LEGEND */}
-<div className="mt-4 flex gap-4 items-center text-m">
-  <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-sm bg-red-100 border border-red-300"></span>
-    <span className="text-red-700">Emergent</span>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300"></span>
-    <span className="text-green-700">Respite</span>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-300"></span>
-    <span className="text-blue-700">Transportation</span>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300"></span>
-    <span className="text-yellow-700">Supervised</span>
-  </div>
-</div>
 
     </div>
     

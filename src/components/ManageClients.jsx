@@ -11,7 +11,7 @@ const ManageClients = () => {
   const [search, setSearch] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const [gender, setGender] = useState("");
-  const [clientStatus, setClientStatus] = useState("");
+  const [clientStatus, setClientStatus] = useState("Active");
   const [agencyType, setAgencyType] = useState("");
   const [clients, setClients] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -21,7 +21,7 @@ const ManageClients = () => {
   const [servicesMap, setServicesMap] = useState({});
 
   const genderOptions = ["All", "Male", "Female"];
-  const clientStatusOptions = ["Active", "Inactive","Closed"];
+  const clientStatusOptions = ["Active", "Inactive", "Closed"];
 
   const getStatusStyles = (status) => {
     switch (status) {
@@ -51,63 +51,63 @@ const ManageClients = () => {
   };
 
   const handleToggle = async (clientId, value) => {
-  try {
-    await updateDoc(doc(db, "clients", clientId), {
-      fileClosed: value,
-    });
-    console.log("File closed updated:", value);
-  } catch (error) {
-    console.error("Error updating fileClosed:", error);
-  }
-};
-
-  // ✅ Fetch clients
-  useEffect(() => {
-  const fetchClients = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "clients"));
-
-      const clientList = querySnapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-        // ✅ newest first
-        .sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return bTime - aTime;
-        });
-
-      setClients(clientList);
-      fetchServiceTypes(clientList);
+      await updateDoc(doc(db, "clients", clientId), {
+        fileClosed: value,
+      });
+      console.log("File closed updated:", value);
     } catch (error) {
-      console.error("Error fetching clients:", error);
+      console.error("Error updating fileClosed:", error);
     }
   };
 
-  fetchClients();
-}, []);
+  // ✅ Fetch clients
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "clients"));
 
-const handleDeleteClient = async (clientId) => {
-  const confirmDelete = window.confirm(
-    "Are you sure you want to delete this client? This action cannot be undone."
-  );
+        const clientList = querySnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+          // ✅ newest first
+          .sort((a, b) => {
+            const aTime = a.createdAt?.seconds || 0;
+            const bTime = b.createdAt?.seconds || 0;
+            return bTime - aTime;
+          });
 
-  if (!confirmDelete) return;
+        setClients(clientList);
+        fetchServiceTypes(clientList);
+      } catch (error) {
+        console.error("Error fetching clients:", error);
+      }
+    };
 
-  try {
-    await deleteDoc(doc(db, "clients", clientId));
+    fetchClients();
+  }, []);
 
-    // ✅ Remove from UI instantly
-    setClients((prev) => prev.filter((c) => c.id !== clientId));
+  const handleDeleteClient = async (clientId) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this client? This action cannot be undone."
+    );
 
-    alert("Client deleted successfully");
-  } catch (error) {
-    console.error("Error deleting client:", error);
-    alert("Failed to delete client");
-  }
-};
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(doc(db, "clients", clientId));
+
+      // ✅ Remove from UI instantly
+      setClients((prev) => prev.filter((c) => c.id !== clientId));
+
+      alert("Client deleted successfully");
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      alert("Failed to delete client");
+    }
+  };
 
 
 
@@ -164,12 +164,12 @@ const handleDeleteClient = async (clientId) => {
   const filteredClients = clients.filter((client) => {
     const genderMatches =
       !gender || gender === "All" || client.gender === gender;
-   const clientStatusMatches =
-  !clientStatus ||
-  clientStatus === "All" ||
-  (clientStatus === "Active" && client.clientStatus === "Active") ||
-  (clientStatus === "Inactive" && client.clientStatus === "Inactive") ||
-  (clientStatus === "Closed" && client.fileClosed === true);
+    const clientStatusMatches =
+      !clientStatus ||
+      clientStatus === "All" ||
+      (clientStatus === "Active" && client.clientStatus === "Active") ||
+      (clientStatus === "Inactive" && client.clientStatus === "Inactive") ||
+      (clientStatus === "Closed" && client.fileClosed === true);
 
     const searchMatches =
       !search ||
@@ -179,7 +179,7 @@ const handleDeleteClient = async (clientId) => {
   });
 
   // Pagination
-  const ITEMS_PER_PAGE = 7;
+  const ITEMS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentClients = filteredClients.slice(
@@ -419,7 +419,7 @@ const handleDeleteClient = async (clientId) => {
                         <input
                           type="checkbox"
                           className="sr-only peer"
-                         checked={client?.fileClosed === true}
+                          checked={client?.fileClosed === true}
                           onChange={(e) => handleToggle(client.id, e.target.checked)}
                         />
 
@@ -450,7 +450,7 @@ const handleDeleteClient = async (clientId) => {
                         src="/images/delete.png"
                         alt="delete"
                         className="w-[14px] h-[18px] cursor-pointer"
-                         onClick={() => handleDeleteClient(client.id)}
+                        onClick={() => handleDeleteClient(client.id)}
                       />
                     </div>
                   </td>
@@ -488,9 +488,8 @@ const handleDeleteClient = async (clientId) => {
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-gray rounded ${
-                  currentPage === page ? "bg-light-green text-white" : "bg-white"
-                }`}
+                className={`px-3 py-1 border border-gray rounded ${currentPage === page ? "bg-light-green text-white" : "bg-white"
+                  }`}
               >
                 {page}
               </button>

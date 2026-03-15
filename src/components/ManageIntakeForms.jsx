@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { IoIosSearch } from "react-icons/io";
 import { IoChevronDown } from "react-icons/io5";
 import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { FaPlus } from "react-icons/fa6";
-import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
+import FileClosureSlider from "./FileClosureSlider";
+// import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
 
 const ManageIntakeForms = () => {
   const [search, setSearch] = useState("");
@@ -15,92 +16,127 @@ const ManageIntakeForms = () => {
   const [formStatus, setFormStatus] = useState("All");
   const [formTypeOpen, setFormTypeOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const dropdownRef = useRef(null);
+  const [closureSliderOpen, setClosureSliderOpen] = useState(false);
+  const [selectedClosureClient, setSelectedClosureClient] = useState(null);
+  // const [showModal, setShowModal] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setFormTypeOpen(false);
+        setStatusOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const navigate = useNavigate();
 
-  const formTypeOptions = ["All", "Parent Form", "Intake Worker Form"];
+  const formTypeOptions = ["All", "Intake Worker"];
   const statusOptions = ["All", "Submitted", "Accepted", "Rejected"];
 
   // =======================
-// 📌 FETCH FORMS (OLD + NEW)
-// =======================
-useEffect(() => {
-  const fetchForms = async () => {
-    try {
-      const snap = await getDocs(collection(db, "InTakeForms"));
-      const list = snap.docs.map((d) => {
-        const data = d.data();
+  // 📌 FETCH FORMS (OLD + NEW)
+  // =======================
+  useEffect(() => {
+    const fetchForms = async () => {
+      try {
+        const [snap, categoriesSnap] = await Promise.all([
+          getDocs(collection(db, "InTakeForms")),
+          getDocs(collection(db, "shiftCategories"))
+        ]);
 
-        const normalized = {
-          id: d.id,
-          formId:d.id || "N/A",
-          formType:
-            data.formType || (data.inTakeWorkerName ? "Intake Worker" : "Private "),
-          filledBy:
-            data.filledBy ||
-            data.inTakeWorkerName ||
-            data.nameOfPerson ||
-            data.parentName ||
-            data.workerInfo?.workerName ||
-            "Unknown",
-              clients: Array.isArray(data.inTakeClients)
-      ? data.inTakeClients.map((c) => c.name).filter(Boolean)
+        const categoryMap = {};
+        if (categoriesSnap) {
+          categoriesSnap.forEach((d) => {
+            categoryMap[d.id] = d.data().name || "Unknown";
+          });
+        }
 
-      : data.clients && typeof data.clients === "object"
-      ? Object.values(data.clients)
-          .map((c) => c.fullName)
-          .filter(Boolean)
+        const list = snap.docs.map((d) => {
+          const data = d.data();
 
-      : data.nameInClientTable
-      ? [data.nameInClientTable]
+          const serviceArray = data.services?.serviceType || data.serviceRequired || [];
+          const careCategory = Array.isArray(serviceArray)
+            ? serviceArray.map((id) => categoryMap[id] || id).join(", ")
+            : categoryMap[serviceArray] || serviceArray || "—";
 
-      : ["—"],
+          const normalized = {
+            id: d.id,
+            formId: d.id || "N/A",
+            careCategory,
+            formType: "Intake Worker",
+            filledBy:
+              data.filledBy ||
+              data.inTakeWorkerName ||
+              data.nameOfPerson ||
+              data.parentName ||
+              data.workerInfo?.workerName ||
+              "Unknown",
+            clients: Array.isArray(data.inTakeClients)
+              ? data.inTakeClients.map((c) => c.name).filter(Boolean)
 
-          submittedOn:
-            data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || "—",
-          status: data.status || "Pending",
-          isEditable: data.isEditable || false,
-        };
+              : data.clients && typeof data.clients === "object"
+                ? Object.values(data.clients)
+                  .map((c) => c.fullName)
+                  .filter(Boolean)
 
-        return normalized;
-      });
+                : data.nameInClientTable
+                  ? [data.nameInClientTable]
 
-      // 🧠 SORT LATEST FIRST
-      const sorted = list.sort((a, b) => {
-        const parseDate = (str) => {
-          if (!str) return 0;
+                  : ["—"],
 
-          // Handle different date formats
-          // Examples: "10 Nov 2025 04:08 PM", "10-11-2025", "2025-11-10"
-          let date;
-          if (str.includes("PM") || str.includes("AM")) {
-            date = new Date(str.replace(/(\d{2}) (\w{3}) (\d{4})/, "$2 $1, $3"));
-          } else if (str.includes("-")) {
-            const parts = str.split("-");
-            if (parts[2]?.length === 4) {
-              // Format: dd-mm-yyyy
-              date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            submittedOn:
+              data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || "—",
+            status: data.status || "Pending",
+            isEditable: data.isEditable || false,
+            lastUpdatedAt: data.lastUpdatedAt || null,
+            lastUpdatedBy: data.lastUpdatedBy || null,
+          };
+
+          return normalized;
+        });
+
+        // 🧠 SORT LATEST FIRST
+        const sorted = list.sort((a, b) => {
+          const parseDate = (str) => {
+            if (!str) return 0;
+
+            // Handle different date formats
+            // Examples: "10 Nov 2025 04:08 PM", "10-11-2025", "2025-11-10"
+            let date;
+            if (str.includes("PM") || str.includes("AM")) {
+              date = new Date(str.replace(/(\d{2}) (\w{3}) (\d{4})/, "$2 $1, $3"));
+            } else if (str.includes("-")) {
+              const parts = str.split("-");
+              if (parts[2]?.length === 4) {
+                // Format: dd-mm-yyyy
+                date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+              } else {
+                date = new Date(str);
+              }
             } else {
               date = new Date(str);
             }
-          } else {
-            date = new Date(str);
-          }
-          return date.getTime() || 0;
-        };
+            return date.getTime() || 0;
+          };
 
-        return parseDate(b.submittedOn) - parseDate(a.submittedOn);
-      });
+          return parseDate(b.submittedOn) - parseDate(a.submittedOn);
+        });
 
-      setForms(sorted);
-    } catch (error) {
-      console.error("Error fetching intake forms:", error);
-    }
-  };
+        setForms(sorted);
+      } catch (error) {
+        console.error("Error fetching intake forms:", error);
+      }
+    };
 
-  fetchForms();
-}, []);
+    fetchForms();
+  }, []);
 
   // =======================
   // 📌 DELETE FORM
@@ -155,7 +191,7 @@ useEffect(() => {
   // =======================
   // 📌 PAGINATION
   // =======================
-  const ITEMS_PER_PAGE = 7;
+  const ITEMS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredForms.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentForms = filteredForms.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -182,15 +218,15 @@ useEffect(() => {
             </p>
           </div>
         </div>
-         <div
-                  className="flex justify-center items-center text-white border gap-[10px] pt-[6px] pr-3 pb-[6px] pl-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
-                  onClick={() => setShowModal(true)}
-                >
-                  <p className="w-[10px]">
-                    <FaPlus />
-                  </p>
-                  <p className="font-medium text-[14px] leading-[20px]">Add Intake Form</p>
-                </div>
+        <div
+          className="flex justify-center items-center text-white border gap-[10px] pt-[6px] pr-3 pb-[6px] pl-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
+          onClick={() => navigate("/admin-dashboard/add/add-intake-form?type=Intake Worker")}
+        >
+          <p className="w-[10px]">
+            <FaPlus />
+          </p>
+          <p className="font-medium text-[14px] leading-[20px]">Add Intake Form</p>
+        </div>
       </div>
 
       <hr className="border-t border-gray" />
@@ -214,7 +250,7 @@ useEffect(() => {
         </div>
 
         {/* Dropdown Filters (right-aligned, just like ManageUser) */}
-        <div className="relative flex gap-3">
+        <div className="relative flex gap-3" ref={dropdownRef}>
           {/* Form Type Filter */}
           <div className="flex gap-[14px] items-center">
             <p className="font-bold text-base leading-6 text-light-black">Form Type</p>
@@ -263,13 +299,13 @@ useEffect(() => {
             </div>
           )}
 
-          {/* Intake Modal */}
-      {showModal && (
+          {/* Intake Modal - REMOVED */}
+          {/* {showModal && (
         <IntakeFormChoiceModel
           setShowModal={setShowModal}
           
         />
-      )}
+      )} */}
 
           {statusOpen && (
             <div className="absolute right-[10px] top-[40px] w-40 bg-white shadow-lg rounded-md z-50">
@@ -303,8 +339,10 @@ useEffect(() => {
                 <th className="text-left px-4">Filled By</th>
                 <th className="text-left px-4 max-w-20">Client(s)</th>
                 <th className="text-left px-4">Submitted On</th>
+                <th className="text-left px-4">Last Updated</th>
                 <th className="text-center px-4">Status</th>
                 <th className="text-center px-4">Editing Access</th>
+                <th className="text-center px-4">File Closure</th>
                 <th className="text-center px-4">Actions</th>
               </tr>
             </thead>
@@ -314,21 +352,29 @@ useEffect(() => {
                   <td className="px-4 py-3">{form.formId}</td>
                   <td className="px-4 py-3">{form.formType}</td>
                   <td className="px-4 py-3">{form.filledBy}</td>
-                  <td className="px-4 py-3 max-w-50 truncate " title= {Array.isArray(form.clients) ? form.clients.join(", ") : form.clients}>
+                  <td className="px-4 py-3 max-w-50 truncate " title={Array.isArray(form.clients) ? form.clients.join(", ") : form.clients}>
                     {Array.isArray(form.clients) ? form.clients.join(", ") : form.clients}
                   </td>
                   <td className="px-4 py-3">{form.submittedOn}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {form.lastUpdatedAt
+                      ? <div>
+                        <div>{form.lastUpdatedAt}</div>
+                        {form.lastUpdatedBy && <div className="text-gray-500 text-[11px]">by {form.lastUpdatedBy}</div>}
+                      </div>
+                      : <span className="text-gray-400">—</span>
+                    }
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <span
-                      className={`px-2 py-1 rounded text-[14px] font-medium border ${
-                         form.status === "Accepted"
-                          ? "bg-[#E5FFD3] text-light-green border-green-500 "
-                          : form.status === "Rejected"
+                      className={`px-2 py-1 rounded text-[14px] font-medium border ${form.status === "Accepted"
+                        ? "bg-[#E5FFD3] text-light-green border-green-500 "
+                        : form.status === "Rejected"
                           ? "bg-red-100 text-red-700"
                           : form.status === "Submitted"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
                     >
                       {form.status}
                     </span>
@@ -344,6 +390,17 @@ useEffect(() => {
                       <div className="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-dark-green transition-colors"></div>
                       <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
                     </label>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      className="text-dark-green font-medium hover:underline cursor-pointer"
+                      onClick={() => {
+                        setSelectedClosureClient(form);
+                        setClosureSliderOpen(true);
+                      }}
+                    >
+                      File Closure
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex justify-center gap-2">
@@ -394,9 +451,8 @@ useEffect(() => {
               <button
                 key={page}
                 onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
-                  currentPage === page ? "bg-light-green text-white" : ""
-                }`}
+                className={`px-3 py-1 border border-[#C5C5C5] rounded ${currentPage === page ? "bg-light-green text-white" : ""
+                  }`}
               >
                 {page}
               </button>
@@ -416,6 +472,14 @@ useEffect(() => {
             »
           </button>
         </div>
+      )}
+
+      {closureSliderOpen && (
+        <FileClosureSlider
+          isOpen={closureSliderOpen}
+          onClose={() => setClosureSliderOpen(false)}
+          selectedClient={selectedClosureClient}
+        />
       )}
     </div>
   );
