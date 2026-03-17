@@ -24,13 +24,9 @@ const [prevCoords, setPrevCoords] = useState(null);
 const [liveDistance, setLiveDistance] = useState(0);
 const [startPoint, setStartPoint] = useState("");
 const [endPoint, setEndPoint] = useState("");
-  // ✅ KM FIELDS (ADDED BACK)
+  // ✅ KM FIELDS
   const [totalKilometer, setTotalKilometer] = useState("");
   const [staffKilometer, setStaffKilometer] = useState("");
-
-  // ✅ APPROVAL FIELDS
-const [approvedKm, setApprovedKm] = useState("");
-const [approvedBy, setApprovedBy] = useState("");
 
 
   // ✅ STOPS
@@ -167,14 +163,9 @@ const handleEndDrive = () => {
     setTotalKilometer(lastDrive.totalKilometer || "");
     setStaffKilometer(lastDrive.staffTraveledKM || "");
 
-    // ✅ NEW
-    setApprovedKm(lastDrive.approvedKM || "");
-    setApprovedBy(lastDrive.approvedBy || "");
   } else {
     setTotalKilometer("");
     setStaffKilometer("");
-    setApprovedKm("");
-    setApprovedBy("");
   }
 }, [shiftData?.extraShiftPoints]);
 
@@ -282,11 +273,6 @@ const handleSubmit = async () => {
         stops,
         totalKilometer: Number(totalKilometer) || 0,
         staffTraveledKM: Number(staffKilometer) || 0,
-
-        // 🆕 NEW FIELDS
-        approvedKM: approvedKm ? Number(approvedKm) : null,
-        approvedBy: approvedBy || null,
-
         createdAt: new Date(),
       });
     }
@@ -298,11 +284,6 @@ const handleSubmit = async () => {
         endLocation: endPoint,
         totalKilometer: Number(totalKilometer) || 0,
         staffTraveledKM: Number(staffKilometer) || 0,
-
-        // 🆕 NEW FIELDS
-        approvedKM: approvedKm ? Number(approvedKm) : null,
-        approvedBy: approvedBy || null,
-
         createdAt: new Date(),
       });
     }
@@ -412,57 +393,6 @@ const handleSubmit = async () => {
             </button>
           </div>
 
-          {/* ================= KM FIELDS ================= */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-            <div>
-              <label className="font-semibold mb-1">Total Kilometer (Planned)</label>
-              <input
-                type="number"
-                value={totalKilometer}
-                onChange={(e) => setTotalKilometer(e.target.value)}
-                placeholder="Enter total planned km"
-                className="w-full border border-gray p-2 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold mb-1">
-                Total Kilometers Staff Traveled
-              </label>
-              <input
-                type="number"
-                value={staffKilometer}
-                onChange={(e) => setStaffKilometer(e.target.value)}
-                placeholder="Enter actual driven km"
-                className="w-full border border-gray p-2 rounded"
-              />
-            </div>
-            {/* ================= APPROVAL FIELDS ================= */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-  <div>
-    <label className="font-semibold mb-1">Approved Kilometers</label>
-    <input
-      type="number"
-      value={approvedKm}
-      onChange={(e) => setApprovedKm(e.target.value)}
-      placeholder="Enter approved km"
-      className="w-full border border-gray p-2 rounded"
-    />
-  </div>
-
-  <div>
-    <label className="font-semibold mb-1">Approved By</label>
-    <input
-      type="text"
-      value={approvedBy}
-      onChange={(e) => setApprovedBy(e.target.value)}
-      placeholder="Enter approver name"
-      className="w-full border border-gray p-2 rounded"
-    />
-  </div>
-</div>
-
-          </div>
         </div>
       )}
 
@@ -514,47 +444,6 @@ const handleSubmit = async () => {
       />
     </div>
 
-    <div>
-      <label className="font-semibold mb-1">Total Kilometer</label>
-      <input
-        value={totalKilometer}
-        readOnly
-        className="w-full border border-gray rounded p-2 bg-gray-100"
-      />
-    </div>
-
-    <div>
-      <label className="font-semibold mb-1">Kilometers Traveled by Staff</label>
-      <input
-        value={staffKilometer}
-        readOnly
-        className="w-full border border-gray rounded p-2 bg-gray-100"
-      />
-    </div>
-    {/* ================= APPROVAL FIELDS ================= */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-  <div>
-    <label className="font-semibold mb-1">Approved Kilometers</label>
-    <input
-      type="number"
-      value={approvedKm}
-      onChange={(e) => setApprovedKm(e.target.value)}
-      placeholder="Enter approved km"
-      className="w-full border border-gray p-2 rounded"
-    />
-  </div>
-
-  <div>
-    <label className="font-semibold mb-1">Approved By</label>
-    <input
-      type="text"
-      value={approvedBy}
-      onChange={(e) => setApprovedBy(e.target.value)}
-      placeholder="Enter approver name"
-      className="w-full border border-gray p-2 rounded"
-    />
-  </div>
-</div>
 
 
   </div>

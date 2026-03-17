@@ -7,6 +7,7 @@ import {
   where,
   onSnapshot,
   updateDoc,
+  doc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import DashboardContentPage from "./DashboardContentPage";
@@ -60,6 +61,8 @@ const Dashboard = () => {
 
   const [showTransportDetails, setShowTransportDetails] = useState(false);
   const [selectedTransportShift, setSelectedTransportShift] = useState(null);
+  const [migratingShifts, setMigratingShifts] = useState(false);
+  const [migrationResult, setMigrationResult] = useState(null);
 
 
   useEffect(() => {
@@ -200,6 +203,30 @@ const Dashboard = () => {
     const x = e.pageX - scrollRef.current.offsetLeft;
     const walk = (x - startX) * 1;
     scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  // ✅ One-time utility: set accessToShiftReport=true on all old emergent care shifts
+  const migrateEmergentCareShifts = async () => {
+    if (!window.confirm("This will enable shift report access for ALL existing Emergent Care shifts. Continue?")) return;
+    setMigratingShifts(true);
+    setMigrationResult(null);
+    try {
+      const snap = await getDocs(collection(db, "shifts"));
+      const emergentShifts = snap.docs.filter((d) => {
+        const data = d.data();
+        const cat = (data.categoryName || data.shiftCategory || "").toLowerCase();
+        return cat.includes("emergent") && !data.accessToShiftReport;
+      });
+      await Promise.all(
+        emergentShifts.map((d) => updateDoc(doc(db, "shifts", d.id), { accessToShiftReport: true }))
+      );
+      setMigrationResult(`Done — updated ${emergentShifts.length} shift(s).`);
+    } catch (err) {
+      console.error(err);
+      setMigrationResult("Error: " + err.message);
+    } finally {
+      setMigratingShifts(false);
+    }
   };
 
   // ✅ Navigation handlers (replaces handleOpenForm, handleViewReport)

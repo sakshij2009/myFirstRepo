@@ -2727,36 +2727,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                   <ErrorMessage name="endTime" component="div" className="text-red-500 text-xs mt-1" />
                 </div>
 
-                {/* Access To Shift Report */}
-                <div className="col-span-2 ">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Access to Shift Report
-                  </label>
-
-                  <div className="flex items-center gap-4 mt-2">
-                    <span>No</span>
-
-                    <Field name="accessToShiftReport">
-                      {({ field, form }) => (
-                        <div
-                          onClick={() =>
-                            form.setFieldValue("accessToShiftReport", !field.value)
-                          }
-                          className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition 
-                            ${field.value ? "bg-dark-green" : "bg-gray-400"}`}
-                        >
-                          <div
-                            className={`bg-white w-5 h-5 rounded-full shadow transform transition 
-                              ${field.value ? "translate-x-6" : "translate-x-0"}`}
-                          ></div>
-                        </div>
-                      )}
-                    </Field>
-
-                    <span>Yes</span>
-                  </div>
-                </div>
-
                 {/* Description */}
                 <div className="col-span-2">
                   <label className="font-bold text-sm leading-5 tracking-normal text-light-black">

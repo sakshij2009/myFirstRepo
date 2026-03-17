@@ -18,6 +18,7 @@ import { db } from "../firebase"; // adjust path if needed
 import { Field, TextInput, TextArea, Select, Check, Radio } from "../components/Inputs";
 import { downloadIncidentFormPDF } from "./DownloadIncidentFormPDF ";
 import { CustomTimePicker } from "./CustomTimePicker";
+import GoogleAddressInput from "./GoogleAddressInput";
 
 /* ---------- constants (same as your reference) ---------- */
 const cfgStatuses = ["CAG", "ICO", "TGO", "PGO", "SFP"];
@@ -743,10 +744,14 @@ export default function CriticalIncidentForm({
                   </Field>
 
                   <Field labelText="Facility Staff Address">
-                    <TextInput
+                    <GoogleAddressInput
                       value={values.facility.staffAddress}
-                      onChange={(e) => setFieldValue("facility.staffAddress", e.target.value)}
                       placeholder="Address"
+                      onChange={(val) => setFieldValue("facility.staffAddress", val)}
+                      onLocationSelect={(loc) => {
+                        setFieldValue("facility.staffLat", loc.lat);
+                        setFieldValue("facility.staffLng", loc.lng);
+                      }}
                     />
                   </Field>
 

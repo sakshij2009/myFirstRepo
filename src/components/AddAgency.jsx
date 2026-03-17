@@ -8,6 +8,7 @@ import { FaRegUserCircle, FaChevronDown } from "react-icons/fa";
 import SuccessSlider from "./SuccessSlider";
 import { sendNotification } from "../utils/notificationHelper";
 import { useNavigate, useParams } from "react-router-dom";
+import GoogleAddressInput from "./GoogleAddressInput";
 
 
 const AddAgency = ({ mode = "add", user }) => {
@@ -406,14 +407,14 @@ const AddAgency = ({ mode = "add", user }) => {
                 <label className="font-bold text-sm text-light-black">
                   Address
                 </label>
-                <Field
-                  name="address"
-                  type="text"
+                <GoogleAddressInput
+                  value={values.address}
                   placeholder="Please enter the agency address"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${touched.address && errors.address
-                    ? "border-red-500"
-                    : "border-light-gray"
-                    }`}
+                  onChange={(val) => setFieldValue("address", val)}
+                  onLocationSelect={(loc) => {
+                    setFieldValue("latitude", loc.lat);
+                    setFieldValue("longitude", loc.lng);
+                  }}
                 />
                 <ErrorMessage
                   name="address"

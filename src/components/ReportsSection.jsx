@@ -10,6 +10,18 @@ import MedicalLogForm from "./MedicalLogForm";
 const ReportsSection = ({ shiftId, shiftData, user, readOnly = false }) => {
   const [text, setText] = useState("");
   const [showForm, setShowForm] = useState(null);
+  const [reportAccess, setReportAccess] = useState(shiftData?.accessToShiftReport || false);
+
+  const handleReportAccessToggle = async () => {
+    const newValue = !reportAccess;
+    setReportAccess(newValue);
+    try {
+      await updateDoc(doc(db, "shifts", shiftId), { accessToShiftReport: newValue });
+    } catch (err) {
+      console.error("Error updating report access:", err);
+      setReportAccess(!newValue);
+    }
+  };
 
   // Edit Clock states
   const [isEditingClock, setIsEditingClock] = useState(false);
@@ -466,21 +478,36 @@ const ReportsSection = ({ shiftId, shiftData, user, readOnly = false }) => {
 
           <div><hr className="border-t border-gray" /></div>
 
-          {/* Buttons */}
+          {/* Buttons + Access Toggle */}
           {!readOnly && (
-            <div className="flex justify-end gap-5">
-              <button
-                onClick={handleSaveDraft}
-                className="border border-dark-green text-dark-green px-4 py-[10px] rounded-md font-normal text-[16px]"
-              >
-                Save as Draft
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="bg-dark-green text-white px-4 py-[10px] rounded-md font-normal text-[16px]"
-              >
-                Submit
-              </button>
+            <div className="flex justify-between items-center">
+              {/* Access to Shift Report toggle — bottom right */}
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-sm text-light-black">Access to Shift Report</span>
+                <span className="text-sm text-light-black">No</span>
+                <div
+                  onClick={handleReportAccessToggle}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition ${reportAccess ? "bg-dark-green" : "bg-gray-400"}`}
+                >
+                  <div className={`bg-white w-5 h-5 rounded-full shadow transform transition ${reportAccess ? "translate-x-6" : "translate-x-0"}`} />
+                </div>
+                <span className="text-sm text-light-black">Yes</span>
+              </div>
+
+              <div className="flex gap-5">
+                <button
+                  onClick={handleSaveDraft}
+                  className="border border-dark-green text-dark-green px-4 py-[10px] rounded-md font-normal text-[16px]"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="bg-dark-green text-white px-4 py-[10px] rounded-md font-normal text-[16px]"
+                >
+                  Submit
+                </button>
+              </div>
             </div>
           )}
         </div>

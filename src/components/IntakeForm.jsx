@@ -153,6 +153,7 @@ const createEmptyInitialValues = () => ({
       gender: "",
       birthDate: "",
       address: "",
+      apartmentUnit: "",
       latitude: "",
       longitude: "",
       startDate: "",
@@ -290,6 +291,7 @@ const mapOldIntakeToInitialValues = (raw) => {
         cfsStatus: c.cfsStatus || "",
         dfnaNumber: c.dfnaNumber || "",
         treatyNumber: c.treatyNumber || "",
+        apartmentUnit: c.apartmentUnit || "",
       }))
       : base.clients;
 
@@ -439,6 +441,7 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Slider active index for each info section
+  const [activeClientIdx, setActiveClientIdx] = useState(0);
   const [activeParentIdx, setActiveParentIdx] = useState(0);
   const [activeMedicalIdx, setActiveMedicalIdx] = useState(0);
   const [activeTransportIdx, setActiveTransportIdx] = useState(0);
@@ -529,6 +532,7 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
                 cfsStatus: c.cfsStatus || "",
                 dfnaNumber: c.dfnaNumber || "",
                 treatyNumber: c.treatyNumber || "",
+                apartmentUnit: c.apartmentUnit || "",
               }))
               : base.clients;
 
@@ -765,6 +769,7 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
         cfsStatus: c.cfsStatus || "",
         dfnaNumber: c.dfnaNumber || "",
         treatyNumber: c.treatyNumber || "",
+        apartmentUnit: c.apartmentUnit || "",
         // Parent
         parentName: parent.parentName || "",
         relationship: parent.relationShip || "",
@@ -1368,13 +1373,14 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
                     <button
                       type="button"
                       onClick={() => {
-                        setFieldValue("clients", [
+                        const newClients = [
                           ...values.clients,
                           {
                             fullName: "",
                             gender: "",
                             birthDate: "",
                             address: "",
+                            apartmentUnit: "",
                             latitude: "",
                             longitude: "",
                             startDate: "",
@@ -1387,7 +1393,9 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
                             treatyNumber: "",
                             clientCode: "",
                           },
-                        ]);
+                        ];
+                        setFieldValue("clients", newClients);
+                        setActiveClientIdx(newClients.length - 1);
                       }}
                       className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
                     >
@@ -1396,281 +1404,229 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user, id: prop
                   </div>
 
                   <FieldArray name="clients">
-                    {({ remove }) => (
-                      <div className="flex flex-col gap-6">
-                        {values.clients.map((client, index) => (
-                          <div
-                            key={index}
-                            className="bg-white p-4 border border-light-gray rounded relative w-full"
-                          >
-                            <div className="flex justify-between items-center mb-3">
-                              <h4 className="font-semibold text-lg text-light-black">
-                                Client {index + 1}
-                              </h4>
-                              {values.clients.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => remove(index)}
-                                  className="text-red-500 font-semibold"
-                                >
-                                  Remove
-                                </button>
-                              )}
+                    {({ remove }) => {
+                      const total = values.clients.length;
+                      if (total === 0) return null;
+                      const idx = Math.min(activeClientIdx, total - 1);
+                      const copyFromFirst = () => {
+                        const src = values.clients[0];
+                        setFieldValue(`clients.${idx}.address`, src.address);
+                        setFieldValue(`clients.${idx}.apartmentUnit`, src.apartmentUnit);
+                        setFieldValue(`clients.${idx}.latitude`, src.latitude);
+                        setFieldValue(`clients.${idx}.longitude`, src.longitude);
+                        setFieldValue(`clients.${idx}.startDate`, src.startDate);
+                        setFieldValue(`clients.${idx}.clientInfo`, src.clientInfo);
+                        setFieldValue(`clients.${idx}.cfsStatus`, src.cfsStatus);
+                      };
+                      return (
+                        <div className="bg-white p-4 border border-light-gray rounded w-full">
+                          {/* Slider nav */}
+                          <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={() => setActiveClientIdx(i => Math.max(0, i - 1))} disabled={idx === 0} className="px-2 py-1 border rounded text-sm disabled:opacity-40">‹</button>
+                              <span className="font-semibold text-base text-light-black">Client {idx + 1} of {total}</span>
+                              <button type="button" onClick={() => setActiveClientIdx(i => Math.min(total - 1, i + 1))} disabled={idx === total - 1} className="px-2 py-1 border rounded text-sm disabled:opacity-40">›</button>
                             </div>
+                            {total > 1 && (
+                              <button type="button" onClick={() => { remove(idx); setActiveClientIdx(i => Math.min(total - 2, Math.max(0, i))); }} className="text-red-500 text-sm font-semibold">Remove</button>
+                            )}
+                          </div>
 
-                            <div className="grid grid-cols-3 gap-8 gap-y-4">
-                              {/* client photo */}
-                              <div className="col-span-3 mt-2">
+                          {/* Copy from Client 1 (shown for idx > 0) */}
+                          {idx > 0 && (
+                            <label className="flex items-center gap-2 mb-4 px-3 py-2 rounded border-2 border-dark-green bg-green-50 cursor-pointer w-fit">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-dark-green"
+                                onChange={(e) => { if (e.target.checked) copyFromFirst(); }}
+                              />
+                              <span className="text-sm font-semibold text-dark-green">Copy shared info from Client 1</span>
+                            </label>
+                          )}
 
-                                {/* Hidden File Input */}
-                                <input
-                                  id={`client-photo-input-${index}`}
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(e) =>
-                                    handleClientPhotosChange(e, index, values, setFieldValue)
-                                  }
-                                />
-
-                                {/* Round Photo + Buttons */}
-                                <div className="flex items-center gap-7">
-                                  {/* Round Photo Display */}
-                                  <div className="w-22 h-22 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border border-gray-300">
-                                    {values.clients[index].photos &&
-                                      values.clients[index].photos.length > 0 ? (
-                                      <img
-                                        src={
-                                          typeof values.clients[index].photos[0] === "string"
-                                            ? values.clients[index].photos[0]
-                                            : URL.createObjectURL(values.clients[index].photos[0])
-                                        }
-                                        alt="Client"
-                                        className="object-cover w-full h-full"
-                                      />
-                                    ) : (
-                                      <img src="/images/profile.jpeg" />
-                                    )}
-                                  </div>
-
-                                  {/* Buttons */}
-                                  <div className="flex gap-2">
-                                    <label
-                                      htmlFor={`client-photo-input-${index}`}
-                                      className="px-4 py-1.5 rounded-sm border-2 border-dark-green bg-dark-green text-white cursor-pointer text-sm"
-                                    >
-                                      Add Photo
-                                    </label>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => setFieldValue(`clients.${index}.photos`, [])}
-                                      className="px-4 py-1.5 rounded-sm border-2 border-light-green text-light-green text-sm"
-                                    >
-                                      Remove Photo
-                                    </button>
-                                  </div>
+                          <div className="grid grid-cols-3 gap-8 gap-y-4">
+                            {/* client photo */}
+                            <div className="col-span-3 mt-2">
+                              <input
+                                id={`client-photo-input-${idx}`}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handleClientPhotosChange(e, idx, values, setFieldValue)
+                                }
+                              />
+                              <div className="flex items-center gap-7">
+                                <div className="w-22 h-22 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border border-gray-300">
+                                  {values.clients[idx].photos && values.clients[idx].photos.length > 0 ? (
+                                    <img
+                                      src={
+                                        typeof values.clients[idx].photos[0] === "string"
+                                          ? values.clients[idx].photos[0]
+                                          : URL.createObjectURL(values.clients[idx].photos[0])
+                                      }
+                                      alt="Client"
+                                      className="object-cover w-full h-full"
+                                    />
+                                  ) : (
+                                    <img src="/images/profile.jpeg" />
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <label
+                                    htmlFor={`client-photo-input-${idx}`}
+                                    className="px-4 py-1.5 rounded-sm border-2 border-dark-green bg-dark-green text-white cursor-pointer text-sm"
+                                  >
+                                    Add Photo
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFieldValue(`clients.${idx}.photos`, [])}
+                                    className="px-4 py-1.5 rounded-sm border-2 border-light-green text-light-green text-sm"
+                                  >
+                                    Remove Photo
+                                  </button>
                                 </div>
                               </div>
+                            </div>
 
-                              {/* Full Name */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Full Name
-                                </label>
-                                <Field
-                                  name={`clients.${index}.fullName`}
-                                  type="text"
-                                  placeholder="Enter client name"
-                                  className={`w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]  placeholder:text-sm placeholder:font-normal ${touched.clients?.[index]?.fullName &&
-                                    errors.clients?.[index]?.fullName
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                    }`}
-                                />
-                                <ErrorMessage
-                                  name={`clients.${index}.fullName`}
-                                  component="div"
-                                  className="text-red-500 text-xs mt-1"
-                                />
-                              </div>
+                            {/* Full Name */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">Full Name</label>
+                              <Field
+                                name={`clients.${idx}.fullName`}
+                                type="text"
+                                placeholder="Enter client name"
+                                className={`w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${touched.clients?.[idx]?.fullName && errors.clients?.[idx]?.fullName ? "border-red-500" : "border-light-gray"}`}
+                              />
+                              <ErrorMessage name={`clients.${idx}.fullName`} component="div" className="text-red-500 text-xs mt-1" />
+                            </div>
 
-                              {/* Gender */}
-                              <div className="relative">
-                                <label className="font-bold text-sm text-light-black">
-                                  Gender
-                                </label>
+                            {/* Gender */}
+                            <div className="relative">
+                              <label className="font-bold text-sm text-light-black">Gender</label>
+                              <Field
+                                as="select"
+                                name={`clients.${idx}.gender`}
+                                className={`w-full border rounded-sm p-[10px] appearance-none pr-10 text-sm ${values?.clients?.[idx]?.gender ? "text-black" : "text-[#72787E]"} border-light-gray`}
+                              >
+                                <option value="" className="text-[#72787E] text-sm">Select Gender</option>
+                                <option value="male" className="text-black text-sm">Male</option>
+                                <option value="female" className="text-black text-sm">Female</option>
+                                <option value="other" className="text-black text-sm">Other</option>
+                              </Field>
+                              <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
+                                <FaChevronDown className="text-light-green w-4 h-4" />
+                              </span>
+                            </div>
 
-                                <Field
-                                  as="select"
-                                  name={`clients.${index}.gender`}
-                                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10 text-sm
-                            ${values?.clients?.[index]?.gender
-                                      ? "text-black"
-                                      : "text-[#72787E]"
-                                    }
-                            border-light-gray
-                          `}
-                                >
-                                  <option
-                                    value=""
-                                    className="text-[#72787E] text-sm"
-                                  >
-                                    Select Gender
-                                  </option>
-                                  <option
-                                    value="male"
-                                    className="text-black text-sm"
-                                  >
-                                    Male
-                                  </option>
-                                  <option
-                                    value="female"
-                                    className="text-black text-sm"
-                                  >
-                                    Female
-                                  </option>
-                                  <option
-                                    value="other"
-                                    className="text-black text-sm"
-                                  >
-                                    Other
-                                  </option>
-                                </Field>
+                            {/* Birth Date */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">Date of Birth</label>
+                              <Field
+                                name={`clients.${idx}.birthDate`}
+                                type="date"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
+                              />
+                              {(() => {
+                                const displayAge = calculateAgeDisplay(values.clients?.[idx]?.birthDate);
+                                return displayAge !== null ? (
+                                  <p className="text-xs text-gray-500 mt-1">Age: {displayAge}</p>
+                                ) : null;
+                              })()}
+                            </div>
 
-                                <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                  <FaChevronDown className="text-light-green w-4 h-4" />
-                                </span>
-                              </div>
+                            {/* Address */}
+                            <div className="col-span-2">
+                              <label className="font-bold text-sm text-light-black">Address</label>
+                              <GoogleAddressInput
+                                value={values.clients[idx].address}
+                                placeholder="Enter client address"
+                                onChange={(val) => setFieldValue(`clients.${idx}.address`, val)}
+                                onLocationSelect={(loc) => {
+                                  setFieldValue(`clients.${idx}.latitude`, loc.lat);
+                                  setFieldValue(`clients.${idx}.longitude`, loc.lng);
+                                }}
+                              />
+                            </div>
 
-                              {/* Birth Date */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Date of Birth
-                                </label>
-                                <Field
-                                  name={`clients.${index}.birthDate`}
-                                  type="date"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                                />
-                                {(() => {
-                                  const displayAge = calculateAgeDisplay(values.clients?.[index]?.birthDate);
-                                  return displayAge !== null ? (
-                                    <p className="text-xs text-gray-500 mt-1">Age: {displayAge}</p>
-                                  ) : null;
-                                })()}
-                              </div>
+                            {/* Apartment / Unit No. */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">Apartment / Unit No.</label>
+                              <Field
+                                name={`clients.${idx}.apartmentUnit`}
+                                type="text"
+                                placeholder="e.g. Apt 4B, Unit 12"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
+                              />
+                            </div>
 
-                              {/* Address */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Address
-                                </label>
-                                <GoogleAddressInput
-                                  value={values.clients[index].address}
-                                  placeholder="Enter client address"
-                                  onChange={(val) =>
-                                    setFieldValue(
-                                      `clients.${index}.address`,
-                                      val
-                                    )
-                                  }
-                                  onLocationSelect={(loc) => {
-                                    setFieldValue(
-                                      `clients.${index}.latitude`,
-                                      loc.lat
-                                    );
-                                    setFieldValue(
-                                      `clients.${index}.longitude`,
-                                      loc.lng
-                                    );
-                                  }}
-                                />
-                              </div>
+                            {/* Start Date */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">Service Start Date</label>
+                              <Field
+                                name={`clients.${idx}.startDate`}
+                                type="date"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
+                              />
+                            </div>
 
-                              {/* Start Date */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Service Start Date
-                                </label>
-                                <Field
-                                  name={`clients.${index}.startDate`}
-                                  type="date"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                                />
-                              </div>
+                            {/* Client Info */}
+                            <div className="col-span-3">
+                              <label className="font-bold text-sm text-light-black">Client Info</label>
+                              <Field
+                                as="textarea"
+                                name={`clients.${idx}.clientInfo`}
+                                placeholder="Write down any risk or safety plan required for the plan"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50"
+                              />
+                            </div>
 
-                              {/* Client Info */}
-                              <div className="col-span-3">
-                                <label className="font-bold text-sm text-light-black">
-                                  Client Info
-                                </label>
-                                <Field
-                                  as="textarea"
-                                  name={`clients.${index}.clientInfo`}
-                                  placeholder="Write down any risk or safety plan required for the plan"
-                                  className={
-                                    "w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50"
-                                  }
-                                />
-                              </div>
+                            {/* CFS Status */}
+                            <div className="relative">
+                              <label className="font-bold text-sm text-light-black">CFS Status</label>
+                              <Field
+                                as="select"
+                                name={`clients.${idx}.cfsStatus`}
+                                className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${values.clients[idx]?.cfsStatus === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"} border-light-gray`}
+                              >
+                                <option value="">Select CFS status</option>
+                                <option value="CAG">CAG</option>
+                                <option value="ICO">ICO</option>
+                                <option value="TGO">TGO</option>
+                                <option value="PGO">PGO</option>
+                                <option value="SFP">SFP</option>
+                              </Field>
+                              <span className="absolute right-3 top-[64%] -translate-y-1/2 pointer-events-none">
+                                <FaChevronDown className="text-light-green w-4 h-4" />
+                              </span>
+                            </div>
 
-                              {/* CFS Status */}
-                              <div className="relative">
-                                <label className="font-bold text-sm text-light-black">
-                                  CFS Status
-                                </label>
-                                <Field
-                                  as="select"
-                                  name={`clients.${index}.cfsStatus`}
-                                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${values.clients[index]?.cfsStatus === ""
-                                    ? "text-[#72787E] font-normal text-sm"
-                                    : "text-light-black"
-                                    } border-light-gray`}
-                                >
-                                  <option value="">Select CFS status</option>
-                                  <option value="CAG">CAG</option>
-                                  <option value="ICO">ICO</option>
-                                  <option value="TGO">TGO</option>
-                                  <option value="PGO">PGO</option>
-                                  <option value="SFP">SFP</option>
-                                </Field>
-                                <span className="absolute right-3 top-[64%] -translate-y-1/2 pointer-events-none">
-                                  <FaChevronDown className="text-light-green w-4 h-4" />
-                                </span>
-                              </div>
+                            {/* DFNA Number */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">DFNA Number</label>
+                              <Field
+                                name={`clients.${idx}.dfnaNumber`}
+                                type="text"
+                                placeholder="Enter DFNA number"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
+                              />
+                            </div>
 
-                              {/* DFNA Number */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  DFNA Number
-                                </label>
-                                <Field
-                                  name={`clients.${index}.dfnaNumber`}
-                                  type="text"
-                                  placeholder="Enter DFNA number"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                                />
-                              </div>
-
-                              {/* Treaty # */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Treaty #
-                                </label>
-                                <Field
-                                  name={`clients.${index}.treatyNumber`}
-                                  type="text"
-                                  placeholder="Enter treaty number"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                                />
-                              </div>
-
+                            {/* Treaty # */}
+                            <div>
+                              <label className="font-bold text-sm text-light-black">Treaty #</label>
+                              <Field
+                                name={`clients.${idx}.treatyNumber`}
+                                type="text"
+                                placeholder="Enter treaty number"
+                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
+                              />
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      );
+                    }}
                   </FieldArray>
                 </div>
 
