@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { collection, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { toast } from "sonner";
 import {
   Heart, Shield, Eye, Car, Grid3x3, ArrowRight,
   Lock, Unlock, X, AlertTriangle, Clock, CheckCircle2,
-  DollarSign, Receipt, User, Briefcase,
+  DollarSign, Receipt, User, Briefcase, Calendar, ChevronDown, Trash2,
 } from "lucide-react";
 import AppToggle from "./ui/AppToggle";
+import { MiniCalendar } from "./ui/MiniCalendar";
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -60,12 +62,50 @@ const TABS = [
 
 // ── Component ──────────────────────────────────────────────────────────────
 
+// ── Date helpers ────────────────────────────────────────────────────────────
+const formatDDMMYYYY = (d) =>
+  `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+
+function matchesSelectedDates(shift, selectedDates) {
+  if (!selectedDates || selectedDates.length === 0) return true;
+  let shiftStart = null;
+  if (shift.startDate?.toDate) {
+    shiftStart = shift.startDate.toDate();
+  } else if (shift.startDate instanceof Date) {
+    shiftStart = shift.startDate;
+  } else if (typeof shift.startDate === "string") {
+    const cleaned = shift.startDate.replace(/,/g, "").replace(/\s+/g, " ").trim();
+    const parsed = Date.parse(cleaned);
+    if (!isNaN(parsed)) {
+      shiftStart = new Date(parsed);
+    } else {
+      const parts = cleaned.split(" ");
+      if (parts.length >= 3) {
+        const [day, month, year] = parts;
+        const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
+        if (!isNaN(monthIndex)) shiftStart = new Date(Number(year), monthIndex, Number(day));
+      }
+    }
+  }
+  if (!shiftStart || isNaN(shiftStart)) return false;
+  return selectedDates.some(
+    (sel) =>
+      sel.getDate() === shiftStart.getDate() &&
+      sel.getMonth() === shiftStart.getMonth() &&
+      sel.getFullYear() === shiftStart.getFullYear()
+  );
+}
+
 export default function ClientActivityTable({ onNavigateToReport }) {
+  const navigate = useNavigate();
   const [rows, setRows]             = useState([]);
   const [activeTab, setActiveTab]   = useState("all");
   const [lockTarget, setLockTarget] = useState(null);
   const [unlockTarget, setUnlockTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [selectedDates, setSelectedDates] = useState([new Date()]);
+  const [calendarOpen, setCalendarOpen]   = useState(false);
 
   // Fetch shifts + enrich
   useEffect(() => {
@@ -76,11 +116,11 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           const s = { id: d.id, ...d.data() };
           const clientName = s.clientName || s.clientDetails?.name || s.clientDetails?.clientName || "—";
           const clientId   = s.clientId   || s.clientDetails?.id   || s.clientDetails?.clientId   || "—";
-          const staff      = s.staffName  || s.assignedUser        || s.userName                  || "—";
+          const staff      = s.staffName || s.assignedUser || s.userName || s.name || s.user || "—";
           const agency     = s.agencyName || s.agency              || "—";
           const service    = normService(s.categoryName || s.shiftCategory);
-          const shiftType  = s.shiftType  || s.name                || "Regular";
-          const status     = (s.clientStatus === "Active" || s.status === "Active") ? "Active" : "Pending";
+          const shiftType  = s.typeName || s.shiftType || "Regular";
+          const status     = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
           const hoursWorked= s.hoursWorked || 8;
           return {
             id: s.id, clientName, clientId, staff, agency,
@@ -88,6 +128,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
             billingRate: s.billingRate || BILLING_RATE,
             locked: s.locked || false,
             billingStatus: s.billingStatus || "Pending Review",
+            // keep raw startDate for date filtering
+            startDate: s.startDate,
           };
         });
         setRows(enriched);
@@ -98,10 +140,27 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     fetch();
   }, []);
 
-  const filtered = activeTab === "all" ? rows : rows.filter(r => {
-    const tab = TABS.find(t => t.id === activeTab);
-    return tab?.svc ? r.service === tab.svc : true;
-  });
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      const tab = TABS.find((t) => t.id === activeTab);
+      const tabMatch = !tab?.svc || r.service === tab.svc;
+      const dateMatch = matchesSelectedDates(r, selectedDates);
+      return tabMatch && dateMatch;
+    });
+  }, [rows, activeTab, selectedDates]);
+
+  const calendarLabel = useMemo(() => {
+    if (!selectedDates.length) return "All Dates";
+    if (selectedDates.length === 1) {
+      const today = new Date();
+      const d = selectedDates[0];
+      if (d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear())
+        return "Today";
+      return formatDDMMYYYY(d);
+    }
+    const sorted = [...selectedDates].sort((a, b) => a - b);
+    return `${formatDDMMYYYY(sorted[0])} – ${formatDDMMYYYY(sorted[sorted.length - 1])}`;
+  }, [selectedDates]);
 
   // Lock
   const confirmLock = async () => {
@@ -140,6 +199,21 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setProcessing(true);
+    try {
+      await deleteDoc(doc(db, "shifts", deleteTarget.id));
+      setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
+      toast.success("Shift deleted", { description: `${deleteTarget.clientName}'s shift has been removed.`, duration: 4000 });
+    } catch (err) {
+      toast.error("Failed to delete shift");
+    } finally {
+      setProcessing(false);
+      setDeleteTarget(null);
+    }
+  };
+
   const handleToggle = (row) => {
     if (row.billingStatus === "Invoiced") return;
     row.locked ? setUnlockTarget(row) : setLockTarget(row);
@@ -159,16 +233,55 @@ export default function ClientActivityTable({ onNavigateToReport }) {
       {/* Header */}
       <div className="px-5 py-4 flex items-center justify-between border-b" style={{ borderColor: "#e5e7eb" }}>
         <h2 className="uppercase tracking-wider" style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>Client Activity</h2>
-        <button className="flex items-center gap-1 font-semibold transition-colors" style={{ fontSize: 12, color: "#1f7a3c" }}>
-          <span>View All</span><ArrowRight size={12} strokeWidth={2.5} />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Calendar filter */}
+          <div className="relative">
+            <button
+              onClick={() => setCalendarOpen((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all"
+              style={{
+                borderColor: selectedDates.length ? "#145228" : "#e5e7eb",
+                background:  selectedDates.length ? "#f0fdf4"  : "#fff",
+                color:       selectedDates.length ? "#145228"  : "#374151",
+              }}
+            >
+              <Calendar size={12} strokeWidth={2} />
+              <span>{calendarLabel}</span>
+              <ChevronDown size={11} style={{ color: "#9ca3af" }} />
+            </button>
+            {calendarOpen && (
+              <MiniCalendar
+                selectedDates={selectedDates}
+                onDatesChange={(dates) => setSelectedDates(dates)}
+                onClose={() => setCalendarOpen(false)}
+              />
+            )}
+          </div>
+
+          {/* Clear filter */}
+          {selectedDates.length > 0 && (
+            <button
+              onClick={() => setSelectedDates([])}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-red-50"
+              style={{ color: "#dc2626", border: "1px solid #fecaca" }}
+            >
+              <X size={11} strokeWidth={2.5} />
+              Clear
+            </button>
+          )}
+
+          <button className="flex items-center gap-1 font-semibold transition-colors" style={{ fontSize: 12, color: "#1f7a3c" }}>
+            <span>View All</span><ArrowRight size={12} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
       <div className="relative border-b flex px-5" style={{ borderColor: "#e5e7eb" }}>
         {TABS.map(tab => {
           const isActive = activeTab === tab.id;
-          const count    = tab.svc ? rows.filter(r => r.service === tab.svc).length : rows.length;
+          const dateFiltered = rows.filter(r => matchesSelectedDates(r, selectedDates));
+          const count = tab.svc ? dateFiltered.filter(r => r.service === tab.svc).length : dateFiltered.length;
           return (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className="relative flex items-center gap-2 px-4 py-3 transition-all"
@@ -213,12 +326,13 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                     <span className="px-2 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 500, backgroundColor: "#f3f4f6", color: "#6b7280" }}>{row.shiftType}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{
-                      fontSize: 11, fontWeight: 500,
-                      backgroundColor: row.status === "Active" ? "#d8f3e3" : "#fef3c7",
-                      color:           row.status === "Active" ? "#1a6432" : "#92400e",
-                    }}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: row.status === "Active" ? "#1a6432" : "#d97706" }} />
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border" style={
+                      row.status === "Completed"
+                        ? { backgroundColor: "#dcfce7", color: "#16a34a", borderColor: "#bbf7d0" }
+                        : row.status === "Ongoing"
+                        ? { backgroundColor: "#fef3c7", color: "#d97706", borderColor: "#fde68a" }
+                        : { backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" }
+                    }>
                       {row.status}
                     </span>
                   </td>
@@ -243,20 +357,25 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {/* View */}
-                      <button onClick={() => onNavigateToReport?.({ id: row.clientId, name: row.clientName, assignedStaff: row.staff, serviceType: row.service, shiftType: row.shiftType, status: row.status, agency: row.agency })}
+                      <button
+                        onClick={() => navigate(`/admin-dashboard/shift-report/${row.id}`)}
                         className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all hover:brightness-95"
                         style={{ background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe" }} title="View Report">
                         <Eye size={13} strokeWidth={2} />
                       </button>
                       {/* Edit */}
-                      <button className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all" disabled={row.locked}
+                      <button
+                        onClick={() => !row.locked && navigate(`/admin-dashboard/add/update-user-shift/${row.id}`)}
+                        className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all" disabled={row.locked}
                         style={{ background: row.locked ? "#f9fafb" : "#f0fdf4", color: row.locked ? "#d1d5db" : "#16a34a", border: `1px solid ${row.locked ? "#e5e7eb" : "#bbf7d0"}`, cursor: row.locked ? "not-allowed" : "pointer", opacity: row.locked ? 0.55 : 1 }} title={row.locked ? "Unlock to edit" : "Edit"}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
                       {/* Delete */}
-                      <button className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all" disabled={row.locked}
+                      <button
+                        onClick={() => !row.locked && setDeleteTarget(row)}
+                        className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all" disabled={row.locked}
                         style={{ background: row.locked ? "#f9fafb" : "#fef2f2", color: row.locked ? "#d1d5db" : "#dc2626", border: `1px solid ${row.locked ? "#e5e7eb" : "#fecaca"}`, cursor: row.locked ? "not-allowed" : "pointer", opacity: row.locked ? 0.55 : 1 }} title={row.locked ? "Unlock to delete" : "Delete"}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                        <Trash2 size={13} strokeWidth={2} />
                       </button>
                     </div>
                   </td>
@@ -351,6 +470,46 @@ export default function ClientActivityTable({ onNavigateToReport }) {
               <button onClick={() => { if (!processing) setUnlockTarget(null); }} disabled={processing} className="px-4 py-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: "#e5e7eb", fontSize: 12, fontWeight: 600, color: "#374151" }}>Cancel</button>
               <button onClick={confirmUnlock} disabled={processing} className="px-4 py-2 rounded-lg text-white flex items-center gap-2 hover:brightness-95 transition-all" style={{ background: processing ? "#9ca3af" : "#2563eb", fontSize: 12, fontWeight: 700 }}>
                 {processing ? "Unlocking…" : <><Unlock size={13} strokeWidth={2} />Unlock Shift</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }} onClick={() => { if (!processing) setDeleteTarget(null); }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 420, maxWidth: "92vw" }}>
+            <div className="px-6 py-5 flex items-start justify-between" style={{ background: "linear-gradient(135deg,#fef2f2 0%,#fff5f5 100%)" }}>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+                  <Trash2 size={18} style={{ color: "#dc2626" }} strokeWidth={2} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>Delete Shift</h3>
+                  <p style={{ fontSize: 12, color: "#6b7280", marginTop: 2, lineHeight: 1.5 }}>This action is permanent and cannot be undone.</p>
+                </div>
+              </div>
+              <button onClick={() => { if (!processing) setDeleteTarget(null); }} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/80" style={{ color: "#6b7280" }}><X size={16} strokeWidth={2} /></button>
+            </div>
+            <div className="px-6 py-5">
+              <div className="rounded-xl border px-4 py-3 flex items-center gap-3" style={{ borderColor: "#e5e7eb", background: "#fafafa" }}>
+                <div className="flex-1 min-w-0">
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{deleteTarget.clientName}</p>
+                  <p style={{ fontSize: 11, color: "#6b7280" }}>{deleteTarget.service} · {deleteTarget.shiftType} · {deleteTarget.staff}</p>
+                </div>
+                <span className="px-2 py-0.5 rounded-md" style={{ fontSize: 11, fontWeight: 700, color: "#dc2626", background: "#fef2f2" }}>{deleteTarget.status}</span>
+              </div>
+              <div className="mt-3 rounded-lg px-3 py-2.5 flex items-start gap-2" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+                <AlertTriangle size={13} style={{ color: "#dc2626", marginTop: 1, flexShrink: 0 }} strokeWidth={2} />
+                <p style={{ fontSize: 11, color: "#991b1b", lineHeight: 1.5 }}>This will permanently delete the shift and all associated data. This cannot be recovered.</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 flex items-center justify-end gap-2 border-t" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+              <button onClick={() => { if (!processing) setDeleteTarget(null); }} disabled={processing} className="px-4 py-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: "#e5e7eb", fontSize: 12, fontWeight: 600, color: "#374151" }}>Cancel</button>
+              <button onClick={confirmDelete} disabled={processing} className="px-4 py-2 rounded-lg text-white flex items-center gap-2 hover:brightness-95 transition-all" style={{ background: processing ? "#9ca3af" : "#dc2626", fontSize: 12, fontWeight: 700 }}>
+                {processing ? "Deleting…" : <><Trash2 size={13} strokeWidth={2} />Delete Shift</>}
               </button>
             </div>
           </div>

@@ -1,117 +1,102 @@
-import React, { useState } from "react";
-import { CgProfile } from "react-icons/cg";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
+import {
+  ChevronLeft, ChevronRight, Calendar, User, Tag, Clock,
+  FileText, Edit2, Download, Lock, Building2,
+} from "lucide-react";
 
+function statusBadge(status) {
+  const map = {
+    Completed:  { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
+    Ongoing:    { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    InProgress: { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    Incomplete: { bg: "#f3f4f6", color: "#6b7280", border: "#e5e7eb" },
+  };
+  const s = map[status] || map.Incomplete;
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
+      style={{ backgroundColor: s.bg, color: s.color, borderColor: s.border }}
+    >
+      {status}
+    </span>
+  );
+}
 
+function confirmedBadge(confirmed) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
+      style={
+        confirmed
+          ? { backgroundColor: "#dcfce7", color: "#16a34a", borderColor: "#bbf7d0" }
+          : { backgroundColor: "#fee2e2", color: "#dc2626", borderColor: "#fecaca" }
+      }
+    >
+      {confirmed ? "Confirmed" : "Unconfirmed"}
+    </span>
+  );
+}
+
+function categoryBadge(cat) {
+  const map = {
+    "Emergent Care":         { bg: "#fff1f2", color: "#c70036", border: "#ffccd3" },
+    "Supervised Visitation": { bg: "#fffbeb", color: "#bf4d00", border: "#fee685" },
+    "Respite Care":          { bg: "#ecfeff", color: "#007595", border: "#a2f4fd" },
+  };
+  const s = map[cat] || { bg: "#f3f4f6", color: "#374151", border: "#e5e7eb" };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
+      style={{ backgroundColor: s.bg, color: s.color, borderColor: s.border }}
+    >
+      {cat || "—"}
+    </span>
+  );
+}
+
+const formatDate = (ts) => {
+  if (!ts) return "—";
+  const d = typeof ts?.toDate === "function" ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const normalizeCategory = (cat) => {
+  const c = (cat || "").toLowerCase().trim();
+  if (c.includes("supervised visitation")) return "Supervised Visitation";
+  if (c.includes("emergent care")) return "Emergent Care";
+  if (c.includes("respite care")) return "Respite Care";
+  return cat || "—";
+};
+
+const getShiftStatus = (clockIn, clockOut) => {
+  if (clockIn && clockOut) return "Completed";
+  if (clockIn && !clockOut) return "Ongoing";
+  return "Incomplete";
+};
 
 const ShiftsData = ({ filteredShifts = [] }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const navigate=useNavigate();
+  const navigate = useNavigate();
 
-
-  const getShift = (isConfirmed) => {
-  if (isConfirmed) {
-    return (
-      <span className="px-2 py-1 text-[#2D8C0C] bg-[#E5FFD3] rounded-[8px] font-bold text-sm border border-[#AAFA69]">
-        Confirmed
-      </span>
-    );
-  }
-
-  return (
-    <span className="px-2 py-1 text-[#C70036] bg-[#FFF1F2] rounded-[8px] font-bold text-sm border border-[#FFCCD3]">
-      Unconfirmed
-    </span>
-  );
-};
-
-
-  
-
-
-  // Helper to determine shift status
-  const getShiftStatus = (clockIn, clockOut) => {
-    if (clockIn && clockOut) return "Completed";
-    if (clockIn && !clockOut) return "Ongoing";
-    return "Incomplete";
-  };
-
-  // Style based on shift status
-  const getStatusStyles = (status) => {
-    switch (status) {
-      case "Completed":
-        return "bg-lime text-fonts border border-parrot-green px-[8px] py-[4px] rounded-[8px] font-medium text-[14px] leading-[16px]";
-      case "Ongoing":
-        return "bg-[#FEE9EE] text-[#940730] border border-[#FCA7BC] px-[8px] py-[4px] rounded-[8px] font-medium text-[14px] leading-[16px]";
-      case "Incomplete":
-        return "bg-[#EAEEF2] text-[#54585D] border border-[#C8C9C9] px-[8px] py-[4px] rounded-[8px] font-medium text-[14px] leading-[16px]";
-      default:
-        return "";
-    }
-  };
-
-  // Style based on shift category
-  const getShiftCategoryStyle = (category) => {
-    switch (category) {
-      case "Emergent Care":
-        return "flex bg-[#FFF1F2] border border-[#FFCCD3] rounded-[8px] py-1 px-2 text-[#C70036] font-bold text-[14px] leading-[140%] w-[115px]";
-      case "Supervised Visitation":
-        return "flex bg-[#FFFBEB] border border-[#FEE685] rounded-[8px] py-1 px-2 text-[#BF4D00] font-bold text-[14px] leading-[140%]";
-      case "Respite Care":
-        return "flex bg-[#ECFEFF] border border-[#A2F4FD] rounded-[8px] py-1 px-2 text-[#007595] font-bold text-[14px] leading-[140%]";
-      default:
-        return "truncate font-bold text-[14px] leading-[140%]";
-    }
-  };
-
-  const formatDate = (timestamp) => {
-  if (!timestamp) return "-";
-
-  // Firebase Timestamp support
-  const date =
-    typeof timestamp?.toDate === "function"
-      ? timestamp.toDate()
-      : new Date(timestamp);
-
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-
- 
-
-
-  // Pagination
-  const ITEMS_PER_PAGE = 5;
-  const totalPages = Math.ceil(filteredShifts.length / ITEMS_PER_PAGE);
+  const ITEMS_PER_PAGE = 8;
+  const totalPages = Math.max(1, Math.ceil(filteredShifts.length / ITEMS_PER_PAGE));
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentShifts = filteredShifts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const goToPage = (page) => {
+  const changePage = (page) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
   const handleViewIntakeForm = (intakeId, shift) => {
-  if (!intakeId) return;
-
-  const agency = shift?.agencyName?.trim() || "";
-
-  const formType = agency.toLowerCase() === "private"
-    ? "Private"
-    : "Intake Worker";
-
-  navigate(
-    `/admin-dashboard/add/update-intake-form/${intakeId}?type=${formType}`
-  );
-};
-
+    if (!intakeId) return;
+    const formType = (shift?.agencyName?.trim() || "").toLowerCase() === "private" ? "Private" : "Intake Worker";
+    navigate(`/admin-dashboard/add/update-intake-form/${intakeId}?type=${formType}`);
+  };
 
   const handleViewReport = (shiftId) => {
     if (!shiftId) return;
@@ -123,253 +108,213 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     navigate(`/admin-dashboard/add/update-user-shift/${shiftId}`);
   };
 
-  const normalizeCategory = (category) => {
-  const c = (category || "").toLowerCase().trim();
-
-  // Anything that starts with supervised visitation should be treated as supervised visitation tab
-  if (c.includes("supervised visitation")) return "Supervised Visitation";
-
-  if (c.includes("emergent care")) return "Emergent Care";
-  if (c.includes("respite care")) return "Respite Care";
-
-  return category || "-";
-};
-
+  if (currentShifts.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center w-full py-20 bg-white rounded-xl border"
+        style={{ borderColor: "#e5e7eb" }}
+      >
+        <Calendar size={40} style={{ color: "#d1d5db", marginBottom: 12 }} strokeWidth={1.5} />
+        <p className="font-semibold" style={{ fontSize: 15, color: "#6b7280" }}>No Shifts Found</p>
+        <p style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }}>No shifts match your current filters.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-[24px] w-full ">
-      {currentShifts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-          <p className="text-lg font-semibold">No Shifts Found</p>
-          <p className="text-sm text-gray-400">
-            Looks like there are no shifts to display right now.
-          </p>
-        </div>
-      ) : (
-        currentShifts.map((shift) => {
-          const status = getShiftStatus(shift.clockIn, shift.clockOut);
-          const isCompleted = status === "Completed";
-         
-          
+    <div className="w-full flex flex-col gap-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Shift Cards */}
+      {currentShifts.map((shift) => {
+        const status = getShiftStatus(shift.clockIn, shift.clockOut);
+        const isCompleted = status === "Completed";
+        const rawCategory = shift.categoryName || shift.shiftCategory || "";
+        const normCat = normalizeCategory(rawCategory);
 
-          return (
+        return (
+          <div
+            key={shift.id}
+            className="bg-white rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
+            style={{ borderColor: "#e5e7eb" }}
+          >
+            {/* Card Header */}
             <div
-              key={shift.id}
-              className="flex flex-row bg-white h-[115px] justify-center items-center gap-[24px] py-3 px-4 rounded-[4px]"
+              className="flex items-center justify-between px-5 py-3 border-b"
+              style={{ borderColor: "#f3f4f6", backgroundColor: "#fafafa" }}
             >
-              <div className="flex items-center justify-center bg-gray-300 h-19 w-20 rounded-full overflow-hidden">
-                {shift.image ? (
-                  <img
-                    src={shift.image}
-                    alt="Profile"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <img src="/images/profile.jpeg" />
-                )}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <User size={13} style={{ color: "#9ca3af" }} />
+                  <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>
+                    {shift.clientName || shift.clientDetails?.name || "—"}
+                  </span>
+                  {shift.clientId && (
+                    <span style={{ fontSize: 12, color: "#9ca3af", fontFamily: "monospace" }}>
+                      · {shift.clientId}
+                    </span>
+                  )}
+                </div>
+                {categoryBadge(normCat)}
+                {statusBadge(status)}
+                {confirmedBadge(shift.shiftConfirmed)}
               </div>
 
-              <div className="flex flex-col w-full justify-center gap-[8px]">
-                {/* Header */}
-                <div className="flex flex-row justify-between text-[#2B3232] p-1">
-                  <div className="flex flex-col gap-[2px]">
-                    <div className="flex justify-start gap-[8px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Client</p>
-                      <p className="font-bold text-[14px] leading-[20px]">
-                        {shift.clientName || shift.clientDetails?.name ||  "-"}
-                      </p>
-                    </div>
-                    <div className="flex justify-start gap-[8px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Client ID</p>
-                      <p className="font-bold text-[14px] leading-[20px]">
-                        {shift.clientId || shift.clientDetails?.id || "-"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Shift info */}
-                  <div className="flex flex-row gap-[24px] justify-end">
-                    <div>
-                      <p className="font-normal text-[14px] leading-[20px]">Shift Date</p>
-                      <p
-                        className="font-bold text-[14px] leading-[20px] truncate"
-                        title={formatDate(shift.startDate)}
-                      >
-                        {formatDate(shift.startDate)}
-                      </p>
-                    </div>
-
-
-                    <div className="w-[120px]">
-                      <p className="font-normal text-[14px] leading-[20px]">
-                        Assign Caregiver
-                      </p>
-                      <p
-                        className="font-bold text-[14px] leading-[20px] truncate"
-                        title={shift.name}
-                      >
-                        {shift.name || shift.user ||  "-"}
-                      </p>
-                    </div>
-
-                    <div className="gap-2">
-                      <p className="flex font-normal text-[14px] leading-[20px]">Shift Category</p>
-                     {(() => {
-                        const rawCategory = shift.categoryName || shift.shiftCategory;
-                        const normalized = normalizeCategory(rawCategory);
-
-                        return (
-                          <p
-                            className={getShiftCategoryStyle(normalized)}
-                            title={rawCategory}
-                          >
-                            {rawCategory || "-"}
-                          </p>
-                        );
-                      })()}
-
-                    </div>
-
-                    <div className="w-[75px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Shift Type</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{shift.typeName || shift.shiftType}</p>
-                    </div>
-
-                    <div className="w-[80px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Status</p>
-                      <span className={getStatusStyles(status)}>{status}</span>
-                    </div>
-
-                  
-
-                    <div className="w-[90px]">
-                      <p className="flex font-normal text-[14px] leading-[20px]">Shift</p>
-                      <p className="flex font-bold text-[14px] leading-[20px]">
-                        {getShift(shift.shiftConfirmed)}
-                      </p>
-                    </div>
-
-                    <div className="w-[120px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Agency</p>
-                      <p
-                        className="truncate font-bold text-[14px] leading-[20px]"
-                        title={shift.agencyName || shift.clientDetails?.agencyName}
-                      >
-                        {shift.agencyName || shift.clientDetails?.agencyName || "-"}
-                      </p>
-                    </div>
-                  </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1" style={{ fontSize: 12, color: "#6b7280" }}>
+                  <Calendar size={13} />
+                  <span>{formatDate(shift.startDate)}</span>
                 </div>
-
-                <hr className="border-t border-dashed border-gray-300" />
-
-                {/* Footer actions */}
-                <div className="flex justify-between text-light-green text-[14px]">
-                  <div className="flex items-center font-medium cursor-pointer"
-                  onClick={() => handleViewIntakeForm(shift.clientId,shift)}
-                  >
-                    <p>View Intake Form</p>
-                  </div>
-
-                  <div className="flex gap-4">
-
-                    
-                    <div className="flex gap-1 text-light-black">
-                      <p className="font-bold">Shift Timeline:</p>
-                      <p>{shift.startTime}-{shift.endTime}</p>
-                    </div>
-
-                    {/* 🔒 SHIFT LOCK TOGGLE WITH SAFE STATE */}
-                  <ShiftLockToggle
-                    shiftId={shift.id}
-                    initialValue={shift.isRatify ?? false}
-                    className={""}
-                  />
-
-                  
-
-                    {/* View Report */}
-                    {/* View Report */}
-                 <div
-  className="font-medium text-light-green cursor-pointer"
-  onClick={() => handleViewReport(shift.id)}
->
-  View Report
-</div>
-
-
-
-                    {/* Download Report */}
-                    <div
-                      className={` font-medium ${
-                        isCompleted ? "text-light-green cursor-pointer" : "text-[#72787E] cursor-not-allowed"
-                      }`}
-                      onClick={() => isCompleted &&  generateShiftReportPDF(shift)}
-                    >
-                      Download Report
-                    </div>
-
-                    {/* Edit Shift */}
-                    <div
-                      className={" font-medium cursor-pointer text-light-green "}
-                      onClick={() => handleEditShift(shift.id)
-                      }
-                    >
-                      Edit Shift
-                    </div>
-                  </div>
+                <div
+                  className="w-px h-4"
+                  style={{ backgroundColor: "#e5e7eb" }}
+                />
+                <div className="flex items-center gap-1" style={{ fontSize: 12, color: "#6b7280" }}>
+                  <Clock size={13} />
+                  <span>{shift.startTime}–{shift.endTime}</span>
                 </div>
               </div>
             </div>
-          );
-        })
-      )}
+
+            {/* Card Body */}
+            <div className="grid grid-cols-4 gap-4 px-5 py-3">
+              <div>
+                <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                  Caregiver
+                </p>
+                <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                  {shift.name || shift.user || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                  Shift Type
+                </p>
+                <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                  {shift.typeName || shift.shiftType || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                  Agency
+                </p>
+                <div className="flex items-center gap-1">
+                  <Building2 size={13} style={{ color: "#9ca3af" }} />
+                  <p className="truncate" style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                    {shift.agencyName || shift.clientDetails?.agencyName || "—"}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
+                  Clock In / Out
+                </p>
+                <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                  {shift.clockIn ? formatDate(shift.clockIn) : "—"} / {shift.clockOut ? formatDate(shift.clockOut) : "—"}
+                </p>
+              </div>
+            </div>
+
+            {/* Card Footer */}
+            <div
+              className="flex items-center justify-between px-5 py-2.5 border-t"
+              style={{ borderColor: "#f3f4f6" }}
+            >
+              <button
+                onClick={() => handleViewIntakeForm(shift.clientId, shift)}
+                className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
+                style={{ color: "#1f7a3c" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#145228")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#1f7a3c")}
+              >
+                <FileText size={13} />
+                View Intake Form
+              </button>
+
+              <div className="flex items-center gap-3">
+                <ShiftLockToggle shiftId={shift.id} initialValue={shift.isRatify ?? false} className="" />
+
+                <button
+                  onClick={() => handleViewReport(shift.id)}
+                  className="flex items-center gap-1 text-xs font-semibold transition-colors"
+                  style={{ color: "#6b7280" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#1f7a3c")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#6b7280")}
+                >
+                  <FileText size={13} />
+                  View Report
+                </button>
+
+                <button
+                  onClick={() => isCompleted && generateShiftReportPDF(shift)}
+                  className="flex items-center gap-1 text-xs font-semibold transition-colors"
+                  style={{ color: isCompleted ? "#6b7280" : "#d1d5db", cursor: isCompleted ? "pointer" : "not-allowed" }}
+                  onMouseEnter={(e) => { if (isCompleted) e.currentTarget.style.color = "#1f7a3c"; }}
+                  onMouseLeave={(e) => { if (isCompleted) e.currentTarget.style.color = "#6b7280"; }}
+                >
+                  <Download size={13} />
+                  Download Report
+                </button>
+
+                <button
+                  onClick={() => handleEditShift(shift.id)}
+                  className="flex items-center gap-1 text-xs font-semibold transition-colors"
+                  style={{ color: "#6b7280" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#1f7a3c")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#6b7280")}
+                >
+                  <Edit2 size={13} />
+                  Edit Shift
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex justify-end items-center gap-1 py-[10px] px-4 rounded">
+        <div className="flex justify-end items-center gap-2 pt-2">
           <button
-            onClick={() => goToPage(1)}
+            onClick={() => changePage(currentPage - 1)}
             disabled={currentPage === 1}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+            className="flex items-center justify-center w-8 h-8 rounded-lg border transition-colors hover:bg-gray-50 disabled:opacity-40 bg-white"
+            style={{ borderColor: "#e5e7eb" }}
           >
-            «
-          </button>
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
-          >
-            ‹
+            <ChevronLeft size={15} style={{ color: "#374151" }} />
           </button>
 
           {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))
-            .map((page) => (
-              <button
-                key={page}
-                onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
-                  currentPage === page ? "bg-light-green text-white" : "bg-white"
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+            .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+            .reduce((acc, p, idx, arr) => {
+              if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, i) =>
+              p === "…" ? (
+                <span key={`d-${i}`} style={{ fontSize: 13, color: "#9ca3af", padding: "0 4px" }}>…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => changePage(p)}
+                  className="w-8 h-8 rounded-lg font-semibold text-xs transition-colors"
+                  style={{
+                    backgroundColor: currentPage === p ? "#1f7a3c" : "#fff",
+                    color: currentPage === p ? "#fff" : "#374151",
+                    border: currentPage === p ? "none" : "1px solid #e5e7eb",
+                  }}
+                >
+                  {p}
+                </button>
+              )
+            )}
 
           <button
-            onClick={() => goToPage(currentPage + 1)}
+            onClick={() => changePage(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
+            className="flex items-center justify-center w-8 h-8 rounded-lg border transition-colors hover:bg-gray-50 disabled:opacity-40 bg-white"
+            style={{ borderColor: "#e5e7eb" }}
           >
-            ›
-          </button>
-          <button
-            onClick={() => goToPage(totalPages)}
-            disabled={currentPage === totalPages}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50 bg-white"
-          >
-            »
+            <ChevronRight size={15} style={{ color: "#374151" }} />
           </button>
         </div>
       )}

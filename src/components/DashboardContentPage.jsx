@@ -4,12 +4,11 @@ import ShiftsData from "../components/ShiftsData";
 import IntakeFormChoiceModel from "../components/IntakeFormChoiceModel";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
-import { IoChevronDown } from "react-icons/io5";
 import CustomCalendar from "./CustomerCalender";
-import { FaPlus } from "react-icons/fa6";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import TransportationShiftsData from "./TransportationShiftsData";
 import AdminShiftCalendar from "./AdminShiftCalender";
+import { Plus, Search, ChevronDown, Calendar } from "lucide-react";
 
 const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails,initialShiftCategory }) => {
   const navigate = useNavigate();
@@ -302,173 +301,183 @@ useEffect(() => {
 
   // ✅ MAIN RETURN
   return (
-    <div className="flex flex-col w-full gap-[16px] relative ">
-      {/* Header */}
-      <div className="flex justify-between">
-        <p className="font-bold text-2xl text-light-black leading-7">Shift Category</p>
-
-        <div className="flex flex-row gap-[12px] flex-wrap">
+    <div
+      className="flex flex-col w-full gap-0"
+      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+    >
+      {/* Page Header */}
+      <div
+        className="flex items-center justify-between px-0 pb-4"
+      >
+        <div>
+          <h1 className="font-bold" style={{ fontSize: 18, color: "#111827" }}>Shifts</h1>
+          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+            {filteredShifts.length} shift{filteredShifts.length !== 1 ? "s" : ""} shown
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           {[
             { label: "Add User", path: "/admin-dashboard/add/add-user" },
             { label: "Add Shift", path: "/admin-dashboard/add/add-user-shift" },
-            { label: "Add Intake Forms", path: "" },
+            { label: "Add Intake Form", path: "" },
           ].map((btn, idx) => (
-            <div
+            <button
               key={idx}
-              className="flex justify-center items-center text-white border gap-[10px] py-[6px] px-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
               onClick={() => {
-                if (btn.label === "Add Intake Forms") {
-                  setShowModal(true);
-                } else {
-                  navigate(btn.path);
-                }
+                if (btn.label === "Add Intake Form") setShowModal(true);
+                else navigate(btn.path);
               }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-white font-semibold text-xs transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#1f7a3c" }}
             >
-              <FaPlus className="w-[10px]" />
-              <p className="font-medium text-[14px] leading-[20px]">{btn.label}</p>
-            </div>
+              <Plus size={13} strokeWidth={2.5} />
+              {btn.label}
+            </button>
           ))}
         </div>
       </div>
 
       {/* Intake Modal */}
-      {showModal && (
-        <IntakeFormChoiceModel
-          setShowModal={setShowModal}
-          
-        />
-      )}
+      {showModal && <IntakeFormChoiceModel setShowModal={setShowModal} />}
 
       {/* Tabs */}
-      <div className="flex items-center gap-6 border-b border-gray">
-        {/* 🔹 Shift Calendar Tab */}
-  <button
-    onClick={() => setShiftCategory("CALENDAR")}
-    className={`pb-2 text-sm font-medium cursor-pointer ${
-      shiftCategory === "CALENDAR"
-        ? "text-dark-green border-b-2 border-dark-green font-bold"
-        : "text-light-black font-bold"
-    }`}
-  >
-    Shift Calendar
-  </button>
+      <div
+        className="flex items-center gap-1 border-b mb-4"
+        style={{ borderColor: "#e5e7eb" }}
+      >
+        <button
+          onClick={() => setShiftCategory("CALENDAR")}
+          className="pb-2.5 px-3 text-sm font-semibold transition-colors relative"
+          style={{ color: shiftCategory === "CALENDAR" ? "#111827" : "#9ca3af" }}
+        >
+          Shift Calendar
+          {shiftCategory === "CALENDAR" && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: "#1f7a3c" }} />
+          )}
+        </button>
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setShiftCategory(cat.name)}
-            className={`pb-2 text-sm font-medium cursor-pointer ${
-              shiftCategory === cat.name
-                ? "text-dark-green border-b-2 border-dark-green font-bold"
-                : "text-light-black font-bold"
-            }`}
+            className="pb-2.5 px-3 text-sm font-semibold transition-colors relative"
+            style={{ color: shiftCategory === cat.name ? "#111827" : "#9ca3af" }}
           >
             {cat.name}
+            {shiftCategory === cat.name && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: "#1f7a3c" }} />
+            )}
           </button>
         ))}
       </div>
 
       {/* Filters */}
       {shiftCategory !== "CALENDAR" && (
-      <div className="flex justify-between min-h-[32px] text-light-black relative">
-        <div className="flex gap-[12px] items-center">
-          {/* Search */}
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-[#C5C5C5] rounded-[4px] w-[342px] focus:outline-none p-2 bg-white placeholder-[#C5C5C5] placeholder:text-[12px]"
-            placeholder="Search with Name, Client ID"
-          />
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative" style={{ width: 260 }}>
+              <Search
+                size={14}
+                style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }}
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by name or client ID…"
+                className="w-full rounded-lg border focus:outline-none bg-white"
+                style={{
+                  paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7,
+                  fontSize: 13, borderColor: "#e5e7eb", color: "#111827",
+                }}
+              />
+            </div>
 
-          {/* Calendar */}
-          <div className="relative flex gap-3 items-center">
-            <p className="font-bold text-[16px] leading-[24px]">Calendar</p>
+            {/* Calendar picker */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCalendarOpen((v) => !v)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium bg-white"
+                style={{ borderColor: "#e5e7eb", color: "#374151" }}
+              >
+                <Calendar size={13} style={{ color: "#6b7280" }} />
+                <span>{calendarBadge}</span>
+                {isThisWeek && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded text-xs font-bold"
+                    style={{ backgroundColor: "#f0fdf4", color: "#1f7a3c" }}>
+                    This Week
+                  </span>
+                )}
+                <ChevronDown size={13} style={{ color: "#9ca3af" }} />
+              </button>
+              {calendarOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setCalendarOpen(false)} />
+                  <div className="absolute z-50 top-10 left-0 shadow-lg rounded-lg bg-white border" style={{ borderColor: "#e5e7eb" }}>
+                    <CustomCalendar
+                      selectedDates={selectedDates}
+                      onDatesChange={(dates) => setSelectedDates(dates)}
+                      onClose={() => setCalendarOpen(false)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <span style={{ fontSize: 13, color: "#6b7280" }}>
+              {filteredShifts.length} result{filteredShifts.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {/* Status Filter */}
+          <div className="relative">
             <button
-              type="button"
-              onClick={() => setCalendarOpen((v) => !v)}
-              className="flex items-center gap-2 px-3 py-[6px] rounded border border-light-green text-light-green"
+              onClick={() => setStatusOpen(!statusOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium bg-white"
+              style={{ borderColor: "#e5e7eb", color: "#374151" }}
             >
-              <span className="text-sm font-medium">{calendarBadge}</span>
-              <IoChevronDown />
+              Status: <span style={{ color: "#1f7a3c" }}>{shiftStatus || "All"}</span>
+              <ChevronDown size={13} style={{ color: "#9ca3af" }} />
             </button>
-
-            {calendarOpen && (
+            {statusOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setCalendarOpen(false)} />
-                <div className="absolute z-50 top-10 left-0 shadow-lg rounded bg-white">
-                  <CustomCalendar
-                    selectedDates={selectedDates}
-                    onDatesChange={(dates) => setSelectedDates(dates)}
-                    onClose={() => setCalendarOpen(false)}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex gap-[12px] items-center">
-            {isThisWeek && <p className="font-bold text-[16px] leading-[24px]">This Week</p>}
-            <div className="w-px h-6 bg-gray-400"></div>
-            <p className="font-normal text-base">Showed Results ({filteredShifts.length})</p>
-          </div>
-        </div>
-
-        {/* Status Filter */}
-        <div className="flex gap-[12px] items-center relative">
-          <p className="font-bold text-base leading-6">Status</p>
-          <button
-            onClick={() => setStatusOpen(!statusOpen)}
-            className="flex items-center gap-1 text-light-green"
-          >
-            {shiftStatus || "All"} <IoChevronDown />
-          </button>
-          {statusOpen && (
-            <>
-              <div onClick={() => setStatusOpen(false)} className="fixed inset-0 z-40" />
-              <div className="absolute right-[4px] top-[40px] w-40 bg-white border border-gray-200 shadow-lg rounded-md z-50">
-                <ul className="py-1">
+                <div onClick={() => setStatusOpen(false)} className="fixed inset-0 z-40" />
+                <div className="absolute right-0 top-9 bg-white border rounded-lg shadow-lg z-50 min-w-[140px]"
+                  style={{ borderColor: "#e5e7eb" }}>
                   {statusOptions.map((status) => (
-                    <li
+                    <button
                       key={status}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-light-black text-sm"
+                      className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50"
+                      style={{ color: "#374151" }}
                       onClick={() => {
                         setShiftStatus(status === "All" ? "" : status);
                         setStatusOpen(false);
                       }}
                     >
                       {status}
-                    </li>
+                    </button>
                   ))}
-                </ul>
-              </div>
-            </>
-          )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
       )}
 
-      {/* ✅ Data Section */}
-      <div className="flex p-1 h-auto">
-
-         {/* 🗓 CALENDAR VIEW */}
-  {shiftCategory === "CALENDAR" && (
-    <AdminShiftCalendar shifts={shifts} />
-  )}
-
+      {/* Data Section */}
+      <div className="w-full">
+        {shiftCategory === "CALENDAR" && <AdminShiftCalendar shifts={shifts} />}
         {shiftCategory === "Transportation" && (
           <TransportationShiftsData
             filteredShifts={filteredShifts}
             handleViewReport={handleViewReport}
-             openTransportDetails={openTransportDetails}
+            openTransportDetails={openTransportDetails}
           />
-        ) }
-        
-         {shiftCategory !== "CALENDAR" && shiftCategory !== "Transportation" && (
-    <ShiftsData
-      filteredShifts={filteredShifts}
-      handleViewReport={handleViewReport}
-    />
-  )}
+        )}
+        {shiftCategory !== "CALENDAR" && shiftCategory !== "Transportation" && (
+          <ShiftsData filteredShifts={filteredShifts} handleViewReport={handleViewReport} />
+        )}
       </div>
     </div>
   );

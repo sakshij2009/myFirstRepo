@@ -1,290 +1,304 @@
- 
-import React, { useEffect, useState } from "react";
-import { FaPlus } from "react-icons/fa6";
-import { IoIosSearch } from "react-icons/io";
-import { IoChevronDown } from "react-icons/io5";
+import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import {
+  Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail,
+} from "lucide-react";
+
+const ROLE_TABS = ["All", "Parent", "Intake Worker"];
+
+function roleBadge(role) {
+  const isWorker = role?.toLowerCase().includes("intake");
+  return (
+    <span
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+      style={{
+        backgroundColor: isWorker ? "#f0fdf4" : "#eff6ff",
+        color: isWorker ? "#16a34a" : "#3b82f6",
+        borderColor: isWorker ? "#bbf7d0" : "#bfdbfe",
+      }}
+    >
+      {role || "—"}
+    </span>
+  );
+}
 
 const ManageIntakeWorkers = () => {
   const [search, setSearch] = useState("");
   const [intakeWorkers, setIntakeWorkers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-   const [statusOpen, setStatusOpen] = useState(false);
-   const[role,setRole]=useState("");
-
+  const [roleTab, setRoleTab] = useState("All");
+  const [goToPage, setGoToPage] = useState("");
 
   const navigate = useNavigate();
-  const roles=["All","Parent","Intake Worker"];
 
-  
+  useEffect(() => {
+    const fetchIntakeWorkers = async () => {
+      try {
+        const snap = await getDocs(collection(db, "intakeUsers"));
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setIntakeWorkers(list);
+      } catch (e) {
+        console.error("Error fetching intake workers:", e);
+      }
+    };
+    fetchIntakeWorkers();
+  }, []);
 
-  // ✅ Fetch Users
-// =======================
-// 📌 FETCH INTAKE WORKERS
-// =======================
-
-useEffect(() => {
-  const fetchIntakeWorkers = async () => {
+  const handleDeleteIntakeWorker = async (worker) => {
+    if (!window.confirm(`Are you sure you want to delete "${worker.name}"?`)) return;
     try {
-      const snap = await getDocs(collection(db, "intakeUsers"));  // 👈 NEW COLLECTION
-
-      const list = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      setIntakeWorkers(list);  // 👈 NEW STATE
-    } catch (error) {
-      console.error("Error fetching intake workers:", error);
+      const q = query(collection(db, "intakeUsers"), where("email", "==", worker.email));
+      const snap = await getDocs(q);
+      if (snap.empty) return;
+      await deleteDoc(doc(db, "intakeWorkers", snap.docs[0].id));
+      setIntakeWorkers((prev) => prev.filter((w) => w.email !== worker.email));
+    } catch (e) {
+      console.error("Error deleting intake worker:", e);
     }
   };
 
-  fetchIntakeWorkers();
-}, []);
+  const filtered = intakeWorkers.filter((w) => {
+    const searchMatch = !search
+      || w.name?.toLowerCase().includes(search.toLowerCase())
+      || w.email?.toLowerCase().includes(search.toLowerCase());
+    const roleMatch = roleTab === "All" || w.role?.toLowerCase() === roleTab.toLowerCase();
+    return searchMatch && roleMatch;
+  });
 
-
-// =======================
-// 📌 DELETE INTAKE WORKER
-// =======================
-
-const handleDeleteIntakeWorker = async (worker) => {
-  const confirmDelete = window.confirm(
-    `Are you sure you want to delete intake worker "${worker.name}"?`
-  );
-  if (!confirmDelete) return;
-
-  try {
-    // 🔍 Find this worker in Firestore by email (unique)
-    const q = query(
-      collection(db, "intakeUsers"),
-      where("email", "==", worker.email)
-    );
-
-    const snap = await getDocs(q);
-
-    if (snap.empty) {
-      alert("Error: Intake worker not found in database.");
-      return;
-    }
-
-    // There will be only one worker with this email
-    const docId = snap.docs[0].id;
-
-    // ❌ Delete this intake worker
-    await deleteDoc(doc(db, "intakeWorkers", docId));
-
-    // Update UI
-    setIntakeWorkers((prev) => prev.filter((w) => w.email !== worker.email));
-
-    alert("Intake worker deleted successfully");
-  } catch (error) {
-    console.error("Error deleting intake worker:", error);
-    alert("Failed to delete intake worker.");
-  }
-};
-
-
-
-// =======================
-// 📌 FILTERING (ONLY SEARCH)
-// =======================
-
-const filteredIntakeWorkers = intakeWorkers.filter((worker) => {
-  const matchesSearch =
-    !search ||
-    worker.name?.toLowerCase().includes(search.toLowerCase()) ||
-    worker.email?.toLowerCase().includes(search.toLowerCase());
-
-  const matchesRole =
-    !role || role === "All" || worker.role?.toLowerCase() === role.toLowerCase();
-
-  return matchesSearch && matchesRole;
-});
-
-
-
-  // ✅ Pagination logic
-  const ITEMS_PER_PAGE = 7;
-  const totalPages = Math.ceil(filteredIntakeWorkers.length / ITEMS_PER_PAGE);
+  const ITEMS_PER_PAGE = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentIntakeWorkers = filteredIntakeWorkers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const currentWorkers = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const goToPage = (page) => {
-    if (page < 1 || page > totalPages) return;
-    setCurrentPage(page);
+  const changePage = (page) => {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+    setGoToPage("");
   };
 
   return (
-    <div className="flex flex-col gap-[24px] p-4">
+    <div
+      className="flex flex-col h-full"
+      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: "#f9fafb" }}
+    >
       {/* Header */}
-      <div className="flex justify-between">
+      <div
+        className="flex items-center justify-between px-6 py-4 bg-white border-b shrink-0"
+        style={{ borderColor: "#e5e7eb" }}
+      >
         <div>
-          <p className="font-bold text-[24px] leading-[28px] text-light-black">Manage Intake Worker</p>
-          <div className="flex gap-[10px] text-[#535E5E]">
-            <p className="font-medium text-[14px] leading-[20px]">
-              Total Intake Workers: <span className="font-bold">{intakeWorkers.length}</span>
-            </p>
-            <p className="font-medium text-[14px] leading-[20px]">
-              Showing Intake Workers: <span className="font-bold">{filteredIntakeWorkers.length}</span>
-            </p>
-          </div>
+          <h1 className="font-bold" style={{ fontSize: 18, color: "#111827" }}>Intake Workers</h1>
+          <p style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+            {filtered.length} of {intakeWorkers.length} workers
+          </p>
         </div>
-
+        <button
+          onClick={() => navigate("/admin-dashboard/add/add-intake-worker")}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold transition-opacity hover:opacity-90"
+          style={{ backgroundColor: "#1f7a3c", fontSize: 13 }}
+        >
+          <Plus size={15} strokeWidth={2.5} />
+          Add Intake Worker
+        </button>
       </div>
-
-      <hr className="border-t border-gray" />
 
       {/* Filters */}
-      <div className="flex justify-between h-[40px]">
-        <div className="flex gap-[24px]">
-          <div className="relative">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="border border-[#C5C5C5] rounded-[4px] w-[342px] focus:outline-none pt-2 pr-3 pb-2 pl-6 bg-[#FFFFFF] placeholder-[#809191] placeholder:text-[12px]"
-              placeholder="Search with Name"
-            />
-            {search === "" && <IoIosSearch className="absolute top-3.5 left-2 text-[#809191]" />}
-          </div>
+      <div
+        className="flex items-center justify-between gap-4 px-6 py-3 bg-white border-b shrink-0"
+        style={{ borderColor: "#e5e7eb" }}
+      >
+        <div className="relative" style={{ width: 280 }}>
+          <Search
+            size={15}
+            style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9ca3af" }}
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+            placeholder="Search by name or email…"
+            className="w-full rounded-lg border focus:outline-none"
+            style={{
+              paddingLeft: 32, paddingRight: 12, paddingTop: 7, paddingBottom: 7,
+              fontSize: 13, borderColor: "#e5e7eb", color: "#111827",
+            }}
+          />
         </div>
 
-         <div className="flex gap-[14px] items-center">
-                    <p className="font-bold text-base leading-6 text-light-black">
-                      Role
-                    </p>
-                    <button
-                      onClick={() => setStatusOpen(!statusOpen)}
-                      className="flex items-center gap-1 text-light-green cursor-pointer text-nowrap"
-                    >
-                      {role || "All"} <IoChevronDown />
-                    </button>
-                  </div>
-
-        
+        <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: "#f3f4f6" }}>
+          {ROLE_TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => { setRoleTab(t); setCurrentPage(1); }}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap"
+              style={{
+                backgroundColor: roleTab === t ? "#fff" : "transparent",
+                color: roleTab === t ? "#111827" : "#6b7280",
+                boxShadow: roleTab === t ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Dropdown Lists */}
-          {statusOpen && (
-            <div className="absolute right-[20px] top-[250px] w-30 bg-white shadow-lg rounded-md z-50">
-              <ul className="py-2">
-                {roles.map((g) => (
-                  <li
-                    key={g}
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-light-black"
-                    onClick={() => {
-                      setRole(g === "All" ? "" : g);
-                      setStatusOpen(false);
-                    }}
-                  >
-                    {g}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-      {/* Users Table */}
-      <div className="min-h-[500px]">
-        <div className="w-full rounded border border-light-gray text-light-black">
-          <table className="bg-white w-full rounded">
+      {/* Table */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
+          <table className="w-full border-collapse">
             <thead>
-              <tr className="h-[65px]">
-                <th className="text-left px-4 max-w-50 max-h-16">Intake Worker Name</th>
-                <th className="text-left px-4">Email</th>
-                 <th className="text-left px-4">Phone Number</th>
-                <th className="text-left px-4">Role</th>
-                <th className="text-left px-4">Invoice E-mail</th>
-                <th className="text-center px-4">Name of Agency</th>
-                <th className="text-center px-4">Actions</th>
+              <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                {["Name", "Email", "Phone", "Role", "Invoice Email", "Agency", "Actions"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 font-semibold whitespace-nowrap"
+                    style={{ fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {currentIntakeWorkers.map((user, index) => (
-                <tr key={index} className="border-t border-light-gray">
-                  <td className="px-4 py-3 max-w-50 h-16">{user.name}</td>
-                  <td className="px-4 py-3">{user.email}</td>
-                  <td className="px-4 py-3 max-w-30">{user.phone}</td>
-                  <td className="px-4 py-3 w-40">{user.role}</td>
-                  <td className="px-4 py-3 w-50">{user.invoiceEmail}</td>
-                  <td className="px-4 py-3 w-40">{user.agency}</td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex justify-center gap-2">
-                      <img
-                        src="/images/edit.png"
-                        alt="edit"
-                        className="h-4 w-4 cursor-pointer"
-                        onClick={() =>
-                          navigate(`/admin-dashboard/add/update-intakeworker/${user.email}`)
-                        }
-                      />
-                      <div className="w-px h-6 bg-gray"></div>
-                      <img
-                        src="/images/delete.png"
-                        alt="delete"
-                        className="h-[18px] w-[14px] cursor-pointer"
-                        onClick={() => handleDeleteIntakeWorker(user)}
-                      />
-                    </div>
+              {currentWorkers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-16" style={{ color: "#9ca3af", fontSize: 14 }}>
+                    No intake workers found
                   </td>
                 </tr>
-              ))}
+              ) : (
+                currentWorkers.map((worker) => (
+                  <tr
+                    key={worker.id}
+                    className="transition-colors hover:bg-gray-50"
+                    style={{ borderBottom: "1px solid #f3f4f6" }}
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>
+                        {worker.name || "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="flex items-center gap-1.5" style={{ fontSize: 13, color: "#6b7280" }}>
+                        <Mail size={13} />
+                        {worker.email || "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3" style={{ fontSize: 13, color: "#374151" }}>
+                      {worker.phone || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {roleBadge(worker.role)}
+                    </td>
+                    <td className="px-4 py-3" style={{ fontSize: 13, color: "#6b7280" }}>
+                      {worker.invoiceEmail || "—"}
+                    </td>
+                    <td className="px-4 py-3" style={{ fontSize: 13, color: "#374151" }}>
+                      {worker.agency || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => navigate(`/admin-dashboard/add/update-intakeworker/${worker.email}`)}
+                          className="flex items-center justify-center rounded-lg border transition-colors hover:bg-gray-100"
+                          style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}
+                          title="View"
+                        >
+                          <Eye size={14} style={{ color: "#6b7280" }} />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/admin-dashboard/add/update-intakeworker/${worker.email}`)}
+                          className="flex items-center justify-center rounded-lg border transition-colors hover:bg-gray-100"
+                          style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}
+                          title="Edit"
+                        >
+                          <Edit2 size={14} style={{ color: "#6b7280" }} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIntakeWorker(worker)}
+                          className="flex items-center justify-center rounded-lg border transition-colors hover:bg-red-50"
+                          style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}
+                          title="Delete"
+                        >
+                          <Trash2 size={14} style={{ color: "#ef4444" }} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ✅ Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-end items-center gap-1">
+      {/* Pagination */}
+      <div
+        className="flex items-center justify-between px-6 py-3 bg-white border-t shrink-0"
+        style={{ borderColor: "#e5e7eb" }}
+      >
+        <p style={{ fontSize: 13, color: "#6b7280" }}>
+          Showing {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+        </p>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => goToPage(1)}
+            onClick={() => changePage(currentPage - 1)}
             disabled={currentPage === 1}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50"
+            className="flex items-center justify-center w-8 h-8 rounded-lg border transition-colors hover:bg-gray-50 disabled:opacity-40"
+            style={{ borderColor: "#e5e7eb" }}
           >
-            «
-          </button>
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50"
-          >
-            ‹
+            <ChevronLeft size={15} style={{ color: "#374151" }} />
           </button>
           {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))
-            .map((page) => (
-              <button
-                key={page}
-                onClick={() => goToPage(page)}
-                className={`px-3 py-1 border border-[#C5C5C5] rounded ${
-                  currentPage === page ? "bg-light-green text-white" : ""
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+            .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+            .reduce((acc, p, idx, arr) => {
+              if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, i) =>
+              p === "…" ? (
+                <span key={`d-${i}`} style={{ fontSize: 13, color: "#9ca3af", padding: "0 4px" }}>…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => changePage(p)}
+                  className="w-8 h-8 rounded-lg font-semibold text-xs transition-colors"
+                  style={{
+                    backgroundColor: currentPage === p ? "#1f7a3c" : "transparent",
+                    color: currentPage === p ? "#fff" : "#374151",
+                    border: currentPage === p ? "none" : "1px solid #e5e7eb",
+                  }}
+                >
+                  {p}
+                </button>
+              )
+            )}
           <button
-            onClick={() => goToPage(currentPage + 1)}
+            onClick={() => changePage(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50"
+            className="flex items-center justify-center w-8 h-8 rounded-lg border transition-colors hover:bg-gray-50 disabled:opacity-40"
+            style={{ borderColor: "#e5e7eb" }}
           >
-            ›
+            <ChevronRight size={15} style={{ color: "#374151" }} />
           </button>
-          <button
-            onClick={() => goToPage(totalPages)}
-            disabled={currentPage === totalPages}
-            className="px-2 py-1 border border-[#C5C5C5] rounded disabled:opacity-50"
-          >
-            »
-          </button>
+          <div className="flex items-center gap-1.5 ml-2">
+            <span style={{ fontSize: 12, color: "#6b7280" }}>Go to</span>
+            <input
+              type="number" min={1} max={totalPages} value={goToPage}
+              onChange={(e) => setGoToPage(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") changePage(Number(goToPage)); }}
+              className="w-12 rounded-lg border text-center focus:outline-none"
+              style={{ fontSize: 12, borderColor: "#e5e7eb", padding: "4px 6px" }}
+              placeholder="…"
+            />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
 export default ManageIntakeWorkers;
-

@@ -1,63 +1,17 @@
-import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutGrid,
-  Users,
-  UserPlus,
-  Calendar,
-  CheckCircle,
-  Car,
-  FileText,
-  Building,
-  BarChart3,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Inbox,
-  UserCheck,
-  ClipboardCheck,
-  Receipt,
-  Wallet,
-  Landmark,
-  LogOut,
+  LayoutGrid, Users, UserPlus, Calendar, CheckCircle, Car, FileText, Building,
+  BarChart3, Settings, ChevronLeft, ChevronRight, Inbox, UserCheck, ClipboardCheck,
+  Receipt, Wallet, Landmark, LogOut, ArrowLeftRight,
 } from "lucide-react";
-
-const NAV_GROUPS = [
-  {
-    group: "Main",
-    items: [
-      { label: "Dashboard",   path: "/admin-dashboard/dashboard",      icon: <LayoutGrid size={16} strokeWidth={1.7} /> },
-      { label: "Clients",     path: "/admin-dashboard/clients",         icon: <Users size={16} strokeWidth={1.7} />,      badge: null },
-      { label: "Staff",       path: "/admin-dashboard/users",           icon: <UserPlus size={16} strokeWidth={1.7} /> },
-      { label: "Shifts",      path: "/admin-dashboard/dashboard",       icon: <Calendar size={16} strokeWidth={1.7} />,   badge: null },
-    ],
-  },
-  {
-    group: "Services",
-    items: [
-      { label: "Services",         path: "/admin-dashboard/services",        icon: <CheckCircle size={16} strokeWidth={1.7} /> },
-      { label: "Transportations",  path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
-      { label: "Intake Requests",  path: "/admin-dashboard/intake-requests", icon: <Inbox size={16} strokeWidth={1.7} /> },
-      { label: "Intake Forms",     path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
-      { label: "Intake Workers",   path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} /> },
-    ],
-  },
-  {
-    group: "Admin",
-    items: [
-      { label: "Agencies",           path: "/admin-dashboard/agency",           icon: <Building size={16} strokeWidth={1.7} /> },
-      { label: "Staff Evaluation",   path: "/admin-dashboard/staff-evaluation", icon: <ClipboardCheck size={16} strokeWidth={1.7} /> },
-      { label: "Billing",            path: "/admin-dashboard/billing",          icon: <Receipt size={16} strokeWidth={1.7} /> },
-      { label: "Payroll",            path: "/admin-dashboard/payroll",          icon: <Wallet size={16} strokeWidth={1.7} /> },
-      { label: "GST Reporting",      path: "/admin-dashboard/gst-reporting",    icon: <Landmark size={16} strokeWidth={1.7} /> },
-      { label: "Reports",            path: "/admin-dashboard/reports",          icon: <BarChart3 size={16} strokeWidth={1.7} /> },
-      { label: "Settings",           path: "/admin-dashboard/settings",         icon: <Settings size={16} strokeWidth={1.7} /> },
-    ],
-  },
-];
+import { collection, getCountFromServer } from "firebase/firestore";
+import { db } from "../firebase";
 
 const SideBar = ({ user, onLogout, onWidthChange }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [badges, setBadges] = useState({ clients: null, shifts: null, intakeRequests: null, intakeWorkers: null });
+  const navigate = useNavigate();
 
   const toggle = () => {
     const next = !collapsed;
@@ -73,28 +27,70 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
     ? user.name.replace(/\b\w/g, (c) => c.toUpperCase())
     : "Admin";
 
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const [clients, shifts, intakeWorkers] = await Promise.all([
+          getCountFromServer(collection(db, "clients")),
+          getCountFromServer(collection(db, "shifts")),
+          getCountFromServer(collection(db, "intakeUsers")),
+        ]);
+        setBadges({
+          clients: clients.data().count || null,
+          shifts: shifts.data().count || null,
+          intakeWorkers: intakeWorkers.data().count || null,
+        });
+      } catch (e) { /* silently ignore */ }
+    };
+    fetchCounts();
+  }, []);
+
+  const NAV_GROUPS = [
+    {
+      group: "Main",
+      items: [
+        { label: "Dashboard",  path: "/admin-dashboard/dashboard",      icon: <LayoutGrid size={16} strokeWidth={1.7} /> },
+        { label: "Clients",    path: "/admin-dashboard/clients",         icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.clients },
+        { label: "Staff",      path: "/admin-dashboard/users",           icon: <UserPlus size={16} strokeWidth={1.7} /> },
+        { label: "Shifts",     path: "/admin-dashboard/shifts",          icon: <Calendar size={16} strokeWidth={1.7} />,   badge: badges.shifts },
+      ],
+    },
+    {
+      group: "Services",
+      items: [
+        { label: "Services",        path: "/admin-dashboard/services",        icon: <CheckCircle size={16} strokeWidth={1.7} /> },
+        { label: "Transportations", path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
+        { label: "Intake Requests", path: "/admin-dashboard/intake-requests", icon: <Inbox size={16} strokeWidth={1.7} /> },
+        { label: "Intake Forms",    path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
+        { label: "Intake Workers",  path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
+      ],
+    },
+    {
+      group: "Admin",
+      items: [
+        { label: "Agencies",         path: "/admin-dashboard/agency",           icon: <Building size={16} strokeWidth={1.7} /> },
+        { label: "Staff Evaluation", path: "/admin-dashboard/staff-evaluation", icon: <ClipboardCheck size={16} strokeWidth={1.7} /> },
+        { label: "Billing",          path: "/admin-dashboard/billing",          icon: <Receipt size={16} strokeWidth={1.7} /> },
+        { label: "Payroll",          path: "/admin-dashboard/payroll",          icon: <Wallet size={16} strokeWidth={1.7} /> },
+        { label: "GST Reporting",    path: "/admin-dashboard/gst-reporting",    icon: <Landmark size={16} strokeWidth={1.7} /> },
+        { label: "Reports",          path: "/admin-dashboard/reports",          icon: <BarChart3 size={16} strokeWidth={1.7} /> },
+        { label: "Settings",         path: "/admin-dashboard/settings",         icon: <Settings size={16} strokeWidth={1.7} /> },
+      ],
+    },
+  ];
+
   return (
     <aside
       className="h-screen flex flex-col shrink-0 transition-all duration-300 ease-out overflow-hidden"
-      style={{
-        width: collapsed ? 64 : 242,
-        backgroundColor: "#145228",
-        fontFamily: "'Plus Jakarta Sans', sans-serif",
-      }}
+      style={{ width: collapsed ? 64 : 242, backgroundColor: "#145228", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
       {/* Logo */}
       <div className="px-4 py-5 flex items-center gap-3 shrink-0">
-        <img
-          src="/images/logo.png"
-          alt="Family Forever"
-          className="shrink-0 w-9 h-9 object-contain rounded-lg"
-        />
+        <img src="/images/logo.png" alt="Family Forever" className="shrink-0 w-9 h-9 object-contain rounded-lg" />
         {!collapsed && (
           <div className="flex-1 min-w-0">
             <div className="text-white font-bold text-sm leading-tight">Family Forever</div>
-            <div className="text-xs" style={{ color: "rgba(255,255,255,0.48)" }}>
-              Care Management
-            </div>
+            <div className="text-xs" style={{ color: "rgba(255,255,255,0.48)" }}>Care Management</div>
           </div>
         )}
       </div>
@@ -131,13 +127,21 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
                         style={{ backgroundColor: "#5ccf80" }}
                       />
                     )}
-                    <div className="shrink-0" style={{ opacity: isActive ? 1 : 0.55 }}>
+                    <div className="shrink-0" style={{ opacity: isActive ? 1 : 0.6 }}>
                       {item.icon}
                     </div>
                     {!collapsed && (
-                      <span className="flex-1 text-left text-sm font-medium truncate">
-                        {item.label}
-                      </span>
+                      <>
+                        <span className="flex-1 text-left text-sm font-medium truncate">{item.label}</span>
+                        {item.badge != null && item.badge > 0 && (
+                          <span
+                            className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none"
+                            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)" }}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -147,11 +151,28 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
         ))}
       </nav>
 
-      {/* Bottom user area */}
-      <div
-        className="p-3 shrink-0 border-t"
-        style={{ borderColor: "rgba(255,255,255,0.08)" }}
-      >
+      {/* Bottom */}
+      <div className="p-3 shrink-0 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+        {/* Back to Role Select */}
+        {!collapsed ? (
+          <button
+            onClick={() => navigate("/")}
+            className="w-full flex items-center gap-2 px-3 py-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
+            style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.55)" }}
+          >
+            <ArrowLeftRight size={14} strokeWidth={1.8} />
+            Back to Role Select
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate("/")}
+            className="w-full flex items-center justify-center p-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
+            title="Back to Role Select"
+          >
+            <ArrowLeftRight size={14} strokeWidth={1.8} style={{ color: "rgba(255,255,255,0.45)" }} />
+          </button>
+        )}
+
         {/* Logout */}
         {!collapsed ? (
           <button
@@ -184,18 +205,12 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
                 {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Admin"}
               </div>
             </div>
-            <button
-              onClick={toggle}
-              className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors"
-            >
+            <button onClick={toggle} className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors">
               <ChevronLeft size={16} style={{ color: "rgba(255,255,255,0.52)" }} strokeWidth={2} />
             </button>
           </div>
         ) : (
-          <button
-            onClick={toggle}
-            className="w-full flex items-center justify-center p-2 rounded hover:bg-white/10 transition-colors"
-          >
+          <button onClick={toggle} className="w-full flex items-center justify-center p-2 rounded hover:bg-white/10 transition-colors">
             <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.52)" }} strokeWidth={2} />
           </button>
         )}

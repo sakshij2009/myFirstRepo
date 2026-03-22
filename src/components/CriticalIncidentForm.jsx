@@ -17,6 +17,7 @@ import { db } from "../firebase"; // adjust path if needed
 // Your existing input primitives (keep as-is)
 import { Field, TextInput, TextArea, Select, Check, Radio } from "../components/Inputs";
 import { downloadIncidentFormPDF } from "./DownloadIncidentFormPDF ";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 /* ---------- constants (same as your reference) ---------- */
 const cfgStatuses = ["CAG", "ICO", "TGO", "PGO", "SFP"];
@@ -739,10 +740,11 @@ useEffect(() => {
                 </Field>
 
                 <Field labelText="Facility Staff Address">
-                  <TextInput
+                  <PlacesAutocomplete
                     value={values.facility.staffAddress}
-                    onChange={(e) => setFieldValue("facility.staffAddress", e.target.value)}
+                    onChange={(v) => setFieldValue("facility.staffAddress", v)}
                     placeholder="Address"
+                    className="block w-full rounded border border-light-gray p-[10px] text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-black"
                   />
                 </Field>
 

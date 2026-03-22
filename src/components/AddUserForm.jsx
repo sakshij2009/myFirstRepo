@@ -6,10 +6,11 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
 import { FaChevronDown } from "react-icons/fa6";
+import { Upload } from "lucide-react";
 import SuccessSlider from "../components/SuccessSlider";
 import { useNavigate, useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
-import GoogleAddressInput from "../components/GoogleAddressInput";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 const AddUserForm = ({ mode = "add", user }) => {
   const navigate = useNavigate();
@@ -69,7 +70,7 @@ const AddUserForm = ({ mode = "add", user }) => {
     description: Yup.string().max(200, "Max 200 chars"),
     position: Yup.string().required("Position is required"),
 
-    // ✅ NEW FIELDS (kept optional so we don’t break your flow)
+    // ✅ NEW FIELDS (kept optional so we don't break your flow)
     reasonOfLeaving: Yup.string().max(200, "Max 200 chars"),
     totalKMs: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
     rateBefore5000km: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
@@ -312,400 +313,254 @@ const AddUserForm = ({ mode = "add", user }) => {
     }
   };
 
+  const inputCls = (hasError) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    }`;
+
+  const selectCls = (hasError, empty) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    } ${empty ? "text-gray-400" : "text-gray-700"}`;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-bold text-2xl leading-7 text-light-black">
-          {mode === "update" ? "Update User" : "Add User"}
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50 text-[13px]"
+            style={{ borderColor: "#e5e7eb", color: "#374151" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back
+          </button>
+        </div>
+        <h1 className="font-bold text-2xl text-gray-900" style={{ letterSpacing: "-0.02em" }}>
+          {mode === "update" ? "Update Staff" : "Add Staff"}
+        </h1>
+        <p className="text-[13px] text-gray-500 mt-0.5">
+          {mode === "update" ? "Update an existing staff member" : "Create a new staff member profile"}
         </p>
       </div>
-      <hr className="border-t border-gray" />
-      <Formik
-        enableReinitialize
-        initialValues={initialValues}
-        validationSchema={mode === "add" ? validationSchema : null}
-        onSubmit={handleSubmit}
-      >
-        {({ touched, errors, values, setFieldValue }) => (
-          <Form className="flex flex-col gap-4">
-            {/* Avatar Section */}
-            <div className="flex items-center gap-4 p-4 bg-white border border-light-gray rounded-sm">
-              <div
-                className="flex bg-gray-200 h-[90px] w-[90px] rounded-full overflow-hidden items-center justify-center cursor-pointer hover:opacity-80 transition"
-                onClick={() => {
-                  if (avatarPreview) setIsImageModalOpen(true);
-                }}
-              >
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt="Avatar" className="h-full w-full object-cover" />
-                ) : (
-                  <img src="/images/profile.jpeg" className="h-full w-full object-cover" />
-                )}
-              </div>
 
-              <div className="flex gap-3">
-                <input
-                  id="avatarInput"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => handleAvatarChange(event, setFieldValue)}
-                />
-
-                <label
-                  htmlFor="avatarInput"
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-dark-green font-medium text-sm leading-5 tracking-normal cursor-pointer bg-dark-green text-white"
-                >
-                  Add Avatar
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAvatar(setFieldValue)}
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-light-green font-medium text-sm leading-5 tracking-normal "
-                >
-                  Remove Avatar
-                </button>
-              </div>
-            </div>
-
-            {/* Form Fields */}
-            <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4">
-              {/* Name */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Name</label>
-                <Field
-                  name="name"
-                  type="text"
-                  placeholder="Please enter the name of user"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.name && errors.name ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* User Id */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">User Id</label>
-                <Field
-                  name="userId"
-                  type="text"
-                  placeholder="Please enter a specific ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.userId && errors.userId ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Username */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Username</label>
-                <Field
-                  name="username"
-                  type="text"
-                  placeholder="Please enter a specific username"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.username && errors.username ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="username" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Password</label>
-                <Field
-                  name="password"
-                  type="text"
-                  placeholder="Please enter a specific password"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.password && errors.password ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* E-Mail */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">E-Mail</label>
-                <Field
-                  name="email"
-                  type="email"
-                  placeholder="Please enter the e-mail ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.email && errors.email ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Phone No</label>
-                <Field
-                  name="phone"
-                  type="text"
-                  placeholder="Please enter the phone no"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Gender */}
-              <div className="relative">
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Gender</label>
-                <Field
-                  as="select"
-                  name="gender"
-                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                    ${values.gender === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}  
-                    ${touched.gender && errors.gender ? "border-red-500" : "border-light-gray"}
-                  `}
-                >
-                  <option value="">Please enter the gender of the user</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </Field>
-                <span className="absolute right-3 top-[65%] -translate-y-1/2 pointer-events-none">
-                  <FaChevronDown className="text-light-green w-4 h-4" />
-                </span>
-                <ErrorMessage name="gender" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Day of Joining */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Date of Joining</label>
-                <Field
-                  name="dayOfJoining"
-                  type="date"
-                  className={`w-full border rounded-sm p-[10px]  
-                    ${values.dayOfJoining === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
-                    ${touched.dayOfJoining && errors.dayOfJoining ? "border-red-500" : "border-light-gray"}
-                  `}
-                />
-                <ErrorMessage name="dayOfJoining" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Leaving Date (auto set from last shift on update mode) */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Date of Leaving/Last Working Date
-                </label>
-                <Field
-                  name="dayOfLeaving"
-                  type="date"
-                  className={`w-full border rounded-sm p-[10px]  
-                    ${values.dayOfLeaving === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
-                    ${touched.dayOfLeaving && errors.dayOfLeaving ? "border-red-500" : "border-light-gray"}
-                  `}
-                />
-                <ErrorMessage name="dayOfLeaving" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* ✅ NEW: Reason of leaving (after date of leaving) */}
-              <div className="col-span-2">
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Reason of Leaving
-                </label>
-                <Field
-                  as="textarea"
-                  name="reasonOfLeaving"
-                  placeholder="Enter reason of leaving"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-24 ${
-                    touched.reasonOfLeaving && errors.reasonOfLeaving ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="reasonOfLeaving" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Position */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Position</label>
-                <Field
-                  name="position"
-                  type="text"
-                  placeholder="Please enter the position of user"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.position && errors.position ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="position" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Daily Shift Hours */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Daily Allowed Shift Hours
-                </label>
-                <Field
-                  name="dailyShiftHours"
-                  type="number"
-                  placeholder="Enter the Daily allowed hours"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.dailyShiftHours && errors.dailyShiftHours ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="dailyShiftHours" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Salary Per Hour */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Salary Per Hour</label>
-                <Field
-                  name="salaryPerHour"
-                  type="number"
-                  placeholder="Please enter the specific amount"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.salaryPerHour && errors.salaryPerHour ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="salaryPerHour" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* ✅ NEW: Total KMs */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Total KMs</label>
-                <Field
-                  name="totalKMs"
-                  type="number"
-                  placeholder="Enter total kms"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.totalKMs && errors.totalKMs ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="totalKMs" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* ✅ NEW: Rate before 5000km */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Rate before 5000km
-                </label>
-                <Field
-                  name="rateBefore5000km"
-                  type="number"
-                  placeholder="Enter rate before 5000km"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.rateBefore5000km && errors.rateBefore5000km ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="rateBefore5000km" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* ✅ NEW: Rate after 5000km */}
-              <div>
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Rate after 5000km
-                </label>
-                <Field
-                  name="rateAfter5000km"
-                  type="number"
-                  placeholder="Enter rate after 5000km"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                    touched.rateAfter5000km && errors.rateAfter5000km ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="rateAfter5000km" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Address */}
-              <div>
-                <label className="font-bold text-sm text-light-black">Address</label>
-                <GoogleAddressInput
-                  value={values.address}
-                  placeholder="Enter user address"
-                  onChange={(val) => setFieldValue("address", val)}
-                />
-                <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* role */}
-              <div className="relative">
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">Role</label>
-                <Field
-                  as="select"
-                  name="role"
-                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                      ${values.role === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}
-                      ${touched.role && errors.role ? "border-red-500" : "border-light-gray"}
-                    `}
-                >
-                  <option value="">Please select role </option>
-                  <option value="Admin">Admin</option>
-                  <option value="User">User</option>
-                  <option value="Manager">Manager</option>
-                </Field>
-                <span className="absolute right-3 top-[65%] -translate-y-1/2 pointer-events-none">
-                  <FaChevronDown className="text-light-green w-4 h-4" />
-                </span>
-                <ErrorMessage name="role" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Description */}
-              <div className="col-span-2">
-                <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                  Description of User
-                </label>
-                <Field
-                  as="textarea"
-                  name="description"
-                  placeholder="Write the description of the User"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50 ${
-                    touched.description && errors.description ? "border-red-500" : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
-              </div>
-
-              {/* Submit Button */}
-              <div className="col-span-2 flex justify-center">
-                <button type="submit" className="bg-dark-green text-white px-6 py-2 rounded cursor-pointer">
-                  {mode === "update" ? "Update User" : "Add User"}
-                </button>
-              </div>
-            </div>
-          </Form>
-        )}
-      </Formik>
-
-      <SuccessSlider
-        show={slider.show}
-        title={slider.title}
-        subtitle={slider.subtitle}
-        viewText={slider.viewText}
-        onView={() => {
-          if (createdUser) setInitialValues(createdUser);
-          navigate("/admin-dashboard/users");
-          setSlider({ ...slider, show: false });
-        }}
-        onDismiss={() => setSlider({ ...slider, show: false })}
-      />
-
-      {isImageModalOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={() => setIsImageModalOpen(false)}
+      <div>
+        <Formik
+          enableReinitialize
+          initialValues={initialValues}
+          validationSchema={mode === "add" ? validationSchema : null}
+          onSubmit={handleSubmit}
         >
-          <div className="relative">
-            <img
-              src={avatarPreview}
-              alt="Large Preview"
-              className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-xl"
-            />
-            <button
-              className="absolute top-2 right-2 bg-white text-black px-3 py-1 rounded-full shadow cursor-pointer"
-              onClick={() => setIsImageModalOpen(false)}
-            >
-              ✕
-            </button>
+          {({ touched, errors, values, setFieldValue }) => (
+            <Form>
+              {/* Single white card */}
+              <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+
+                {/* Avatar Section */}
+                <div className="mb-6 pb-6 border-b" style={{ borderColor: "#f3f4f6" }}>
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="flex-shrink-0 rounded-full overflow-hidden bg-gray-100 cursor-pointer"
+                      style={{ width: 80, height: 80 }}
+                      onClick={() => { if (avatarPreview) setIsImageModalOpen(true); }}
+                    >
+                      {avatarPreview ? (
+                        <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Upload className="w-6 h-6 text-gray-400" strokeWidth={1.5} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input id="avatarInput" type="file" accept="image/*" className="hidden"
+                        onChange={(e) => handleAvatarChange(e, setFieldValue)} />
+                      <label htmlFor="avatarInput"
+                        className="px-3 py-2 rounded-lg font-semibold text-white cursor-pointer text-xs"
+                        style={{ backgroundColor: "#1f7a3c" }}>
+                        Change Avatar
+                      </label>
+                      {avatarPreview && (
+                        <button type="button" onClick={() => handleRemoveAvatar(setFieldValue)}
+                          className="px-3 py-2 rounded-lg border font-semibold hover:bg-gray-50 text-xs"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                          Remove Avatar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fields grid */}
+                <div className="grid grid-cols-2 gap-5">
+
+                  {/* Name */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                    <Field name="name" placeholder="Please enter the name of user" className={inputCls(touched.name && errors.name)} />
+                    <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Staff ID */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID</label>
+                    <Field name="userId" placeholder="Please enter a specific ID" className={inputCls(touched.userId && errors.userId)} />
+                    <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Username */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Username</label>
+                    <Field name="username" placeholder="Please enter a specific username" className={inputCls(touched.username && errors.username)} />
+                    <ErrorMessage name="username" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
+                    <Field name="password" type="password" placeholder="Please enter a specific password" className={inputCls(touched.password && errors.password)} />
+                    <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* E-Mail */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>E-Mail</label>
+                    <Field name="email" type="email" placeholder="Please enter the e-mail ID" className={inputCls(touched.email && errors.email)} />
+                    <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Phone No */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone No</label>
+                    <Field name="phone" placeholder="Please enter the phone no" className={inputCls(touched.phone && errors.phone)} />
+                    <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Gender */}
+                  <div className="relative">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender</label>
+                    <Field as="select" name="gender" className={selectCls(touched.gender && errors.gender, values.gender === "")}>
+                      <option value="">Please enter the gender of the user</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </Field>
+                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                    </span>
+                    <ErrorMessage name="gender" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Day of Joining */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Day of Joining</label>
+                    <Field name="dayOfJoining" type="date" className={inputCls(touched.dayOfJoining && errors.dayOfJoining)} />
+                    <ErrorMessage name="dayOfJoining" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Daily Shift Hours */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Daily Allowed Shift Hours</label>
+                    <Field name="dailyShiftHours" type="number" placeholder="Enter the Daily allowed hours" className={inputCls(touched.dailyShiftHours && errors.dailyShiftHours)} />
+                    <ErrorMessage name="dailyShiftHours" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Salary Per Hour */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Salary Per Hour</label>
+                    <Field name="salaryPerHour" type="number" placeholder="Please enter the specific amount for the user" className={inputCls(touched.salaryPerHour && errors.salaryPerHour)} />
+                    <ErrorMessage name="salaryPerHour" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                    <PlacesAutocomplete
+                      value={values.address}
+                      placeholder="Please enter the address of the user"
+                      onChange={(val) => setFieldValue("address", val)}
+                      className={inputCls(touched.address && errors.address)}
+                    />
+                    <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Employment Type / Role */}
+                  <div className="relative">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Employment Type</label>
+                    <Field as="select" name="role" className={selectCls(touched.role && errors.role, values.role === "")}>
+                      <option value="">Please enter the specific amount for the user</option>
+                      <option value="Admin">Admin</option>
+                      <option value="User">User</option>
+                      <option value="Manager">Manager</option>
+                    </Field>
+                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                    </span>
+                    <ErrorMessage name="role" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Position – full width */}
+                  <div className="col-span-2">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Position</label>
+                    <Field name="position" placeholder="Add a position for the employee" className={inputCls(touched.position && errors.position)} />
+                    <ErrorMessage name="position" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Description – full width */}
+                  <div className="col-span-2">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description of User</label>
+                    <Field as="textarea" name="description" placeholder="Write the description of the User" rows={4}
+                      className={`${inputCls(touched.description && errors.description)} resize-none`} />
+                    <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                </div>
+
+                {/* Submit */}
+                <div className="mt-8 flex justify-end gap-3">
+                  <button type="button" onClick={() => navigate(-1)}
+                    className="px-5 py-2.5 rounded-lg border font-semibold text-sm transition-all hover:bg-gray-50"
+                    style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                    Cancel
+                  </button>
+                  <button type="submit"
+                    className="px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-all"
+                    style={{ backgroundColor: "#1f7a3c" }}>
+                    {mode === "update" ? "Update Staff" : "Submit"}
+                  </button>
+                </div>
+              </div>
+            </Form>
+          )}
+        </Formik>
+
+        <SuccessSlider
+          show={slider.show}
+          title={slider.title}
+          subtitle={slider.subtitle}
+          viewText={slider.viewText}
+          onView={() => {
+            if (createdUser) setInitialValues(createdUser);
+            navigate("/admin-dashboard/users");
+            setSlider({ ...slider, show: false });
+          }}
+          onDismiss={() => setSlider({ ...slider, show: false })}
+        />
+
+        {isImageModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsImageModalOpen(false)}>
+            <div className="relative">
+              <img src={avatarPreview} alt="Large Preview" className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-xl" />
+              <button className="absolute top-2 right-2 bg-white text-black px-3 py-1 rounded-full shadow cursor-pointer"
+                onClick={() => setIsImageModalOpen(false)}>✕</button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

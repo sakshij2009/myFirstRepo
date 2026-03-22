@@ -4,10 +4,11 @@ import * as Yup from "yup";
 import { getDocs, collection, doc, setDoc, getDoc, query, where, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
-import { FaRegUserCircle, FaChevronDown } from "react-icons/fa";
+import { FaChevronDown } from "react-icons/fa";
 import SuccessSlider from "./SuccessSlider";
 import { sendNotification } from "../utils/notificationHelper";
 import { useNavigate, useParams } from "react-router-dom";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 
 const AddAgency = ({  mode = "add", user }) => {
@@ -19,7 +20,7 @@ const AddAgency = ({  mode = "add", user }) => {
     show: false,
     title: "",
     subtitle: "",
-   
+
   });
 
   const [createdAgency, setCreatedAgency] = useState(null);
@@ -63,7 +64,7 @@ const AddAgency = ({  mode = "add", user }) => {
 
   useEffect(() => {
   const fetchAgency = async () => {
-    
+
     if (mode === "update" && id) {
       try {
         const docRef = doc(db, "agencies", id);
@@ -233,313 +234,222 @@ const handleSubmit = async (values, { resetForm }) => {
   }
 };
 
+  const inputCls = (hasError) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    }`;
 
-  // if (mode === "update" && !initialValues) {
-  //   return <p>Loading agency data...</p>;
-  // }
+  const selectCls = (hasError, empty) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    } ${empty ? "text-gray-400" : "text-gray-700"}`;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-         <p className="font-bold text-2xl leading-7 text-light-black">
-           {mode === "update" ? "Update Agency" : "Add Agency"}
-        </p>
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50 text-[13px]"
+              style={{ borderColor: "#e5e7eb", color: "#374151" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              Back
+            </button>
+          </div>
+          <h1 className="font-bold text-2xl text-gray-900" style={{ letterSpacing: "-0.02em" }}>
+            {mode === "update" ? "Update Agency" : "Add Agency"}
+          </h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            {mode === "update" ? "Update an existing agency partnership" : "Create a new agency partnership"}
+          </p>
+        </div>
       </div>
-      <hr className="border-t border-gray" />
-      <Formik
-         initialValues={
-          initialValues || {
-            agencyType: "",
-            name: "",
-            email: "",
-            phone: "",
-            address: "",
-            description: "",
-            avatar: null,
-            rateList: serviceList.map(() => ({
-              billingRate: "",
-              kmRate: "",
-            })),
+
+      <div>
+        <Formik
+          initialValues={
+            initialValues || {
+              agencyType: "",
+              name: "",
+              email: "",
+              phone: "",
+              address: "",
+              description: "",
+              avatar: null,
+              rateList: serviceList.map(() => ({ billingRate: "", kmRate: "" })),
+            }
           }
-        }
-        enableReinitialize
-        validationSchema={mode=="add" ? validationSchema:""}
-        onSubmit={handleSubmit}
-      >
-        {({ touched, errors, values, setFieldValue }) => (
-          <Form className="flex flex-col gap-4">
-            {/* Avatar Section */}
-            <div className="flex items-center gap-4 p-4 bg-white border border-light-gray rounded-sm">
-              <div className="flex bg-gray-200 h-[91px] w-[91px] rounded-full overflow-hidden items-center justify-center">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <img src="/images/profile.jpeg" />
-                )}
+          enableReinitialize
+          validationSchema={mode === "add" ? validationSchema : ""}
+          onSubmit={handleSubmit}
+        >
+          {({ touched, errors, values, setFieldValue }) => (
+            <Form className="flex flex-col gap-5">
+
+              {/* ── Main Info Card ── */}
+              <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+
+                {/* Avatar section */}
+                <div className="flex items-center gap-5 px-6 py-5 border-b" style={{ borderColor: "#f3f4f6" }}>
+                  <div className="flex-shrink-0 rounded-full overflow-hidden bg-gray-100" style={{ width: 80, height: 80 }}>
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="Agency Logo" className="h-full w-full object-cover" />
+                    ) : (
+                      <img src="/images/profile.jpeg" className="h-full w-full object-cover" alt="default" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800 text-sm mb-0.5">Agency Logo</p>
+                    <p className="text-xs text-gray-400 mb-2.5">JPG, PNG up to 5MB</p>
+                    <div className="flex gap-2">
+                      <input id="avatarInput" type="file" accept="image/*" className="hidden"
+                        onChange={(e) => handleAvatarChange(e, setFieldValue)} />
+                      <label htmlFor="avatarInput"
+                        className="px-3 py-1.5 text-white text-xs font-semibold rounded-lg cursor-pointer transition-colors"
+                        style={{ backgroundColor: "#145228" }}>
+                        Change Logo
+                      </label>
+                      <button type="button" onClick={() => handleRemoveAvatar(setFieldValue)}
+                        className="px-3 py-1.5 border text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                        style={{ borderColor: "#e5e7eb" }}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fields grid */}
+                <div className="p-6">
+                  <p className="font-semibold mb-4 uppercase tracking-wide" style={{ fontSize: 11, color: "#9ca3af" }}>Agency Information</p>
+                  <div className="grid grid-cols-2 gap-5">
+
+                    {/* Agency Type */}
+                    <div className="relative">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency Type</label>
+                      <Field as="select" name="agencyType" className={selectCls(touched.agencyType && errors.agencyType, !values.agencyType)}>
+                        <option value="">Select agency type</option>
+                        {agencyType.map((item) => (
+                          <option key={item.id} value={item.name}>{item.name}</option>
+                        ))}
+                      </Field>
+                      <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                        <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                      </span>
+                      <ErrorMessage name="agencyType" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    {/* Agency Name */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency Name</label>
+                      <Field name="name" type="text" placeholder="Enter agency name" className={inputCls(touched.name && errors.name)} />
+                      <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                      <Field name="email" type="email" placeholder="Enter agency email" className={inputCls(touched.email && errors.email)} />
+                      <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
+                      <Field name="phone" type="text" placeholder="Enter phone number" className={inputCls(touched.phone && errors.phone)} />
+                      <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    {/* Address */}
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                      <PlacesAutocomplete
+                        placeholder="Enter agency address"
+                        className={inputCls(touched.address && errors.address)}
+                        value={values.address}
+                        onChange={(v) => setFieldValue("address", v)}
+                      />
+                      <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    {/* Description */}
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description</label>
+                      <Field as="textarea" name="description" placeholder="Write a description of the agency" rows={4}
+                        className={`${inputCls(touched.description && errors.description)} resize-none`} />
+                      <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex gap-3">
-                <input
-                  id="avatarInput"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => handleAvatarChange(event, setFieldValue)}
-                />
-                <label
-                  htmlFor="avatarInput"
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-dark-green font-medium text-sm cursor-pointer bg-dark-green text-white"
-                >
-                  Change Logo
-                </label>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAvatar(setFieldValue)}
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-light-green font-medium text-sm hover:bg-dark-green hover:text-white"
-                >
-                  Remove Logo
+              {/* ── Service Rates Card ── */}
+              <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                <p className="font-bold text-gray-900 mb-1" style={{ fontSize: 15 }}>Agency Service Rates</p>
+                <p className="text-[12px] text-gray-400 mb-5">Billing and kilometre rates per service type</p>
+                <FieldArray name="rateList">
+                  {() => (
+                    <div className="grid grid-cols-2 gap-4">
+                      {serviceList.map((service, index) => (
+                        <div key={service.key} className="rounded-xl border p-4" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                          <p className="font-bold text-gray-800 mb-3" style={{ fontSize: 13 }}>{service.name}</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block font-semibold mb-1.5 uppercase tracking-wide" style={{ fontSize: 10, color: "#9ca3af" }}>Billing Rate</label>
+                              <Field name={`rateList[${index}].billingRate`} type="number" placeholder="0.00"
+                                className={inputCls(touched.rateList?.[index]?.billingRate && errors.rateList?.[index]?.billingRate)} />
+                              <ErrorMessage name={`rateList[${index}].billingRate`} component="div" className="text-red-500 text-xs mt-1" />
+                            </div>
+                            <div>
+                              <label className="block font-semibold mb-1.5 uppercase tracking-wide" style={{ fontSize: 10, color: "#9ca3af" }}>KM Rate</label>
+                              <Field name={`rateList[${index}].kmRate`} type="number" placeholder="0.00"
+                                className={inputCls(touched.rateList?.[index]?.kmRate && errors.rateList?.[index]?.kmRate)} />
+                              <ErrorMessage name={`rateList[${index}].kmRate`} component="div" className="text-red-500 text-xs mt-1" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </FieldArray>
+              </div>
+
+              {/* ── Footer ── */}
+              <div className="bg-white rounded-xl border flex items-center justify-end gap-3 px-6 py-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                <button type="button" onClick={() => navigate(-1)}
+                  className="px-5 py-2.5 rounded-lg border font-semibold text-sm hover:bg-gray-50 transition-colors"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                  Cancel
+                </button>
+                <button type="submit"
+                  className="px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
+                  style={{ backgroundColor: "#145228" }}>
+                  {mode === "update" ? "Update Agency" : "Add Agency"}
                 </button>
               </div>
-            </div>
 
-            {/* Form Fields */}
-            <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4">
-             
-              {/* Agency type */}
-            <div className="relative">
-              <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                Agency Type
-              </label>
+            </Form>
+          )}
+        </Formik>
 
-              <Field
-                as="select"
-                name="agencyType"
-                className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                  ${values.agencyType === "" ? "text-[#72787E] font-normal text-sm" : "text-light-black"}  
-                  ${touched.agencyType && errors.agencyType ? "border-red-500" : "border-light-gray"}
-                `}
-              >
-                <option value="">Select Agency Type</option>
-                {agencyType.map((item) => (
-                  <option key={item.id} value={item.name}>
-                    {item.name}
-                  </option>
-                ))}
-              </Field>
-
-              {/* Custom dropdown arrow */}
-              <span className="absolute right-3 top-[63%] -translate-y-1/2 pointer-events-none">
-                <FaChevronDown className="text-light-green w-4 h-4" />
-              </span>
-
-              <ErrorMessage
-                name="agencyType"
-                component="div"
-                className="text-red-500 text-xs mt-1"
-              />
-            </div>
-
-
-              {/* File Name */}
-              <div>
-                <label className="font-bold text-sm text-light-black">
-                  Agency Name
-                </label>
-                <Field
-                  name="name"
-                  type="text"
-                  placeholder="Please enter a specific ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.name && errors.name
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="name"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              {/* Email */}
-              <div>
-                <label className="font-bold text-sm text-light-black">
-                  E-Mail
-                </label>
-                <Field
-                  name="email"
-                  type="email"
-                  placeholder="Please enter the email ID"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.email && errors.email
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="email"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="font-bold text-sm text-light-black">
-                  Phone No
-                </label>
-                <Field
-                  name="phone"
-                  type="text"
-                  placeholder="Please enter the phone number"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.phone && errors.phone
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="phone"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              {/* Address */}
-              <div className="">
-                <label className="font-bold text-sm text-light-black">
-                  Address
-                </label>
-                <Field
-                  name="address"
-                  type="text"
-                  placeholder="Please enter the agency address"
-                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.address && errors.address
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="address"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              {/* Description */}
-              <div className="col-span-2">
-                <label className="font-bold text-sm text-light-black">
-                  Description of Agency
-                </label>
-                <Field
-                  as="textarea"
-                  name="description"
-                  placeholder="Write the description of the agency"
-                  className={`w-full border rounded-sm p-[10px] h-32 placeholder:text-sm placeholder:text-[#72787E] ${
-                    touched.description && errors.description
-                      ? "border-red-500"
-                      : "border-light-gray"
-                  }`}
-                />
-                <ErrorMessage
-                  name="description"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-               {/* Agency Service Rates */}
-            <div className="col-span-2">
-              <h3 className="font-bold text-lg mb-4 text-light-black">Agency Service Rates</h3>
-              <FieldArray name="rateList">
-                {() => (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 text-light-black">
-                    {serviceList.map((service, index) => (
-                      <div
-                        key={service.key}
-                        className="border border-light-gray p-2 rounded-lg  "
-                      >
-                        <h3 className=" text-base font-bold text-[14px] leading-[20px]">
-                          {service.name}
-                        </h3>
-                        <div className="flex gap-4 ">
-                        {/* Billing Rate */}
-                        <div className="w-1/2">
-                          <label className="block text-sm font-medium mb-1">
-                            Billing Rate
-                          </label>
-                          <Field
-                            name={`rateList[${index}].billingRate`}
-                            type="number"
-                            placeholder="0.00"
-                            className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
-                          />
-                          <ErrorMessage
-                            name={`rateList[${index}].billingRate`}
-                            component="div"
-                            className="text-red-500 text-xs mt-1"
-                          />
-                        </div>
-
-                        {/* Kilometer Rate */}
-                        <div className="w-1/2">
-                          <label className="block text-sm font-medium mb-1">
-                            Km Rate
-                          </label>
-                          <Field
-                            name={`rateList[${index}].kmRate`}
-                            type="number"
-                            placeholder="0.00"
-                            className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]"
-                          />
-                          <ErrorMessage
-                            name={`rateList[${index}].kmRate`}
-                            component="div"
-                            className="text-red-500 text-xs mt-1"
-                          />
-                        </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </FieldArray>
-            </div>
-             {/* Submit Button */}
-            <div className="col-span-2 flex justify-center">
-              <button
-                type="submit"
-                className="bg-dark-green text-white px-3 py-[6px] rounded-[6px] cursor-pointer"
-              >
-                {mode === "update" ? "Update Agency" : "Add Agency"}
-              </button>
-            </div>
-            </div>
-
-           
-
-           
-          </Form>
-        )}
-
-      </Formik>
-      <SuccessSlider
-        show={slider.show}
-        title={slider.title}
-        subtitle={slider.subtitle}
-        viewText={slider.viewText}
-        onView={() => {
-          if (createdAgency) setInitialValues(createdAgency);
-          navigate("/admin-dashboard/agency")
-          setSlider({ ...slider, show: false });
-        }}
-        onDismiss={() => setSlider({ ...slider, show: false })}
-      />
+        <SuccessSlider
+          show={slider.show}
+          title={slider.title}
+          subtitle={slider.subtitle}
+          viewText={slider.viewText}
+          onView={() => {
+            if (createdAgency) setInitialValues(createdAgency);
+            navigate("/admin-dashboard/agency")
+            setSlider({ ...slider, show: false });
+          }}
+          onDismiss={() => setSlider({ ...slider, show: false })}
+        />
+      </div>
     </div>
   );
 };

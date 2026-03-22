@@ -15,19 +15,14 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { FaChevronDown } from "react-icons/fa";
+import { FaChevronDown, FaRegCalendarAlt } from "react-icons/fa";
 import SuccessSlider from "../components/SuccessSlider";
 import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap } from "react-icons/fa";
-import { FaRegCalendarAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 
-
-// multi-date calendar
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
 
 // ---------------- OFFICE ADDRESS ----------------
 const OFFICE_ADDRESS = "206,10110 124 St, Edmonton T5N 1P6, Alberta, Canada";
@@ -111,7 +106,13 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedShiftType, setSelectedShiftType] = useState(null);
   const [selectedShiftCategory, setSelectedShiftCategory] = useState(null);
-  const [showCalendar, setShowCalendar] = useState(false);   
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [monthShifts, setMonthShifts] = useState([]);
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatDays, setRepeatDays] = useState([]); // 0=Mon … 6=Sun
+  const [repeatEndCondition, setRepeatEndCondition] = useState("none"); // "none"|"after"|"on"
+  const [repeatOccurrences, setRepeatOccurrences] = useState(4);
+  const [repeatEndDate, setRepeatEndDate] = useState("");
 
   const navigate = useNavigate();
 
@@ -499,7 +500,6 @@ setShiftPoints(points);
   }, [selectedClient, mode]);
 
   // ---------------- SUBMIT HANDLER ----------------
-  // ---------------- SUBMIT HANDLER ----------------
 const handleSubmit = async (values, { resetForm }) => {
   try {
     const { shiftDates, ...restValues } = values;
@@ -683,889 +683,937 @@ const handleCalculateKilometers = async (shiftPoint) => {
   }
 };
 
+  // ---------------- FETCH ALL SHIFTS FOR CALENDAR DISPLAY ----------------
+  useEffect(() => {
+    const fetchAllShifts = async () => {
+      try {
+        const snap = await getDocs(collection(db, "shifts"));
+        setMonthShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Error fetching shifts for calendar:", err);
+      }
+    };
+    fetchAllShifts();
+  }, []);
 
+  // ---------------- CALENDAR GRID HELPER ----------------
+  const getCalendarDays = (month) => {
+    const year = month.getFullYear();
+    const m = month.getMonth();
+    const firstDay = new Date(year, m, 1);
+    const lastDay = new Date(year, m + 1, 0);
+    let startDow = firstDay.getDay(); // 0=Sun
+    startDow = startDow === 0 ? 6 : startDow - 1; // Mon=0
+    const days = [];
+    for (let i = startDow - 1; i >= 0; i--) {
+      days.push({ date: new Date(year, m, -i), isCurrentMonth: false });
+    }
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push({ date: new Date(year, m, i), isCurrentMonth: true });
+    }
+    const remaining = 42 - days.length;
+    for (let i = 1; i <= remaining; i++) {
+      days.push({ date: new Date(year, m + 1, i), isCurrentMonth: false });
+    }
+    return days;
+  };
 
+  // ---------------- REPEAT DATE GENERATOR ----------------
+  const generateRepeatDates = (days, endCondition, occurrences, endDate) => {
+    const dates = [];
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const maxDate =
+      endCondition === "on" && endDate
+        ? new Date(endDate)
+        : new Date(start.getTime() + 365 * 24 * 60 * 60 * 1000);
+    let current = new Date(start);
+    let count = 0;
+    const maxCount = endCondition === "after" ? occurrences : 365;
+    while (current <= maxDate && count < maxCount) {
+      const dow = current.getDay(); // 0=Sun
+      const idx = dow === 0 ? 6 : dow - 1; // Mon=0
+      if (days.includes(idx)) {
+        dates.push(new Date(current));
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const inputCls = (hasError) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    }`;
+
+  const selectCls = (hasError, empty) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    } ${empty ? "text-gray-400" : "text-gray-700"}`;
 
   // ---------------- RENDER ----------------
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-between">
-        <p className="font-bold text-2xl leading-7 text-light-black flex">
-        {mode === "update" ? "Update Shift" : "Add Shift"}
-      </p>
-       {mode === "update" && (
-    <button
-      onClick={async () => {
-        if (window.confirm("Are you sure you want to delete this shift?")) {
-          try {
-            await deleteDoc(doc(db, "shifts", id));
-            alert("Shift deleted successfully!");
-            window.history.back(); // navigate back after delete
-          } catch (err) {
-            console.error("Error deleting shift:", err);
-            alert("Failed to delete shift. Please try again.");
-          }
-        }
-      }}
-      className="bg-[#C70036] text-white px-4 py-2 rounded hover:bg-[#A0002C] transition flex"
-    >
-      Delete Shift
-    </button>
-  )}
-      </div>
-      
-      <hr className="border-t border-gray" />
-
-      <Formik
-        enableReinitialize
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ touched, errors, values, setFieldValue }) => {
-          // sync client/user/type/category objects
-          useEffect(() => {
-            const clientData = clients.find((c) => c.id === values.client);
-            setSelectedClient(clientData || null);
-
-            const userData = users.find((u) => u.id === values.user);
-            setSelectedUser(userData || null);
-
-            const shiftTypeData = shiftTypes.find(
-              (s) => s.id === values.shiftType
-            );
-            setSelectedShiftType(shiftTypeData || null);
-
-           const shiftCategoryData = shiftCategories.find(
-              (s) => s.name === values.shiftCategory
-            );
-
-            setSelectedShiftCategory(shiftCategoryData || null);
-          }, [
-            values.client,
-            values.user,
-            values.shiftType,
-            values.shiftCategory,
-          ]);
-
-          const handleDatesChange = (dates) => {
-            const selected = dates || [];
-            setFieldValue("shiftDates", selected);
-
-            if (selected.length > 0) {
-              const sorted = [...selected].sort((a, b) => a - b);
-              const first = sorted[0];
-              const last = sorted[sorted.length - 1];
-
-              const toISO = (d) => d.toISOString().split("T")[0];
-              setFieldValue("startDate", toISO(first));
-              setFieldValue("endDate", toISO(last));
-            } else {
-              setFieldValue("startDate", "");
-              setFieldValue("endDate", "");
-            }
-          };
-
-          const firstPoint = shiftPoints[0] || null;
-
-          return (
-            <Form className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4">
-                {/* Shift Type */}
-                <div className="relative">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Shift Type
-                  </label>
-                  <Field
-                    as="select"
-                    name="shiftType"
-                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                      ${
-                        touched.shiftType && errors.shiftType
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }
-                      ${
-                        values.shiftType
-                          ? "text-black"
-                          : "text-[#72787E] text-sm"
-                      }`}
-                  >
-                    <option value="" className="text-[#72787E]">
-                      Please select the shift type
-                    </option>
-                    {shiftTypes.map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.name}
-                        className="text-black"
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </Field>
-                  <span className="absolute right-3 top-12 -translate-y-1/2 pointer-events-none">
-                    <FaChevronDown className="text-light-green w-4 h-4" />
-                  </span>
-                  <ErrorMessage
-                    name="shiftType"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
-
-                {/* Shift Category */}
-                <div className="relative">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Shift Category
-                  </label>
-                  <Field
-                    as="select"
-                    name="shiftCategory"
-                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                      ${
-                        touched.shiftCategory && errors.shiftCategory
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }
-                      ${
-                        values.shiftCategory
-                          ? "text-black"
-                          : "text-[#72787E] text-sm"
-                      }`}
-                  >
-                    <option value="" className="text-gray-400">
-                      Please select the shift category
-                    </option>
-                    {shiftCategories.map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.name}
-                        className="text-black"
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </Field>
-                  <span className="absolute right-3 top-12 -translate-y-1/2 pointer-events-none">
-                    <FaChevronDown className="text-light-green w-4 h-4" />
-                  </span>
-                  <ErrorMessage
-                    name="shiftCategory"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
-
-                {/* Client */}
-                <div className="relative">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Select Client
-                  </label>
-                  <Field
-                    as="select"
-                    name="client"
-                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                      ${
-                        touched.client && errors.client
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }
-                      ${
-                        values.client
-                          ? "text-black"
-                          : "text-[#72787E] text-sm"
-                      }`}
-                  >
-                    <option value="" className="text-gray-400">
-                      Please select a client
-                    </option>
-                    {clients.map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                        className="text-black"
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </Field>
-                  <span className="absolute right-3 top-12 -translate-y-1/2 pointer-events-none">
-                    <FaChevronDown className="text-light-green w-4 h-4" />
-                  </span>
-                  <ErrorMessage
-                    name="client"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
-
-                {/* User */}
-                <div className="relative">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Select User
-                  </label>
-                  <Field
-                    as="select"
-                    name="user"
-                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                      ${
-                        touched.user && errors.user
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }
-                      ${
-                        values.user ? "text-black" : "text-[#72787E] text-sm"
-                      }`}
-                  >
-                    <option value="" className="text-gray-400">
-                      Please select a user
-                    </option>
-                    {users.map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                        className="text-black"
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </Field>
-                  <span className="absolute right-3 top-12 -translate-y-1/2 pointer-events-none">
-                    <FaChevronDown className="text-light-green w-4 h-4" />
-                  </span>
-                  <ErrorMessage
-                    name="user"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
-
-                {/* Multi-date calendar */}
-                {/* Shift Dates */}
-<div className="col-span-2">
-  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-    Shift Dates
-  </label>
-
-  {/* 🔥 NEW Trigger Box */}
-  <div
-    onClick={() => setShowCalendar(true)}
-    className="mt-2 w-56 border border-light-gray rounded-sm px-3 py-2 flex items-center justify-between cursor-pointer bg-white"
-  >
-    <span className="text-gray-600 text-sm">
-      {values.shiftDates?.length > 0
-        ? `${values.shiftDates.length} date(s) selected`
-        : "Select dates"}
-    </span>
-
-    <FaRegCalendarAlt className="text-dark-green text-lg" />
-  </div>
-
-  <ErrorMessage
-    name="shiftDates"
-    component="div"
-    className="text-red-500 text-xs mt-1"
-  />
-
-  {/* 🔥 POPUP CALENDAR */}
-  {showCalendar && (
-    <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-
-      <div className="bg-white p-5 rounded-md shadow-lg min-w-[360px]">
-        <h2 className="text-lg font-bold mb-3 text-light-black">
-          Select Shift Dates
-        </h2>
-
-        <DayPicker
-          mode="multiple"
-          selected={values.shiftDates}
-          onSelect={(dates) => handleDatesChange(dates)}
-          className="custom-daypicker-green"
-        />
-
-        <div className="flex justify-end gap-3 mt-4">
-          <button
-            onClick={() => setShowCalendar(false)}
-            className="px-4 py-1 border border-gray-400 rounded"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => setShowCalendar(false)}
-            className="px-4 py-1 bg-dark-green text-white rounded"
-          >
-            Done
-          </button>
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50 text-[13px]"
+              style={{ borderColor: "#e5e7eb", color: "#374151" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              Back
+            </button>
+          </div>
+          <h1 className="font-bold text-2xl text-gray-900" style={{ letterSpacing: "-0.02em" }}>
+            {mode === "update" ? "Update Shift" : "Add User Shift"}
+          </h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            Assign a staff member to a client — select one or more shift dates on the calendar
+          </p>
         </div>
+        {mode === "update" && (
+          <button
+            onClick={async () => {
+              if (window.confirm("Are you sure you want to delete this shift?")) {
+                try {
+                  await deleteDoc(doc(db, "shifts", id));
+                  alert("Shift deleted successfully!");
+                  window.history.back();
+                } catch (err) {
+                  console.error("Error deleting shift:", err);
+                  alert("Failed to delete shift. Please try again.");
+                }
+              }
+            }}
+            className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Delete Shift
+          </button>
+        )}
       </div>
-    </div>
-  )}
-</div>
 
+      <div>
+        <Formik
+          enableReinitialize
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ touched, errors, values, setFieldValue }) => {
+            useEffect(() => {
+              const clientData = clients.find((c) => c.id === values.client);
+              setSelectedClient(clientData || null);
+              const userData = users.find((u) => u.id === values.user);
+              setSelectedUser(userData || null);
+              const shiftTypeData = shiftTypes.find((s) => s.id === values.shiftType);
+              setSelectedShiftType(shiftTypeData || null);
+              const shiftCategoryData = shiftCategories.find((s) => s.name === values.shiftCategory);
+              setSelectedShiftCategory(shiftCategoryData || null);
+            }, [values.client, values.user, values.shiftType, values.shiftCategory]);
 
+            const handleDatesChange = (dates) => {
+              const selected = dates || [];
+              setFieldValue("shiftDates", selected);
+              if (selected.length > 0) {
+                const sorted = [...selected].sort((a, b) => a - b);
+                const toISO = (d) => d.toISOString().split("T")[0];
+                setFieldValue("startDate", toISO(sorted[0]));
+                setFieldValue("endDate", toISO(sorted[sorted.length - 1]));
+              } else {
+                setFieldValue("startDate", "");
+                setFieldValue("endDate", "");
+              }
+            };
 
+            // Auto-generate dates when repeat settings change
+            // eslint-disable-next-line react-hooks/rules-of-hooks
+            useEffect(() => {
+              if (repeatEnabled && repeatDays.length > 0) {
+                const generated = generateRepeatDates(repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate);
+                handleDatesChange(generated);
+              } else if (!repeatEnabled) {
+                handleDatesChange([]);
+              }
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, [repeatEnabled, repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate]);
 
+            const firstPoint = shiftPoints[0] || null;
 
-                {/* Start Time */}
-                <div>
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Start Time
-                  </label>
-                  <Field
-                    name="startTime"
-                    type="text"
-                    placeholder="HH:MM(24 Hrs Format)"
-                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm
-                      ${
-                        touched.startTime && errors.startTime
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                  />
-                  <ErrorMessage
-                    name="startTime"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
+            return (
+              <Form className="flex flex-col gap-5">
 
-                {/* End Time */}
-                <div>
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    End Time
-                  </label>
-                  <Field
-                    name="endTime"
-                    type="text"
-                    placeholder="HH:MM(24 Hrs Format)"
-                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm
-                      ${
-                        touched.endTime && errors.endTime
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                  />
-                  <ErrorMessage
-                    name="endTime"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
-                </div>
+                {/* ── Main Card ── */}
+                <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
-                {/* Access To Shift Report */}
-                <div className="col-span-2 ">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Access to Shift Report
-                  </label>
-
-                  <div className="flex items-center gap-4 mt-2">
-                    <span>No</span>
-
-                    <Field name="accessToShiftReport">
-                      {({ field, form }) => (
-                        <div
-                          onClick={() =>
-                            form.setFieldValue(
-                              "accessToShiftReport",
-                              !field.value
-                            )
-                          }
-                          className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition 
-                            ${
-                              field.value ? "bg-dark-green" : "bg-gray-400"
-                            }`}
-                        >
-                          <div
-                            className={`bg-white w-5 h-5 rounded-full shadow transform transition 
-                              ${
-                                field.value
-                                  ? "translate-x-6"
-                                  : "translate-x-0"
-                              }`}
-                          ></div>
+                  {/* Assignment Context Header */}
+                  {(selectedClient || selectedUser) && (
+                    <div className="flex items-center justify-between px-6 py-4 border-b" style={{ background: "#fafafa", borderColor: "#f3f4f6" }}>
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                          style={{ width: 44, height: 44, background: "linear-gradient(135deg,#145228,#1f7a3c)" }}>
+                          {(selectedClient?.name || "C").charAt(0).toUpperCase()}
                         </div>
-                      )}
-                    </Field>
+                        <div>
+                          <p className="font-semibold text-[13px] text-gray-900">{selectedClient?.name || "—"}</p>
+                          <p className="text-[11px] text-gray-500">Client ID: {selectedClient?.clientCode || selectedClient?.id || "—"}</p>
+                          {selectedClient && (
+                            <span className="inline-block px-2 py-0.5 rounded-full font-semibold mt-0.5" style={{ fontSize: 10, background: "#dcfce7", color: "#15803d" }}>
+                              {values.shiftCategory || "No Category"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="flex items-center gap-1.5 text-gray-300">
+                          <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 12 19 12"/><polyline points="13 6 19 12 13 18"/></svg>
+                          <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Assigns to</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold text-[13px] text-gray-900">{selectedUser?.name || "—"}</p>
+                          <p className="text-[11px] text-gray-500">Staff ID: {selectedUser?.userId || selectedUser?.id || "—"}</p>
+                          {selectedUser && (
+                            <span className="inline-block px-2 py-0.5 rounded-full font-semibold mt-0.5" style={{ fontSize: 10, background: "#e0e7ff", color: "#4338ca" }}>
+                              {values.shiftType || "No Type"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                          style={{ width: 44, height: 44, background: "linear-gradient(135deg,#4338ca,#6366f1)" }}>
+                          {(selectedUser?.name || "S").charAt(0).toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                    <span>Yes</span>
+                  <div className="p-6">
+                    {/* Section label */}
+                    <p className="font-semibold mb-4 uppercase tracking-wide" style={{ fontSize: 11, color: "#9ca3af" }}>Shift Details</p>
+
+                    <div className="grid grid-cols-2 gap-5">
+
+                      {/* Shift Type */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Type</label>
+                        <Field as="select" name="shiftType" className={selectCls(touched.shiftType && errors.shiftType, !values.shiftType)}>
+                          <option value="">Please select the shift type</option>
+                          {shiftTypes.map((item) => (
+                            <option key={item.id} value={item.name}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="shiftType" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Shift Category */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Category</label>
+                        <Field as="select" name="shiftCategory" className={selectCls(touched.shiftCategory && errors.shiftCategory, !values.shiftCategory)}>
+                          <option value="">Please select the shift category</option>
+                          {shiftCategories.map((item) => (
+                            <option key={item.id} value={item.name}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="shiftCategory" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Select Client */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Select Client</label>
+                        <Field as="select" name="client" className={selectCls(touched.client && errors.client, !values.client)}>
+                          <option value="">Please enter a specific username</option>
+                          {clients.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="client" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Select User (Staff) */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Select User (Staff)</label>
+                        <Field as="select" name="user" className={selectCls(touched.user && errors.user, !values.user)}>
+                          <option value="">Select a staff member</option>
+                          {users.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="user" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Start Time */}
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Start Time</label>
+                        <Field name="startTime" type="text" placeholder="HH:MM (24-hour)" className={inputCls(touched.startTime && errors.startTime)} />
+                        <ErrorMessage name="startTime" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* End Time */}
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>End Time</label>
+                        <Field name="endTime" type="text" placeholder="HH:MM (24-hour)" className={inputCls(touched.endTime && errors.endTime)} />
+                        <ErrorMessage name="endTime" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Access to Shift Report toggle */}
+                      <div className="col-span-2">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Access to Shift Report</label>
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-[13px] text-gray-400">No</span>
+                          <Field name="accessToShiftReport">
+                            {({ field, form }) => (
+                              <button type="button"
+                                onClick={() => form.setFieldValue("accessToShiftReport", !field.value)}
+                                className="relative inline-flex items-center rounded-full transition-all duration-200"
+                                style={{ backgroundColor: field.value ? "#145228" : "#d1d5db", width: 52, height: 28, padding: 3 }}>
+                                <span className="inline-block rounded-full bg-white shadow-sm transition-transform duration-200"
+                                  style={{ width: 22, height: 22, transform: field.value ? "translateX(24px)" : "translateX(0)" }} />
+                              </button>
+                            )}
+                          </Field>
+                          <span className="font-semibold text-[13px] text-gray-700">Yes</span>
+                        </div>
+                      </div>
+
+
+                      {/* Description */}
+                      <div className="col-span-2">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description of Shift</label>
+                        <Field as="textarea" name="description" placeholder="Describe responsibilities, special instructions, or notes..." rows={3}
+                          className={`${inputCls(touched.description && errors.description)} resize-none`} />
+                        <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* ── Calendar Card ── */}
+                <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  {/* Calendar Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
+                    <div className="flex items-center gap-2">
+                      <FaRegCalendarAlt className="w-4 h-4 text-gray-400" />
+                      <span className="font-semibold text-gray-900" style={{ fontSize: 14 }}>Select Shift Dates</span>
+                    </div>
+                    <span style={{ fontSize: 12, color: "#9ca3af" }}>Click a date to select · Click again to deselect</span>
+                  </div>
+
+                  <div className="flex">
+                    {/* ── Month Grid ── */}
+                    <div className="flex-1 p-5">
+                      {/* Month navigation */}
+                      <div className="flex items-center justify-between mb-5">
+                        <button type="button"
+                          onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1))}
+                          className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-gray-50 transition-colors"
+                          style={{ borderColor: "#e5e7eb" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                        </button>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-gray-900" style={{ fontSize: 16 }}>
+                            {calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                          </span>
+                          <button type="button" onClick={() => setCalendarMonth(new Date())}
+                            className="px-3 py-1 rounded-lg border font-semibold hover:bg-gray-50 transition-colors"
+                            style={{ borderColor: "#e5e7eb", fontSize: 12, color: "#374151" }}>
+                            Today
+                          </button>
+                        </div>
+                        <button type="button"
+                          onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1))}
+                          className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-gray-50 transition-colors"
+                          style={{ borderColor: "#e5e7eb" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                        </button>
+                      </div>
+
+                      {/* Day headers */}
+                      <div className="grid grid-cols-7 mb-1">
+                        {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                          <div key={d} className="text-center font-semibold uppercase py-2" style={{ fontSize: 11, color: "#9ca3af" }}>{d}</div>
+                        ))}
+                      </div>
+
+                      {/* Day cells */}
+                      <div className="grid grid-cols-7 border-l border-t" style={{ borderColor: "#f3f4f6" }}>
+                        {getCalendarDays(calendarMonth).map((cell, i) => {
+                          const dateKey = cell.date.toISOString().split("T")[0];
+                          const isSelected = (values.shiftDates || []).some(d => {
+                            const sd = d instanceof Date ? d : new Date(d);
+                            return sd.toISOString().split("T")[0] === dateKey;
+                          });
+                          const isToday = new Date().toISOString().split("T")[0] === dateKey;
+                          const shiftPillColors = [
+                            { bg: "#fef9c3", text: "#854d0e" },
+                            { bg: "#dbeafe", text: "#1e40af" },
+                            { bg: "#dcfce7", text: "#15803d" },
+                            { bg: "#e0e7ff", text: "#4338ca" },
+                            { bg: "#fce7f3", text: "#9d174d" },
+                          ];
+                          const cellShifts = monthShifts.filter(s => {
+                            try {
+                              const sd = s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate);
+                              return sd.toISOString().split("T")[0] === dateKey;
+                            } catch { return false; }
+                          }).slice(0, 3);
+
+                          return (
+                            <div key={i}
+                              className="border-r border-b transition-colors"
+                              style={{
+                                borderColor: "#f3f4f6",
+                                minHeight: 88,
+                                background: isSelected ? "#f0fdf4" : "white",
+                                cursor: cell.isCurrentMonth ? "pointer" : "default",
+                              }}
+                              onClick={() => {
+                                if (!cell.isCurrentMonth) return;
+                                const existing = values.shiftDates || [];
+                                const already = existing.some(d => (d instanceof Date ? d : new Date(d)).toISOString().split("T")[0] === dateKey);
+                                handleDatesChange(already
+                                  ? existing.filter(d => (d instanceof Date ? d : new Date(d)).toISOString().split("T")[0] !== dateKey)
+                                  : [...existing, cell.date]
+                                );
+                              }}
+                            >
+                              <div className="p-2">
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full mb-1 font-semibold"
+                                  style={{
+                                    fontSize: 13,
+                                    background: isSelected ? "#145228" : "transparent",
+                                    color: isSelected ? "white" : isToday ? "#145228" : cell.isCurrentMonth ? "#374151" : "#d1d5db",
+                                    border: isToday && !isSelected ? "1.5px solid #145228" : "none",
+                                  }}>
+                                  {cell.date.getDate()}
+                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  {cellShifts.map((s, si) => {
+                                    const c = shiftPillColors[si % shiftPillColors.length];
+                                    return (
+                                      <div key={si} className="truncate rounded px-1.5 py-0.5 font-medium"
+                                        style={{ fontSize: 10, background: c.bg, color: c.text }}>
+                                        {s.userName || s.name || "Staff"} · {s.startTime || ""}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <ErrorMessage name="shiftDates" component="div" className="text-red-500 text-xs mt-2" />
+                    </div>
+
+                    {/* ── Right Panel: Selected Dates ── */}
+                    <div className="border-l flex-shrink-0" style={{ borderColor: "#f3f4f6", width: 220 }}>
+                      <div className="p-5">
+                        <p className="font-bold text-gray-900 mb-0.5" style={{ fontSize: 13 }}>Selected Dates</p>
+                        <p style={{ fontSize: 11, color: "#9ca3af", marginBottom: 16 }}>
+                          {values.shiftDates?.length > 0
+                            ? `${values.shiftDates.length} shift${values.shiftDates.length !== 1 ? "s" : ""} to create`
+                            : "0 shifts to create"}
+                        </p>
+                        {values.shiftDates?.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {[...values.shiftDates].sort((a, b) => a - b).map((d, i) => {
+                              const date = d instanceof Date ? d : new Date(d);
+                              return (
+                                <div key={i} className="flex items-center justify-between rounded-lg px-2.5 py-2" style={{ background: "#f9fafb" }}>
+                                  <p className="font-semibold text-gray-800" style={{ fontSize: 11 }}>
+                                    {date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                  </p>
+                                  <button type="button"
+                                    onClick={() => handleDatesChange(values.shiftDates.filter((_, idx) => idx !== i))}
+                                    className="text-gray-400 hover:text-red-500 transition-colors font-bold ml-2"
+                                    style={{ fontSize: 14 }}>×</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" strokeWidth="1.5" className="mb-2">
+                              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                            <p style={{ fontSize: 11, color: "#9ca3af" }}>Click dates on the<br/>calendar to select them</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Description */}
-                <div className="col-span-2">
-                  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                    Description of Shift
-                  </label>
-                  <Field
-                    as="textarea"
-                    name="description"
-                    placeholder="Write the description of the Shift"
-                    className={`w-full border rounded-sm p-[10px] h-50 placeholder:text-sm
-                      ${
-                        touched.description && errors.description
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                  />
-                  <ErrorMessage
-                    name="description"
-                    component="div"
-                    className="text-red-500 text-xs mt-1"
-                  />
+                {/* ── Transportation Details (conditional) ── */}
+                {selectedClient && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-5">
+                      <div>
+                        <h2 className="font-bold text-gray-900" style={{ fontSize: 15 }}>Transportation Details</h2>
+                        <p className="text-[12px] text-gray-400 mt-0.5">Auto-filled from intake form · click any field to edit</p>
+                      </div>
+                      <button type="button"
+                        className="px-3 py-1.5 rounded-lg border font-semibold text-xs transition-all hover:bg-gray-50"
+                        style={{ borderColor: "#145228", color: "#145228" }}
+                        onClick={() => {
+                          if (!firstPoint) return;
+                          setShiftPoints([{ ...firstPoint, pickupLocation: firstPoint.dropLocation, dropLocation: firstPoint.pickupLocation }]);
+                        }}>
+                        Swap Pickup / Drop
+                      </button>
+                    </div>
+
+                    {firstPoint ? (
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+
+                        {/* Pickup Location */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Location</label>
+                          <div className="flex items-center gap-2">
+                            {!firstPoint.pickupLocation_edit ? (
+                              <p
+                                className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
+                                onClick={() => setShiftPoints([{ ...firstPoint, pickupLocation_edit: true }])}
+                                title={firstPoint.pickupLocation}
+                              >
+                                {firstPoint.pickupLocation || <span className="text-gray-400">N/A – click to edit</span>}
+                              </p>
+                            ) : (
+                              <input
+                                type="text"
+                                autoFocus
+                                className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                value={firstPoint.pickupLocation || ""}
+                                onChange={async (e) => {
+                                  const updatedPickup = e.target.value;
+                                  let updatedPoint = { ...firstPoint, pickupLocation: updatedPickup };
+                                  if (updatedPickup && firstPoint.dropLocation && window.google) {
+                                    const km = await calculateDistance(updatedPickup, firstPoint.dropLocation);
+                                    updatedPoint.totalKilometers = km;
+                                  }
+                                  setShiftPoints([updatedPoint]);
+                                }}
+                                onBlur={() => setShiftPoints([{ ...firstPoint, pickupLocation_edit: false }])}
+                              />
+                            )}
+                            <FaRegMap
+                              className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                              onClick={() =>
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.pickupLocation || "")}`,
+                                  "_blank"
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        {/* Pickup Time */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Time</label>
+                          {!firstPoint.pickupTime_edit ? (
+                            <p
+                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                              onClick={() => setShiftPoints([{ ...firstPoint, pickupTime_edit: true }])}
+                            >
+                              {firstPoint.pickupTime || <span className="text-gray-400">N/A – click to edit</span>}
+                            </p>
+                          ) : (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                              value={firstPoint.pickupTime || ""}
+                              onChange={(e) => setShiftPoints([{ ...firstPoint, pickupTime: e.target.value }])}
+                              onBlur={() => setShiftPoints([{ ...firstPoint, pickupTime_edit: false }])}
+                            />
+                          )}
+                        </div>
+
+                        {/* Drop Location */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Location</label>
+                          <div className="flex items-center gap-2">
+                            {!firstPoint.dropLocation_edit ? (
+                              <p
+                                className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
+                                title={firstPoint.dropLocation}
+                                onClick={() => setShiftPoints([{ ...firstPoint, dropLocation_edit: true }])}
+                              >
+                                {firstPoint.dropLocation || <span className="text-gray-400">N/A – click to edit</span>}
+                              </p>
+                            ) : (
+                              <input
+                                type="text"
+                                autoFocus
+                                className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                value={firstPoint.dropLocation || ""}
+                                onChange={async (e) => {
+                                  const updatedDrop = e.target.value;
+                                  let updatedPoint = { ...firstPoint, dropLocation: updatedDrop };
+                                  if (firstPoint.pickupLocation && updatedDrop && window.google) {
+                                    const km = await calculateDistance(firstPoint.pickupLocation, updatedDrop);
+                                    updatedPoint.totalKilometers = km;
+                                  }
+                                  setShiftPoints([updatedPoint]);
+                                }}
+                                onBlur={() => setShiftPoints([{ ...firstPoint, dropLocation_edit: false }])}
+                              />
+                            )}
+                            <FaRegMap
+                              className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                              onClick={() =>
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.dropLocation || "")}`,
+                                  "_blank"
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        {/* Drop Time */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Time</label>
+                          {!firstPoint.dropTime_edit ? (
+                            <p
+                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                              onClick={() => setShiftPoints([{ ...firstPoint, dropTime_edit: true }])}
+                            >
+                              {firstPoint.dropTime || <span className="text-gray-400">N/A – click to edit</span>}
+                            </p>
+                          ) : (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                              value={firstPoint.dropTime || ""}
+                              onChange={(e) => setShiftPoints([{ ...firstPoint, dropTime: e.target.value }])}
+                              onBlur={() => setShiftPoints([{ ...firstPoint, dropTime_edit: false }])}
+                            />
+                          )}
+                        </div>
+
+                        {/* Visit Fields (conditional) */}
+                        {firstPoint.visitLocation?.trim() !== "" && (
+                          <>
+                            {/* Visit Location */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Location</label>
+                              <div className="flex items-center gap-2">
+                                {!firstPoint.visitLocation_edit ? (
+                                  <p
+                                    className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
+                                    title={firstPoint.visitLocation}
+                                    onClick={() => setShiftPoints([{ ...firstPoint, visitLocation_edit: true }])}
+                                  >
+                                    {firstPoint.visitLocation}
+                                  </p>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                    value={firstPoint.visitLocation || ""}
+                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitLocation: e.target.value }])}
+                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitLocation_edit: false }])}
+                                  />
+                                )}
+                                <FaRegMap
+                                  className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                                  onClick={() =>
+                                    window.open(
+                                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.visitLocation || "")}`,
+                                      "_blank"
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            {/* Visit Duration */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Duration</label>
+                              <div className="flex items-center gap-2">
+                                {!firstPoint.visitStartTime_edit ? (
+                                  <p
+                                    className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                                    onClick={() => setShiftPoints([{ ...firstPoint, visitStartTime_edit: true }])}
+                                  >
+                                    {firstPoint.visitStartTime || "N/A"}
+                                  </p>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white w-24"
+                                    value={firstPoint.visitStartTime || ""}
+                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitStartTime: e.target.value }])}
+                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitStartTime_edit: false }])}
+                                  />
+                                )}
+                                <span className="text-gray-400">–</span>
+                                {!firstPoint.visitEndTime_edit ? (
+                                  <p
+                                    className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                                    onClick={() => setShiftPoints([{ ...firstPoint, visitEndTime_edit: true }])}
+                                  >
+                                    {firstPoint.visitEndTime || "N/A"}
+                                  </p>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white w-24"
+                                    value={firstPoint.visitEndTime || ""}
+                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitEndTime: e.target.value }])}
+                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitEndTime_edit: false }])}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Seat Type */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Seat Type</label>
+                          {!firstPoint.seatType_edit ? (
+                            <p
+                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                              onClick={() => setShiftPoints([{ ...firstPoint, seatType_edit: true }])}
+                            >
+                              {firstPoint.seatType || <span className="text-gray-400">N/A – click to edit</span>}
+                            </p>
+                          ) : (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                              value={firstPoint.seatType || ""}
+                              onChange={(e) => setShiftPoints([{ ...firstPoint, seatType: e.target.value }])}
+                              onBlur={() => setShiftPoints([{ ...firstPoint, seatType_edit: false }])}
+                            />
+                          )}
+                        </div>
+
+                        {/* Transportation Mode */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Transportation Mode</label>
+                          {!firstPoint.transportationMode_edit ? (
+                            <p
+                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
+                              onClick={() => setShiftPoints([{ ...firstPoint, transportationMode_edit: true }])}
+                            >
+                              {firstPoint.transportationMode || <span className="text-gray-400">N/A – click to edit</span>}
+                            </p>
+                          ) : (
+                            <input
+                              type="text"
+                              autoFocus
+                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                              value={firstPoint.transportationMode || ""}
+                              onChange={(e) => setShiftPoints([{ ...firstPoint, transportationMode: e.target.value }])}
+                              onBlur={() => setShiftPoints([{ ...firstPoint, transportationMode_edit: false }])}
+                            />
+                          )}
+                        </div>
+
+                        {/* Total Kilometers */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Total Kilometers</label>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="text"
+                              readOnly
+                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 w-32"
+                              value={firstPoint.totalKilometers || ""}
+                              placeholder="Not calculated"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleCalculateKilometers(firstPoint)}
+                              className="px-4 py-2.5 bg-[#145228] text-white text-sm font-medium rounded-lg hover:bg-[#1f7a3c] transition-colors"
+                            >
+                              Calculate Total Kilometers
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-gray-400">No transportation details found in intake for this client.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Repeat / Recurrence Card ── */}
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  {/* Header row */}
+                  <div className="flex items-center justify-between px-6 py-4" style={{ background: repeatEnabled ? "#f0fdf4" : "#fafafa", borderBottom: repeatEnabled ? "1px solid #dcfce7" : "1px solid #f3f4f6" }}>
+                    <div className="flex items-center gap-3">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={repeatEnabled ? "#145228" : "#9ca3af"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                      </svg>
+                      <div>
+                        <p className="font-bold text-gray-900" style={{ fontSize: 14 }}>Repeat / Recurrence</p>
+                        <p className="text-gray-400" style={{ fontSize: 12 }}>Automatically repeat this shift on a schedule</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-500" style={{ fontSize: 13 }}>
+                        {repeatEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                      <button type="button"
+                        onClick={() => setRepeatEnabled(v => !v)}
+                        className="relative inline-flex items-center rounded-full transition-all duration-200"
+                        style={{ backgroundColor: repeatEnabled ? "#145228" : "#d1d5db", width: 52, height: 28, padding: 3 }}>
+                        <span className="inline-block rounded-full bg-white shadow-sm transition-transform duration-200"
+                          style={{ width: 22, height: 22, transform: repeatEnabled ? "translateX(24px)" : "translateX(0)" }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body — only when enabled */}
+                  {repeatEnabled && (
+                    <div className="p-6 bg-white grid grid-cols-2 gap-8">
+                      {/* Left: Repeat on weekdays */}
+                      <div>
+                        <p className="font-semibold text-gray-700 mb-3" style={{ fontSize: 13 }}>Repeat on weekdays</p>
+                        <div className="flex items-center gap-2">
+                          {["M","T","W","T","F","S","S"].map((label, i) => (
+                            <button key={i} type="button"
+                              onClick={() => setRepeatDays(prev => prev.includes(i) ? prev.filter(d => d !== i) : [...prev, i])}
+                              className="flex items-center justify-center rounded-full font-bold transition-all"
+                              style={{
+                                width: 36, height: 36, fontSize: 13,
+                                background: repeatDays.includes(i) ? "#145228" : "#f3f4f6",
+                                color: repeatDays.includes(i) ? "white" : "#6b7280",
+                                border: repeatDays.includes(i) ? "none" : "1px solid #e5e7eb",
+                              }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right: End condition */}
+                      <div>
+                        <p className="font-semibold text-gray-700 mb-3" style={{ fontSize: 13 }}>End condition</p>
+                        <div className="flex flex-col gap-3">
+                          {/* No end date */}
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <button type="button" onClick={() => setRepeatEndCondition("none")}
+                              className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                              style={{ borderColor: repeatEndCondition === "none" ? "#145228" : "#d1d5db", background: "white" }}>
+                              {repeatEndCondition === "none" && <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#145228" }} />}
+                            </button>
+                            <span className="text-sm text-gray-700">No end date</span>
+                          </label>
+
+                          {/* After X occurrences */}
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <button type="button" onClick={() => setRepeatEndCondition("after")}
+                              className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                              style={{ borderColor: repeatEndCondition === "after" ? "#145228" : "#d1d5db", background: "white" }}>
+                              {repeatEndCondition === "after" && <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#145228" }} />}
+                            </button>
+                            <span className="text-sm text-gray-700">After</span>
+                            <input type="number" min={1} max={365}
+                              value={repeatOccurrences}
+                              onChange={e => setRepeatOccurrences(Number(e.target.value))}
+                              onClick={() => setRepeatEndCondition("after")}
+                              className="w-16 px-2 py-1 rounded-lg border text-sm text-center font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              style={{ borderColor: "#e5e7eb", color: "#374151" }} />
+                            <span className="text-sm text-gray-700">occurrences</span>
+                          </label>
+
+                          {/* On date */}
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <button type="button" onClick={() => setRepeatEndCondition("on")}
+                              className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                              style={{ borderColor: repeatEndCondition === "on" ? "#145228" : "#d1d5db", background: "white" }}>
+                              {repeatEndCondition === "on" && <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#145228" }} />}
+                            </button>
+                            <span className="text-sm text-gray-700">On date</span>
+                            <input type="date"
+                              value={repeatEndDate}
+                              onChange={e => { setRepeatEndDate(e.target.value); setRepeatEndCondition("on"); }}
+                              className="px-2 py-1 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              style={{ borderColor: "#e5e7eb", color: repeatEndDate ? "#374151" : "#9ca3af" }} />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-{/* NEW: SHIFT POINTS (TRANSPORTATION) SECTION */}
-{selectedClient && (
-  <div className="col-span-2">
-    <p className="font-bold text-sm text-light-black ">Shift Point</p>
-     <button
-    type="button"
-    className="text-dark-green text-sm underline cursor-pointer"
-    onClick={() => {
-      if (!firstPoint) return;
-
-      const swapped = {
-        ...firstPoint,
-        pickupLocation: firstPoint.dropLocation,
-        
-        dropLocation: firstPoint.pickupLocation,
-        
-      };
-
-      setShiftPoints([swapped]);
-    }}
-  >
-    Swap Pickup / Drop
-  </button>
-
-    {firstPoint ? (
-      <div className="grid grid-cols-2 gap-x-10 gap-y-6 text-sm border border-light-gray rounded-sm p-4">
-
-        {/* ------------------------- PICKUP LOCATION ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">Pickup Location</span>
-
-          <div className="flex items-center gap-2">
-            {!firstPoint.pickupLocation_edit ? (
-              <p
-                className="font-medium truncate max-w-[220px] cursor-pointer"
-                onClick={() =>
-                  setShiftPoints([{ ...firstPoint, pickupLocation_edit: true }])
-                }
-                title={firstPoint.pickupLocation}
-              >
-                {firstPoint.pickupLocation || "N/A"}
-              </p>
-            ) : (
-              <input
-                type="text"
-                autoFocus
-                className="border border-light-gray rounded-sm p-[6px] text-sm w-full"
-                value={firstPoint.pickupLocation || ""}
-                onChange={async (e) => {
-                  const updatedPickup = e.target.value;
-                  let updatedPoint = { ...firstPoint, pickupLocation: updatedPickup };
-
-                  if (updatedPickup && firstPoint.dropLocation && window.google) {
-                    const km = await calculateDistance(updatedPickup, firstPoint.dropLocation);
-                    updatedPoint.totalKilometers = km;
-                  }
-
-                  setShiftPoints([updatedPoint]);
-                }}
-
-
-                onBlur={() =>
-                  setShiftPoints([{ ...firstPoint, pickupLocation_edit: false }])
-                }
-              />
-            )}
-
-            <FaRegMap
-              className="text-dark-green text-lg cursor-pointer hover:opacity-70"
-              onClick={() =>
-                window.open(
-                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    firstPoint.pickupLocation || ""
-                  )}`,
-                  "_blank"
-                )
-              }
-            />
-          </div>
-        </div>
-
-        {/* ------------------------- PICKUP TIME ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">Pickup Time</span>
-
-          {!firstPoint.pickupTime_edit ? (
-            <p
-              className="font-medium cursor-pointer"
-              onClick={() =>
-                setShiftPoints([{ ...firstPoint, pickupTime_edit: true }])
-              }
-            >
-              {firstPoint.pickupTime || "N/A"}
-            </p>
-          ) : (
-            <input
-              type="text"
-              autoFocus
-              className="border border-light-gray rounded-sm p-[6px] text-sm"
-              value={firstPoint.pickupTime || ""}
-              onChange={(e) =>
-                setShiftPoints([{ ...firstPoint, pickupTime: e.target.value }])
-              }
-              onBlur={() =>
-                setShiftPoints([{ ...firstPoint, pickupTime_edit: false }])
-              }
-            />
-          )}
-        </div>
-
-        {/* ------------------------- DROP LOCATION ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">Drop Location</span>
-
-          <div className="flex items-center gap-2">
-            {!firstPoint.dropLocation_edit ? (
-              <p
-                className="font-medium truncate max-w-[220px] cursor-pointer"
-                title={firstPoint.dropLocation}
-                onClick={() =>
-                  setShiftPoints([{ ...firstPoint, dropLocation_edit: true }])
-                }
-              >
-                {firstPoint.dropLocation || "N/A"}
-              </p>
-            ) : (
-              <input
-                type="text"
-                autoFocus
-                className="border border-light-gray rounded-sm p-[6px] text-sm w-full"
-                value={firstPoint.dropLocation || ""}
-                onChange={async (e) => {
-                  const updatedDrop = e.target.value;
-                  let updatedPoint = { ...firstPoint, dropLocation: updatedDrop };
-
-                  if (firstPoint.pickupLocation && updatedDrop && window.google) {
-                    const km = await calculateDistance(firstPoint.pickupLocation, updatedDrop);
-                    updatedPoint.totalKilometers = km;
-                  }
-
-                  setShiftPoints([updatedPoint]);
-                }}
-
-
-                onBlur={() =>
-                  setShiftPoints([{ ...firstPoint, dropLocation_edit: false }])
-                }
-              />
-            )}
-
-            <FaRegMap
-              className="text-dark-green text-lg cursor-pointer hover:opacity-70"
-              onClick={() =>
-                window.open(
-                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    firstPoint.dropLocation || ""
-                  )}`,
-                  "_blank"
-                )
-              }
-            />
-          </div>
-        </div>
-
-        {/* ------------------------- DROP TIME ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">Drop Time</span>
-
-          {!firstPoint.dropTime_edit ? (
-            <p
-              className="font-medium cursor-pointer"
-              onClick={() =>
-                setShiftPoints([{ ...firstPoint, dropTime_edit: true }])
-              }
-            >
-              {firstPoint.dropTime || "N/A"}
-            </p>
-          ) : (
-            <input
-              type="text"
-              autoFocus
-              className="border border-light-gray rounded-sm p-[6px] text-sm"
-              value={firstPoint.dropTime || ""}
-              onChange={(e) =>
-                setShiftPoints([{ ...firstPoint, dropTime: e.target.value }])
-              }
-              onBlur={() =>
-                setShiftPoints([{ ...firstPoint, dropTime_edit: false }])
-              }
-            />
-          )}
-        </div>
-
-        {/* ------------------------- VISIT FIELDS (ONLY IF EXIST) ------------------------- */}
-        {firstPoint.visitLocation?.trim() !== "" && (
-          <>
-            {/* VISIT LOCATION */}
-            <div className="flex flex-col gap-1">
-              <span className="font-semibold text-[#44474B]">
-                Visit Location
-              </span>
-
-              <div className="flex items-center gap-2">
-                {!firstPoint.visitLocation_edit ? (
-                  <p
-                    className="font-medium truncate max-w-[220px] cursor-pointer"
-                    title={firstPoint.visitLocation}
-                    onClick={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitLocation_edit: true }
-                      ])
-                    }
-                  >
-                    {firstPoint.visitLocation}
+                {/* ── Bottom Footer Bar ── */}
+                <div className="bg-white rounded-xl border flex items-center justify-between px-6 py-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <p style={{ fontSize: 13, color: "#9ca3af" }}>
+                    {values.shiftDates?.length > 0
+                      ? <span><span className="font-semibold" style={{ color: "#111827" }}>{values.shiftDates.length} shift{values.shiftDates.length !== 1 ? "s" : ""}</span><span style={{ color: "#6b7280" }}> ready to create</span></span>
+                      : "No dates selected — choose dates on the calendar above"}
                   </p>
-                ) : (
-                  <input
-                    type="text"
-                    autoFocus
-                    className="border border-light-gray rounded-sm p-[6px] text-sm w-full"
-                    value={firstPoint.visitLocation || ""}
-                    onChange={(e) =>
-                      setShiftPoints([
-                        { ...firstPoint, visitLocation: e.target.value }
-                      ])
-                    }
-                    onBlur={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitLocation_edit: false }
-                      ])
-                    }
-                  />
-                )}
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => navigate(-1)}
+                      className="px-5 py-2.5 rounded-lg border font-semibold text-sm hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
+                      style={{ backgroundColor: "#145228" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      {mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`}
+                    </button>
+                  </div>
+                </div>
 
-                <FaRegMap
-                  className="text-dark-green text-lg cursor-pointer hover:opacity-70"
-                  onClick={() =>
-                    window.open(
-                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        firstPoint.visitLocation || ""
-                      )}`,
-                      "_blank"
-                    )
-                  }
-                />
-              </div>
-            </div>
+              </Form>
+            );
+          }}
+        </Formik>
 
-            {/* VISIT DURATION (Start – End) */}
-            <div className="flex flex-col gap-1">
-              <span className="font-semibold text-[#44474B]">
-                Visit Duration
-              </span>
+        <SuccessSlider
+          show={slider.show}
+          title={slider.title}
+          subtitle={slider.subtitle}
+          viewText="View Shift"
+          onView={() => {
+              navigate("/admin-dashboard/dashboard", {
+                state: { shiftCategory: selectedShiftCategory?.name }
+              });
+            setSlider({ ...slider, show: false });
 
-              <div className="flex items-center gap-2">
-                {/* START TIME */}
-                {!firstPoint.visitStartTime_edit ? (
-                  <p
-                    className="font-medium cursor-pointer"
-                    onClick={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitStartTime_edit: true }
-                      ])
-                    }
-                  >
-                    {firstPoint.visitStartTime || "N/A"}
-                  </p>
-                ) : (
-                  <input
-                    type="text"
-                    autoFocus
-                    className="border border-light-gray rounded-sm p-[6px] text-sm w-24"
-                    value={firstPoint.visitStartTime || ""}
-                    onChange={(e) =>
-                      setShiftPoints([
-                        { ...firstPoint, visitStartTime: e.target.value }
-                      ])
-                    }
-                    onBlur={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitStartTime_edit: false }
-                      ])
-                    }
-                  />
-                )}
-
-                <span>–</span>
-
-                {/* END TIME */}
-                {!firstPoint.visitEndTime_edit ? (
-                  <p
-                    className="font-medium cursor-pointer"
-                    onClick={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitEndTime_edit: true }
-                      ])
-                    }
-                  >
-                    {firstPoint.visitEndTime || "N/A"}
-                  </p>
-                ) : (
-                  <input
-                    type="text"
-                    autoFocus
-                    className="border border-light-gray rounded-sm p-[6px] text-sm w-24"
-                    value={firstPoint.visitEndTime || ""}
-                    onChange={(e) =>
-                      setShiftPoints([
-                        { ...firstPoint, visitEndTime: e.target.value }
-                      ])
-                    }
-                    onBlur={() =>
-                      setShiftPoints([
-                        { ...firstPoint, visitEndTime_edit: false }
-                      ])
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ------------------------- SEAT TYPE ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">Seat Type</span>
-
-          {!firstPoint.seatType_edit ? (
-            <p
-              className="font-medium cursor-pointer"
-              onClick={() =>
-                setShiftPoints([{ ...firstPoint, seatType_edit: true }])
-              }
-            >
-              {firstPoint.seatType || "N/A"}
-            </p>
-          ) : (
-            <input
-              type="text"
-              autoFocus
-              className="border border-light-gray rounded-sm p-[6px] text-sm"
-              value={firstPoint.seatType || ""}
-              onChange={(e) =>
-                setShiftPoints([{ ...firstPoint, seatType: e.target.value }])
-              }
-              onBlur={() =>
-                setShiftPoints([{ ...firstPoint, seatType_edit: false }])
-              }
-            />
-          )}
-        </div>
-
-        {/* ------------------------- TRANSPORTATION MODE ------------------------- */}
-        <div className="flex flex-col gap-1">
-          <span className="font-semibold text-[#44474B]">
-            Transportation Mode
-          </span>
-
-          {!firstPoint.transportationMode_edit ? (
-            <p
-              className="font-medium cursor-pointer"
-              onClick={() =>
-                setShiftPoints([
-                  { ...firstPoint, transportationMode_edit: true }
-                ])
-              }
-            >
-              {firstPoint.transportationMode || "N/A"}
-            </p>
-          ) : (
-            <input
-              type="text"
-              autoFocus
-              className="border border-light-gray rounded-sm p-[6px] text-sm"
-              value={firstPoint.transportationMode || ""}
-              onChange={(e) =>
-                setShiftPoints([
-                  { ...firstPoint, transportationMode: e.target.value }
-                ])
-              }
-              onBlur={() =>
-                setShiftPoints([
-                  { ...firstPoint, transportationMode_edit: false }
-                ])
-              }
-            />
-          )}
-        </div>
-{/* ------------------------- TOTAL KILOMETERS ------------------------- */}
-<div className="flex flex-col gap-2">
-  <span className="font-semibold text-[#44474B]">Total Kilometers</span>
-
-  <div className="flex items-center gap-3">
-    <input
-      type="text"
-      readOnly
-      className="border border-light-gray rounded-sm p-[6px] text-sm w-32 bg-gray-50"
-      value={firstPoint.totalKilometers || ""}
-      placeholder="Not calculated"
-    />
-
-    <button
-      type="button"
-      onClick={() => handleCalculateKilometers(firstPoint)}
-      className="bg-dark-green text-white px-3 py-1 rounded text-sm hover:opacity-90"
-    >
-      Calculate Total Kilometers
-    </button>
-  </div>
-</div>
-
-
+          }}
+          onDismiss={() => setSlider({ ...slider, show: false })}
+        />
       </div>
-    ) : (
-      <p className="text-xs text-gray-500">
-        No transportation details found in intake for this client.
-      </p>
-    )}
-  </div>
-)}
-
-              </div>
-
-              <div className="col-span-2 flex justify-center">
-                <button
-                  type="submit"
-                  className="bg-dark-green text-white px-6 py-2 rounded cursor-pointer"
-                >
-                  {mode === "update" ? "Update Shift" : "Add Shift"}
-                </button>
-              </div>
-            </Form>
-          );
-        }}
-      </Formik>
-
-      <SuccessSlider
-        show={slider.show}
-        title={slider.title}
-        subtitle={slider.subtitle}
-        viewText="View Shift"
-        onView={() => {
-            navigate("/admin-dashboard/dashboard", {
-              state: { shiftCategory: selectedShiftCategory?.name }
-            });
-          setSlider({ ...slider, show: false });
-          
-        }}
-        onDismiss={() => setSlider({ ...slider, show: false })}
-      />
     </div>
   );
 };

@@ -18,8 +18,8 @@ import { db, storage } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload, X } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
-import { useParams, useSearchParams } from "react-router-dom";
-import GoogleAddressInput from "./GoogleAddressInput";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { EditableProvider } from "./EditableContext";
@@ -367,15 +367,29 @@ const mapOldIntakeToInitialValues = (raw) => {
 //
 
 const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: propId,isEditable=true}) => {
+  const navigate = useNavigate();
   const [showServiceCalendar, setShowServiceCalendar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [shiftCategories, setShiftCategories] = useState([]);
+  const [manualTransport, setManualTransport] = useState(false);
+  const [manualVisitation, setManualVisitation] = useState(false);
   const fileInputRef = useRef(null);
+  const docInputRef = useRef(null);
   const fileInputRefMedical = useRef(null);
   const hasResigned = useRef(false);
 
 const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const serviceDropdownRef = useRef(null);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target)) {
+        setShowServiceDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const previousServiceStart = useRef(null);
 
@@ -926,1746 +940,954 @@ const handleSubmit = async (values, { resetForm }) => {
 
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-bold text-2xl leading-7 text-light-black">
-          {mode === "update" ? "Update Intake Form" : "Add Intake Form"}{" "}
-          {isCaseWorker ? "(Intake Worker)" : "(Private Form)"}
-        </p>
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+
+      {/* ─── Top Header ─── */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <div className="w-px h-5 bg-gray-200" />
+          <h1 className="font-bold text-[20px] text-gray-900">
+            {mode === "update" ? "Update Intake Form" : "Add Intake Form"}{" "}
+            <span className="font-semibold text-[16px] text-gray-400">({isCaseWorker ? "Intake Worker" : "Owner"})</span>
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" className="px-4 py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50" style={{ borderColor: "#e5e7eb" }}>Save Draft</button>
+        </div>
       </div>
-      <hr className="border-t border-gray" />
 
-       <EditableProvider isEditable={isEditable}>
+      <EditableProvider isEditable={isEditable}>
         <Formik
-        enableReinitialize={true}
-        initialValues={initialValues}
-        validate={validate}
-
-        onSubmit={handleSubmit}
-      >
-       {({ touched, errors, values, setFieldValue }) => {
-
-         useEffect(() => {
-      if (user) {
-        setFieldValue("intakeworkerName", user.name || "");
-        setFieldValue("agencyName", user.agency || "");
-        setFieldValue("intakeworkerPhone", user.phone || "");
-        setFieldValue("intakeworkerEmail", user.email || "");
-      }
-    }, [user, setFieldValue]);
-
-  // derive sections visibility from selected service types
-  const selectedServiceIds = values.services?.serviceType || [];
-
-  const selectedServiceCategories = shiftCategories.filter((cat) =>
-    selectedServiceIds.includes(cat.id)
-  );
-
-  const showTransportationSection = selectedServiceCategories.some((cat) =>
-    (cat.name || "").toLowerCase().includes("transport")
-  );
-
-  const showVisitationSection = selectedServiceCategories.some((cat) => {
-    const name = (cat.name || "").toLowerCase();
-    return (
-      name.includes("supervised") ||
-      name.includes("supervisitation") ||
-      name.includes("visitation")
-    );
-  });
-
-          return (
-            <Form className="flex flex-col gap-4 w-full ">
-              {/* Status (only in update mode) */}
-              {mode === "update" && (
-                <div className="flex justify-end">
-                  <div className="bg-white border border-light-gray rounded p-3 ">
-                    <label className="font-bold text-sm text-light-black mr-2">
-                      Status
-                    </label>
-                    <Field
-                      as="select"
-                      name="status"
-                      disabled={isCaseWorker}
-                      className="border border-light-gray rounded-sm p-[8px] text-sm"
-                    >
-                      <option value="Submitted">Submitted</option>
-                      <option value="Accepted">Accepted</option>
-                      <option value="Rejected">Rejected</option>
-                    </Field>
-                  </div>
-                </div>
-              )}
-
-
-              {/* <div className="flex justify-end gap-3 ">
-                <div
-                  className="flex justify-center items-center text-white border gap-[10px] pt-[6px] pr-3 pb-[6px] pl-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
-                  onClick={() => setShowTransportation((prev) => !prev)}
-                >
-                  <p className="w-[10px] ">
-                    {!showTransportation ? <FaPlus /> : <FaMinus />}
-                  </p>
-                  <p className="font-medium text-[14px] leading-[20px] ">
-                    {!showTransportation ? "Add" : "Remove"} Transportation
-                  </p>
-                </div>
-                <div
-                  className="flex justify-center items-center text-white border gap-[10px] pt-[6px] pr-3 pb-[6px] pl-3 rounded-[6px] cursor-pointer bg-dark-green w-auto"
-                  onClick={() => setShowVisitation((prev) => !prev)}
-                >
-                  <p className="w-[10px] ">
-                    {!showVisitation ? <FaPlus /> : <FaMinus />}
-                  </p>
-                  <p className="font-medium text-[14px] leading-[20px] ">
-                    {!showVisitation ? "Add" : "Remove"} Supervised Visitation
-                  </p>
-                </div>
-              </div> */}
-
-              {/* Services */}
-              <div className="">
-                <h3 className="font-bold text-[24px] text-light-black ">
-                  Services
-                </h3>
-                <div className="grid grid-cols-3 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
-                  {/* Multi-select Service Type */}
-      <div className="relative">
-        <label
-          htmlFor="shiftCategory"
-          className="font-bold text-sm leading-5 tracking-normal text-light-black"
+          enableReinitialize={true}
+          initialValues={initialValues}
+          validate={validate}
+          onSubmit={handleSubmit}
         >
-          Types of Services
-        </label>
+          {({ touched, errors, values, setFieldValue }) => {
+            // eslint-disable-next-line react-hooks/rules-of-hooks
+            useEffect(() => {
+              if (user) {
+                setFieldValue("intakeworkerName", user.name || "");
+                setFieldValue("agencyName", user.agency || "");
+                setFieldValue("intakeworkerPhone", user.phone || "");
+                setFieldValue("intakeworkerEmail", user.email || "");
+              }
+            }, [user, setFieldValue]);
 
-  {/* CLICKABLE DISPLAY BOX */}
-  <div
-    onClick={() => setShowServiceDropdown(!showServiceDropdown)}
-    className={`w-full border rounded-sm p-[10px] appearance-none pr-10 cursor-pointer 
-      ${touched.services?.serviceType && errors.services?.serviceType
-        ? "border-red-500"
-        : "border-light-gray"
-      }
-      ${(values.services.serviceType?.length ?? 0) > 0
-        ? "text-black"
-        : "text-[#72787E] text-sm"
-      }
-    `}
-  >
-    {(values.services.serviceType?.length ?? 0) > 0
-      ? shiftCategories
-          .filter(cat => values.services.serviceType.includes(cat.id))
-          .map(cat => cat.name)
-          .join(", ")
-      : "Select the type of service"}
-  </div>
+            const selectedServiceIds = values.services?.serviceType || [];
+            const selectedServiceCategories = shiftCategories.filter((cat) => selectedServiceIds.includes(cat.id));
+            const showTransportationSection = selectedServiceCategories.some((cat) => (cat.name || "").toLowerCase().includes("transport"));
+            const showVisitationSection = selectedServiceCategories.some((cat) => {
+              const name = (cat.name || "").toLowerCase();
+              return name.includes("supervised") || name.includes("supervisitation") || name.includes("visitation");
+            });
 
-  {/* DROPDOWN ICON */}
-  <span className="absolute right-3 top-[45px] -translate-y-1/2 pointer-events-none">
-    <FaChevronDown className="text-light-green w-4 h-4" />
-  </span>
+            const showTransportSection = showTransportationSection || manualTransport;
+            const showVisitSection = showVisitationSection || manualVisitation;
 
-  {/* ACTUAL MULTI-SELECT MENU */}
-  {showServiceDropdown && (
-    <div
-      className="absolute z-50 mt-1 w-full bg-white border border-light-gray rounded shadow-md max-h-60 overflow-auto"
-    >
-      {shiftCategories
-        .filter(item => {
-          const lowers = (item.name || "").toLowerCase();
-          return lowers !== "supervisitation + transportation" &&
-                 lowers !== "supervisitation+transportation";
-        })
-        .map(item => {
-          const isSelected = values.services.serviceType.includes(item.id);
-          return (
-            <div
-              key={item.id}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 cursor-pointer"
-              onClick={() => {
-                let updated = [...values.services.serviceType];
+            const iCls = (err) =>
+              `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${err ? "border-red-400" : "border-[#e5e7eb]"}`;
+            const sCls = (err, empty) =>
+              `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${err ? "border-red-400" : "border-[#e5e7eb]"} ${empty ? "text-gray-400" : "text-gray-700"}`;
 
-                if (isSelected) {
-                  updated = updated.filter(id => id !== item.id);
-                } else {
-                  updated.push(item.id);
-                }
+            const SectionTitle = ({ title }) => (
+              <div className="mb-5">
+                <h2 className="font-bold text-gray-900 text-[15px]">{title}</h2>
+                <div className="h-[3px] w-8 rounded-full mt-1" style={{ backgroundColor: "#145228" }} />
+              </div>
+            );
 
-                setFieldValue("services.serviceType", updated);
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                readOnly
-              />
-              <span className="text-sm text-black">{item.name}</span>
-            </div>
-          );
-        })}
-    </div>
-  )}
+            const completionPct = (() => {
+              let filled = 0; const total = 8;
+              if (values.clients?.[0]?.fullName) filled++;
+              if ((values.services?.serviceType?.length ?? 0) > 0) filled++;
+              if ((values.services?.serviceDates?.length ?? 0) > 0) filled++;
+              if (values.services?.serviceStartTime) filled++;
+              if (values.parentInfoList?.[0]?.parentName) filled++;
+              if (values.billingInfo?.invoiceEmail) filled++;
+              if (values.medicalInfoList?.[0]?.clientName) filled++;
+              if (values.workerInfo?.signature) filled++;
+              return Math.round((filled / total) * 100);
+            })();
 
-  <ErrorMessage
-    name="services.serviceType"
-    component="div"
-    className="text-red-500 text-xs mt-1"
-  />
-</div>
+            return (
+              <Form>
+                <div className="flex gap-5 items-start">
 
 
-                  <div>
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      Service Dates
-                    </label>
+                  {/* ── LEFT: Main content ── */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-4">
 
-                    <div
-                      className="w-full border border-light-gray rounded-sm p-[10px] cursor-pointer text-sm text-[#72787E]"
-                      onClick={() => setShowServiceCalendar(true)}
-                    >
-                      {(values.services?.serviceDates?.length ?? 0) > 0
-
-                        ? values.services.serviceDates.join(", ")
-                        : "Select the service dates"}
-                    </div>
-
-                  {showServiceCalendar && (
-                  <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-                    <div className="bg-white p-5 rounded-md shadow-lg min-w-[360px]">
-                      <h2 className="text-lg font-bold mb-3 text-light-black">
-                        Select Service Dates
-                      </h2>
-
-                     <DayPicker
-                        mode="multiple"
-                        selected={(values.services?.serviceDates || []).map((str) => {
-                          // str = "YYYY-MM-DD"
-                          const [year, month, day] = (str || "").split("-").map(Number);
-                          if (!year || !month || !day) return new Date();
-                          return new Date(year, month - 1, day);
-                        })}
-                        onSelect={(dates) =>
-                          setFieldValue(
-                            "services.serviceDates",
-                            (dates || []).map((date) => formatDateLocal(date))
-                          )
-                        }
-                        className="custom-daypicker-green"
-                      />
-
-
-                     <div className="flex justify-between gap-3 mt-4">
-                        <button
-                          type="button"
-                          onClick={() => setFieldValue("services.serviceDates", [])}
-                          className="px-4 py-1 border border-gray-400 rounded"
-                        >
-                          Clear All
-                        </button>
-
-                        <div className="flex gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setShowServiceCalendar(false)}
-                            className="px-4 py-1 border border-gray-400 rounded"
-                          >
-                            Cancel
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setShowServiceCalendar(false)}
-                            className="px-4 py-1 bg-dark-green text-white rounded"
-                          >
-                            Done
-                          </button>
+                  {/* Avatar + Transport toggles */}
+                  <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                          onClick={() => fileInputRef.current?.click()}>
+                          {avatarPreview
+                            ? <img src={avatarPreview} className="w-full h-full object-cover" alt="avatar" />
+                            : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          }
                         </div>
-                  </div>
-
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                          onChange={(e) => {
+                            const file = e.currentTarget.files[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setAvatarPreview(reader.result);
+                              reader.readAsDataURL(file);
+                            }
+                          }} />
+                        <div>
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="text-sm font-semibold text-gray-700 hover:text-gray-900">Change Avatar</button>
+                          <p className="text-xs text-gray-400 mt-0.5">JPG, PNG up to 5MB</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setManualTransport(v => !v)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
+                          style={{
+                            borderColor: showTransportSection ? "#145228" : "#e5e7eb",
+                            color: showTransportSection ? "#145228" : "#374151",
+                            background: showTransportSection ? "#f0fdf4" : "white"
+                          }}>
+                          {showTransportSection ? "✓" : "+"} Add Transportation
+                        </button>
+                        <button type="button" onClick={() => setManualVisitation(v => !v)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
+                          style={{
+                            borderColor: showVisitSection ? "#145228" : "#e5e7eb",
+                            color: showVisitSection ? "#145228" : "#374151",
+                            background: showVisitSection ? "#f0fdf4" : "white"
+                          }}>
+                          {showVisitSection ? "✓" : "+"} Add Supervised Visitations
+                        </button>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Status (update mode) */}
+                  {mode === "update" && (
+                    <div className="bg-white rounded-xl border p-5 flex items-center gap-3" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                      <label className="font-semibold text-sm text-gray-700">Status</label>
+                      <div className="relative">
+                        <Field as="select" name="status" disabled={isCaseWorker} className={sCls(false, !values.status)}>
+                          <option value="Submitted">Submitted</option>
+                          <option value="Accepted">Accepted</option>
+                          <option value="Rejected">Rejected</option>
+                        </Field>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
                   )}
 
-               </div>
+                {/* ── Services Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <SectionTitle title="Services" />
+                  <div className="grid grid-cols-2 gap-5">
 
-               {/* Service Start Time */}
-<div>
-  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-    Service Start Time
-  </label>
-  <Field
-    name="services.serviceStartTime"
-    type="time"
-    className="w-full border border-light-gray rounded-sm p-[10px] text-sm"
-  />
-</div>
-
-{/* Service End Time */}
-<div>
-  <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-    Service End Time
-  </label>
-  <Field
-    name="services.serviceEndTime"
-    type="time"
-    className="w-full border border-light-gray rounded-sm p-[10px] text-sm"
-  />
-</div>
-
-
-
-                  <div className="col-span-3">
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      Safety Plan/Management Risk
-                    </label>
-                    <Field
-                      as="textarea"
-                      name="services.safetyPlan"
-                      placeholder="Write down any risk or safety plan required for the plan"
-                      className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50 ${
-                        touched.services?.safetyPlan &&
-                        errors.services?.safetyPlan
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                    />
-                    <ErrorMessage
-                      name="services.safetyPlan"
-                      component="div"
-                      className="text-red-500 text-xs mt-1"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      Service Description
-                    </label>
-
-                    <Field
-                      as="textarea"
-                      name="services.serviceDesc"
-                      placeholder="Write down the details regarding the service"
-                      className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* === CLIENT INFO (with Add Sibling) === */}
-              <div>
-                <div className="flex justify-between items-center ">
-                  <h3 className="font-bold text-[24px] text-light-black">
-                    Client Info
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldValue("clients", [
-                        ...values.clients,
-                        {
-                          fullName: "",
-                          gender: "",
-                          birthDate: "",
-                          address: "",
-                          latitude: "",
-                          longtitude: "",
-                          startDate: "",
-                          clientInfo: "",
-                          phone: "",
-                          email: "",
-                          photos: [],
-                        },
-                      ]);
-                    }}
-                    className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
-                  >
-                    + Add Sibling
-                  </button>
-                </div>
-
-                <FieldArray name="clients">
-                  {({ remove }) => (
-                    <div className="flex flex-col gap-6">
-                      {values.clients.map((client, index) => (
+                    {/* Types of Services — multi-select */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Types of Services</label>
+                      <div className="relative" ref={serviceDropdownRef}>
                         <div
-                          key={index}
-                          className="bg-white p-4 border border-light-gray rounded relative w-full"
-                        >
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-semibold text-lg text-light-black">
-                              Client {index + 1}
-                            </h4>
-                            {values.clients.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => remove(index)}
-                                className="text-red-500 font-semibold"
-                              >
-                                Remove
-                              </button>
-                            )}
+                          onClick={() => setShowServiceDropdown(!showServiceDropdown)}
+                          className={`w-full px-3 py-2.5 rounded-lg border cursor-pointer text-sm ${
+                            touched.services?.serviceType && errors.services?.serviceType ? "border-red-400" : "border-[#e5e7eb]"
+                          } ${(values.services.serviceType?.length ?? 0) > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                          {(values.services.serviceType?.length ?? 0) > 0
+                            ? shiftCategories.filter(cat => values.services.serviceType.includes(cat.id)).map(cat => cat.name).join(", ")
+                            : "Select type of service"}
+                        </div>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        {showServiceDropdown && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-60 overflow-auto" style={{ borderColor: "#e5e7eb" }}>
+                            {shiftCategories
+                              .filter(item => {
+                                const l = (item.name || "").toLowerCase();
+                                return l !== "supervisitation + transportation" && l !== "supervisitation+transportation";
+                              })
+                              .map(item => {
+                                const isSelected = values.services.serviceType.includes(item.id);
+                                return (
+                                  <div key={item.id}
+                                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => {
+                                      let updated = [...values.services.serviceType];
+                                      updated = isSelected ? updated.filter(id => id !== item.id) : [...updated, item.id];
+                                      setFieldValue("services.serviceType", updated);
+                                    }}>
+                                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                                      style={{ background: isSelected ? "#145228" : "white", border: isSelected ? "none" : "1.5px solid #d1d5db" }}>
+                                      {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                                    </div>
+                                    <span className="text-sm text-gray-700">{item.name}</span>
+                                  </div>
+                                );
+                              })}
                           </div>
+                        )}
+                      </div>
+                      {touched.services?.serviceType && errors.services?.serviceType && (
+                        <div className="text-red-500 text-xs mt-1">{errors.services.serviceType}</div>
+                      )}
+                    </div>
 
-                          <div className="grid grid-cols-3 gap-8 gap-y-4">
-                            {/* client photo */}
-                            <div className="col-span-3 mt-2">
-
-                            {/* Hidden File Input */}
-                            <input
-                              id={`client-photo-input-${index}`}
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) =>
-                                handleClientPhotosChange(e, index, values, setFieldValue)
-                              }
+                    {/* Service Dates */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Dates</label>
+                      <button type="button"
+                        onClick={() => setShowServiceCalendar(true)}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                          touched.services?.serviceDates && errors.services?.serviceDates ? "border-red-400" : "border-[#e5e7eb]"
+                        } ${(values.services?.serviceDates?.length ?? 0) > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                        {(values.services?.serviceDates?.length ?? 0) > 0
+                          ? values.services.serviceDates.join(", ")
+                          : "Select service dates"}
+                      </button>
+                      {touched.services?.serviceDates && errors.services?.serviceDates && (
+                        <div className="text-red-500 text-xs mt-1">{errors.services.serviceDates}</div>
+                      )}
+                      {showServiceCalendar && (
+                        <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
+                          <div className="bg-white p-6 rounded-xl shadow-xl min-w-[360px]">
+                            <h2 className="font-bold text-gray-900 mb-4" style={{ fontSize: 15 }}>Select Service Dates</h2>
+                            <DayPicker
+                              mode="multiple"
+                              selected={(values.services?.serviceDates || []).map((str) => {
+                                const [year, month, day] = (str || "").split("-").map(Number);
+                                if (!year || !month || !day) return new Date();
+                                return new Date(year, month - 1, day);
+                              })}
+                              onSelect={(dates) => setFieldValue("services.serviceDates", (dates || []).map(formatDateLocal))}
+                              className="custom-daypicker-green"
                             />
+                            <div className="flex justify-between gap-3 mt-4">
+                              <button type="button" onClick={() => setFieldValue("services.serviceDates", [])}
+                                className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-gray-50"
+                                style={{ borderColor: "#e5e7eb", color: "#374151" }}>Clear All</button>
+                              <div className="flex gap-3">
+                                <button type="button" onClick={() => setShowServiceCalendar(false)}
+                                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-gray-50"
+                                  style={{ borderColor: "#e5e7eb", color: "#374151" }}>Cancel</button>
+                                <button type="button" onClick={() => setShowServiceCalendar(false)}
+                                  className="px-4 py-2 text-white text-sm font-semibold rounded-lg"
+                                  style={{ backgroundColor: "#145228" }}>Done</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                            {/* Round Photo + Buttons */}
-                            <div className="flex items-center gap-7">
-                              {/* Round Photo Display */}
-                              <div className="w-22 h-22 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden border border-gray-300">
-                                {values.clients[index].photos &&
-                                values.clients[index].photos.length > 0 ? (
+                    {/* Start Time */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Start Time</label>
+                      <Field name="services.serviceStartTime" type="time" className={iCls(false)} />
+                    </div>
+
+                    {/* End Time */}
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service End Time</label>
+                      <Field name="services.serviceEndTime" type="time" className={iCls(false)} />
+                    </div>
+
+                    {/* Safety Plan */}
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Safety Plan / Management Risk</label>
+                      <Field as="textarea" name="services.safetyPlan"
+                        placeholder="Write down any risk or safety plan required"
+                        rows={3} className={`${iCls(touched.services?.safetyPlan && errors.services?.safetyPlan)} resize-none`} />
+                      {touched.services?.safetyPlan && errors.services?.safetyPlan && (
+                        <div className="text-red-500 text-xs mt-1">{errors.services.safetyPlan}</div>
+                      )}
+                    </div>
+
+                    {/* Service Description */}
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Description</label>
+                      <Field as="textarea" name="services.serviceDesc"
+                        placeholder="Write down details regarding the service"
+                        rows={3} className={`${iCls(false)} resize-none`} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Client Info Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <div className="flex items-center justify-between mb-5">
+                    <SectionTitle title="Client Info" />
+                    <button type="button"
+                      onClick={() => setFieldValue("clients", [...values.clients, { fullName: "", gender: "", birthDate: "", address: "", latitude: "", longtitude: "", startDate: "", clientInfo: "", phone: "", email: "", photos: [] }])}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+                      style={{ backgroundColor: "#145228" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Sibling
+                    </button>
+                  </div>
+
+                  <FieldArray name="clients">
+                    {({ remove }) => (
+                      <div className="flex flex-col gap-5">
+                        {values.clients.map((client, index) => (
+                          <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Client {index + 1}</p>
+                              {values.clients.length > 1 && (
+                                <button type="button" onClick={() => remove(index)}
+                                  className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                              )}
+                            </div>
+
+                            {/* Photo */}
+                            <div className="flex items-center gap-5 mb-5 pb-5 border-b" style={{ borderColor: "#e5e7eb" }}>
+                              <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                                {values.clients[index].photos?.length > 0 ? (
                                   <img
-                                    src={
-                                      typeof values.clients[index].photos[0] === "string"
-                                        ? values.clients[index].photos[0]
-                                        : URL.createObjectURL(values.clients[index].photos[0])
-                                    }
-                                    alt="Client"
-                                    className="object-cover w-full h-full"
-                                  />
+                                    src={typeof values.clients[index].photos[0] === "string" ? values.clients[index].photos[0] : URL.createObjectURL(values.clients[index].photos[0])}
+                                    alt="Client" className="w-full h-full object-cover" />
                                 ) : (
-                                   <img src="/images/profile.jpeg" />
+                                  <img src="/images/profile.jpeg" className="w-full h-full object-cover" alt="default" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-sm text-gray-800 mb-0.5">Client Photo</p>
+                                <p className="text-xs text-gray-400 mb-2">JPG, PNG up to 5MB</p>
+                                <div className="flex gap-2">
+                                  <input id={`client-photo-input-${index}`} type="file" accept="image/*" className="hidden"
+                                    onChange={(e) => handleClientPhotosChange(e, index, values, setFieldValue)} />
+                                  <label htmlFor={`client-photo-input-${index}`}
+                                    className="px-3 py-1.5 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                                    style={{ backgroundColor: "#145228" }}>Add Photo</label>
+                                  <button type="button" onClick={() => setFieldValue(`clients.${index}.photos`, [])}
+                                    className="px-3 py-1.5 border text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50"
+                                    style={{ borderColor: "#e5e7eb" }}>Remove Photo</button>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-5">
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Full Name</label>
+                                <Field name={`clients.${index}.fullName`} type="text" placeholder="Enter client name"
+                                  className={iCls(touched.clients?.[index]?.fullName && errors.clients?.[index]?.fullName)} />
+                                {touched.clients?.[index]?.fullName && errors.clients?.[index]?.fullName && (
+                                  <div className="text-red-500 text-xs mt-1">{errors.clients[index].fullName}</div>
                                 )}
                               </div>
 
-                              {/* Buttons */}
-                              <div className="flex gap-2">
-                                <label
-                                  htmlFor={`client-photo-input-${index}`}
-                                  className="px-4 py-1.5 rounded-sm border-2 border-dark-green bg-dark-green text-white cursor-pointer text-sm"
-                                >
-                                  Add Photo
-                                </label>
+                              <div className="relative">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender</label>
+                                <Field as="select" name={`clients.${index}.gender`}
+                                  className={sCls(touched.clients?.[index]?.gender && errors.clients?.[index]?.gender, !values.clients[index].gender)}>
+                                  <option value="">Select gender</option>
+                                  <option value="male">Male</option>
+                                  <option value="female">Female</option>
+                                  <option value="other">Other</option>
+                                </Field>
+                                <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                                  <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                                </span>
+                              </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => setFieldValue(`clients.${index}.photos`, [])}
-                                  className="px-4 py-1.5 rounded-sm border-2 border-light-green text-light-green text-sm"
-                                >
-                                  Remove Photo
-                                </button>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                                <Field name={`clients.${index}.birthDate`} type="date" className={iCls(touched.clients?.[index]?.birthDate && errors.clients?.[index]?.birthDate)} />
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
+                                <Field name={`clients.${index}.phone`} type="text" placeholder="10-digit phone number"
+                                  className={iCls(touched.clients?.[index]?.phone && errors.clients?.[index]?.phone)} />
+                                {touched.clients?.[index]?.phone && errors.clients?.[index]?.phone && (
+                                  <div className="text-red-500 text-xs mt-1">{errors.clients[index].phone}</div>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                                <Field name={`clients.${index}.email`} type="email" placeholder="Enter email"
+                                  className={iCls(touched.clients?.[index]?.email && errors.clients?.[index]?.email)} />
+                                {touched.clients?.[index]?.email && errors.clients?.[index]?.email && (
+                                  <div className="text-red-500 text-xs mt-1">{errors.clients[index].email}</div>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Start Date</label>
+                                <Field name={`clients.${index}.startDate`} type="date"
+                                  className={iCls(touched.clients?.[index]?.startDate && errors.clients?.[index]?.startDate)} />
+                              </div>
+
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                                <PlacesAutocomplete
+                                  value={values.clients[index].address}
+                                  placeholder="Enter client address"
+                                  className={iCls(touched.clients?.[index]?.address && errors.clients?.[index]?.address)}
+                                  onChange={(val) => setFieldValue(`clients.${index}.address`, val)} />
+                              </div>
+
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Info</label>
+                                <Field as="textarea" name={`clients.${index}.clientInfo`}
+                                  placeholder="Write down any risk or safety plan required"
+                                  rows={3} className={`${iCls(touched.clients?.[index]?.clientInfo && errors.clients?.[index]?.clientInfo)} resize-none`} />
+                                {touched.clients?.[index]?.clientInfo && errors.clients?.[index]?.clientInfo && (
+                                  <div className="text-red-500 text-xs mt-1">{errors.clients[index].clientInfo}</div>
+                                )}
                               </div>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </FieldArray>
+                </div>
 
-                            {/* Full Name */}
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Full Name
-                              </label>
-                              <Field
-                                name={`clients.${index}.fullName`}
-                                type="text"
-                                placeholder="Enter client name"
-                                className={`w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E]  placeholder:text-sm placeholder:font-normal ${
-                                  touched.clients?.[index]?.fullName &&
-                                  errors.clients?.[index]?.fullName
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`clients.${index}.fullName`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
+                {/* ── Case Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <SectionTitle title="Case Worker Information" />
+                    <div className="grid grid-cols-2 gap-5">
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                        <Field name="caseworkerName" type="text" placeholder="Case worker name" className={iCls(touched.caseworkerName && errors.caseworkerName)} />
+                        {touched.caseworkerName && errors.caseworkerName && <div className="text-red-500 text-xs mt-1">{errors.caseworkerName}</div>}
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                        <Field name="caseworkerAgencyName" type="text" placeholder="Agency or organisation name" className={iCls(touched.caseworkerAgencyName && errors.caseworkerAgencyName)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                        <Field name="caseworkerPhone" type="text" placeholder="Phone number" className={iCls(touched.caseworkerPhone && errors.caseworkerPhone)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                        <Field name="caseworkerEmail" type="text" placeholder="Case worker email" className={iCls(touched.caseworkerEmail && errors.caseworkerEmail)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Intake Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <SectionTitle title="Intake Worker Information" />
+                    <div className="grid grid-cols-2 gap-5">
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Parent Info Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <div className="flex items-center justify-between mb-5">
+                    <SectionTitle title="Parents Info" />
+                    <button type="button"
+                      onClick={() => setFieldValue("parentInfoList", [...values.parentInfoList, { clientName: "", parentName: "", relationShip: "", parentPhone: "", parentEmail: "", parentAddress: "" }])}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                      style={{ backgroundColor: "#145228" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Parent Info
+                    </button>
+                  </div>
+                  <FieldArray name="parentInfoList">
+                    {({ remove }) => (
+                      <div className="flex flex-col gap-4">
+                        {values.parentInfoList.map((parent, index) => (
+                          <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Parent {index + 1}</p>
+                              {values.parentInfoList.length > 1 && (
+                                <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                              )}
                             </div>
-
-                            {/* Gender */}
-                            <div className="relative">
-                              <label className="font-bold text-sm text-light-black">
-                                Gender
-                              </label>
-
-                              <Field
-                                as="select"
-                                name={`clients.${index}.gender`}
-                                className={`w-full border rounded-sm p-[10px] appearance-none pr-10 text-sm
-                            ${
-                              values?.clients?.[index]?.gender
-                                ? "text-black"
-                                : "text-[#72787E]"
-                            }
-                            border-light-gray
-                          `}
-                              >
-                                <option
-                                  value=""
-                                  className="text-[#72787E] text-sm"
-                                >
-                                  Select Gender
-                                </option>
-                                <option
-                                  value="male"
-                                  className="text-black text-sm"
-                                >
-                                  Male
-                                </option>
-                                <option
-                                  value="female"
-                                  className="text-black text-sm"
-                                >
-                                  Female
-                                </option>
-                                <option
-                                  value="other"
-                                  className="text-black text-sm"
-                                >
-                                  Other
-                                </option>
-                              </Field>
-
-                              <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                <FaChevronDown className="text-light-green w-4 h-4" />
-                              </span>
+                            <div className="grid grid-cols-3 gap-5">
+                              <div className="relative">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
+                                <Field as="select" name={`parentInfoList.${index}.clientName`}
+                                  className={sCls(false, !values.parentInfoList[index].clientName)}>
+                                  <option value="">Select Client</option>
+                                  {values.clients.map((c, i) => <option key={i} value={c.fullName}>{c.fullName || `Client ${i+1}`}</option>)}
+                                </Field>
+                                <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent Name</label>
+                                <Field name={`parentInfoList.${index}.parentName`} type="text" placeholder="Parent name" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Relationship</label>
+                                <Field name={`parentInfoList.${index}.relationShip`} type="text" placeholder="e.g. Father, Mother" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
+                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent phone" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                                <Field name={`parentInfoList.${index}.parentEmail`} type="email" placeholder="Parent email" className={iCls(false)} />
+                              </div>
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                                <PlacesAutocomplete value={values.parentInfoList[index].parentAddress} placeholder="Enter address"
+                                  className={iCls(false)}
+                                  onChange={(val) => setFieldValue(`parentInfoList.${index}.parentAddress`, val)} />
+                              </div>
                             </div>
-
-                            {/* Birth Date */}
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Date of Birth
-                              </label>
-                              <Field
-                                name={`clients.${index}.birthDate`}
-                                type="date"
-                                className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                              />
-                            </div>
-
-                            {/* Address */}
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Address
-                              </label>
-                              <GoogleAddressInput
-                                value={values.clients[index].address}
-                                placeholder="Enter client address"
-                                onChange={(val) =>
-                                  setFieldValue(
-                                    `clients.${index}.address`,
-                                    val
-                                  )
-                                }
-                                onLocationSelect={(loc) => {
-                                  setFieldValue(
-                                    `clients.${index}.latitude`,
-                                    loc.lat
-                                  );
-                                  setFieldValue(
-                                    `clients.${index}.longitude`,
-                                    loc.lng
-                                  );
-                                }}
-                              />
-                            </div>
-
-                            {/* Start Date */}
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Service Start Date
-                              </label>
-                              <Field
-                                name={`clients.${index}.startDate`}
-                                type="date"
-                                className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal"
-                              />
-                            </div>
-
-                            {/* Client Info */}
-                            <div className="col-span-3">
-                              <label className="font-bold text-sm text-light-black">
-                                Client Info
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`clients.${index}.clientInfo`}
-                                placeholder="Write down any risk or safety plan required for the plan"
-                                className={
-                                  "w-full border border-light-gray rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal h-50"
-                                }
-                              />
-                            </div>
-
-                            
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </FieldArray>
-              </div>
+                        ))}
+                      </div>
+                    )}
+                  </FieldArray>
+                </div>
 
-              {/* Case Worker Information */}
-              {isCaseWorker && (
-                <div>
-                  <h3 className="font-bold text-[24px] text-light-black">
-                    Case Worker Information
-                  </h3>
-                  <div className="grid grid-cols-3 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
+                {/* ── Billing Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <SectionTitle title="Billing Info" />
+                  <div className="grid grid-cols-2 gap-5">
                     <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Name
-                      </label>
-                      <Field
-                        name="caseworkerName"
-                        type="text"
-                        placeholder="Please enter the name of case worker "
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.caseworkerName && errors.caseworkerName
-                            ? "border-red-500"
-                            : "border-light-gray"
-                        }`}
-                      />
-                      <ErrorMessage
-                        name="caseworkerName"
-                        component="div"
-                        className="text-red-500 text-xs mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Name of Agency/Organisation
-                      </label>
-                      <Field
-                        name="caseworkerAgencyName"
-                        type="text"
-                        placeholder="Please enter the name of agency/organisation"
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.caseworkerAgencyName && errors.caseworkerAgencyName
-                            ? "border-red-500"
-                            : "border-light-gray"
-                        }`}
-                      />
-                      <ErrorMessage
-                        name="caseworkerAgencyName"
-                        component="div"
-                        className="text-red-500 text-xs mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Phone Number
-                      </label>
-                      <Field
-                        name="caseworkerPhone"
-                        type="text"
-                        placeholder="Please enter the phone number"
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.caseworkerPhone &&
-                          errors.caseworkerPhone
-                            ? "border-red-500"
-                            : "border-light-gray"
-                        }`}
-                      />
-                      <ErrorMessage
-                        name="caseworkerPhone"
-                        component="div"
-                        className="text-red-500 text-xs mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        E-mail
-                      </label>
-                      <Field
-                        name="caseworkerEmail"
-                        type="text"
-                        placeholder="Please enter the e-mail of case worker"
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                          touched.caseworkerEmail &&
-                          errors.caseworkerEmail
-                            ? "border-red-500"
-                            : "border-light-gray"
-                        }`}
-                      />
-                      <ErrorMessage
-                        name="caseworkerEmail"
-                        component="div"
-                        className="text-red-500 text-xs mt-1"
-                      />
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Invoice Email</label>
+                      <Field name="billingInfo.invoiceEmail" type="email" placeholder="Enter invoice email"
+                        className={iCls(touched.billingInfo?.invoiceEmail && errors.billingInfo?.invoiceEmail)} />
+                      {touched.billingInfo?.invoiceEmail && errors.billingInfo?.invoiceEmail && (
+                        <div className="text-red-500 text-xs mt-1">{errors.billingInfo.invoiceEmail}</div>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
 
-              {/* Intake Worker Information (prefilled from user) */}
-              {isCaseWorker && (
-                <div>
-                  <h3 className="font-bold text-[24px] text-light-black">
-                    Intake Worker Information
-                  </h3>
-                  <div className="grid grid-cols-3 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Name
-                      </label>
-                      <Field
-                        name="intakeworkerName"
-                        type="text"
-                        placeholder="Please enter the name of intake worker "
-                        
-                        
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Name of Agency/Organisation
-                      </label>
-                      <Field
-                        name="agencyName"
-                        type="text"
-                        placeholder="Please enter the name of agency/organisation"
-                       
-                        
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        Phone Number
-                      </label>
-                      <Field
-                        name="intakeworkerPhone"
-                        type="text"
-                        placeholder="Please enter the phone number"
-                       
-                        
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                        E-mail
-                      </label>
-                      <Field
-                        name="intakeworkerEmail"
-                        type="text"
-                        placeholder="Please enter the e-mail of intake worker"  
-                        
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal border-light-gray`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Parent Info Section */}
-              <div className="">
-                <div className="flex justify-between items-center ">
-                  <h3 className="font-bold text-[24px] text-light-black">
-                    Parent Info
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldValue("parentInfoList", [
-                        ...values.parentInfoList,
-                        {
-                          clientName: "",
-                          parentName: "",
-                          relationShip: "",
-                          parentPhone: "",
-                          parentEmail: "",
-                          parentAddress: "",
-                        },
-                      ]);
-                    }}
-                    className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
-                  >
-                    + Add Parent Info
-                  </button>
-                </div>
-
-                <FieldArray name="parentInfoList">
-                  {({ remove }) => (
-                    <div className="flex flex-col gap-6">
-                      {values.parentInfoList.map((parent, index) => (
-                        <div
-                          key={index}
-                          className="bg-white p-4 border border-light-gray rounded relative w-full"
-                        >
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-semibold text-lg text-light-black">
-                              Parent {index + 1}
-                            </h4>
-                            {values.parentInfoList.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => remove(index)}
-                                className="text-red-500 font-semibold"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-8 gap-y-4">
-                            <div className="relative">
-                              <label className="font-bold text-sm text-light-black">
-                                Client Name
-                              </label>
-
-                              <Field
-                                as="select"
-                                name={`parentInfoList.${index}.clientName`}
-                                value={values.parentInfoList[index].clientName}
-                                className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                    ${
-                      values.parentInfoList[index].clientName
-                        ? "text-black"
-                        : "text-[#72787E] text-sm"
-                    } border-light-gray`}
-                                            >
-                                <option
-                                  value=""
-                                  className="text-gray-400 text-sm"
-                                >
-                                  Select Client
-                                </option>
-
-                                {values.clients.map((client, i) => (
-                                  <option
-                                    key={i}
-                                    value={client.fullName}
-                                    className="text-black"
-                                  >
-                                    {client.fullName}
-                                  </option>
-                                ))}
-                              </Field>
-
-                              <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                <FaChevronDown className="text-light-green w-4 h-4" />
-                              </span>
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Parent Name
-                              </label>
-                              <Field
-                                name={`parentInfoList.${index}.parentName`}
-                                type="text"
-                                placeholder="Enter parent name"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Relationship
-                              </label>
-                              <Field
-                                name={`parentInfoList.${index}.relationShip`}
-                                type="text"
-                                placeholder="e.g. Father, Mother"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Phone
-                              </label>
-                              <Field
-                                name={`parentInfoList.${index}.parentPhone`}
-                                type="text"
-                                placeholder="Enter Parent's phone number"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Email
-                              </label>
-                              <Field
-                                name={`parentInfoList.${index}.parentEmail`}
-                                type="email"
-                                placeholder="Enter Parent's email"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div className="col-span-3">
-                              <label className="font-bold text-sm text-light-black">
-                                Address
-                              </label>
-
-                              <GoogleAddressInput
-                                value={
-                                  values.parentInfoList[index].parentAddress
-                                }
-                                placeholder="Enter address"
-                                onChange={(val) =>
-                                  setFieldValue(
-                                    `parentInfoList.${index}.parentAddress`,
-                                    val
-                                  )
-                                }
-                                onLocationSelect={(loc) => {
-                                  // If you also want lat/lng for parent
-                                  setFieldValue(
-                                    `parentInfoList.${index}.latitude`,
-                                    loc.lat
-                                  );
-                                  setFieldValue(
-                                    `parentInfoList.${index}.longitude`,
-                                    loc.lng
-                                  );
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </FieldArray>
-              </div>
-
-              {/* Billing */}
-              <div>
-                <h3 className="font-bold text-[24px] text-light-black">
-                  Billing Information
-                </h3>
-                <div className="grid grid-cols-2 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
+                {/* ── Upload Documents Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <SectionTitle title="Upload Documents" />
                   <div>
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      Invoice E-mail
-                    </label>
-                    <Field
-                      name="billingInfo.invoiceEmail"
-                      type="email"
-                      placeholder="Please enter the email for invoices"
-                      className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal ${
-                        touched.billingInfo?.invoiceEmail &&
-                        errors.billingInfo?.invoiceEmail
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                    />
-                    <ErrorMessage
-                      name="billingInfo.invoiceEmail"
-                      component="div"
-                      className="text-red-500 text-xs mt-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Upload Documents */}
-              <div>
-                <h3 className="font-bold text-[24px] text-light-black">
-                  Upload Documents
-                </h3>
-                <div className="grid grid-cols-2 gap-16  bg-white p-4 border border-light-gray w-full rounded">
-                  <div>
-                    <label
-                      htmlFor="uploadDocs"
-                      className="font-bold text-sm leading-5 tracking-normal text-light-black"
-                    >
-                      Upload Documents
-                    </label>
-
-                    <div className="relative w-full">
-                      <input
-                        type="text"
-                        name="uploadDocs"
-                        value={
-                          values.uploadDocs.length > 0
-                            ? `${values.uploadDocs.length} file(s) selected`
-                            : ""
-                        }
-                        readOnly
-                        placeholder="Please upload documents regarding the client"
-                        className={`w-full border rounded-sm p-[10px] placeholder:text-[#72787E] placeholder:text-sm placeholder:font-normal pr-10 ${
-                          touched.uploadDocs && errors.uploadDocs
-                            ? "border-red-500"
-                            : "border-light-gray"
-                        }`}
-                      />
-
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        style={{ display: "none" }}
-                        multiple
-                        onChange={(event) => {
-                          const files = Array.from(event.target.files || []);
-                          const updatedFiles = [
-                            ...(values.uploadDocs || []),
-                            ...files,
-                          ];
-                          setFieldValue("uploadDocs", updatedFiles);
-                        }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-blue-600"
-                      >
-                        <Upload size={20} />
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Documents</label>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${touched.uploadDocs && errors.uploadDocs ? "border-red-400" : "border-[#e5e7eb]"} ${values.uploadDocs.length > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                        {values.uploadDocs.length > 0 ? `${values.uploadDocs.length} file(s) selected` : "No files selected"}
+                      </div>
+                      <input type="file" ref={docInputRef} className="hidden" multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          setFieldValue("uploadDocs", [...(values.uploadDocs || []), ...files]);
+                        }} />
+                      <button type="button" onClick={() => docInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold hover:bg-gray-50 transition-colors"
+                        style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                        <Upload size={16} /> Browse Files
                       </button>
                     </div>
-
-                    <ErrorMessage
-                      name="uploadDocs"
-                      component="div"
-                      className="text-red-500 text-xs mt-1"
-                    />
-
                     {values.uploadDocs.length > 0 && (
-                      <div className="mt-3 border rounded p-2 bg-gray-50">
-                        <h4 className="text-sm font-semibold mb-2">
-                          Selected Files:
-                        </h4>
-                        <ul className="space-y-1">
-                          {values.uploadDocs.map((file, index) => (
-                            <li
-                              key={index}
-                              className="flex justify-between items-center bg-white border p-2 rounded shadow-sm"
-                            >
-                              <span className="text-sm truncate max-w-[70%]">
-                                {file.name}
-                              </span>
-                              <button
-                                type="button"
-                                className="text-red-500 hover:text-red-700"
-                                onClick={() => {
-                                  const updatedFiles =
-                                    values.uploadDocs.filter(
-                                      (_, i) => i !== index
-                                    );
-                                  setFieldValue("uploadDocs", updatedFiles);
-                                }}
-                              >
-                                <X size={18} />
-                              </button>
+                      <div className="mt-3 flex flex-col gap-2">
+                        {values.uploadDocs.map((file, i) => (
+                          <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                            <span className="text-sm text-gray-700 truncate max-w-[80%]">{file.name}</span>
+                            <button type="button" onClick={() => setFieldValue("uploadDocs", values.uploadDocs.filter((_, idx) => idx !== i))}
+                              className="text-gray-400 hover:text-red-500 transition-colors"><X size={16} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Medical Info Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <div className="flex items-center justify-between mb-5">
+                    <SectionTitle title="Medical Info" />
+                    <button type="button"
+                      onClick={() => setFieldValue("medicalInfoList", [...values.medicalInfoList, { clientName: "", healthCareNo: "", diagnosis: "", diagnosisType: "", medicalConcern: "", mobilityAssistance: "", mobilityInfo: "", communicationAid: "", communicationInfo: "" }])}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                      style={{ backgroundColor: "#145228" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add Medical Info
+                    </button>
+                  </div>
+                  <FieldArray name="medicalInfoList">
+                    {({ remove }) => (
+                      <div className="flex flex-col gap-4">
+                        {values.medicalInfoList.map((medical, index) => (
+                          <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Medical Info {index + 1}</p>
+                              {values.medicalInfoList.length > 1 && (
+                                <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-5">
+                              <div className="relative">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
+                                <Field as="select" name={`medicalInfoList.${index}.clientName`}
+                                  className={sCls(false, !values.medicalInfoList[index].clientName)}>
+                                  <option value="">Select Client</option>
+                                  {values.clients.map((c, i) => <option key={i} value={c.fullName}>{c.fullName || `Client ${i+1}`}</option>)}
+                                </Field>
+                                <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Health Care No.</label>
+                                <Field name={`medicalInfoList.${index}.healthCareNo`} type="text" placeholder="Enter health care no." className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Diagnosis</label>
+                                <Field name={`medicalInfoList.${index}.diagnosis`} type="text" placeholder="Enter diagnosis" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Diagnosis Type</label>
+                                <Field name={`medicalInfoList.${index}.diagnosisType`} type="text" placeholder="Type of diagnosis" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Mobility Assistance</label>
+                                <Field name={`medicalInfoList.${index}.mobilityAssistance`} type="text" placeholder="Yes / No" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Mobility Info</label>
+                                <Field name={`medicalInfoList.${index}.mobilityInfo`} type="text" placeholder="Enter details" className={iCls(false)} />
+                              </div>
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Communication Aid</label>
+                                <Field name={`medicalInfoList.${index}.communicationAid`} type="text" placeholder="Yes / No" className={iCls(false)} />
+                              </div>
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Medical Concern</label>
+                                <Field as="textarea" name={`medicalInfoList.${index}.medicalConcern`} placeholder="Enter medical concerns" rows={2}
+                                  className={`${iCls(false)} resize-none`} />
+                              </div>
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Communication Info</label>
+                                <Field as="textarea" name={`medicalInfoList.${index}.communicationInfo`} placeholder="Enter communication details" rows={2}
+                                  className={`${iCls(false)} resize-none`} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </FieldArray>
+                </div>
+
+                {/* ── Transportation Info Card (conditional) ── */}
+                {showTransportSection && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-5">
+                      <SectionTitle title="Transportation Info" />
+                      <button type="button"
+                        onClick={() => setFieldValue("transportationInfoList", [...values.transportationInfoList, { clientName: "", pickupAddress: "", dropoffAddress: "", pickupTime: "", dropOffTime: "", transportationOverview: "", carSeatRequired: "", carSeatType: "" }])}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Transportation
+                      </button>
+                    </div>
+                    <FieldArray name="transportationInfoList">
+                      {({ remove }) => (
+                        <div className="flex flex-col gap-4">
+                          {values.transportationInfoList.map((trans, index) => (
+                            <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                              <div className="flex items-center justify-between mb-4">
+                                <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Transportation {index + 1}</p>
+                                {values.transportationInfoList.length > 1 && (
+                                  <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-5">
+                                <div className="relative">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
+                                  <Field as="select" name={`transportationInfoList.${index}.clientName`}
+                                    value={values.transportationInfoList[index].clientName}
+                                    onChange={(e) => {
+                                      const selectedName = e.target.value;
+                                      setFieldValue(`transportationInfoList.${index}.clientName`, selectedName);
+                                      const c = values.clients.find(c => c.fullName === selectedName);
+                                      if (c?.birthDate) {
+                                        const age = calculateAgeYears(c.birthDate);
+                                        const seat = deriveCarSeatFromAge(age);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatRequired`, seat.required);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatType`, seat.type);
+                                      }
+                                    }}
+                                    className={sCls(false, !values.transportationInfoList[index].clientName)}>
+                                    <option value="">Select Client</option>
+                                    {values.clients.map((c, i) => <option key={i} value={c.fullName}>{c.fullName || `Client ${i+1}`}</option>)}
+                                  </Field>
+                                  <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Address</label>
+                                  <PlacesAutocomplete value={values.transportationInfoList[index].pickupAddress} placeholder="Enter pickup address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`transportationInfoList.${index}.pickupAddress`, val)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Dropoff Address</label>
+                                  <PlacesAutocomplete value={values.transportationInfoList[index].dropoffAddress} placeholder="Enter dropoff address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`transportationInfoList.${index}.dropoffAddress`, val)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Time</label>
+                                  <Field name={`transportationInfoList.${index}.pickupTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Dropoff Time</label>
+                                  <Field name={`transportationInfoList.${index}.dropOffTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div className="relative">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Car Seat Required</label>
+                                  <Field as="select" name={`transportationInfoList.${index}.carSeatRequired`}
+                                    className={sCls(false, !values.transportationInfoList[index].carSeatRequired)}>
+                                    <option value="">Select</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                  </Field>
+                                  <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                </div>
+                                {trans.carSeatRequired === "yes" && (
+                                  <div className="relative">
+                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Car Seat Type</label>
+                                    <Field as="select" name={`transportationInfoList.${index}.carSeatType`} value={trans.carSeatType}
+                                      className={sCls(false, !trans.carSeatType)}>
+                                      <option value="">Select seat type</option>
+                                      <option value="Rear-facing seat">Rear-facing seat</option>
+                                      <option value="Forward-facing seat">Forward-facing seat</option>
+                                      <option value="Booster seat">Booster seat</option>
+                                      <option value="Seat belt only">Seat belt only</option>
+                                    </Field>
+                                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                  </div>
+                                )}
+                                <div className="col-span-3">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Transportation Overview</label>
+                                  <Field as="textarea" name={`transportationInfoList.${index}.transportationOverview`}
+                                    placeholder="Add transportation overview" rows={2} className={`${iCls(false)} resize-none`} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </FieldArray>
+                  </div>
+                )}
+
+                {/* ── Supervised Visitations Card (conditional) ── */}
+                {showVisitSection && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-5">
+                      <SectionTitle title="Supervised Visitations" />
+                      <button type="button"
+                        onClick={() => setFieldValue("supervisedVisitations", [...values.supervisedVisitations, { clientName: "", visitStartTime: "", visitEndTime: "", visitDuration: "", visitPurpose: "", visitAddress: "", visitOverview: "" }])}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Visitation
+                      </button>
+                    </div>
+                    <FieldArray name="supervisedVisitations">
+                      {({ remove }) => (
+                        <div className="flex flex-col gap-4">
+                          {values.supervisedVisitations.map((visit, index) => (
+                            <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                              <div className="flex items-center justify-between mb-4">
+                                <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Visitation {index + 1}</p>
+                                {values.supervisedVisitations.length > 1 && (
+                                  <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-5">
+                                <div className="relative">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
+                                  <Field as="select" name={`supervisedVisitations.${index}.clientName`}
+                                    className={sCls(false, !values.supervisedVisitations[index].clientName)}>
+                                    <option value="">Select Client</option>
+                                    {values.clients.map((c, i) => <option key={i} value={c.fullName || c.name}>{c.fullName || c.name || `Client ${i+1}`}</option>)}
+                                  </Field>
+                                  <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Start Time</label>
+                                  <Field name={`supervisedVisitations.${index}.visitStartTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit End Time</label>
+                                  <Field name={`supervisedVisitations.${index}.visitEndTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Duration</label>
+                                  <Field name={`supervisedVisitations.${index}.visitDuration`} type="text" placeholder="e.g. 2 hours" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Purpose of Visit</label>
+                                  <Field name={`supervisedVisitations.${index}.visitPurpose`} type="text" placeholder="Enter purpose" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Address</label>
+                                  <PlacesAutocomplete value={values.supervisedVisitations[index].visitAddress} placeholder="Enter visit address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`supervisedVisitations.${index}.visitAddress`, val)} />
+                                </div>
+                                <div className="col-span-3">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Overview</label>
+                                  <Field as="textarea" name={`supervisedVisitations.${index}.visitOverview`}
+                                    placeholder="Write down the visit overview" rows={2} className={`${iCls(false)} resize-none`} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </FieldArray>
+                  </div>
+                )}
+
+                {/* ── Acknowledgement Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <SectionTitle title="Acknowledgement" />
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
+                        {isCaseWorker ? "Worker Name" : "Parent / Guardian Name"}
+                      </label>
+                      <Field name="workerInfo.workerName" type="text" placeholder="Name of person filling the form" className={iCls(false)} />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date</label>
+                      <Field name="workerInfo.date" type="date" className={iCls(false)} />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
+                        {isCaseWorker ? "Worker Signature" : "Parent / Guardian Signature"}
+                      </label>
+                      <div className="relative border rounded-xl overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
+                        <SignatureCanvas
+                          ref={sigCanvas}
+                          penColor="black"
+                          backgroundColor="#ffffff"
+                          canvasProps={{ width: 600, height: 140, className: "w-full" }}
+                          minWidth={0.4}
+                          maxWidth={1.0}
+                          velocityFilterWeight={0.7}
+                          onBegin={() => { hasResigned.current = true; }}
+                        />
+                        <button type="button"
+                          onClick={() => { if (sigCanvas.current) sigCanvas.current.clear(); setFieldValue("workerInfo.signature", ""); }}
+                          className="absolute top-2 right-2 px-3 py-1 text-xs font-semibold rounded-lg border hover:bg-gray-50"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                  </div>{/* end left column */}
+
+                  {/* ── RIGHT: Form Summary sidebar ── */}
+                  <div className="w-[280px] flex-shrink-0 sticky top-4">
+                    <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                      <h3 className="font-bold text-gray-900 mb-4" style={{ fontSize: 15 }}>Form Summary</h3>
+
+                      <div className="space-y-3 pb-4 border-b" style={{ borderColor: "#f3f4f6" }}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] text-gray-500">Status</span>
+                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#fef3c7", color: "#d97706" }}>📄 Draft</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] text-gray-500">Created</span>
+                          <span className="text-[13px] font-semibold text-gray-700">Today</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] text-gray-500">Last Saved</span>
+                          <span className="text-[13px] font-semibold text-gray-700">Just now</span>
+                        </div>
+                      </div>
+
+                      <div className="py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">COMPLETION</p>
+                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, backgroundColor: "#145228" }} />
+                        </div>
+                        <p className="text-[12px] font-semibold text-gray-500 mt-1.5 text-right">{completionPct}%</p>
+                      </div>
+
+                      <div className="py-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">SECTIONS</p>
+                        <ul className="space-y-2.5">
+                          {[
+                            { label: "Basic Info", filled: !!(values.clients?.[0]?.fullName) },
+                            { label: "Services", filled: (values.services?.serviceType?.length ?? 0) > 0 },
+                            { label: "Client Info", filled: !!(values.clients?.[0]?.fullName) },
+                            { label: "Billing Info", filled: !!(values.billingInfo?.invoiceEmail) },
+                            { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName) },
+                            { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName) },
+                            { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
+                          ].map(({ label, filled }) => (
+                            <li key={label} className="flex items-center gap-2.5">
+                              <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
+                                style={{ border: filled ? "none" : "1.5px solid #d1d5db", background: filled ? "#145228" : "white" }}>
+                                {filled && (
+                                  <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                                    <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className="text-[13px]" style={{ color: filled ? "#145228" : "#6b7280", fontWeight: filled ? 600 : 400 }}>{label}</span>
                             </li>
                           ))}
                         </ul>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {/* Medical Info */}
-              <div className="">
-                <div className="flex justify-between items-center ">
-                  <h3 className="font-bold text-[24px] text-light-black">
-                    Medical Info
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldValue("medicalInfoList", [
-                        ...values.medicalInfoList,
-                        {
-                          clientName: "",
-                          healthCareNo: "",
-                          diagnosis: "",
-                          diagnosisType: "",
-                          medicalConcern: "",
-                          mobilityAssistance: "",
-                          mobilityInfo: "",
-                          communicationAid: "",
-                          communicationInfo: "",
-                        },
-                      ]);
-                    }}
-                    className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
-                  >
-                    + Add Medical Info
-                  </button>
-                </div>
-
-                <FieldArray name="medicalInfoList">
-                  {({ remove }) => (
-                    <div className="flex flex-col gap-6">
-                      {values.medicalInfoList.map((medical, index) => (
-                        <div
-                          key={index}
-                          className="bg-white p-4 border border-light-gray rounded relative w-full"
-                        >
-                          <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-semibold text-lg text-light-black">
-                              Medical Info {index + 1}
-                            </h4>
-                            {values.medicalInfoList.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => remove(index)}
-                                className="text-red-500 font-semibold"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-8 gap-y-4">
-                            <div className="relative">
-                              <label className="font-bold text-sm text-light-black">
-                                Client Name
-                              </label>
-
-                              <Field
-                                as="select"
-                                name={`medicalInfoList.${index}.clientName`}
-                                className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                          ${
-                            values.medicalInfoList[index].clientName
-                              ? "text-black"
-                              : "text-[#72787E] text-sm"
-                          } border-light-gray`}
-                                                  >
-                                <option
-                                  value=""
-                                  className="text-sm text-gray-400"
-                                >
-                                  Select Client
-                                </option>
-
-                                {values.clients.map((client, i) => (
-                                  <option
-                                    key={i}
-                                    value={client.fullName}
-                                    className="text-black"
-                                  >
-                                    {client.fullName || `Client ${i + 1}`}
-                                  </option>
-                                ))}
-                              </Field>
-
-                              <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                <FaChevronDown className="text-light-green w-4 h-4" />
-                              </span>
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Health Care No.
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.healthCareNo`}
-                                type="text"
-                                placeholder="Enter health care no"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Diagnosis
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.diagnosis`}
-                                type="text"
-                                placeholder="Enter diagnosis"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Diagnosis Type
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.diagnosisType`}
-                                type="text"
-                                placeholder="Enter Type of Diagnosis"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div className="col-span-3">
-                              <label className="font-bold text-sm text-light-black">
-                                Medical Concern
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`medicalInfoList.${index}.medicalConcern`}
-                                placeholder="Enter Medical concerns"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Mobility Assistance
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.mobilityAssistance`}
-                                type="text"
-                                placeholder="Yes/No"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Mobility Info
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.mobilityInfo`}
-                                type="text"
-                                placeholder="Enter details"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Communication Aid
-                              </label>
-                              <Field
-                                name={`medicalInfoList.${index}.communicationAid`}
-                                type="text"
-                                placeholder="Yes/No"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-
-                            <div className="col-span-3">
-                              <label className="font-bold text-sm text-light-black">
-                                Communication Info
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`medicalInfoList.${index}.communicationInfo`}
-                                placeholder="Enter communication details"
-                                className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </FieldArray>
-              </div>
-
-              {/* Transportation Info */}
-              {showTransportationSection && (
-                <div className="">
-                  <div className="flex justify-between items-center ">
-                    <h3 className="font-bold text-[24px] text-light-black">
-                      Transportation Info
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFieldValue("transportationInfoList", [
-                          ...values.transportationInfoList,
-                          {
-                            clientName: "",
-                            pickupAddress: "",
-                            dropoffAddress: "",
-                            pickupTime: "",
-                            dropOffTime: "",
-                            transportationOverview: "",
-                            carSeatType: "",
-                          },
-                        ]);
-                      }}
-                      className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
-                    >
-                      + Add Transportation Info
-                    </button>
-                  </div>
-
-                  <FieldArray name="transportationInfoList">
-                    {({ remove }) => (
-                      <div className="flex flex-col gap-6">
-                        {values.transportationInfoList.map((trans, index) => (
-                          <div
-                            key={index}
-                            className="bg-white p-4 border border-light-gray rounded relative w-full"
-                          >
-                            <div className="flex justify-between items-center mb-3">
-                              <h4 className="font-semibold text-lg text-light-black">
-                                Transportation {index + 1}
-                              </h4>
-                              {values.transportationInfoList.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => remove(index)}
-                                  className="text-red-500 font-semibold"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-8 gap-y-4">
-                              <div className="relative">
-                                <label className="font-bold text-sm text-light-black">
-                                  Client Name
-                                </label>
-
-                               <Field
-                                        as="select"
-                                        name={`transportationInfoList.${index}.clientName`}
-                                        value={values.transportationInfoList[index].clientName}
-                                        onChange={(e) => {
-                                          const selectedName = e.target.value;
-                                          setFieldValue(
-                                            `transportationInfoList.${index}.clientName`,
-                                            selectedName
-                                          );
-
-                                          const client = values.clients.find(
-                                            (c) => c.fullName === selectedName
-                                          );
-
-                                          if (client?.birthDate) {
-                                            const age = calculateAgeYears(client.birthDate);
-                                            const seat = deriveCarSeatFromAge(age);
-                                            // pre-fill but keep editable
-                                            setFieldValue(
-                                              `transportationInfoList.${index}.carSeatRequired`,
-                                              seat.required
-                                            );
-                                            setFieldValue(
-                                              `transportationInfoList.${index}.carSeatType`,
-                                              seat.type
-                                            );
-                                          }
-                                        }}
-                                        className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                                          ${
-                                            values.transportationInfoList[index].clientName
-                                              ? "text-black"
-                                              : "text-[#72787E] text-sm"
-                                          } border-light-gray`}
-                                      >
-                                        <option value="" className="text-sm text-gray-400">
-                                          Select Client
-                                        </option>
-
-                                        {values.clients.map((client, i) => (
-                                          <option
-                                            key={i}
-                                            value={client.fullName}
-                                            className="text-black"
-                                          >
-                                            {client.fullName || `Client ${i + 1}`}
-                                          </option>
-                                        ))}
-                                      </Field>
-
-
-                                <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                  <FaChevronDown className="text-light-green w-4 h-4" />
-                                </span>
-                              </div>
-
-                             <div>
-                              <label className="font-bold text-sm text-light-black">
-                                Pickup Address
-                              </label>
-
-                              <GoogleAddressInput
-                                value={values.transportationInfoList[index].pickupAddress}
-                                placeholder="Enter pickup address"
-                                onChange={(val) =>
-                                  setFieldValue(
-                                    `transportationInfoList.${index}.pickupAddress`,
-                                    val
-                                  )
-                                }
-                              />
-                            </div>
-
-
-                             <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Dropoff Address
-                                </label>
-
-                                <GoogleAddressInput
-                                  value={values.transportationInfoList[index].dropoffAddress}
-                                  placeholder="Enter dropoff address"
-                                  onChange={(val) =>
-                                    setFieldValue(
-                                      `transportationInfoList.${index}.dropoffAddress`,
-                                      val
-                                    )
-                                  }
-                                />
-                              </div>
-
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Pickup Time
-                                </label>
-                                <Field
-                                  name={`transportationInfoList.${index}.pickupTime`}
-                                  type="time"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-sm"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Dropoff Time
-                                </label>
-                                <Field
-                                  name={`transportationInfoList.${index}.dropOffTime`}
-                                  type="time"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]"
-                                />
-                              </div>
-                               {/* Car Seat Required */}
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Car Seat Required
-                                </label>
-                                <Field
-                                  as="select"
-                                  name={`transportationInfoList.${index}.carSeatRequired`}
-                                  className="w-full border border-light-gray rounded-sm p-[10px] text-sm"
-                                >
-                                  <option value="">Select</option>
-                                  <option value="yes">Yes</option>
-                                  <option value="no">No</option>
-                                </Field>
-                              </div>
-
-
-                              {trans.carSeatRequired === "yes" && (
-                                <div>
-                                  <label className="font-bold text-sm text-light-black">
-                                    Car Seat Type
-                                  </label>
-                                  <Field
-                                    as="select"
-                                    name={`transportationInfoList.${index}.carSeatType`}
-                                    value={trans.carSeatType}
-
-                                    className="w-full border border-light-gray rounded-sm p-[10px] text-sm"
-                                  >
-                                    <option value="">Select seat type</option>
-                                    <option value="Rear-facing seat">
-                                      Rear-facing seat
-                                    </option>
-                                    <option value="Forward-facing seat">
-                                      Forward-facing seat
-                                    </option>
-                                    <option value="Booster seat">
-                                      Booster seat
-                                    </option>
-                                    <option value="Seat belt only">
-                                      Seat belt only
-                                    </option>
-                                  </Field>
-                                </div>
-                              )}
-
-                              <div className="col-span-3">
-                                <label className="font-bold text-sm text-light-black">
-                                  Transportation Overview
-                                </label>
-                                <Field
-                                  as="textarea"
-                                  name={`transportationInfoList.${index}.transportationOverview`}
-                                  placeholder="Add transportation Overview"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]  placeholder:text-sm"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </FieldArray>
-                </div>
-              )}
-
-              {/* Supervised Visitations */}
-              {showVisitationSection && (
-                <div className="">
-                  <div className="flex justify-between items-center ">
-                    <h3 className="font-bold text-[24px] text-light-black">
-                      Supervised Visitations
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFieldValue("supervisedVisitations", [
-                          ...values.supervisedVisitations,
-                          {
-                            clientName: "",
-                            visitStartTime: "",
-                            visitEndTime: "",
-                            visitDuration: "",
-                            visitPurpose: "",
-                            visitAddress: "",
-                            visitOverview: "",
-                          },
-                        ]);
-                      }}
-                      className="bg-dark-green text-white px-4 py-2 rounded-md text-sm mb-1"
-                    >
-                      + Add Supervised Visitation
-                    </button>
-                  </div>
-
-                  <FieldArray name="supervisedVisitations">
-                    {({ remove }) => (
-                      <div className="flex flex-col gap-6">
-                        {values.supervisedVisitations.map((visit, index) => (
-                          <div
-                            key={index}
-                            className="bg-white p-4 border border-light-gray rounded relative w-full"
-                          >
-                            <div className="flex justify-between items-center mb-3">
-                              <h4 className="font-semibold text-lg text-light-black">
-                                Supervised Visitation {index + 1}
-                              </h4>
-                              {values.supervisedVisitations.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => remove(index)}
-                                  className="text-red-500 font-semibold"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-8 gap-y-4">
-                              <div className="relative">
-                                <label className="font-bold text-sm text-light-black">
-                                  Client Name
-                                </label>
-
-                                <Field
-                                  as="select"
-                                  name={`supervisedVisitations.${index}.clientName`}
-                                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                    ${
-                      values.supervisedVisitations[index].clientName
-                        ? "text-black"
-                        : "text-[#72787E] text-sm"
-                    } border-light-gray`}
-                                >
-                                  <option
-                                    value=""
-                                    className="text-sm text-gray-400"
-                                  >
-                                    Select Client
-                                  </option>
-
-                                  {values.clients.map((client, i) => (
-                                    <option
-                                      key={i}
-                                      value={client.fullName || client.name}
-                                    >
-                                      {client.fullName ||
-                                        client.name ||
-                                        `Client ${i + 1}`}
-                                    </option>
-                                  ))}
-                                </Field>
-
-                                <span className="absolute right-3 top-11 -translate-y-1/2 pointer-events-none">
-                                  <FaChevronDown className="text-light-green w-4 h-4" />
-                                </span>
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Visit Start Time
-                                </label>
-                                <Field
-                                  name={`supervisedVisitations.${index}.visitStartTime`}
-                                  type="time"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Visit End Time
-                                </label>
-                                <Field
-                                  name={`supervisedVisitations.${index}.visitEndTime`}
-                                  type="time"
-                                  className="w-full border border-light-gray rounded-sm p-[10px]"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Visit Duration
-                                </label>
-                                <Field
-                                  name={`supervisedVisitations.${index}.visitDuration`}
-                                  type="text"
-                                  placeholder="Enter visit duration"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Purpose of Visit
-                                </label>
-                                <Field
-                                  name={`supervisedVisitations.${index}.visitPurpose`}
-                                  type="text"
-                                  placeholder="Enter purpose of visit"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="font-bold text-sm text-light-black">
-                                  Visit Address
-                                </label>
-
-                                <GoogleAddressInput
-                                  value={values.supervisedVisitations[index].visitAddress}
-                                  placeholder="Enter visit address"
-                                  onChange={(val) =>
-                                    setFieldValue(
-                                      `supervisedVisitations.${index}.visitAddress`,
-                                      val
-                                    )
-                                  }
-                                />
-                              </div>
-
-
-                              <div className="col-span-3">
-                                <label className="font-bold text-sm text-light-black">
-                                  Visit Overview
-                                </label>
-                                <Field
-                                  as="textarea"
-                                  name={`supervisedVisitations.${index}.visitOverview`}
-                                  placeholder="Write down the visit overview"
-                                  className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </FieldArray>
-                </div>
-              )}
-
-              {/* Acknowledgement */}
-              <div>
-                <h3 className="font-bold text-[24px] text-light-black">
-                  Acknowledgement
-                </h3>
-                <div className="grid grid-cols-3 gap-16 gap-y-4 bg-white p-4 border border-light-gray w-full rounded">
-                  <div>
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      {isCaseWorker ? "Worker Name" : "Parent/Guardian Name"}
-                    </label>
-                    <Field
-                      name="workerInfo.workerName"
-                      type="text"
-                      placeholder="Enter the name of person filling out the form"
-                      className="w-full border border-light-gray rounded-sm p-[10px] placeholder:text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black">
-                      Date
-                    </label>
-                    <Field
-                      name="workerInfo.date"
-                      type="date"
-                      placeholder="Please enter the current date(DD-MM-YYY)"
-                      className="w-full border rounded-sm p-[10px] border-light-gray placeholder:text-sm"
-                    />
-                  </div>
-
-                  <div className="col-span-3">
-                    <label className="font-bold text-sm leading-5 tracking-normal text-light-black ">
-                      {isCaseWorker
-                        ? "Worker Signature"
-                        : "Parent/Guardian Signature"}
-                    </label>
-
-                    <div className="border rounded-sm mt-1 relative border-light-gray ">
-                      <SignatureCanvas
-                        ref={sigCanvas}
-                        
-                        penColor="black"
-                        backgroundColor="#ffffff"
-                        canvasProps={{
-                          width: 400,
-                          height: 120,
-                          className: "rounded-md",
-                        }}
-                        minWidth={0.4}
-                        maxWidth={1.0}
-                        velocityFilterWeight={0.7}
-                        onBegin={() => {
-                          hasResigned.current = true;   // ✅ user started drawing
-                        }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (sigCanvas.current) sigCanvas.current.clear();
-                          setFieldValue("workerInfo.signature", "");
-                        }}
-                        className="absolute top-1 right-1 px-2 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                      >
-                        Clear
+                      <button type="button" className="w-full py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors mt-1" style={{ borderColor: "#e5e7eb" }}>
+                        Save Draft
                       </button>
                     </div>
+                  </div>
 
-                    <ErrorMessage
-                      name="workerInfo.signature"
-                      component="div"
-                      className="text-red-500 text-xs mt-1"
-                    />
+                </div>{/* end flex gap-5 */}
+
+                {/* ── Bottom Footer ── */}
+                <div className="sticky bottom-0 mt-4 bg-white border-t flex items-center justify-between px-6 py-4 -mx-6" style={{ borderColor: "#e5e7eb" }}>
+                  <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900">
+                    ← Back to Dashboard
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="px-4 py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50" style={{ borderColor: "#e5e7eb" }}>Save Draft</button>
+                    <button type="submit" className="px-6 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5" style={{ backgroundColor: "#145228" }}>
+                      {mode === "update" ? "Update Form" : "Submit Form"} →
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Submit Button */}
-              <div className="col-span-2 flex justify-center">
-                <button
-                  type="submit"
-                  className="bg-dark-green text-white px-6 py-2 rounded  cursor-pointer"
-                >
-                  Submit Intake Form
-                </button>
-              </div>
-            </Form>
-          );
-        }}
-      </Formik>
-       </EditableProvider>
-      
+              </Form>
+            );
+          }}
+        </Formik>
+      </EditableProvider>
     </div>
   );
 };

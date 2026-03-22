@@ -14,14 +14,16 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
+import { Upload } from "lucide-react";
 import SuccessSlider from "../components/SuccessSlider";
 import { useNavigate, useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 const AddClient = ({ mode = "add", user }) => {
   const { id } = useParams();
-
   const navigate = useNavigate();
+
   const [slider, setSlider] = useState({
     show: false,
     title: "",
@@ -33,38 +35,35 @@ const AddClient = ({ mode = "add", user }) => {
   const [avatarPreview, setAvatarPreview] = useState(null);
 
   const [initialValues, setInitialValues] = useState({
-  name: "",
-  clientCode: "",
-  password: "",
-  clientStatus: "",
-  parentEmail: "",
-  agency: "",
-  address: "",
-  dob: "",
-  kmRate: "",
-  clientRate: "",
-  description: "",
-  avatar: null,
-  medications: [
-    {
-      medicationName: "",
-      dosage: "",
-      timing: "",
-      medicineDescription: "",
-      reasonOfMedication: "",
-      cautions: "",
+    name: "",
+    clientCode: "",
+    password: "",
+    clientStatus: "",
+    parentEmail: "",
+    agency: "",
+    address: "",
+    dob: "",
+    kmRate: "",
+    clientRate: "",
+    description: "",
+    avatar: null,
+    medications: [
+      {
+        medicationName: "",
+        dosage: "",
+        medicineDescription: "",
+        reasonOfMedication: "",
+        cautions: "",
+      },
+    ],
+    pharmacy: {
+      pharmacyName: "",
+      pharmacyEmail: "",
+      pharmacyPhone: "",
+      pharmacyAddress: "",
     },
-  ],
-  pharmacy: {
-    pharmacyName: "",
-    pharmacyEmail: "",
-    pharmacyPhone: "",
-    pharmacyAddress: "",
-  },
-});
+  });
 
-
-  // ✅ Validation Schema
   const validationSchema = Yup.object({
     name: Yup.string().required("Name is required").min(3, "Min 3 chars"),
     clientCode: Yup.string()
@@ -77,72 +76,47 @@ const AddClient = ({ mode = "add", user }) => {
     agency: Yup.string().required("Agency required"),
     address: Yup.string().required("Address required"),
     dob: Yup.date().required("Date of Birth required"),
-    description: Yup.string()
-    // NEW: validate medications array
-
+    description: Yup.string(),
   });
 
-  // ✅ Fetch client data for update mode
   useEffect(() => {
     const fetchClient = async () => {
       if (mode === "update" && id) {
         try {
-         const clientSnap = await getDoc(doc(db, "clients", id));
-
+          const clientSnap = await getDoc(doc(db, "clients", id));
           if (clientSnap.exists()) {
-           const data = clientSnap.data();
-
-            // If document already has medications array, use it.
-            // Otherwise, build one item from legacy single fields.
-            const existingMeds =
-              data.medications && Array.isArray(data.medications)
-                ? data.medications
-                : [
-                    {
-                      medicationName: data.medicationName || "",
-                      dosage: data.dosage || "",
-                      medicineDescription: data.medicineDescription || "",
-                      reasonOfMedication: data.reasonOfMedication || "",
-                      cautions: data.cautions || "",
-                    },
-                  ];
-
-           setInitialValues({
-  name: data.name || "",
-  clientCode: data.clientCode || "",
-  clientStatus: data.clientStatus || "Active",
-  parentEmail: data.parentEmail || "",
-  agency: data.agencyName || "",
-  address: data.address || "",
-  dob: data.dob || "",
-  kmRate: data.kmRate || "",
-  clientRate: data.clientRate || "",
-  description: data.description || "",
-  avatar: null,
-
-  medications:
-    Array.isArray(data.medications) && data.medications.length > 0
-      ? data.medications
-      : [
-          {
-            medicationName: "",
-            dosage: "",
-            timing: "",
-            medicineDescription: "",
-            reasonOfMedication: "",
-            cautions: "",
-          },
-        ],
-
-  pharmacy: data.pharmacy || {
-    pharmacyName: "",
-    pharmacyEmail: "",
-    pharmacyPhone: "",
-    pharmacyAddress: "",
-  },
-});
-
-
+            const data = clientSnap.data();
+            setInitialValues({
+              name: data.name || "",
+              clientCode: data.clientCode || "",
+              clientStatus: data.clientStatus || "Active",
+              parentEmail: data.parentEmail || "",
+              agency: data.agencyName || "",
+              address: data.address || "",
+              dob: data.dob || "",
+              kmRate: data.kmRate || "",
+              clientRate: data.clientRate || "",
+              description: data.description || "",
+              avatar: null,
+              medications:
+                Array.isArray(data.medications) && data.medications.length > 0
+                  ? data.medications
+                  : [
+                      {
+                        medicationName: "",
+                        dosage: "",
+                        medicineDescription: "",
+                        reasonOfMedication: "",
+                        cautions: "",
+                      },
+                    ],
+              pharmacy: data.pharmacy || {
+                pharmacyName: "",
+                pharmacyEmail: "",
+                pharmacyPhone: "",
+                pharmacyAddress: "",
+              },
+            });
             if (data.avatar) setAvatarPreview(data.avatar);
           } else {
             console.warn("No client found with ID:", id);
@@ -152,11 +126,9 @@ const AddClient = ({ mode = "add", user }) => {
         }
       }
     };
-
     fetchClient();
   }, [mode, id]);
 
-  // ✅ Avatar Handlers
   const handleAvatarChange = (event, setFieldValue) => {
     const file = event.target.files[0];
     if (file) {
@@ -172,9 +144,7 @@ const AddClient = ({ mode = "add", user }) => {
 
   const handleSubmit = async (values, { resetForm }) => {
     try {
-      // Always define a customId
       let customId = Date.now().toString();
-
       let photoURL = avatarPreview;
 
       if (values.avatar) {
@@ -183,88 +153,50 @@ const AddClient = ({ mode = "add", user }) => {
         photoURL = await getDownloadURL(storageRef);
       }
 
-      // NEW: medications array
       const medications = values.medications || [];
-
-      // For backward compatibility:
-      // also store the first medication as top-level fields
-      const firstMed = medications[0] || {
-        medicationName: "",
-        dosage: "",
-        medicineDescription: "",
-        reasonOfMedication: "",
-        cautions: "",
-      };
-
       const dataToSave = {
         ...values,
         avatar: photoURL || "",
         medications,
-        // legacy fields – in case something else in the app still reads them
-       
-        
       };
 
       if (mode === "update" && id) {
-        // Fetch the existing client
-       const clientSnap = await getDoc(doc(db, "clients", id));
-
+        const clientSnap = await getDoc(doc(db, "clients", id));
         if (clientSnap.exists()) {
-         const data = clientSnap.data();
-
-          // Use the existing document ID as customId
-          // customId = clientDoc.id;
-
           await updateDoc(doc(db, "clients", id), {
             ...dataToSave,
             updatedAt: new Date(),
           });
-
           setSlider({
             show: true,
             title: "Client Updated Successfully!",
             subtitle: `${values.name} (${values.clientCode})`,
             viewText: "View Client",
           });
-
           setCreatedClient(dataToSave);
         } else {
-          setSlider({
-            show: true,
-            title: "Client Not Found!",
-            subtitle: "",
-            viewText: "",
-          });
+          setSlider({ show: true, title: "Client Not Found!", subtitle: "", viewText: "" });
         }
       } else {
-        // ADD MODE – use the generated customId
         await setDoc(doc(db, "clients", customId), {
           ...dataToSave,
           createdAt: new Date(),
           fileClosed: false,
         });
-
         setSlider({
           show: true,
           title: "Client Added Successfully!",
           subtitle: `${values.name} (${values.clientCode})`,
           viewText: "View Client",
         });
-
         setCreatedClient(dataToSave);
         resetForm();
         setAvatarPreview(null);
       }
 
-      // Fetch admins
       const q = query(collection(db, "users"), where("role", "==", "admin"));
       const adminsSnapshot = await getDocs(q);
-      const admins = adminsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      // Send notification with correct clientId
+      const admins = adminsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       for (const admin of admins) {
         await sendNotification(admin.id, {
           type: "info",
@@ -274,509 +206,385 @@ const AddClient = ({ mode = "add", user }) => {
               ? `A new Client "${values.name}" has been added.`
               : `Client "${values.name}" has been updated.`,
           senderId: user.name,
-          meta: {
-            clientId: customId,
-            clientName: values.name,
-            entity: "Client",
-          },
+          meta: { clientId: customId, clientName: values.name, entity: "Client" },
         });
       }
     } catch (error) {
       console.error("❌ Error saving client:", error);
-      setSlider({
-        show: true,
-        title: "Error Saving Client!",
-        subtitle: "Please try again.",
-        viewText: "",
-      });
+      setSlider({ show: true, title: "Error Saving Client!", subtitle: "Please try again.", viewText: "" });
     }
   };
 
+  const inputCls = (hasError) =>
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${
+      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    }`;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-bold text-2xl leading-7 text-light-black">
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50 text-[13px]"
+            style={{ borderColor: "#e5e7eb", color: "#374151" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back
+          </button>
+        </div>
+        <h1 className="font-bold text-2xl text-gray-900" style={{ letterSpacing: "-0.02em" }}>
           {mode === "update" ? "Update Client" : "Add Client"}
+        </h1>
+        <p className="text-[13px] text-gray-500 mt-0.5">
+          {mode === "update" ? "Update an existing client profile" : "Create a new client profile"}
         </p>
       </div>
-      <hr className="border-t border-gray" />
 
-      <Formik
-        enableReinitialize
-        initialValues={initialValues}
-        validationSchema={mode === "add" ? validationSchema : validationSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ touched, errors, values, setFieldValue }) => (
-          <Form className="flex flex-col gap-4">
-            {/* Avatar Section */}
-            <div className="flex items-center gap-4 p-4 bg-white border border-light-gray rounded-sm">
-              <div className="flex bg-gray-200 h-[90px] w-[90px] rounded-full overflow-hidden items-center justify-center">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <img src="/images/profile.jpeg" />
-                )}
-              </div>
+      <div>
+        <Formik
+          enableReinitialize
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ touched, errors, values, setFieldValue }) => (
+            <Form>
+              {/* Single white card */}
+              <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
-              <div className="flex gap-3">
-                <input
-                  id="avatarInput"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) =>
-                    handleAvatarChange(event, setFieldValue)
-                  }
-                />
-                <label
-                  htmlFor="avatarInput"
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-dark-green font-medium text-sm cursor-pointer bg-dark-green text-white"
-                >
-                  Change Avatar
-                </label>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAvatar(setFieldValue)}
-                  className="text-light-green px-3 py-[6px] rounded-sm border-2 border-light-green font-medium text-sm"
-                >
-                  Remove Avatar
-                </button>
-              </div>
-            </div>
-
-            {/* Form Fields */}
-            <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4 text-light-black">
-              {/* Basic Info */}
-              <FieldInput
-                label="Name"
-                name="name"
-                placeholder="Please enter the name of user"
-                touched={touched}
-                errors={errors}
-              />
-              <FieldInput
-                label="CYIM ID"
-                name="clientCode"
-                placeholder="Please enter a specific ID"
-                touched={touched}
-                errors={errors}
-              />
-
-              {/* Client Status */}
-              <div className="relative">
-                <label className="font-bold text-sm">Client Status</label>
-                <Field
-                  as="select"
-                  name="clientStatus"
-                  className={`w-full border rounded-sm p-[10px] appearance-none pr-10
-                    ${
-                      values.clientStatus === ""
-                        ? "text-[#72787E] font-normal text-sm"
-                        : "text-light-black"
-                    }
-                    ${
-                      touched.clientStatus && errors.clientStatus
-                        ? "border-red-500"
-                        : "border-light-gray"
-                    }`}
-                >
-                  <option value="">Please select the client status</option>
-                  <option value="Active">Active</option>
-                  <option value="InActive">InActive</option>
-                </Field>
-                <span className="absolute right-3 top-[64%] -translate-y-1/2 pointer-events-none">
-                  <FaChevronDown className="text-light-green w-4 h-4" />
-                </span>
-                <ErrorMessage
-                  name="clientStatus"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              <FieldInput
-                label="Parent E-Mail"
-                name="parentEmail"
-                placeholder="Please enter the e-mail ID"
-                touched={touched}
-                errors={errors}
-                type="email"
-              />
-              <FieldInput
-                label="Agency"
-                name="agency"
-                placeholder="Please enter the agency name"
-                touched={touched}
-                errors={errors}
-              />
-              <FieldInput
-                label="Address"
-                name="address"
-                placeholder="Please enter the address"
-                touched={touched}
-                errors={errors}
-              />
-              <FieldInput
-                label="Date of Birth"
-                name="dob"
-                type="date"
-                touched={touched}
-                errors={errors}
-              />
-              <FieldInput
-                label="Client KM Rate"
-                name="kmRate"
-                placeholder="Please enter the KM Rate"
-                touched={touched}
-                errors={errors}
-              />
-              <FieldInput
-                label="Client Rate"
-                name="clientRate"
-                placeholder="Please enter the Rate"
-                touched={touched}
-                errors={errors}
-              />
-
-
-              {/* Description */}
-              <FieldTextArea
-                label="Description of Client"
-                name="description"
-                placeholder="Write the description of the User"
-                touched={touched}
-                errors={errors}
-              />
-
-              {/* =================== PHARMACY INFORMATION =================== */}
-<div className="col-span-2  rounded-sm p-1 bg-white">
-  <p className="font-bold text-2xl mb-3 leading-7 text-light-black">Pharmacy Information</p>
-
-  <div className="grid grid-cols-2 gap-x-8 gap-y-4  border border-light-gray p-4">
-    <FieldInput
-      label="Pharmacy Name"
-      name="pharmacy.pharmacyName"
-      placeholder="Enter pharmacy name"
-      touched={touched.pharmacy || {}}
-      errors={errors.pharmacy || {}}
-    />
-
-    <FieldInput
-      label="Pharmacy Email"
-      name="pharmacy.pharmacyEmail"
-      placeholder="Enter pharmacy email"
-      touched={touched.pharmacy || {}}
-      errors={errors.pharmacy || {}}
-      type="email"
-    />
-
-    <FieldInput
-      label="Pharmacy Phone"
-      name="pharmacy.pharmacyPhone"
-      placeholder="Enter phone number"
-      touched={touched.pharmacy || {}}
-      errors={errors.pharmacy || {}}
-    />
-
-    <FieldInput
-      label="Pharmacy Address"
-      name="pharmacy.pharmacyAddress"
-      placeholder="Enter address"
-      touched={touched.pharmacy || {}}
-      errors={errors.pharmacy || {}}
-    />
-  </div>
-</div>
-
-
-              {/* =================== MEDICATIONS BLOCK (MULTIPLE) =================== */}
-              <FieldArray name="medications">
-                {(arrayHelpers) => (
-                  <>
-                    <div className="col-span-2 flex  justify-between ">
-                      <div className="font-bold text-2xl leading-7">
-                        Medications Information
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          arrayHelpers.push({
-                            medicationName: "",
-                            dosage: "",
-                            medicineDescription: "",
-                            reasonOfMedication: "",
-                            cautions: "",
-                          })
-                        }
-                        className="text-sm font-medium px-3 py-1 border border-dark-green text-dark-green rounded-sm hover:bg-dark-green hover:text-white transition"
-                      >
-                        + Add Medicine
-                      </button>
+                {/* ── Avatar Section ── */}
+                <div className="mb-6 pb-6 border-b" style={{ borderColor: "#f3f4f6" }}>
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex-shrink-0">
+                      {avatarPreview ? (
+                        <img src={avatarPreview} alt="Avatar" className="rounded-full object-cover" style={{ width: 80, height: 80 }} />
+                      ) : (
+                        <div className="rounded-full bg-gray-100 flex items-center justify-center" style={{ width: 80, height: 80 }}>
+                          <Upload className="w-6 h-6 text-gray-400" strokeWidth={1.5} />
+                        </div>
+                      )}
                     </div>
-
-                    {values.medications &&
-                      values.medications.map((med, index) => (
-                        <div
-                          key={index}
-                          className="col-span-2 border border-light-gray rounded-sm p-4 "
+                    <div className="flex gap-2">
+                      <input
+                        id="avatarInput"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleAvatarChange(e, setFieldValue)}
+                      />
+                      <label
+                        htmlFor="avatarInput"
+                        className="px-3 py-2 rounded-lg font-semibold transition-all text-white cursor-pointer text-xs"
+                        style={{ backgroundColor: "#1f7a3c" }}
+                      >
+                        Change Avatar
+                      </label>
+                      {avatarPreview && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAvatar(setFieldValue)}
+                          className="px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50 text-xs"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}
                         >
-                          <div className="flex justify-between items-center mb-2">
-                            <p className="font-semibold text-base">
-                              Medication #{index + 1}
-                            </p>
+                          Remove Avatar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Basic Information ── */}
+                <div className="grid grid-cols-2 gap-5 mb-6">
+                  {/* Name */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                    <Field
+                      name="name"
+                      placeholder="Please enter the name of user"
+                      className={inputCls(touched.name && errors.name)}
+                    />
+                    <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Client Code */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Code</label>
+                    <Field
+                      name="clientCode"
+                      placeholder="Please enter a specific ID"
+                      className={inputCls(touched.clientCode && errors.clientCode)}
+                    />
+                    <ErrorMessage name="clientCode" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Client Status */}
+                  <div className="relative">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Status</label>
+                    <Field
+                      as="select"
+                      name="clientStatus"
+                      className={`${inputCls(touched.clientStatus && errors.clientStatus)} appearance-none pr-9 ${values.clientStatus === "" ? "text-gray-400" : "text-gray-700"}`}
+                    >
+                      <option value="">Select client status</option>
+                      <option value="Active">Active</option>
+                      <option value="InActive">InActive</option>
+                    </Field>
+                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                    </span>
+                    <ErrorMessage name="clientStatus" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
+                    <Field
+                      name="password"
+                      type="password"
+                      placeholder="Please enter a specific password"
+                      className={inputCls(touched.password && errors.password)}
+                    />
+                    <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Parent Email */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent E-Mail</label>
+                    <Field
+                      name="parentEmail"
+                      type="email"
+                      placeholder="Please enter the e-mail ID"
+                      className={inputCls(touched.parentEmail && errors.parentEmail)}
+                    />
+                    <ErrorMessage name="parentEmail" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Agency */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency</label>
+                    <Field
+                      name="agency"
+                      placeholder="Please enter the agency name"
+                      className={inputCls(touched.agency && errors.agency)}
+                    />
+                    <ErrorMessage name="agency" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                    <PlacesAutocomplete
+                      className={inputCls(touched.address && errors.address)}
+                      value={values.address}
+                      onChange={(v) => setFieldValue("address", v)}
+                      placeholder="Please enter the address"
+                    />
+                    <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Date of Birth */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                    <Field
+                      name="dob"
+                      type="date"
+                      className={inputCls(touched.dob && errors.dob)}
+                    />
+                    <ErrorMessage name="dob" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+
+                  {/* Description – full width */}
+                  <div className="col-span-2">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description of Client</label>
+                    <Field
+                      as="textarea"
+                      name="description"
+                      placeholder="Write the description of the client"
+                      rows={4}
+                      className={`${inputCls(touched.description && errors.description)} resize-none`}
+                    />
+                    <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                </div>
+
+                {/* ── Medications Section ── */}
+                <div className="pt-6 border-t" style={{ borderColor: "#f3f4f6" }}>
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-bold text-gray-900" style={{ fontSize: 17 }}>Medications Information</h3>
+                    <FieldArray name="medications">
+                      {(arrayHelpers) => (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            arrayHelpers.push({
+                              medicationName: "",
+                              dosage: "",
+                              medicineDescription: "",
+                              reasonOfMedication: "",
+                              cautions: "",
+                            })
+                          }
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all"
+                          style={{ border: "1px solid #1f7a3c", color: "#1f7a3c" }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#1f7a3c"; e.currentTarget.style.color = "#fff"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#1f7a3c"; }}
+                        >
+                          <span className="text-base leading-none">+</span> Add Medicine
+                        </button>
+                      )}
+                    </FieldArray>
+                  </div>
+
+                  <FieldArray name="medications">
+                    {(arrayHelpers) => (
+                      <div className="flex flex-col gap-6">
+                        {values.medications && values.medications.map((med, index) => (
+                          <div key={index}>
                             {index > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => arrayHelpers.remove(index)}
-                                className="text-xs text-red-600 border border-red-500 px-2 py-1 rounded-sm"
-                              >
-                                Remove
-                              </button>
+                              <div className="flex items-center justify-between mb-4">
+                                <p className="text-sm font-semibold text-gray-500">Medication #{index + 1}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => arrayHelpers.remove(index)}
+                                  className="text-xs text-red-500 hover:underline"
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                            {/* Name & Dosage */}
-                            <div>
-                              <label className="font-bold text-sm">
-                                Name of Medication
-                              </label>
-                              <Field
-                                name={`medications[${index}].medicationName`}
-                                placeholder="Enter medicine name"
-                                className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                  touched.medications &&
-                                  touched.medications[index] &&
-                                  errors.medications &&
-                                  errors.medications[index] &&
-                                  errors.medications[index].medicationName
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`medications[${index}].medicationName`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="font-bold text-sm">
-                                Dosage
-                              </label>
-                              <Field
-                                name={`medications[${index}].dosage`}
-                                placeholder="Enter dosage"
-                                className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                  touched.medications &&
-                                  touched.medications[index] &&
-                                  errors.medications &&
-                                  errors.medications[index] &&
-                                  errors.medications[index].dosage
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`medications[${index}].dosage`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
-                            </div>
-
-                            <div>
-                                <label className="font-bold text-sm">Timing</label>
+                            <div className="grid grid-cols-2 gap-5">
+                              {/* Name of Medications */}
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name of Medications</label>
                                 <Field
-                                  name={`medications[${index}].timing`}
-                                  placeholder="e.g. Morning and Evening"
-                                  className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                    touched.medications &&
-                                    touched.medications[index] &&
-                                    errors.medications &&
-                                    errors.medications[index] &&
-                                    errors.medications[index].timing
-                                      ? "border-red-500"
-                                      : "border-light-gray"
-                                  }`}
+                                  name={`medications[${index}].medicationName`}
+                                  placeholder="Please write down the medication Name"
+                                  className={inputCls(
+                                    touched.medications?.[index]?.medicationName &&
+                                    errors.medications?.[index]?.medicationName
+                                  )}
                                 />
-                                <ErrorMessage
-                                  name={`medications[${index}].timing`}
-                                  component="div"
-                                  className="text-red-500 text-xs mt-1"
-                                />
+                                <ErrorMessage name={`medications[${index}].medicationName`} component="div" className="text-red-500 text-xs mt-1" />
                               </div>
 
-                            {/* Description */}
-                            <div className="col-span-2">
-                              <label className="font-bold text-sm">
-                                Description of Medicine
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`medications[${index}].medicineDescription`}
-                                placeholder="Describe the medicine"
-                                className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                  touched.medications &&
-                                  touched.medications[index] &&
-                                  errors.medications &&
-                                  errors.medications[index] &&
-                                  errors.medications[index].medicineDescription
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`medications[${index}].medicineDescription`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
+                              {/* Dosage */}
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Dosage</label>
+                                <Field
+                                  name={`medications[${index}].dosage`}
+                                  placeholder="Write down how many dosage"
+                                  className={inputCls(
+                                    touched.medications?.[index]?.dosage &&
+                                    errors.medications?.[index]?.dosage
+                                  )}
+                                />
+                                <ErrorMessage name={`medications[${index}].dosage`} component="div" className="text-red-500 text-xs mt-1" />
+                              </div>
+
+                              {/* Description – full width */}
+                              <div className="col-span-2">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description</label>
+                                <Field
+                                  as="textarea"
+                                  name={`medications[${index}].medicineDescription`}
+                                  placeholder="Describe the medicine"
+                                  rows={3}
+                                  className={`${inputCls(
+                                    touched.medications?.[index]?.medicineDescription &&
+                                    errors.medications?.[index]?.medicineDescription
+                                  )} resize-none`}
+                                />
+                                <ErrorMessage name={`medications[${index}].medicineDescription`} component="div" className="text-red-500 text-xs mt-1" />
+                              </div>
+
+                              {/* Reasons – full width */}
+                              <div className="col-span-2">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Reasons of Medications</label>
+                                <Field
+                                  as="textarea"
+                                  name={`medications[${index}].reasonOfMedication`}
+                                  placeholder="Write the reason for medication"
+                                  rows={3}
+                                  className={`${inputCls(
+                                    touched.medications?.[index]?.reasonOfMedication &&
+                                    errors.medications?.[index]?.reasonOfMedication
+                                  )} resize-none`}
+                                />
+                                <ErrorMessage name={`medications[${index}].reasonOfMedication`} component="div" className="text-red-500 text-xs mt-1" />
+                              </div>
+
+                              {/* Cautions – full width */}
+                              <div className="col-span-2">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Cautions</label>
+                                <Field
+                                  as="textarea"
+                                  name={`medications[${index}].cautions`}
+                                  placeholder="Write any cautions"
+                                  rows={3}
+                                  className={`${inputCls(
+                                    touched.medications?.[index]?.cautions &&
+                                    errors.medications?.[index]?.cautions
+                                  )} resize-none`}
+                                />
+                                <ErrorMessage name={`medications[${index}].cautions`} component="div" className="text-red-500 text-xs mt-1" />
+                              </div>
                             </div>
 
-                            {/* Reason */}
-                            <div className="col-span-2">
-                              <label className="font-bold text-sm">
-                                Reason of Medication
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`medications[${index}].reasonOfMedication`}
-                                placeholder="Write the reason for medication"
-                                className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                  touched.medications &&
-                                  touched.medications[index] &&
-                                  errors.medications &&
-                                  errors.medications[index] &&
-                                  errors.medications[index].reasonOfMedication
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`medications[${index}].reasonOfMedication`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
-                            </div>
-
-                            {/* Cautions */}
-                            <div className="col-span-2">
-                              <label className="font-bold text-sm">
-                                Cautions
-                              </label>
-                              <Field
-                                as="textarea"
-                                name={`medications[${index}].cautions`}
-                                placeholder="Write any cautions"
-                                className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-                                  touched.medications &&
-                                  touched.medications[index] &&
-                                  errors.medications &&
-                                  errors.medications[index] &&
-                                  errors.medications[index].cautions
-                                    ? "border-red-500"
-                                    : "border-light-gray"
-                                }`}
-                              />
-                              <ErrorMessage
-                                name={`medications[${index}].cautions`}
-                                component="div"
-                                className="text-red-500 text-xs mt-1"
-                              />
-                            </div>
+                            {/* Separator between medication entries */}
+                            {index < values.medications.length - 1 && (
+                              <div className="mt-6 border-b" style={{ borderColor: "#f3f4f6" }} />
+                            )}
                           </div>
-                        </div>
-                      ))}
-                  </>
-                )}
-              </FieldArray>
+                        ))}
+                      </div>
+                    )}
+                  </FieldArray>
+                </div>
 
-              {/* Submit Button */}
-              <div className="col-span-2 flex justify-center mt-4">
-                <button
-                  type="submit"
-                  className="bg-dark-green text-white px-6 py-2 rounded cursor-pointer"
-                >
-                  {mode === "update" ? "Update Client" : "Add Client"}
-                </button>
+                {/* ── Submit ── */}
+                <div className="mt-8 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="px-5 py-2.5 rounded-lg border font-semibold text-sm transition-all hover:bg-gray-50"
+                    style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-all"
+                    style={{ backgroundColor: "#1f7a3c" }}
+                  >
+                    {mode === "update" ? "Update Client" : "Submit"}
+                  </button>
+                </div>
               </div>
-            </div>
-          </Form>
-        )}
-      </Formik>
+            </Form>
+          )}
+        </Formik>
 
-      {/* Success Slider */}
-      <SuccessSlider
-        show={slider.show}
-        title={slider.title}
-        subtitle={slider.subtitle}
-        viewText={slider.viewText}
-        onView={() => {
-          if (createdClient) setInitialValues(createdClient);
-          navigate("/admin-dashboard/clients")
-          setSlider({ ...slider, show: false });
-        }}
-        onDismiss={() => setSlider({ ...slider, show: false })}
-      />
+        {/* Success Slider */}
+        <SuccessSlider
+          show={slider.show}
+          title={slider.title}
+          subtitle={slider.subtitle}
+          viewText={slider.viewText}
+          onView={() => {
+            if (createdClient) setInitialValues(createdClient);
+            navigate("/admin-dashboard/clients");
+            setSlider({ ...slider, show: false });
+          }}
+          onDismiss={() => setSlider({ ...slider, show: false })}
+        />
+      </div>
     </div>
   );
 };
-
-// ✅ Helper Input Components
-const FieldInput = ({
-  label,
-  name,
-  placeholder,
-  touched,
-  errors,
-  type = "text",
-}) => (
-  <div>
-    <label className="font-bold text-sm">{label}</label>
-    <Field
-      name={name}
-      type={type}
-      placeholder={placeholder}
-      className={`w-full border rounded-sm p-[10px] placeholder:text-sm placeholder:text-[#72787E] ${
-        touched[name] && errors[name] ? "border-red-500" : "border-light-gray"
-      }`}
-    />
-    <ErrorMessage
-      name={name}
-      component="div"
-      className="text-red-500 text-xs mt-1"
-    />
-  </div>
-);
-
-const FieldTextArea = ({
-  label,
-  name,
-  placeholder,
-  touched,
-  errors,
-}) => (
-  <div className="col-span-2">
-    <label className="font-bold text-sm">{label}</label>
-    <Field
-      as="textarea"
-      name={name}
-      placeholder={placeholder}
-      className={`w-full border rounded-sm p-[10px] h-40 placeholder:text-sm placeholder:text-[#72787E] ${
-        touched[name] && errors[name] ? "border-red-500" : "border-light-gray"
-      }`}
-    />
-    <ErrorMessage
-      name={name}
-      component="div"
-      className="text-red-500 text-xs mt-1"
-    />
-  </div>
-);
 
 export default AddClient;

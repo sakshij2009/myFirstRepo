@@ -18,6 +18,7 @@ import IntakeRequestsPage from "./IntakeRequestsPage";
 import StaffEvaluationPage from "./StaffEvaluationPage";
 import BillingPage from "./BillingPage";
 import GSTReportingPage from "./GSTReportingPage";
+import ShiftCommandPage from "./ShiftCommandPage";
 
 // Form Components
 import AddUserForm from "./AddUserForm";
@@ -89,6 +90,7 @@ const AdminHomePage = ({ user, setUser }) => {
         <main className="flex-1 overflow-auto" style={{ padding: "20px 24px" }}>
           <Routes>
             <Route path="dashboard"        element={<Dashboard user={user} />} />
+            <Route path="shifts"           element={<ShiftCommandPage />} />
             <Route path="transportation"   element={<Transportation />} />
             <Route path="clients"          element={<ManageClients />} />
             <Route path="users"            element={<ManageUser />} />

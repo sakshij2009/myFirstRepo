@@ -3,6 +3,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { storage, db } from "../firebase";
 import { FaUpload } from "react-icons/fa";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 const AddTransportation = ({ shiftId, shiftData }) => {
   const [uploadedReceipts, setUploadedReceipts] = useState([]);
@@ -382,13 +383,11 @@ const handleSubmit = async () => {
 
             {stops.map((stop, index) => (
               <div key={index} className="flex items-center gap-3">
-                <input
-                  type="text"
+                <PlacesAutocomplete
                   placeholder={`Stop ${index + 1} Address`}
                   value={stop.location}
-                  onChange={(e) => handleStopChange(index, e.target.value)}
+                  onChange={(v) => handleStopChange(index, v)}
                   className="w-full border border-gray p-2 rounded"
-                  id={`stop-${index}`}
                 />
 
                 {stops.length > 1 && (

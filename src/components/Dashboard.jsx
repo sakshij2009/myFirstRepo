@@ -1,16 +1,9 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import KPIStrip from "./KPIStrip";
 import ServiceOverview from "./ServiceOverview";
 import ClientActivityTable from "./ClientActivityTable";
 import RightPanel from "./RightPanel";
 
 export default function Dashboard({ user }) {
-  const navigate = useNavigate();
-
-  const handleNavigateToClientReport = (clientData) => {
-    // navigate to client report if it exists
-  };
 
   return (
     <div className="flex flex-col gap-[18px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -24,7 +17,7 @@ export default function Dashboard({ user }) {
         {/* Left column */}
         <div className="flex flex-col gap-[18px] min-w-0">
           <ServiceOverview />
-          <ClientActivityTable onNavigateToReport={handleNavigateToClientReport} />
+          <ClientActivityTable />
         </div>
 
         {/* Right column — fixed 360px */}
