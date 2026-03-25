@@ -130,7 +130,6 @@ export default function Layout() {
       <Tabs.Screen name="_ReportTransportationTab" options={{ href: null }} />
       <Tabs.Screen name="_TransferShiftModal" options={{ href: null }} />
       <Tabs.Screen name="_employee-card" options={{ href: null }} />
-      <Tabs.Screen name="_ActionCard" options={{ href: null }} />
       <Tabs.Screen name="_report" options={{ href: null }} />
 
       {/* New screens — hidden from tab bar */}
