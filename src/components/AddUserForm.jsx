@@ -43,8 +43,20 @@ const AddUserForm = ({ mode = "add", user }) => {
     avatar: null,
     dayOfLeaving: "",
     position: "",
-
-    // ✅ NEW FIELDS
+    firstName: "",
+    lastName: "",
+    dob: "",
+    driverLicense: "",
+    driverLicenseExpiry: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    emergencyContactRelation: "",
+    referenceName: "",
+    referenceEmail: "",
+    referencePhone: "",
+    referenceRelation: "",
+    healthCardNumber: "",
+    medicalConcerns: "",
     reasonOfLeaving: "",
     totalKMs: "",
     rateBefore5000km: "",
@@ -53,7 +65,6 @@ const AddUserForm = ({ mode = "add", user }) => {
 
   // Validation Schema (only used in add mode in your code)
   const validationSchema = Yup.object({
-    name: Yup.string().required("Name is required").min(3, "Min 3 chars"),
     userId: Yup.string()
       .required("userId is required")
       .matches(/^[A-Za-z0-9]+$/, "Only alphanumeric allowed"),
@@ -70,7 +81,19 @@ const AddUserForm = ({ mode = "add", user }) => {
     description: Yup.string().max(200, "Max 200 chars"),
     position: Yup.string().required("Position is required"),
 
-    // ✅ NEW FIELDS (kept optional so we don't break your flow)
+    firstName: Yup.string().required("First Name is required"),
+    lastName: Yup.string().required("Last Name is required"),
+    dob: Yup.date().required("DOB is required"),
+    driverLicense: Yup.string().required("Driver License is required"),
+    emergencyContactName: Yup.string().required("Emergency Contact Name is required"),
+    emergencyContactPhone: Yup.string().required("Phone required").matches(/^[0-9]{10}$/, "10 digits"),
+    emergencyContactRelation: Yup.string().required("Relation is required"),
+    referenceName: Yup.string().required("Reference Name is required"),
+    referenceEmail: Yup.string().email("Invalid email").required("Email is required"),
+    referencePhone: Yup.string().required("Phone required").matches(/^[0-9]{10}$/, "10 digits"),
+    referenceRelation: Yup.string().required("Relation is required"),
+    healthCardNumber: Yup.string().required("Health Card Number is required"),
+    medicalConcerns: Yup.string().max(500, "Max 500 chars"),
     reasonOfLeaving: Yup.string().max(200, "Max 200 chars"),
     totalKMs: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
     rateBefore5000km: Yup.number().typeError("Must be number").min(0, "Cannot be negative").nullable(),
@@ -193,8 +216,20 @@ const AddUserForm = ({ mode = "add", user }) => {
               dayOfLeaving: lastShiftDate || data.dayOfLeaving || data.leavingDate || data.dateOfResignation || "",
 
               position: data.position || "",
-
-              // ✅ NEW FIELDS
+              firstName: data.firstName || (data.name ? data.name.split(" ")[0] : ""),
+              lastName: data.lastName || (data.name ? data.name.split(" ").slice(1).join(" ") : ""),
+              dob: data.dob || "",
+              driverLicense: data.driverLicense || "",
+              driverLicenseExpiry: data.driverLicenseExpiry || "",
+              emergencyContactName: data.emergencyContactName || "",
+              emergencyContactPhone: data.emergencyContactPhone || "",
+              emergencyContactRelation: data.emergencyContactRelation || "",
+              referenceName: data.referenceName || "",
+              referenceEmail: data.referenceEmail || "",
+              referencePhone: data.referencePhone || "",
+              referenceRelation: data.referenceRelation || "",
+              healthCardNumber: data.healthCardNumber || "",
+              medicalConcerns: data.medicalConcerns || "",
               reasonOfLeaving: data.reasonOfLeaving || "",
               totalKMs: data.totalKMs ?? "",
               rateBefore5000km: data.rateBefore5000km ?? "",
@@ -239,6 +274,9 @@ const AddUserForm = ({ mode = "add", user }) => {
         photoURL = await getDownloadURL(storageRef);
       }
 
+      const fullName = `${values.firstName} ${values.lastName}`.trim() || values.name;
+      const submissionData = { ...values, name: fullName };
+
       if (mode === "update") {
         const q = query(collection(db, "users"), where("userId", "==", id));
         const snap = await getDocs(q);
@@ -247,7 +285,7 @@ const AddUserForm = ({ mode = "add", user }) => {
           const userDoc = snap.docs[0].id;
 
           await updateDoc(doc(db, "users", userDoc), {
-            ...values,
+            ...submissionData,
             profilePhotoUrl: photoURL,
             updatedAt: new Date(),
           });
@@ -255,15 +293,15 @@ const AddUserForm = ({ mode = "add", user }) => {
           setSlider({
             show: true,
             title: "User Updated Successfully!",
-            subtitle: `${values.name} ${values.userId}`,
+            subtitle: `${fullName} ${values.userId}`,
             viewText: "View User",
           });
 
-          setCreatedUser(values);
+          setCreatedUser(submissionData);
         }
       } else {
         await setDoc(doc(db, "users", values.username), {
-          ...values,
+          ...submissionData,
           profilePhotoUrl: photoURL,
           createdAt: new Date(),
           isSuspended: false,
@@ -272,11 +310,11 @@ const AddUserForm = ({ mode = "add", user }) => {
         setSlider({
           show: true,
           title: "User Added Successfully!",
-          subtitle: `${values.name} ${values.userId}`,
+          subtitle: `${fullName} ${values.userId}`,
           viewText: "View User",
         });
 
-        setCreatedUser(values);
+        setCreatedUser(submissionData);
         resetForm();
         setAvatarPreview(null);
       }
@@ -395,52 +433,58 @@ const AddUserForm = ({ mode = "add", user }) => {
                   </div>
                 </div>
 
-                {/* Fields grid */}
+                {/* ── Basic Info ── */}
                 <div className="grid grid-cols-2 gap-5">
-
-                  {/* Name */}
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
-                    <Field name="name" placeholder="Please enter the name of user" className={inputCls(touched.name && errors.name)} />
-                    <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>First Name</label>
+                    <Field name="firstName" placeholder="Enter First Name" className={inputCls(touched.firstName && errors.firstName)} />
+                    <ErrorMessage name="firstName" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Staff ID */}
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Last Name</label>
+                    <Field name="lastName" placeholder="Enter Last Name" className={inputCls(touched.lastName && errors.lastName)} />
+                    <ErrorMessage name="lastName" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                    <Field name="dob" type="date" className={inputCls(touched.dob && errors.dob)} />
+                    <ErrorMessage name="dob" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Driver License Number</label>
+                    <Field name="driverLicense" placeholder="Enter Driver License Number" className={inputCls(touched.driverLicense && errors.driverLicense)} />
+                    <ErrorMessage name="driverLicense" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Driver License Expiry Date</label>
+                    <Field name="driverLicenseExpiry" type="date" className={inputCls(touched.driverLicenseExpiry && errors.driverLicenseExpiry)} />
+                    <ErrorMessage name="driverLicenseExpiry" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID (CYIM ID)</label>
                     <Field name="userId" placeholder="Please enter a specific ID" className={inputCls(touched.userId && errors.userId)} />
                     <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Username */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Username</label>
                     <Field name="username" placeholder="Please enter a specific username" className={inputCls(touched.username && errors.username)} />
                     <ErrorMessage name="username" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Password */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
                     <Field name="password" type="password" placeholder="Please enter a specific password" className={inputCls(touched.password && errors.password)} />
                     <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* E-Mail */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>E-Mail</label>
                     <Field name="email" type="email" placeholder="Please enter the e-mail ID" className={inputCls(touched.email && errors.email)} />
                     <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Phone No */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone No</label>
                     <Field name="phone" placeholder="Please enter the phone no" className={inputCls(touched.phone && errors.phone)} />
                     <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Gender */}
                   <div className="relative">
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender</label>
                     <Field as="select" name="gender" className={selectCls(touched.gender && errors.gender, values.gender === "")}>
@@ -449,73 +493,141 @@ const AddUserForm = ({ mode = "add", user }) => {
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </Field>
-                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                    </span>
+                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
                     <ErrorMessage name="gender" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Day of Joining */}
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Day of Joining</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Joining</label>
                     <Field name="dayOfJoining" type="date" className={inputCls(touched.dayOfJoining && errors.dayOfJoining)} />
                     <ErrorMessage name="dayOfJoining" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Daily Shift Hours */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Leaving / Last Working Date</label>
+                    <Field name="dayOfLeaving" type="date" className={inputCls(touched.dayOfLeaving && errors.dayOfLeaving)} />
+                    <ErrorMessage name="dayOfLeaving" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Reason of Leaving</label>
+                    <Field as="textarea" name="reasonOfLeaving" placeholder="Enter reason of leaving" rows={3} className={`${inputCls(touched.reasonOfLeaving && errors.reasonOfLeaving)} resize-none`} />
+                    <ErrorMessage name="reasonOfLeaving" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Position</label>
+                    <Field name="position" placeholder="Add a position for the employee" className={inputCls(touched.position && errors.position)} />
+                    <ErrorMessage name="position" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Daily Allowed Shift Hours</label>
                     <Field name="dailyShiftHours" type="number" placeholder="Enter the Daily allowed hours" className={inputCls(touched.dailyShiftHours && errors.dailyShiftHours)} />
                     <ErrorMessage name="dailyShiftHours" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Salary Per Hour */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Salary Per Hour</label>
                     <Field name="salaryPerHour" type="number" placeholder="Please enter the specific amount for the user" className={inputCls(touched.salaryPerHour && errors.salaryPerHour)} />
                     <ErrorMessage name="salaryPerHour" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Address */}
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Total KMs</label>
+                    <Field name="totalKMs" type="number" placeholder="Enter total kms" className={inputCls(touched.totalKMs && errors.totalKMs)} />
+                    <ErrorMessage name="totalKMs" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Rate Before 5000km</label>
+                    <Field name="rateBefore5000km" type="number" placeholder="Enter rate before 5000km" className={inputCls(touched.rateBefore5000km && errors.rateBefore5000km)} />
+                    <ErrorMessage name="rateBefore5000km" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Rate After 5000km</label>
+                    <Field name="rateAfter5000km" type="number" placeholder="Enter rate after 5000km" className={inputCls(touched.rateAfter5000km && errors.rateAfter5000km)} />
+                    <ErrorMessage name="rateAfter5000km" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
-                    <PlacesAutocomplete
-                      value={values.address}
-                      placeholder="Please enter the address of the user"
-                      onChange={(val) => setFieldValue("address", val)}
-                      className={inputCls(touched.address && errors.address)}
-                    />
+                    <PlacesAutocomplete value={values.address} placeholder="Please enter the address of the user" onChange={(val) => setFieldValue("address", val)} className={inputCls(touched.address && errors.address)} />
                     <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Employment Type / Role */}
                   <div className="relative">
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Employment Type</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Role</label>
                     <Field as="select" name="role" className={selectCls(touched.role && errors.role, values.role === "")}>
-                      <option value="">Please enter the specific amount for the user</option>
-                      <option value="Admin">Admin</option>
-                      <option value="User">User</option>
-                      <option value="Manager">Manager</option>
+                      <option value="">Select role</option>
+                      <option value="user">User</option>
+                      <option value="director">Director</option>
+                      <option value="manager">Manager</option>
+                      <option value="team lead">Team Lead</option>
                     </Field>
-                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                    </span>
+                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
                     <ErrorMessage name="role" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
-
-                  {/* Position – full width */}
-                  <div className="col-span-2">
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Position</label>
-                    <Field name="position" placeholder="Add a position for the employee" className={inputCls(touched.position && errors.position)} />
-                    <ErrorMessage name="position" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
-
-                  {/* Description – full width */}
                   <div className="col-span-2">
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description of User</label>
-                    <Field as="textarea" name="description" placeholder="Write the description of the User" rows={4}
-                      className={`${inputCls(touched.description && errors.description)} resize-none`} />
+                    <Field as="textarea" name="description" placeholder="Write the description of the User" rows={4} className={`${inputCls(touched.description && errors.description)} resize-none`} />
                     <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
+                  </div>
+                </div>
+
+                {/* ── Emergency Contact ── */}
+                <div className="pt-6 mt-6 border-t" style={{ borderColor: "#f3f4f6" }}>
+                  <h3 className="font-bold text-gray-900 mb-5" style={{ fontSize: 17 }}>Emergency Contact Information</h3>
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Emergency Contact Person</label>
+                      <Field name="emergencyContactName" placeholder="Enter Contact Person Name" className={inputCls(touched.emergencyContactName && errors.emergencyContactName)} />
+                      <ErrorMessage name="emergencyContactName" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Emergency Contact Phone</label>
+                      <Field name="emergencyContactPhone" placeholder="Enter Contact Phone" className={inputCls(touched.emergencyContactPhone && errors.emergencyContactPhone)} />
+                      <ErrorMessage name="emergencyContactPhone" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Relationship to Employee</label>
+                      <Field name="emergencyContactRelation" placeholder="Enter Relationship" className={inputCls(touched.emergencyContactRelation && errors.emergencyContactRelation)} />
+                      <ErrorMessage name="emergencyContactRelation" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Reference Information ── */}
+                <div className="pt-6 mt-6 border-t" style={{ borderColor: "#f3f4f6" }}>
+                  <h3 className="font-bold text-gray-900 mb-5" style={{ fontSize: 17 }}>Reference Information</h3>
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Reference Name</label>
+                      <Field name="referenceName" placeholder="Enter Reference Name" className={inputCls(touched.referenceName && errors.referenceName)} />
+                      <ErrorMessage name="referenceName" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Reference Email</label>
+                      <Field name="referenceEmail" type="email" placeholder="Enter Reference Email" className={inputCls(touched.referenceEmail && errors.referenceEmail)} />
+                      <ErrorMessage name="referenceEmail" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Reference Phone</label>
+                      <Field name="referencePhone" placeholder="Enter Reference Phone" className={inputCls(touched.referencePhone && errors.referencePhone)} />
+                      <ErrorMessage name="referencePhone" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Relationship to Reference</label>
+                      <Field name="referenceRelation" placeholder="Enter Relationship" className={inputCls(touched.referenceRelation && errors.referenceRelation)} />
+                      <ErrorMessage name="referenceRelation" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Health Information ── */}
+                <div className="pt-6 mt-6 border-t" style={{ borderColor: "#f3f4f6" }}>
+                  <h3 className="font-bold text-gray-900 mb-5" style={{ fontSize: 17 }}>Health Information</h3>
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Health Card Number</label>
+                      <Field name="healthCardNumber" placeholder="Enter Health Card Number" className={inputCls(touched.healthCardNumber && errors.healthCardNumber)} />
+                      <ErrorMessage name="healthCardNumber" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Medical Concerns / Allergies</label>
+                      <Field as="textarea" name="medicalConcerns" placeholder="Enter any medical concerns or allergies" rows={3} className={`${inputCls(touched.medicalConcerns && errors.medicalConcerns)} resize-none`} />
+                      <ErrorMessage name="medicalConcerns" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
                   </div>
                 </div>
 

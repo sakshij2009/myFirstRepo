@@ -24,13 +24,12 @@ const PAGE_TITLES = {
   "/admin-dashboard/services":         "Services",
 };
 
-const TopBar = ({ user, onLogout, onAddNewClick }) => {
+const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, dateRange = { from: "", to: "" }, setDateRange }) => {
   const location = useLocation();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCardOpen, setIsCardOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-  const [filter, setFilter] = useState("Weekly");
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const dropdownRef = useRef(null);
   const filterRef = useRef(null);
@@ -105,28 +104,49 @@ const TopBar = ({ user, onLogout, onAddNewClick }) => {
             />
           </div>
 
-          {/* Filter dropdown */}
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setShowFilterMenu((p) => !p)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all hover:border-gray-300"
-              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}
-            >
-              <span>{filter}</span>
-              <ChevronDown size={13} strokeWidth={2.5} />
-            </button>
-            {showFilterMenu && (
-              <div className="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50 w-32">
-                {["Weekly", "Monthly", "Yearly"].map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => { setFilter(opt); setShowFilterMenu(false); }}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-                    style={{ color: filter === opt ? "#1f7a3c" : "#374151", fontWeight: filter === opt ? 600 : 400 }}
-                  >
-                    {opt}
-                  </button>
-                ))}
+          {/* Filter dropdown + date range */}
+          <div className="flex items-center gap-2">
+            <div className="relative" ref={filterRef}>
+              <button
+                onClick={() => setShowFilterMenu((p) => !p)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all hover:border-gray-300"
+                style={{ borderColor: "#e5e7eb", color: "#6b7280" }}
+              >
+                <span>{filter}</span>
+                <ChevronDown size={13} strokeWidth={2.5} />
+              </button>
+              {showFilterMenu && (
+                <div className="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50 w-36">
+                  {["Weekly", "Monthly", "Yearly", "Custom"].map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => { setFilter?.(opt); setShowFilterMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                      style={{ color: filter === opt ? "#1f7a3c" : "#374151", fontWeight: filter === opt ? 600 : 400 }}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {filter === "Custom" && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={dateRange?.from || ""}
+                  onChange={(e) => setDateRange?.((p) => ({ ...p, from: e.target.value }))}
+                  className="px-2 py-1.5 rounded-lg border text-xs focus:outline-none"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                />
+                <span style={{ fontSize: 12, color: "#9ca3af" }}>–</span>
+                <input
+                  type="date"
+                  value={dateRange?.to || ""}
+                  onChange={(e) => setDateRange?.((p) => ({ ...p, to: e.target.value }))}
+                  className="px-2 py-1.5 rounded-lg border text-xs focus:outline-none"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                />
               </div>
             )}
           </div>

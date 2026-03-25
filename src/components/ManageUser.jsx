@@ -3,10 +3,158 @@ import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firesto
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, Plus, Eye, Edit2, Trash2, DollarSign, ChevronLeft, ChevronRight,
+  Search, Plus, Edit2, Trash2, DollarSign, ChevronLeft, ChevronRight, CreditCard,
+  Share2, X, Download, Printer,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 const GENDER_TABS = ["All", "Male", "Female"];
+
+/* ── ID Card Modal ─────────────────────────────────────────── */
+function IDCardModal({ user, onClose }) {
+  const [side, setSide] = useState("front");
+
+  const initials = user.name
+    ? user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)
+    : "??";
+
+  const qrValue = `Family Forever Inc.\nEmployee: ${user.name}\nID: ${user.userId}\nEmail: ${user.email || ""}`;
+
+  const handleDownloadPDF = () => {
+    const card = document.getElementById("id-card-printable");
+    if (!card) return;
+    import("html2pdf.js").then(({ default: html2pdf }) => {
+      html2pdf().from(card).set({ filename: `${user.name}-ID.pdf`, margin: 0 }).save();
+    });
+  };
+
+  const handleDownloadImage = () => {
+    const card = document.getElementById("id-card-printable");
+    if (!card) return;
+    import("html2canvas").then(({ default: html2canvas }) => {
+      html2canvas(card, { scale: 2, useCORS: true }).then((canvas) => {
+        const link = document.createElement("a");
+        link.download = `${user.name}-ID.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      });
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 360, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        {/* Modal Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+            style={{ backgroundColor: "#145228" }}
+          >
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm" style={{ color: "#111827" }}>{user.name || "—"}</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>{user.jobTitle || user.position || "Child and Youth Care Worker"}</div>
+            <div style={{ fontSize: 11, color: "#1f7a3c", fontWeight: 600 }}>ID: {user.userId || "—"}</div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X size={16} style={{ color: "#6b7280" }} />
+          </button>
+        </div>
+
+        {/* Side Label */}
+        <div className="text-center pt-4 pb-2" style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.1em" }}>
+          {side === "front" ? "FRONT" : "BACK"}
+        </div>
+
+        {/* Card */}
+        <div className="px-5 pb-4" id="id-card-printable">
+          {side === "front" ? (
+            <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "#e5e7eb" }}>
+              {/* Green top */}
+              <div className="flex flex-col items-center pt-5 pb-10 relative" style={{ backgroundColor: "#145228", minHeight: 150 }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <img src="/images/logo.png" alt="" className="w-6 h-6 object-contain rounded-full opacity-90" />
+                  <span className="text-white font-bold text-sm">Family Forever Inc.</span>
+                </div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>Employee ID {user.userId || "—"}</div>
+
+                {/* Avatar circle — positioned so it overlaps white section */}
+                <div
+                  className="absolute w-16 h-16 rounded-full border-4 border-white overflow-hidden flex items-center justify-center"
+                  style={{ backgroundColor: "#e5e7eb", bottom: -32 }}
+                >
+                  <img
+                    src={user.profilePhotoUrl || "/images/profile.jpeg"}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* White bottom */}
+              <div className="flex flex-col items-center pt-10 pb-6 px-4" style={{ backgroundColor: "#fff" }}>
+                <div className="font-bold text-base" style={{ color: "#111827" }}>{user.name || "—"}</div>
+                <div className="mb-3" style={{ fontSize: 12, color: "#6b7280" }}>{user.jobTitle || user.position || "Child and Youth Care Worker"}</div>
+                <div style={{ fontSize: 12, color: "#374151" }}>{user.email || "—"}</div>
+                <div style={{ fontSize: 12, color: "#374151" }}>{user.phone || "—"}</div>
+                <div className="mt-4 font-semibold" style={{ fontSize: 12, color: "#374151" }}>From Humanity to Community</div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl overflow-hidden border flex flex-col items-center py-6 px-5" style={{ borderColor: "#e5e7eb" }}>
+              <div className="font-bold text-base mb-4" style={{ color: "#111827" }}>Family Forever Inc.</div>
+              <QRCodeSVG value={qrValue} size={96} fgColor="#145228" />
+              <div className="font-bold mt-4 mb-2" style={{ fontSize: 13, color: "#111827" }}>Terms &amp; Conditions</div>
+              <p className="text-center" style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
+                Use of this card indicates agreement with Family Forever Inc.'s Policies and procedures.
+                This Card is the property of Family Forever Inc. of Edmonton, if found please call{" "}
+                <span style={{ fontWeight: 600, color: "#111827" }}>825-982-3256 / 825-522-3256</span>
+              </p>
+              <div className="mt-3 font-medium" style={{ fontSize: 12, color: "#1f7a3c" }}>www.familyforever.ca</div>
+            </div>
+          )}
+        </div>
+
+        {/* Front / Back toggle */}
+        <div className="flex justify-center gap-2 pb-4">
+          {["front", "back"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setSide(s)}
+              className="px-5 py-1.5 rounded-full font-semibold transition-all"
+              style={{
+                fontSize: 13,
+                backgroundColor: side === s ? "#145228" : "transparent",
+                color: side === s ? "#fff" : "#6b7280",
+                border: side === s ? "none" : "1px solid #e5e7eb",
+              }}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Bottom actions */}
+        <div className="flex items-center justify-center gap-5 py-3 border-t" style={{ borderColor: "#f3f4f6" }}>
+          <button onClick={handleDownloadPDF} className="flex items-center gap-1.5 text-xs font-medium hover:opacity-70 transition-opacity" style={{ color: "#374151" }}>
+            <Download size={13} /> Download PDF
+          </button>
+          <button onClick={handleDownloadImage} className="flex items-center gap-1.5 text-xs font-medium hover:opacity-70 transition-opacity" style={{ color: "#374151" }}>
+            <Download size={13} /> Download Image
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs font-medium hover:opacity-70 transition-opacity" style={{ color: "#374151" }}>
+            <Printer size={13} /> Print
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function GenderBadge({ gender }) {
   if (!gender) return <span style={{ color: "#9ca3af", fontSize: 12 }}>—</span>;
@@ -52,44 +200,27 @@ function SuspendToggle({ checked, onChange }) {
 const ManageUser = () => {
   const [search, setSearch] = useState("");
   const [genderTab, setGenderTab] = useState("All");
-  const [shiftHours, setShiftHours] = useState("");
-  const [shiftType, setShiftType] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Active");
   const [users, setUsers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [goToPage, setGoToPage] = useState("");
-  const [shiftHoursOpen, setShiftHoursOpen] = useState(false);
-  const [shiftTypeOpen, setShiftTypeOpen] = useState(false);
-  const [shiftTypeOptions, setShiftTypeOptions] = useState([]);
-  const shiftHoursRef = useRef(null);
-  const shiftTypeRef = useRef(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [idCardUser, setIdCardUser] = useState(null);
+  const statusRef = useRef(null);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    const h = (e) => {
-      if (shiftHoursRef.current && !shiftHoursRef.current.contains(e.target)) setShiftHoursOpen(false);
-      if (shiftTypeRef.current && !shiftTypeRef.current.contains(e.target)) setShiftTypeOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  const shiftHoursOption = ["All", "12:00 Hours", "9:00 Hours", "6:00 Hours"];
-
-  useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "users"));
-        const userList = querySnapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          suspended: d.data().isSuspended ?? false,
-        }));
-        userList.sort((a, b) => {
-          const da = a.createdAt ? new Date(a.createdAt.seconds ? a.createdAt.seconds * 1000 : a.createdAt) : 0;
-          const db2 = b.createdAt ? new Date(b.createdAt.seconds ? b.createdAt.seconds * 1000 : b.createdAt) : 0;
-          return db2 - da;
-        });
-        setUsers(userList);
+        const snap = await getDocs(collection(db, "users"));
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((u) => {
+            const role = (u.role || "").toLowerCase();
+            return role !== "admin" && role !== "superadmin";
+          });
+        setUsers(list);
       } catch (e) {
         console.error("Error fetching users:", e);
       }
@@ -98,15 +229,11 @@ const ManageUser = () => {
   }, []);
 
   useEffect(() => {
-    const fetchShiftTypes = async () => {
-      try {
-        const qs = await getDocs(collection(db, "shiftTypes"));
-        setShiftTypeOptions(qs.docs.map((d) => d.data().name));
-      } catch (e) {
-        console.error("Error fetching shift types:", e);
-      }
+    const h = (e) => {
+      if (statusRef.current && !statusRef.current.contains(e.target)) setStatusOpen(false);
     };
-    fetchShiftTypes();
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
   const handleDeleteUser = async (userId) => {
@@ -131,12 +258,15 @@ const ManageUser = () => {
 
   const filteredUsers = users.filter((user) => {
     const genderMatch = genderTab === "All" || user.gender === genderTab;
-    const hoursMatch = !shiftHours || shiftHours === "All" || user.shiftHours === shiftHours;
-    const typeMatch = !shiftType || shiftType === "All" || user.shiftType === shiftType;
-    const searchMatch = !search
-      || user.name?.toLowerCase().includes(search.toLowerCase())
-      || user.userId?.toString().toLowerCase().includes(search.toLowerCase());
-    return genderMatch && hoursMatch && typeMatch && searchMatch;
+    const statusMatch =
+      statusFilter === "All" ||
+      (statusFilter === "Active" && !user.isSuspended) ||
+      (statusFilter === "Suspended" && user.isSuspended);
+    const searchMatch =
+      !search ||
+      user.name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.userId?.toString().toLowerCase().includes(search.toLowerCase());
+    return genderMatch && statusMatch && searchMatch;
   });
 
   const ITEMS_PER_PAGE = 10;
@@ -155,6 +285,7 @@ const ManageUser = () => {
       className="flex flex-col h-full"
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: "#f9fafb" }}
     >
+      {idCardUser && <IDCardModal user={idCardUser} onClose={() => setIdCardUser(null)} />}
       {/* Page Header */}
       <div
         className="flex items-center justify-between px-6 py-4 bg-white border-b shrink-0"
@@ -218,47 +349,23 @@ const ManageUser = () => {
           ))}
         </div>
 
-        {/* Shift Hours filter */}
-        <div className="relative" ref={shiftHoursRef}>
+        {/* Status filter */}
+        <div className="relative" ref={statusRef}>
           <button
-            onClick={() => { setShiftHoursOpen((o) => !o); setShiftTypeOpen(false); }}
+            onClick={() => setStatusOpen((o) => !o)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
             style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#fff" }}
           >
-            Shift Hours: <span style={{ color: "#1f7a3c" }}>{shiftHours || "All"}</span>
+            Status: <span style={{ color: "#1f7a3c" }}>{statusFilter}</span>
             <ChevronLeft size={13} style={{ transform: "rotate(-90deg)", color: "#9ca3af" }} />
           </button>
-          {shiftHoursOpen && (
-            <div className="absolute top-9 left-0 bg-white rounded-lg shadow-lg border z-50 min-w-[140px]"
+          {statusOpen && (
+            <div className="absolute top-9 right-0 bg-white rounded-lg shadow-lg border z-50 min-w-[140px]"
               style={{ borderColor: "#e5e7eb" }}>
-              {shiftHoursOption.map((o) => (
-                <button key={o} onClick={() => { setShiftHours(o === "All" ? "" : o); setShiftHoursOpen(false); setCurrentPage(1); }}
+              {["All", "Active", "Suspended"].map((o) => (
+                <button key={o} onClick={() => { setStatusFilter(o); setStatusOpen(false); setCurrentPage(1); }}
                   className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50"
-                  style={{ color: "#374151" }}>
-                  {o}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Shift Type filter */}
-        <div className="relative" ref={shiftTypeRef}>
-          <button
-            onClick={() => { setShiftTypeOpen((o) => !o); setShiftHoursOpen(false); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium"
-            style={{ borderColor: "#e5e7eb", color: "#374151", backgroundColor: "#fff" }}
-          >
-            Shift Type: <span style={{ color: "#1f7a3c" }}>{shiftType || "All"}</span>
-            <ChevronLeft size={13} style={{ transform: "rotate(-90deg)", color: "#9ca3af" }} />
-          </button>
-          {shiftTypeOpen && (
-            <div className="absolute top-9 right-0 bg-white rounded-lg shadow-lg border z-50 min-w-[160px]"
-              style={{ borderColor: "#e5e7eb" }}>
-              {["All", ...shiftTypeOptions].map((o) => (
-                <button key={o} onClick={() => { setShiftType(o === "All" ? "" : o); setShiftTypeOpen(false); setCurrentPage(1); }}
-                  className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50"
-                  style={{ color: "#374151" }}>
+                  style={{ color: statusFilter === o ? "#1f7a3c" : "#374151", fontWeight: statusFilter === o ? 600 : 400 }}>
                   {o}
                 </button>
               ))}
@@ -273,7 +380,7 @@ const ManageUser = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                {["Employee Name", "Staff ID", "Username", "Gender", "Phone No", "Salary/Hour", "Suspension", "Actions"].map((h) => (
+                {["Employee Name", "CYIM ID", "Username", "Gender", "Phone No", "Salary/Hour", "ID Card", "Suspension", "Actions"].map((h) => (
                   <th
                     key={h}
                     className="text-left px-4 py-3 font-semibold whitespace-nowrap"
@@ -287,7 +394,7 @@ const ManageUser = () => {
             <tbody>
               {currentUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16" style={{ color: "#9ca3af", fontSize: 14 }}>
+                  <td colSpan={9} className="text-center py-16" style={{ color: "#9ca3af", fontSize: 14 }}>
                     No staff members found
                   </td>
                 </tr>
@@ -343,6 +450,18 @@ const ManageUser = () => {
                       )}
                     </td>
 
+                    {/* ID Card */}
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setIdCardUser(user)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors hover:bg-gray-50"
+                        style={{ fontSize: 12, color: "#1f7a3c", fontWeight: 600, borderColor: "#1f7a3c" }}
+                      >
+                        <CreditCard size={12} />
+                        View
+                      </button>
+                    </td>
+
                     {/* Suspension */}
                     <td className="px-4 py-3">
                       <SuspendToggle
@@ -354,14 +473,6 @@ const ManageUser = () => {
                     {/* Actions */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => navigate(`/admin-dashboard/add/update-user/${user.userId}`)}
-                          className="flex items-center justify-center rounded-lg border transition-colors hover:bg-gray-100"
-                          style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}
-                          title="View"
-                        >
-                          <Eye size={14} style={{ color: "#6b7280" }} />
-                        </button>
                         <button
                           onClick={() => navigate(`/admin-dashboard/add/update-user/${user.userId}`)}
                           className="flex items-center justify-center rounded-lg border transition-colors hover:bg-gray-100"

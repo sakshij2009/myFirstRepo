@@ -138,75 +138,136 @@ function RevenueTrendChart({ data }) {
 
 // ── Main RightPanel ────────────────────────────────────────────────────────
 
-export default function RightPanel() {
+const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// Build usage data points based on filter
+function buildUsageData(shifts, filter) {
+  const now = new Date();
+  const cat = (s) => (s.categoryName || s.shiftCategory || "").toLowerCase();
+  const shiftDay = (s) => {
+    const d = s.startDate?.toDate ? s.startDate.toDate()
+            : s.startDate instanceof Date ? s.startDate
+            : typeof s.startDate === "string" ? new Date(s.startDate.replace(/,/g,"").trim())
+            : null;
+    return d && !isNaN(d) ? d : null;
+  };
+  const bucket = (s) => {
+    const emergency  = cat(s).includes("emergent") ? 1 : 0;
+    const respite    = cat(s).includes("respite")  ? 1 : 0;
+    const supervised = cat(s).includes("supervised") ? 1 : 0;
+    const transport  = cat(s).includes("transport")  ? 1 : 0;
+    return { emergency, respite, supervised, transport };
+  };
+
+  if (filter === "Weekly") {
+    // Last 7 days, one point per day
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + i);
+      const inDay = shifts.filter(s => {
+        const sd = shiftDay(s);
+        return sd && sd.getFullYear() === d.getFullYear() && sd.getMonth() === d.getMonth() && sd.getDate() === d.getDate();
+      });
+      const totals = inDay.reduce((acc, s) => {
+        const b = bucket(s);
+        return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+      }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+      return { month: DAYS_SHORT[(d.getDay() + 6) % 7], ...totals };
+    });
+  }
+
+  if (filter === "Monthly") {
+    // Last 4 weeks
+    return Array.from({ length: 4 }, (_, i) => {
+      const weekEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (3 - i) * 7);
+      const weekStart = new Date(weekEnd); weekStart.setDate(weekStart.getDate() - 6);
+      const inWeek = shifts.filter(s => { const sd = shiftDay(s); return sd && sd >= weekStart && sd <= weekEnd; });
+      const totals = inWeek.reduce((acc, s) => {
+        const b = bucket(s);
+        return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+      }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+      return { month: `W${i + 1}`, ...totals };
+    });
+  }
+
+  // Yearly — last 6 months
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const mIdx = d.getMonth(); const yr = d.getFullYear();
+    const inMonth = shifts.filter(s => { const sd = shiftDay(s); return sd && sd.getMonth() === mIdx && sd.getFullYear() === yr; });
+    const totals = inMonth.reduce((acc, s) => {
+      const b = bucket(s);
+      return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+    }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+    return { month: MONTHS_SHORT[mIdx], ...totals };
+  });
+}
+
+function buildRevenueData(revDocs, filter) {
+  const now = new Date();
+  const revDate = (r) => r.createdAt?.toDate ? r.createdAt.toDate() : null;
+
+  if (filter === "Weekly") {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + i);
+      const total = revDocs.filter(r => {
+        const rd = revDate(r);
+        return rd && rd.getFullYear() === d.getFullYear() && rd.getMonth() === d.getMonth() && rd.getDate() === d.getDate();
+      }).reduce((s, r) => s + (r.amount || 0), 0);
+      return { month: DAYS_SHORT[(d.getDay() + 6) % 7], value: total };
+    });
+  }
+  if (filter === "Monthly") {
+    return Array.from({ length: 4 }, (_, i) => {
+      const weekEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (3 - i) * 7);
+      const weekStart = new Date(weekEnd); weekStart.setDate(weekStart.getDate() - 6);
+      const total = revDocs.filter(r => { const rd = revDate(r); return rd && rd >= weekStart && rd <= weekEnd; }).reduce((s, r) => s + (r.amount || 0), 0);
+      return { month: `W${i + 1}`, value: total };
+    });
+  }
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const mIdx = d.getMonth(); const yr = d.getFullYear();
+    const total = revDocs.filter(r => { const rd = revDate(r); return rd && rd.getMonth() === mIdx && rd.getFullYear() === yr; }).reduce((s, r) => s + (r.amount || 0), 0);
+    return { month: MONTHS_SHORT[mIdx], value: total };
+  });
+}
+
+export default function RightPanel({ filter = "Weekly" }) {
   const [serviceUsage, setServiceUsage] = useState([]);
   const [revenueTrend, setRevenueTrend] = useState([]);
   const [topPerformers, setTopPerformers] = useState([]);
 
   useEffect(() => {
-    const fetch = async () => {
+    const load = async () => {
       try {
-        const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-        const now = new Date();
+        const [shiftSnap, revSnap, userSnap] = await Promise.all([
+          getDocs(collection(db, "shifts")),
+          getDocs(collection(db, "revenue")),
+          getDocs(query(collection(db, "users"), where("role", "==", "user"))),
+        ]);
 
-        // Last 6 months
-        const months = Array.from({ length: 6 }, (_, i) => {
-          const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-          return { month: MONTHS[d.getMonth()], year: d.getFullYear(), monthIdx: d.getMonth() };
-        });
+        const shifts  = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const revDocs = revSnap.docs.map(d => d.data());
+        const users   = userSnap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 3);
 
-        // Fetch all shifts
-        const shiftSnap = await getDocs(collection(db, "shifts"));
-        const shifts = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setServiceUsage(buildUsageData(shifts, filter));
+        setRevenueTrend(buildRevenueData(revDocs, filter));
 
-        // Service usage per month
-        const usageData = months.map(({ month, year, monthIdx }) => {
-          const inMonth = shifts.filter(s => {
-            const d = s.startDate?.toDate ? s.startDate.toDate() : s.createdAt?.toDate ? s.createdAt.toDate() : null;
-            return d && d.getMonth() === monthIdx && d.getFullYear() === year;
-          });
-          const cat = (s) => (s.categoryName || s.shiftCategory || "").toLowerCase();
-          return {
-            month,
-            Emergency:  inMonth.filter(s => cat(s).includes("emergent")).length,
-            Respite:    inMonth.filter(s => cat(s).includes("respite")).length,
-            Supervised: inMonth.filter(s => cat(s).includes("supervised")).length,
-            Transport:  inMonth.filter(s => cat(s).includes("transport")).length,
-          };
-        });
-        setServiceUsage(usageData);
-
-        // Revenue per month
-        const revSnap = await getDocs(collection(db, "revenue"));
-        const revDocs = revSnap.docs.map(d => ({ ...d.data() }));
-        const revenueData = months.map(({ month, year, monthIdx }) => {
-          const total = revDocs.filter(r => {
-            const d = r.createdAt?.toDate ? r.createdAt.toDate() : null;
-            return d && d.getMonth() === monthIdx && d.getFullYear() === year;
-          }).reduce((s, r) => s + (r.amount || 0), 0);
-          return { month, value: total };
-        });
-        setRevenueTrend(revenueData);
-
-        // Top performers from users
-        const userSnap = await getDocs(query(collection(db, "users"), where("role", "==", "user")));
-        const users = userSnap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 3);
-        const performers = users.map((u, i) => ({
-          name: u.name || "Staff Member",
-          service: u.serviceType || ["Emergency Care","Respite Care","Supervised Visits"][i % 3],
-          rating: [5, 4.9, 4.8][i],
-          score: [98, 96, 92][i],
+        setTopPerformers(users.map((u, i) => ({
+          name:     u.name || "Staff Member",
+          service:  u.serviceType || ["Emergency Care","Respite Care","Supervised Visits"][i % 3],
+          rating:   [5, 4.9, 4.8][i],
+          score:    [98, 96, 92][i],
           initials: (u.name || "SM").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2),
-          photo: u.profilePhotoUrl || null,
-        }));
-        setTopPerformers(performers);
-
+          photo:    u.profilePhotoUrl || null,
+        })));
       } catch (err) {
         console.error("RightPanel fetch error:", err);
       }
     };
-    fetch();
-  }, []);
+    load();
+  }, [filter]);
 
   const now = new Date();
   const monthLabel = now.toLocaleString("default", { month: "long" }) + " " + now.getFullYear();

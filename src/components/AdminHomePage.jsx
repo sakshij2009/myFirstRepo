@@ -55,6 +55,8 @@ const AdminHomePage = ({ user, setUser }) => {
   const navigate = useNavigate();
   const [sidebarWidth, setSidebarWidth] = useState(242);
   const [addNewOpen, setAddNewOpen] = useState(false);
+  const [filter, setFilter] = useState("Weekly");
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -84,12 +86,16 @@ const AdminHomePage = ({ user, setUser }) => {
           user={user}
           onLogout={handleLogout}
           onAddNewClick={() => setAddNewOpen(true)}
+          filter={filter}
+          setFilter={(f) => { setFilter(f); if (f !== "Custom") setDateRange({ from: "", to: "" }); }}
+          dateRange={dateRange}
+          setDateRange={setDateRange}
         />
 
         {/* Page area */}
         <main className="flex-1 overflow-auto" style={{ padding: "20px 24px" }}>
           <Routes>
-            <Route path="dashboard"        element={<Dashboard user={user} />} />
+            <Route path="dashboard"        element={<Dashboard user={user} filter={filter} dateRange={dateRange} />} />
             <Route path="shifts"           element={<ShiftCommandPage />} />
             <Route path="transportation"   element={<Transportation />} />
             <Route path="clients"          element={<ManageClients />} />

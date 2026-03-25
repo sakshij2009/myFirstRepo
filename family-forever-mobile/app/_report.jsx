@@ -12,10 +12,10 @@
   import { doc, getDoc, updateDoc,collection,getDocs } from "firebase/firestore";
   import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-  import ReportTransportationTab from "./ReportTransportationTab";
+  import ReportTransportationTab from "./_ReportTransportationTab";
   import { db } from "../src/firebase/config";
-  import MedicationTab from "./MedicationTab";
-import IntakeView from "./IntakeView";
+  import MedicationTab from "./_MedicationTab";
+import IntakeView from "./_IntakeView";
 import MedicalContactLogModal from "../src/components/MedicalContactLogModal";
 import NoteworthyEventModal from "../src/components/NoteworthyEventModal";
 import FollowThroughModal from "../src/components/FollowThroughModal";

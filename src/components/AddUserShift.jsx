@@ -25,7 +25,7 @@ import { useNavigate } from "react-router-dom";
 
 
 // ---------------- OFFICE ADDRESS ----------------
-const OFFICE_ADDRESS = "206,10110 124 St, Edmonton T5N 1P6, Alberta, Canada";
+const OFFICE_ADDRESS = "10110 124 Street, Edmonton, AB T5N 1P6";
 
 // ---------------- GOOGLE MAPS DISTANCE CALCULATOR ----------------
 const calculateTotalDistance = async (shiftPoint) => {
@@ -126,8 +126,12 @@ const AddUserShift = ({ mode = "add", user }) => {
   });
   const [createdShift, setCreatedShift] = useState(null);
 
-  // NEW: shiftPoints derived from intake (or existing shift)
+  // shiftPoints: active members in this shift (editable)
   const [shiftPoints, setShiftPoints] = useState([]);
+  // removedShiftPoints: members removed from this shift (can be added back)
+  const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
+  // intakeDescription: auto-fetched from intake form
+  const [intakeDescription, setIntakeDescription] = useState("");
 
   // ---------------- VALIDATION SCHEMA ----------------
   const validationSchema = Yup.object().shape({
@@ -401,101 +405,84 @@ setShiftPoints(points);
 }, [mode, id, shiftTypes, shiftCategories, clients, users]);
 
 
-  // ---------------- FETCH SHIFT POINTS FROM INTAKE FOR SELECTED CLIENT ----------------
+  // ---------------- FETCH SHIFT POINTS & DESCRIPTION FROM CLIENT / INTAKE ----------------
   useEffect(() => {
-    const loadShiftPointsFromIntake = async () => {
+    const loadFromClient = async () => {
       if (!selectedClient) {
-        // if client cleared
         if (mode !== "update") {
           setShiftPoints([]);
+          setRemovedShiftPoints([]);
         }
         return;
       }
 
-      // If we are editing an existing shift that already has shiftPoints, don't override
-    if (
-  mode === "update" &&
-  Array.isArray(shiftPoints) &&
-  shiftPoints.some(p => p.totalKilometers !== undefined)
-) {
-  return;
-}
+      // In update mode, shift points are already loaded from the saved shift — don't override
+      if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.some(p => p.totalKilometers !== undefined)) {
+        return;
+      }
 
+      // ── 1. If client has shiftPoints (family client), use those ──
+      if (Array.isArray(selectedClient.shiftPoints) && selectedClient.shiftPoints.length > 0) {
+        const points = selectedClient.shiftPoints.map((sp) => ({
+          name: sp.name || "",
+          pickupLocation: sp.pickupLocation || "",
+          pickupTime: sp.pickupTime || "",
+          visitLocation: sp.visitLocation || "",
+          visitStartTime: sp.visitStartTime || "",
+          visitEndTime: sp.visitEndTime || "",
+          dropLocation: sp.dropLocation || "",
+          dropTime: sp.dropTime || "",
+          seatType: sp.seatType || "",
+          transportationMode: sp.transportationMode || "",
+          totalKilometers: 0,
+        }));
+        setShiftPoints(points);
+        setRemovedShiftPoints([]);
+      } else {
+        // Not a family client — no shift points
+        setShiftPoints([]);
+        setRemovedShiftPoints([]);
+      }
 
+      // ── 2. Fetch description from intake form ──
       try {
-        const clientNameCandidate =
-          (selectedClient.name || selectedClient.fullName || "").trim();
-
+        const clientNameCandidate = (selectedClient.name || "").trim();
         if (!clientNameCandidate) return;
 
         const snap = await getDocs(collection(db, "InTakeForms"));
-
-        let foundPoint = null;
+        let foundDesc = "";
 
         snap.forEach((d) => {
-          if (foundPoint) return;
+          if (foundDesc) return;
           const data = d.data();
+          const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
 
-          // ---------- OLD FORMAT: inTakeClients array ----------
-          if (Array.isArray(data.inTakeClients)) {
+          if (nameMatch(data.clientName) || nameMatch(data.name)) {
+            foundDesc = data.jobDescription || data.description || data.notes || "";
+          }
+          if (!foundDesc && Array.isArray(data.inTakeClients)) {
             data.inTakeClients.forEach((cl) => {
-              if (foundPoint) return;
-              const clName = (cl.name || "").trim();
-              if (!clName) return;
-
-              if (clName === clientNameCandidate) {
-                foundPoint = {
-                  pickupLocation: cl.pickupAddress || "",
-                  pickupTime: cl.pickupTime || "",
-                  visitLocation: cl.visitAddress || "",
-                  visitStartTime: cl.startVisitTime || "",
-                  visitEndTime: cl.endVisitTime || "",
-                  dropLocation: cl.dropAddress || "",
-                  dropTime: cl.dropTime || "",
-                  seatType: cl.typeOfSeat || "",
-                  transportationMode:
-                    cl.purposeOfTransportation || cl.transportationMode || "",
-                };
+              if (!foundDesc && nameMatch(cl.name)) {
+                foundDesc = cl.jobDescription || cl.description || cl.notes || data.jobDescription || data.description || "";
               }
             });
           }
-
-          // ---------- NEW FORMAT: clients map with transportation sub-object ----------
-          if (!foundPoint && data.clients && typeof data.clients === "object") {
+          if (!foundDesc && data.clients && typeof data.clients === "object") {
             Object.values(data.clients).forEach((c) => {
-              if (foundPoint) return;
-              const cName = (c.fullName || c.name || "").trim();
-              if (!cName) return;
-
-              if (cName === clientNameCandidate) {
-                const t = c.transportation || {};
-                foundPoint = {
-                  pickupLocation: t.pickupAddress || "",
-                  pickupTime: t.pickupTime || "",
-                  visitLocation: t.visitAddress || "",
-                  visitStartTime: t.startVisitTime || "",
-                  visitEndTime: t.endVisitTime || "",
-                  dropLocation: t.dropAddress || "",
-                  dropTime: t.dropTime || "",
-                  seatType: t.typeOfSeat || "",
-                  transportationMode: t.transportationMode || "",
-                };
+              if (!foundDesc && nameMatch(c.fullName || c.name)) {
+                foundDesc = c.jobDescription || c.description || data.jobDescription || data.description || "";
               }
             });
           }
         });
 
-        if (foundPoint) {
-          setShiftPoints([foundPoint]);
-        } else {
-          setShiftPoints([]);
-        }
+        if (foundDesc) setIntakeDescription(foundDesc);
       } catch (err) {
-        console.error("Error loading shift points from intake:", err);
+        console.error("Error loading intake description:", err);
       }
     };
 
-    loadShiftPointsFromIntake();
+    loadFromClient();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClient, mode]);
 
@@ -510,29 +497,26 @@ const handleSubmit = async (values, { resetForm }) => {
       return;
     }
 
-    const fp = shiftPoints[0] || {}; // from intake
-
-    const finalPoint = {
+    // Build final shiftPoints array from all active points (strip _edit flags)
+    const finalPoints = shiftPoints.map((fp) => ({
+      name: fp.name || "",
       pickupLocation: fp.pickupLocation || "",
       pickupTime: fp.pickupTime || "",
       pickupLatitude: fp.pickupLatitude || 0,
       pickupLongitude: fp.pickupLongitude || 0,
-
       visitLocation: fp.visitLocation || "",
       visitStartTime: fp.visitStartTime || "",
       visitEndTime: fp.visitEndTime || "",
       visitLatitude: fp.visitLatitude || 0,
       visitLongitude: fp.visitLongitude || 0,
-
       dropLocation: fp.dropLocation || "",
       dropTime: fp.dropTime || "",
       dropLatitude: fp.dropLatitude || 0,
       dropLongitude: fp.dropLongitude || 0,
-
       seatType: fp.seatType || "",
       transportationMode: fp.transportationMode || "",
-      purposeOfTransportation: fp.purposeOfTransportation || "",
-    };
+      totalKilometers: Number(fp.totalKilometers) || 0,
+    }));
 
     // ---------- UPDATE MODE ----------
     if (mode === "update" && id) {
@@ -548,19 +532,13 @@ const handleSubmit = async (values, { resetForm }) => {
         let endDateObj = new Date(primaryDate);
         if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-        // ✅ Ensure totalKilometers lives inside shiftPoints only
-const pointWithKM = {
-  ...finalPoint,
-  totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
-};
-
 await updateDoc(docRef, {
   ...restValues,
   startDate: Timestamp.fromDate(primaryDate),
   endDate: Timestamp.fromDate(endDateObj),
   clientDetails: selectedClient,
   updatedAt: new Date(),
-  shiftPoints: [pointWithKM], // ✅ Only inside shiftPoints
+  shiftPoints: finalPoints,
   clockIn: "",
   clockOut: "",
   isRatified: false,
@@ -588,15 +566,9 @@ await updateDoc(docRef, {
       let endDateObj = new Date(startDateObj);
       if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-     // ✅ Ensure totalKilometers lives inside the shift point itself
-const pointWithKM = {
-  ...finalPoint,
-  totalKilometers: Number(shiftPoints[0]?.totalKilometers) || 0,
-};
-
 await setDoc(doc(db, "shifts", newShiftId), {
   ...values,
-   userId:selectedUser?.userId ,
+  userId: selectedUser?.userId,
   userName: selectedUser?.name || "",
   startDate: startDateObj,
   endDate: endDateObj,
@@ -605,7 +577,7 @@ await setDoc(doc(db, "shifts", newShiftId), {
   shiftReport: "",
   shiftConfirmed: false,
   id: newShiftId,
-  shiftPoints: [pointWithKM], // ✅ stored here
+  shiftPoints: finalPoints,
   clockIn: "",
   clockOut: "",
   isRatify: false,
@@ -662,13 +634,15 @@ await setDoc(doc(db, "shifts", newShiftId), {
     setCreatedShift(values);
     resetForm();
     setShiftPoints([]);
+    setRemovedShiftPoints([]);
+    setIntakeDescription("");
   } catch (error) {
     console.error("Error saving shift:", error);
   }
 };
 
 
-const handleCalculateKilometers = async (shiftPoint) => {
+const handleCalculateKilometers = async (shiftPoint, index) => {
   if (!shiftPoint.pickupLocation || !shiftPoint.dropLocation) {
     alert("Please enter both pickup and drop locations first.");
     return;
@@ -676,7 +650,7 @@ const handleCalculateKilometers = async (shiftPoint) => {
 
   try {
     const km = await calculateTotalDistance(shiftPoint);
-    setShiftPoints([{ ...shiftPoint, totalKilometers: km }]);
+    setShiftPoints((prev) => prev.map((p, i) => i === index ? { ...p, totalKilometers: km } : p));
   } catch (err) {
     console.error("Error calculating total distance:", err);
     alert("Failed to calculate total kilometers.");
@@ -818,6 +792,14 @@ const handleCalculateKilometers = async (shiftPoint) => {
               setSelectedShiftCategory(shiftCategoryData || null);
             }, [values.client, values.user, values.shiftType, values.shiftCategory]);
 
+            // Auto-fill description from intake when it loads
+            // eslint-disable-next-line react-hooks/rules-of-hooks
+            useEffect(() => {
+              if (intakeDescription && !values.description) {
+                setFieldValue("description", intakeDescription);
+              }
+            }, [intakeDescription]);
+
             const handleDatesChange = (dates) => {
               const selected = dates || [];
               setFieldValue("shiftDates", selected);
@@ -843,8 +825,6 @@ const handleCalculateKilometers = async (shiftPoint) => {
               }
             // eslint-disable-next-line react-hooks/exhaustive-deps
             }, [repeatEnabled, repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate]);
-
-            const firstPoint = shiftPoints[0] || null;
 
             return (
               <Form className="flex flex-col gap-5">
@@ -1166,308 +1146,161 @@ const handleCalculateKilometers = async (shiftPoint) => {
                   </div>
                 </div>
 
-                {/* ── Transportation Details (conditional) ── */}
-                {selectedClient && (
-                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <div className="flex items-center justify-between mb-5">
+                {/* ── Family Members / Shift Points (only for family clients) ── */}
+                {selectedClient && shiftPoints.length > 0 && (
+                  <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                       <div>
-                        <h2 className="font-bold text-gray-900" style={{ fontSize: 15 }}>Transportation Details</h2>
-                        <p className="text-[12px] text-gray-400 mt-0.5">Auto-filled from intake form · click any field to edit</p>
+                        <h2 className="font-bold text-gray-900" style={{ fontSize: 15 }}>Family Members – Shift Points</h2>
+                        <p className="text-[12px] text-gray-400 mt-0.5">Auto-filled from client record · click any field to edit · remove members not in this shift</p>
                       </div>
-                      <button type="button"
-                        className="px-3 py-1.5 rounded-lg border font-semibold text-xs transition-all hover:bg-gray-50"
-                        style={{ borderColor: "#145228", color: "#145228" }}
-                        onClick={() => {
-                          if (!firstPoint) return;
-                          setShiftPoints([{ ...firstPoint, pickupLocation: firstPoint.dropLocation, dropLocation: firstPoint.pickupLocation }]);
-                        }}>
-                        Swap Pickup / Drop
-                      </button>
+                      <span className="px-2.5 py-1 rounded-full font-semibold text-xs" style={{ background: "#dcfce7", color: "#15803d" }}>
+                        {shiftPoints.length} active · {removedShiftPoints.length} removed
+                      </span>
                     </div>
 
-                    {firstPoint ? (
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-
-                        {/* Pickup Location */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Location</label>
-                          <div className="flex items-center gap-2">
-                            {!firstPoint.pickupLocation_edit ? (
-                              <p
-                                className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
-                                onClick={() => setShiftPoints([{ ...firstPoint, pickupLocation_edit: true }])}
-                                title={firstPoint.pickupLocation}
-                              >
-                                {firstPoint.pickupLocation || <span className="text-gray-400">N/A – click to edit</span>}
-                              </p>
-                            ) : (
-                              <input
-                                type="text"
-                                autoFocus
-                                className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                value={firstPoint.pickupLocation || ""}
-                                onChange={async (e) => {
-                                  const updatedPickup = e.target.value;
-                                  let updatedPoint = { ...firstPoint, pickupLocation: updatedPickup };
-                                  if (updatedPickup && firstPoint.dropLocation && window.google) {
-                                    const km = await calculateDistance(updatedPickup, firstPoint.dropLocation);
-                                    updatedPoint.totalKilometers = km;
-                                  }
-                                  setShiftPoints([updatedPoint]);
-                                }}
-                                onBlur={() => setShiftPoints([{ ...firstPoint, pickupLocation_edit: false }])}
-                              />
-                            )}
-                            <FaRegMap
-                              className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
-                              onClick={() =>
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.pickupLocation || "")}`,
-                                  "_blank"
-                                )
-                              }
-                            />
+                    <div className="p-6 flex flex-col gap-5">
+                      {shiftPoints.map((pt, idx) => (
+                        <div key={idx} className="rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
+                          {/* Member header */}
+                          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: "#f9fafb", borderColor: "#f3f4f6" }}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
+                                style={{ background: "linear-gradient(135deg,#145228,#1f7a3c)" }}>
+                                {(pt.name || String.fromCharCode(65 + idx)).charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-semibold text-sm text-gray-900">{pt.name || `Member ${idx + 1}`}</span>
+                              {pt.seatType && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#e0e7ff", color: "#4338ca" }}>{pt.seatType}</span>}
+                            </div>
+                            <button type="button"
+                              onClick={() => {
+                                setRemovedShiftPoints((prev) => [...prev, pt]);
+                                setShiftPoints((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="text-xs font-semibold px-3 py-1 rounded-lg border transition-all hover:bg-red-50"
+                              style={{ borderColor: "#fca5a5", color: "#ef4444" }}>
+                              Remove from shift
+                            </button>
                           </div>
-                        </div>
 
-                        {/* Pickup Time */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Time</label>
-                          {!firstPoint.pickupTime_edit ? (
-                            <p
-                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                              onClick={() => setShiftPoints([{ ...firstPoint, pickupTime_edit: true }])}
-                            >
-                              {firstPoint.pickupTime || <span className="text-gray-400">N/A – click to edit</span>}
-                            </p>
-                          ) : (
-                            <input
-                              type="text"
-                              autoFocus
-                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                              value={firstPoint.pickupTime || ""}
-                              onChange={(e) => setShiftPoints([{ ...firstPoint, pickupTime: e.target.value }])}
-                              onBlur={() => setShiftPoints([{ ...firstPoint, pickupTime_edit: false }])}
-                            />
-                          )}
-                        </div>
+                          {/* Fields grid */}
+                          <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-4">
 
-                        {/* Drop Location */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Location</label>
-                          <div className="flex items-center gap-2">
-                            {!firstPoint.dropLocation_edit ? (
-                              <p
-                                className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
-                                title={firstPoint.dropLocation}
-                                onClick={() => setShiftPoints([{ ...firstPoint, dropLocation_edit: true }])}
-                              >
-                                {firstPoint.dropLocation || <span className="text-gray-400">N/A – click to edit</span>}
-                              </p>
-                            ) : (
-                              <input
-                                type="text"
-                                autoFocus
-                                className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                value={firstPoint.dropLocation || ""}
-                                onChange={async (e) => {
-                                  const updatedDrop = e.target.value;
-                                  let updatedPoint = { ...firstPoint, dropLocation: updatedDrop };
-                                  if (firstPoint.pickupLocation && updatedDrop && window.google) {
-                                    const km = await calculateDistance(firstPoint.pickupLocation, updatedDrop);
-                                    updatedPoint.totalKilometers = km;
-                                  }
-                                  setShiftPoints([updatedPoint]);
-                                }}
-                                onBlur={() => setShiftPoints([{ ...firstPoint, dropLocation_edit: false }])}
+                            {/* Pickup Location */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Location</label>
+                              <div className="flex items-center gap-2">
+                                <input type="text"
+                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                  value={pt.pickupLocation || ""}
+                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupLocation: e.target.value } : p))}
+                                  placeholder="N/A"
+                                />
+                                <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.pickupLocation || "")}`, "_blank")} />
+                              </div>
+                            </div>
+
+                            {/* Pickup Time */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Time</label>
+                              <input type="text"
+                                className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                value={pt.pickupTime || ""}
+                                onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
+                                placeholder="N/A"
                               />
-                            )}
-                            <FaRegMap
-                              className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
-                              onClick={() =>
-                                window.open(
-                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.dropLocation || "")}`,
-                                  "_blank"
-                                )
-                              }
-                            />
-                          </div>
-                        </div>
+                            </div>
 
-                        {/* Drop Time */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Time</label>
-                          {!firstPoint.dropTime_edit ? (
-                            <p
-                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                              onClick={() => setShiftPoints([{ ...firstPoint, dropTime_edit: true }])}
-                            >
-                              {firstPoint.dropTime || <span className="text-gray-400">N/A – click to edit</span>}
-                            </p>
-                          ) : (
-                            <input
-                              type="text"
-                              autoFocus
-                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                              value={firstPoint.dropTime || ""}
-                              onChange={(e) => setShiftPoints([{ ...firstPoint, dropTime: e.target.value }])}
-                              onBlur={() => setShiftPoints([{ ...firstPoint, dropTime_edit: false }])}
-                            />
-                          )}
-                        </div>
+                            {/* Drop Location */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Location</label>
+                              <div className="flex items-center gap-2">
+                                <input type="text"
+                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                  value={pt.dropLocation || ""}
+                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, dropLocation: e.target.value } : p))}
+                                  placeholder="N/A"
+                                />
+                                <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.dropLocation || "")}`, "_blank")} />
+                              </div>
+                            </div>
 
-                        {/* Visit Fields (conditional) */}
-                        {firstPoint.visitLocation?.trim() !== "" && (
-                          <>
+                            {/* Drop Time */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Time</label>
+                              <input type="text"
+                                className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                value={pt.dropTime || ""}
+                                onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, dropTime: e.target.value } : p))}
+                                placeholder="N/A"
+                              />
+                            </div>
+
                             {/* Visit Location */}
                             <div>
                               <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Location</label>
                               <div className="flex items-center gap-2">
-                                {!firstPoint.visitLocation_edit ? (
-                                  <p
-                                    className="flex-1 text-sm font-medium text-gray-800 truncate cursor-pointer hover:text-[#145228]"
-                                    title={firstPoint.visitLocation}
-                                    onClick={() => setShiftPoints([{ ...firstPoint, visitLocation_edit: true }])}
-                                  >
-                                    {firstPoint.visitLocation}
-                                  </p>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                    value={firstPoint.visitLocation || ""}
-                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitLocation: e.target.value }])}
-                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitLocation_edit: false }])}
-                                  />
-                                )}
-                                <FaRegMap
-                                  className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
-                                  onClick={() =>
-                                    window.open(
-                                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(firstPoint.visitLocation || "")}`,
-                                      "_blank"
-                                    )
-                                  }
+                                <input type="text"
+                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                  value={pt.visitLocation || ""}
+                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitLocation: e.target.value } : p))}
+                                  placeholder="N/A"
+                                />
+                                <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.visitLocation || "")}`, "_blank")} />
+                              </div>
+                            </div>
+
+                            {/* Visit Time */}
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Time</label>
+                              <div className="flex items-center gap-2">
+                                <input type="text"
+                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                  value={pt.visitStartTime || ""}
+                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitStartTime: e.target.value } : p))}
+                                  placeholder="Start"
+                                />
+                                <span className="text-gray-400 text-sm">–</span>
+                                <input type="text"
+                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                  value={pt.visitEndTime || ""}
+                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitEndTime: e.target.value } : p))}
+                                  placeholder="End"
                                 />
                               </div>
                             </div>
 
-                            {/* Visit Duration */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Duration</label>
-                              <div className="flex items-center gap-2">
-                                {!firstPoint.visitStartTime_edit ? (
-                                  <p
-                                    className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                                    onClick={() => setShiftPoints([{ ...firstPoint, visitStartTime_edit: true }])}
-                                  >
-                                    {firstPoint.visitStartTime || "N/A"}
-                                  </p>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white w-24"
-                                    value={firstPoint.visitStartTime || ""}
-                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitStartTime: e.target.value }])}
-                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitStartTime_edit: false }])}
-                                  />
-                                )}
-                                <span className="text-gray-400">–</span>
-                                {!firstPoint.visitEndTime_edit ? (
-                                  <p
-                                    className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                                    onClick={() => setShiftPoints([{ ...firstPoint, visitEndTime_edit: true }])}
-                                  >
-                                    {firstPoint.visitEndTime || "N/A"}
-                                  </p>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    autoFocus
-                                    className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white w-24"
-                                    value={firstPoint.visitEndTime || ""}
-                                    onChange={(e) => setShiftPoints([{ ...firstPoint, visitEndTime: e.target.value }])}
-                                    onBlur={() => setShiftPoints([{ ...firstPoint, visitEndTime_edit: false }])}
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* Seat Type */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Seat Type</label>
-                          {!firstPoint.seatType_edit ? (
-                            <p
-                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                              onClick={() => setShiftPoints([{ ...firstPoint, seatType_edit: true }])}
-                            >
-                              {firstPoint.seatType || <span className="text-gray-400">N/A – click to edit</span>}
-                            </p>
-                          ) : (
-                            <input
-                              type="text"
-                              autoFocus
-                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                              value={firstPoint.seatType || ""}
-                              onChange={(e) => setShiftPoints([{ ...firstPoint, seatType: e.target.value }])}
-                              onBlur={() => setShiftPoints([{ ...firstPoint, seatType_edit: false }])}
-                            />
-                          )}
-                        </div>
-
-                        {/* Transportation Mode */}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Transportation Mode</label>
-                          {!firstPoint.transportationMode_edit ? (
-                            <p
-                              className="text-sm font-medium text-gray-800 cursor-pointer hover:text-[#145228]"
-                              onClick={() => setShiftPoints([{ ...firstPoint, transportationMode_edit: true }])}
-                            >
-                              {firstPoint.transportationMode || <span className="text-gray-400">N/A – click to edit</span>}
-                            </p>
-                          ) : (
-                            <input
-                              type="text"
-                              autoFocus
-                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                              value={firstPoint.transportationMode || ""}
-                              onChange={(e) => setShiftPoints([{ ...firstPoint, transportationMode: e.target.value }])}
-                              onBlur={() => setShiftPoints([{ ...firstPoint, transportationMode_edit: false }])}
-                            />
-                          )}
-                        </div>
-
-                        {/* Total Kilometers */}
-                        <div className="col-span-2">
-                          <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Total Kilometers</label>
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="text"
-                              readOnly
-                              className="bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 w-32"
-                              value={firstPoint.totalKilometers || ""}
-                              placeholder="Not calculated"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleCalculateKilometers(firstPoint)}
-                              className="px-4 py-2.5 bg-[#145228] text-white text-sm font-medium rounded-lg hover:bg-[#1f7a3c] transition-colors"
-                            >
-                              Calculate Total Kilometers
-                            </button>
+                            {/* Total KM + Calculate — hidden */}
                           </div>
                         </div>
+                      ))}
 
-                      </div>
-                    ) : (
-                      <div className="py-8 text-center">
-                        <p className="text-sm text-gray-400">No transportation details found in intake for this client.</p>
-                      </div>
-                    )}
+                      {/* Removed members – add back */}
+                      {removedShiftPoints.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Removed from this shift</p>
+                          <div className="flex flex-wrap gap-2">
+                            {removedShiftPoints.map((pt, idx) => (
+                              <div key={idx} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
+                                <span className="text-sm text-gray-500">{pt.name || `Member ${idx + 1}`}</span>
+                                <button type="button"
+                                  onClick={() => {
+                                    setShiftPoints((prev) => [...prev, pt]);
+                                    setRemovedShiftPoints((prev) => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="text-xs font-semibold px-2 py-0.5 rounded-md transition-all"
+                                  style={{ background: "#dcfce7", color: "#15803d" }}>
+                                  Add back
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

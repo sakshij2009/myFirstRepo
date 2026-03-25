@@ -96,10 +96,12 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-2 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 px-3 py-2 overflow-y-auto overflow-x-hidden sidebar-nav"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+        <style>{`.sidebar-nav::-webkit-scrollbar{display:none!important}`}</style>
         {NAV_GROUPS.map(({ group, items }, gi) => (
           <div key={group}>
-            {!collapsed && gi > 0 && (
+            {!collapsed && gi > 0 && group !== "Admin" && (
               <div
                 className="px-3 pt-4 pb-2 text-[10px] uppercase font-semibold tracking-wider"
                 style={{ color: "rgba(255,255,255,0.35)" }}
@@ -156,7 +158,7 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
         {/* Back to Role Select */}
         {!collapsed ? (
           <button
-            onClick={() => navigate("/")}
+            onClick={onLogout}
             className="w-full flex items-center gap-2 px-3 py-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
             style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.55)" }}
           >
@@ -165,7 +167,7 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
           </button>
         ) : (
           <button
-            onClick={() => navigate("/")}
+            onClick={onLogout}
             className="w-full flex items-center justify-center p-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
             title="Back to Role Select"
           >

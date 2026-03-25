@@ -8,931 +8,597 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { collection, query, where, onSnapshot, doc, updateDoc, getDocs ,addDoc} from "firebase/firestore";
+import { Ionicons } from "@expo/vector-icons";
+import { collection, query, onSnapshot, getDocs, where, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config.jsx";
-import { useRouter } from "expo-router";
-import * as Location from "expo-location";
 import { registerForPushNotifications } from "../src/utils/registerForPushNotifications";
-import TransferShiftModal from "../app/TransferShiftModal.jsx";
-import { requestShiftTransfer } from "../src/utils/transferService.js";
-import ShiftCard from "../src/components/ShiftCard";
-import CalendarModal from "../src/components/CalendarModal";
-import EmergencyCallModal from "../src/components/EmergencyCallModel.jsx"
-import ApplyLeaveModal from "../src/components/ApplyLeaveModal.jsx";
-// import { useRouter } from "expo-router";
-import { sendNotification } from "../src/utils/notificationHelper.js";
-import MonthlyCalendar from "../src/components/MonthlyCalendar";
+import { router } from "expo-router";
 
-
-
-
-/* ===================== */
+const GREEN = "#1F6F43";
+const PRIMARY_GREEN = "#1F6F43";
+const LIGHT_GREEN = "#F0FDF4";
+const DARK_TEXT = "#1A1A1A";
+const GRAY_TEXT = "#9CA3AF";
+const GRAY_LIGHT = "#F8F8F6";
+const GRAY_BORDER = "#E5E7EB";
 
 export default function Home() {
   const [user, setUser] = useState(null);
   const [shifts, setShifts] = useState([]);
-  const [activeTab, setActiveTab] = useState("schedule");
-
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const router = useRouter();
-const [showTransferModal, setShowTransferModal] = useState(false);
-const [selectedShift, setSelectedShift] = useState(null);
-
-const [showEmergencyModal, setShowEmergencyModal] = useState(false);
-const [showDayOffModal, setShowDayOffModal] = useState(false);
-
-
-
-  
-/* ===== LOAD LOGGED IN USER ===== */
-useEffect(() => {
-  const loadUser = async () => {
-    const stored = await AsyncStorage.getItem("user");
-    if (!stored) return;
-
-   
-    setUser(JSON.parse(stored));
-    const parsed = JSON.parse(stored);
-
-
-    // 🔔 Register for notifications
-    if (parsed?.userId) {
-      await registerForPushNotifications(parsed.username);
-    }
-
-    // 🔥 Listen to user document in Firestore (real-time)
-    const userRef = doc(db, "users", parsed.userId);
-
-    // const unsubscribe = onSnapshot(userRef, (snap) => {
-    //   if (snap.exists()) {
-    //     setUser({ userId: parsed.userId, ...snap.data() });
-    //   }
-    // });
-
-    // return unsubscribe;
-  };
-
-  loadUser();
-}, []);
-
-
-
-  /* ===== REAL-TIME SHIFTS FROM FIRESTORE ===== */
   useEffect(() => {
-  if (!user) return;
+    const loadUser = async () => {
+      const stored = await AsyncStorage.getItem("user");
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      setUser(parsed);
+      if (parsed?.userId) await registerForPushNotifications(parsed.username);
+    };
+    loadUser();
+  }, []);
 
-  const q = query(collection(db, "shifts"));
-
-  const unsub = onSnapshot(q, (snap) => {
-    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-    const regularShifts = data.filter(
-      (shift) =>
-        shift?.name?.toLowerCase() === user?.name?.toLowerCase() ||
-        shift?.userId === user?.userId
-    );
-
-    setShifts(regularShifts);
-  });
-
-  return () => unsub();
-}, [user]);
-
-const confirmShift = async (shift) => {
-  try {
-    const q = query(
-      collection(db, "shifts"),
-      where("id", "==", shift?.id)   // 👈 match your field name
-    );
-
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) {
-      console.log("❌ No shift found with this ShiftID");
-      return;
-    }
-
-    // Assuming only ONE document matches
-    const docRef = snapshot.docs[0].ref;
-
-    await updateDoc(docRef, {
-      shiftConfirmed: true,
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "shifts"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const userShifts = data.filter(
+        (s) =>
+          s?.name?.toLowerCase() === user?.name?.toLowerCase() ||
+          s?.userId === user?.userId
+      );
+      setShifts(userShifts);
     });
+    return () => unsub();
+  }, [user]);
 
-    console.log("✅ Shift confirmed successfully!");
-  } catch (err) {
-    console.log("❌ Error confirming shift", err);
-  }
-};
-
-
-
-  /* ===== DATE MATCH HELPER ===== */
-  const isSameDay = (d1, d2) => {
-    return (
-      d1.getFullYear() === d2.getFullYear() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getDate() === d2.getDate()
-    );
+  const parseDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== "string") return null;
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const sep = dateStr.includes("-") ? "-" : " ";
+    const [dd, mmm, yyyy] = dateStr.split(sep);
+    const mi = months.indexOf((mmm || "").slice(0, 3));
+    if (mi >= 0) return new Date(Number(yyyy), mi, Number(dd));
+    return null;
   };
 
- // Convert "07 Mar 2025" to Date safely
-const parseShiftDate = (str) => {
-  if (!str) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // "10-May-2025"
-  if (str.includes("-")) {
-    const [dd, mmm, yyyy] = str.split("-");
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const monthIndex = months.indexOf((mmm || "").slice(0, 3));
-    if (monthIndex >= 0) return new Date(Number(yyyy), monthIndex, Number(dd));
-  }
-
-  // "07 Mar 2025"
-  if (str.includes(" ")) {
-    const [dd, mmm, yyyy] = str.split(" ");
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const monthIndex = months.indexOf((mmm || "").slice(0, 3));
-    if (monthIndex >= 0) return new Date(Number(yyyy), monthIndex, Number(dd));
-  }
-
-  return null;
-};
-
-
-const filteredShifts = shifts.filter((s) => {
-  const shiftDate = parseShiftDate(s.startDate);
-  if (!shiftDate) return false;
-
-  return isSameDay(shiftDate, selectedDate);
-});
-
-
-  const totalShifts = shifts.length;
-  const pendingShifts = shifts.filter(
-    (s) => s.status === "pending"
-  ).length;
-
-  //////////////////////////////////////
-  // Convert "07 Mar 2025" + "09:00" → Date
-const parseShiftDateTime = (dateStr, timeStr) => {
-  if (!dateStr || !timeStr) return null;
-
-  const date = new Date(dateStr);
-  if (isNaN(date)) return null;
-
-  const [h, m] = timeStr.split(":").map(Number);
-
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    h || 0,
-    m || 0,
-    0,
-    0
-  );
-};
-
-
-const handleTransferClick = (shift) => {
-  setSelectedShift(shift);
-  setShowTransferModal(true);
-};
-
-const handleSubmitTransfer = async (staff, reason) => {
-  await requestShiftTransfer({
-    shift: selectedShift,
-    fromUser: currentUser,
-    toStaff: staff,
-    reason,
+  const todayShifts = shifts.filter((s) => {
+    const d = parseDate(s.startDate);
+    if (!d) return false;
+    d.setHours(0, 0, 0, 0);
+    return d.getTime() === today.getTime();
   });
 
-  setShowTransferModal(false);
-  setSelectedShift(null);
-  alert("Transfer request sent");
-};
-
-
-// Check if now is within shift window
-const isNowInShift = (shift) => {
-  const now = new Date();
-
-  let start = parseShiftDateTime(shift.startDate, shift.startTime);
-  let end = parseShiftDateTime(shift.endDate, shift.endTime);
-
-  if (!start || !end) return false;
-
-  // Overnight shift fix
-  if (end <= start) {
-    end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  return now >= start && now <= end;
-};
-const activeShift = shifts.find(
-  (s) =>
-    (s.userId === user?.userId ||
-      s?.name?.toLowerCase() === user?.name?.toLowerCase()) &&
-    isNowInShift(s)
-);
-
-const handleClockIn = async () => {
-  if (!activeShift || activeShift.clockInLocked) return;
-
-  try {
-    // Ask permission
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      console.log("❌ Location permission denied");
-      return;
+  const confirmShift = async (shiftId) => {
+    try {
+      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const snap = await getDocs(q);
+      if (!snap.empty) await updateDoc(snap.docs[0].ref, { shiftConfirmed: true });
+    } catch (e) {
+      console.log("Error confirming shift", e);
     }
+  };
 
-    // Get coordinates
-    const loc = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = loc.coords;
-
-    // Reverse geocode
-    const geo = await Location.reverseGeocodeAsync({
-      latitude,
-      longitude,
-    });
-
-    const place = geo[0];
-
-    const readableAddress = place
-      ? `${place.name || ""}, ${place.street || ""}, ${place.city || ""}, ${place.region || ""}, ${place.country || ""}`
-      : `${latitude}, ${longitude}`;
-
-    await updateDoc(doc(db, "shifts", activeShift.id), {
-      clockIn: new Date().toISOString(),
-      clockInLocation: readableAddress,
-      clockInCoords: { latitude, longitude }, // ✅ optional but recommended
-    });
-  } catch (err) {
-    console.log("Clock In error", err);
-  }
-};
-
-
-const handleClockOut = async () => {
-  if (!activeShift || activeShift.clockOutLocked) return;
-
-  try {
-    // 1️⃣ Ask location permission
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      console.log("❌ Location permission denied");
-      return;
-    }
-
-    // 2️⃣ Get current GPS location
-    const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
-
-    const { latitude, longitude } = loc.coords;
-
-    // 3️⃣ Reverse geocode → readable address
-    const geo = await Location.reverseGeocodeAsync({
-      latitude,
-      longitude,
-    });
-
-    const place = geo[0];
-
-    const readableAddress = place
-      ? [
-          place.name,
-          place.street,
-          place.city,
-          place.region,
-          place.country,
-        ]
-          .filter(Boolean)
-          .join(", ")
-      : `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-
-    // 4️⃣ Save to Firestore
-    await updateDoc(doc(db, "shifts", activeShift.id), {
-      clockOut: new Date().toISOString(), // ✅ actual time
-      clockOutLocation: readableAddress, // ✅ readable address
-      clockOutCoords: {
-        latitude,
-        longitude,
-      }, // ✅ for maps / audit
-    });
-
-    console.log("✅ Clock Out successful");
-  } catch (err) {
-    console.log("❌ Clock Out error", err);
-  }
-};
-
-const handleSubmitLeave = async ({ leaveType, reason, startDate, endDate }) => {
-  if (!leaveType || !reason.trim() || !startDate || !endDate) {
-    alert("Please fill all fields");
-    return;
-  }
-
-  try {
-    // 1️⃣ Save leave request
-    const leaveRef = await addDoc(collection(db, "leaveRequests"), {
-      userId: user.userId,
-      userName: user.name,
-      leaveType,
-      reason,
-      startDate,
-      endDate,
-      status: "pending",
-      createdAt: new Date(),
-    });
-
-    const leaveId = leaveRef.id;
-
-    // 2️⃣ Find admin
-    const adminQuery = query(
-      collection(db, "users"),
-      where("role", "==", "admin")
-    );
-    const adminSnap = await getDocs(adminQuery);
-
-    if (!adminSnap.empty) {
-      const adminId = adminSnap.docs[0].id;
-
-      // 3️⃣ Notify admin
-      await sendNotification(adminId, {
-        type: "request",
-        title: "Leave Request",
-        message: `${user.name} requested ${leaveType} leave`,
-        senderId: user.userId,
-
-        meta: {
-          requestType: "leave",
-          leaveId,
-          leaveType,
-          startDate,
-          endDate,
-        },
-      });
-    }
-
-    alert("Leave request sent");
-    setShowDayOffModal(false);
-  } catch (err) {
-    console.error("Leave submit error", err);
-    alert("Something went wrong. Try again.");
-  }
-};
+  const getInitials = (name) => {
+    if (!name) return "—";
+    return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f6f7f8" }}>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: GRAY_LIGHT }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        scrollEventThrottle={16}
+      >
 
-        {/* ===== HEADER ===== */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Image
-              source={require("../assets/Logo2.png")}
-              style={{ width: 34, height: 34 }}
-            />
-            <Text style={styles.headerTitle}>
-              Family Forever Inc.
+        {/* ── HEADER WITH LOGO & NOTIFICATION ── */}
+        <View style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          backgroundColor: "#fff",
+          borderBottomWidth: 1,
+          borderBottomColor: GRAY_BORDER,
+        }}>
+          <Image
+            source={require("../assets/Logo2.png")}
+            style={{ width: 36, height: 36 }}
+            resizeMode="contain"
+          />
+          <Pressable style={{
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: "#f3f4f6",
+            alignItems: "center", justifyContent: "center",
+            position: "relative",
+          }}>
+            <Ionicons name="notifications-outline" size={22} color="#374151" />
+            <View style={{
+              position: "absolute", top: 6, right: 6,
+              width: 14, height: 14, borderRadius: 7,
+              backgroundColor: "#ef4444",
+            }} />
+          </Pressable>
+        </View>
+
+        {/* ── HEADER - STAFF DASHBOARD LABEL ── */}
+        <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 }}>
+          <Text style={{
+            fontSize: 11,
+            color: GRAY_TEXT,
+            fontWeight: "600",
+            letterSpacing: 0.6,
+            marginBottom: 8
+          }}>
+            STAFF DASHBOARD
+          </Text>
+
+          {/* Welcome Message */}
+          <View style={{ marginBottom: 4 }}>
+            <Text style={{
+              fontSize: 24,
+              fontWeight: "800",
+              color: DARK_TEXT,
+              lineHeight: 31,
+              letterSpacing: -0.5
+            }}>
+              Welcome back, <Text style={{ color: PRIMARY_GREEN }}>{user?.name?.split(" ")[0] || "User"}</Text>
             </Text>
           </View>
 
-         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            {/* 🔔 Bell */}
-            <View style={styles.bell}>
-              <MaterialCommunityIcons
-                name="bell-outline"
-                size={18}
-                color="#fff"
-              />
-            </View>
+          {/* Company Name */}
+          <Text style={{
+            fontSize: 13,
+            color: GRAY_TEXT,
+            lineHeight: 18,
+            fontWeight: "400",
+            marginBottom: 2
+          }}>
+            Family Forever Inc.
+          </Text>
+        </View>
 
-            {/* 👤 Profile Avatar */}
-            <Pressable onPress={() => router.push("/profile")}>
-              <Image
-                source={
-                  user?.profilePhotoUrl
-                    ? { uri: user.profilePhotoUrl}
-                    : require("../assets/defaultuser.jpg") // fallback image
-                }
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: "#e5e7eb",
-                }}
-              />
+        {/* ── TODAY'S SHIFTS SECTION ── */}
+        <View style={{ paddingHorizontal: 20, marginTop: 24, marginBottom: 16 }}>
+          {/* Section Header */}
+          <View style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 14,
+          }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: DARK_TEXT, letterSpacing: -0.2 }}>
+                Today's shifts
+              </Text>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#22C55E" }} />
+            </View>
+            <Pressable onPress={() => router.push("/shifts")}>
+              <Text style={{ fontSize: 14, color: PRIMARY_GREEN, fontWeight: "600", letterSpacing: -0.2 }}>
+                View all →
+              </Text>
             </Pressable>
           </View>
+
+          {/* Shift Cards or Empty State */}
+          {todayShifts.length === 0 ? (
+            <View style={{
+              backgroundColor: "#fff",
+              borderRadius: 20,
+              padding: 52,
+              alignItems: "center",
+              justifyContent: "center",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.04,
+              shadowRadius: 8,
+              elevation: 2,
+              borderWidth: 1,
+              borderColor: "#f3f4f6"
+            }}>
+              <Ionicons name="calendar-outline" size={60} color="#d1d5db" />
+              <Text style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: "#6b7280",
+                marginTop: 20,
+                letterSpacing: -0.3
+              }}>
+                No shifts today
+              </Text>
+            </View>
+          ) : (
+            todayShifts.map((shift) => (
+              <ShiftCard
+                key={shift.id}
+                shift={shift}
+                onConfirm={() => confirmShift(shift.id)}
+                getInitials={getInitials}
+              />
+            ))
+          )}
         </View>
 
-        <Text style={styles.welcome}>
-          Welcome {user?.name || "User"}
-        </Text>
+        {/* ── QUICK STATS ── */}
+        <View style={{ paddingHorizontal: 20, marginTop: 32, marginBottom: 8 }}>
+          <View style={{
+            backgroundColor: LIGHT_GREEN,
+            borderRadius: 16,
+            paddingHorizontal: 20, // 20px horizontally 
+            paddingVertical: 24, // 24px vertically
+            flexDirection: "row",
+            justifyContent: "space-around",
+            alignItems: "center",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 8,
+            elevation: 2,
+            borderWidth: 1,
+            borderColor: "#dcfce7"
+          }}>
+            {/* Stat Item 1 */}
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={{
+                fontSize: 11,
+                color: "#6B7280",
+                fontWeight: "500",
+                letterSpacing: 0.2,
+                marginBottom: 10
+              }}>
+                This week
+              </Text>
+              <Text 
+                numberOfLines={1} 
+                adjustsFontSizeToFit
+                style={{
+                fontSize: 22,
+                fontWeight: "800",
+                color: DARK_TEXT,
+                letterSpacing: -0.3,
+                lineHeight: 28
+              }}>
+                12 shifts
+              </Text>
+            </View>
 
-        {/* ===== STATS ===== */}
-        <View style={{ gap: 12, marginBottom: 18 }}>
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            {statCard("Total Shifts", totalShifts)}
-            {statCard("Pending Shifts", pendingShifts)}
+            {/* Divider */}
+            <View style={{
+              width: 1,
+              height: 40,
+              backgroundColor: "#E5E7EB",
+              marginHorizontal: 16,
+              opacity: 1
+            }} />
+
+            {/* Stat Item 2 */}
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={{
+                fontSize: 11,
+                color: "#6B7280",
+                fontWeight: "500",
+                letterSpacing: 0.2,
+                marginBottom: 10
+              }}>
+                Hours
+              </Text>
+              <Text 
+                numberOfLines={1} 
+                adjustsFontSizeToFit
+                style={{
+                fontSize: 22,
+                fontWeight: "800",
+                color: DARK_TEXT,
+                letterSpacing: -0.3,
+                lineHeight: 28
+              }}>
+                48.5 hrs
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View style={{
+              width: 1.5,
+              height: 48,
+              backgroundColor: "#d1fae5",
+              marginHorizontal: 16,
+              opacity: 0.6
+            }} />
+
+            {/* Stat Item 3 */}
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text style={{
+                fontSize: 11,
+                color: "#6B7280",
+                fontWeight: "500",
+                letterSpacing: 0.2,
+                marginBottom: 10
+              }}>
+                Completed
+              </Text>
+              <Text 
+                numberOfLines={1} 
+                adjustsFontSizeToFit
+                style={{
+                fontSize: 22,
+                fontWeight: "800",
+                color: DARK_TEXT,
+                letterSpacing: -0.3,
+                lineHeight: 28
+              }}>
+                8 of 12
+              </Text>
+            </View>
           </View>
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            {statCard("Avg Hours", "12:00")}
-            {statCard("Overtime", "03:00")}
+        </View>
+
+        {/* ── DATE PICKER ── */}
+        <View style={{ paddingHorizontal: 20, marginTop: 36 }}>
+          <Text style={{
+            fontSize: 16,
+            fontWeight: "800",
+            color: DARK_TEXT,
+            marginBottom: 16,
+            letterSpacing: -0.3
+          }}>
+            Select Date
+          </Text>
+          <View style={{
+            backgroundColor: "#fff",
+            borderRadius: 20,
+            padding: 22,
+            borderWidth: 1,
+            borderColor: "#f0f0f0",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 10,
+            elevation: 2
+          }}>
+            {/* Date Navigation */}
+            <View style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 22,
+            }}>
+              <Pressable style={{
+                width: 44, height: 44, borderRadius: 12,
+                alignItems: "center", justifyContent: "center",
+                backgroundColor: "#f9fafb",
+              }} onPress={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() - 1);
+                setSelectedDate(newDate);
+              }}>
+                <Ionicons name="chevron-back" size={28} color={PRIMARY_GREEN} />
+              </Pressable>
+
+              <Text style={{
+                fontSize: 17,
+                fontWeight: "800",
+                color: DARK_TEXT,
+                letterSpacing: -0.3
+              }}>
+                {selectedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </Text>
+
+              <Pressable style={{
+                width: 44, height: 44, borderRadius: 12,
+                alignItems: "center", justifyContent: "center",
+                backgroundColor: "#f9fafb",
+              }} onPress={() => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() + 1);
+                setSelectedDate(newDate);
+              }}>
+                <Ionicons name="chevron-forward" size={28} color={PRIMARY_GREEN} />
+              </Pressable>
+            </View>
+
+            {/* Quick Date Selection */}
+            <View style={{
+              flexDirection: "row",
+              gap: 12,
+            }}>
+              {["Today", "Tomorrow", "+2 Days"].map((label, idx) => {
+                const quickDate = new Date();
+                quickDate.setDate(quickDate.getDate() + idx);
+                const isSelected = selectedDate.toDateString() === quickDate.toDateString();
+
+                return (
+                  <Pressable
+                    key={label}
+                    onPress={() => setSelectedDate(quickDate)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      paddingHorizontal: 16,
+                      borderRadius: 14,
+                      backgroundColor: isSelected ? PRIMARY_GREEN : "#f3f4f6",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: isSelected ? 0 : 1,
+                      borderColor: "#e5e7eb"
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: "700",
+                      color: isSelected ? "#fff" : "#374151",
+                      letterSpacing: -0.2
+                    }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
-
-        {/* ===== TABS ===== */}
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-          {tabBtn("schedule", "Schedule", "clock-outline")}
-          {tabBtn("leave", "Leave", "calendar-remove-outline")}
-          {tabBtn("transport", "Transport", "car-outline")}
-        </View>
-
-       {activeTab === "schedule" && (
-        <ScheduleTab
-          activeShift={activeShift}
-          onClockIn={handleClockIn}
-          onClockOut={handleClockOut}
-        />
-      )}
-      {activeTab === "leave" && (
-  <LeaveTab
-    onEmergency={() => setShowEmergencyModal(true)}
-    onDayOff={() => setShowDayOffModal(true)}
-  />
-)}
-
-        {activeTab === "transport" && <TransportTab />}
-{/* ===== MONTHLY CALENDAR (INLINE) ===== */}
-<View style={styles.sectionHeader}>
-  <Text style={styles.sectionTitle}>Monthly Calendar</Text>
-
-  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-    <Pressable
-  onPress={() =>
-    router.push({
-      pathname: "/Availability",
-      params: {
-        userId: user?.userId,
-        // optional
-        userName: user?.name,
-      },
-    })
-  }
->
-
-      <Text style={{ color: "#1f5f3b", fontWeight: "700" }}>
-        + Add Availability
-      </Text>
-    </Pressable>
-  </View>
-</View>
-
-<MonthlyCalendar
-  shifts={shifts}               // all shifts (it highlights dates)
-  selectedDate={selectedDate}   // current selected
-  onSelectDate={(d) => setSelectedDate(d)}
-/>
-
-
-        {/* ===== UPCOMING SHIFTS HEADER ===== */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Upcoming Shifts
-          </Text>
-
-          {/* <Pressable onPress={() => setCalendarOpen(true)}>
-            <MaterialCommunityIcons
-              name="calendar-month-outline"
-              size={22}
-              color="#1f5f3b"
-            />
-          </Pressable> */}
-        </View>
-
-        {/* ===== SHIFTS LIST ===== */}
-        {filteredShifts.length === 0 && (
-          <Text style={{ color: "#6b7280" }}>
-            No shifts on selected date
-          </Text>
-        )}
-
-        {filteredShifts.map((shift) => (
-          <ShiftCard key={shift.id} shift={shift}  onConfirm={confirmShift}   onTransfer={handleTransferClick}/>
-        ))}
-        {/* <Text style={{ fontSize: 18, fontWeight: "bold" }}>
-            Shifts Loaded: {filteredShifts.length}
-            </Text>
-
-            {shifts.map((s) => (
-            <Text key={s.id}>
-                {s.name} — {String(s.date)}
-            </Text>
-            ))} */}
-
       </ScrollView>
-
-      {/* ===== TRANSFER SHIFT MODAL ===== */}
-<TransferShiftModal
-  visible={showTransferModal}
-  onClose={() => setShowTransferModal(false)}
-  onSubmit={handleSubmitTransfer}
-/>
-
-
-
-      {/* ===== CALENDAR MODAL ===== */}
-      <CalendarModal
-        visible={calendarOpen}
-        onClose={() => setCalendarOpen(false)}
-        onSelect={(date) => {
-          setSelectedDate(date);
-          setCalendarOpen(false);
-        }}
-      />
-      <EmergencyCallModal
-  visible={showEmergencyModal}
-  onClose={() => setShowEmergencyModal(false)}
-/>
-<ApplyLeaveModal
-  visible={showDayOffModal}
-  onClose={() => setShowDayOffModal(false)}
-  onSubmit={handleSubmitLeave}
-/>
-
-
     </SafeAreaView>
   );
-
-  function tabBtn(key, label, icon) {
-    const active = activeTab === key;
-    return (
-      <Pressable
-        onPress={() => setActiveTab(key)}
-        style={[styles.tab, active && styles.tabActive]}
-      >
-        <MaterialCommunityIcons
-          name={icon}
-          size={16}
-          color={active ? "#fff" : "#111"}
-        />
-        <Text style={{ color: active ? "#fff" : "#111" }}>
-          {label}
-        </Text>
-      </Pressable>
-    );
-  }
 }
 
-/* ===================== */
-/* SUB COMPONENTS */
-/* ===================== */
-
-function ScheduleTab({ activeShift, onClockIn, onClockOut }) {
-  const formatTime = (iso) => {
-    if (!iso) return "--";
-    return new Date(iso).toLocaleTimeString("en-CA", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+function ShiftCard({ shift, onConfirm, getInitials }) {
+  const parseLocations = (locationStr) => {
+    if (!locationStr) return [];
+    return locationStr.split(",").map((l) => l.trim()).filter((l) => l);
   };
 
+  const locations = parseLocations(shift.location);
+
   return (
-    <View style={styles.card}>
-      {/* Header */}
-      <Text style={styles.scheduleTitle}>Time Schedule</Text>
-
-     {/* Current Time */}
-<View style={{ marginTop: 10 }}>
-  <Text style={styles.label}>CURRENT TIME</Text>
-  <Text style={styles.currentTime}>
-    {new Date().toLocaleTimeString("en-CA", {
-      timeZone: "America/Edmonton",   // ✅ Force Edmonton time
-      hour: "2-digit",
-      minute: "2-digit",
-     
-    })}
-  </Text>
-</View>
-
-
-      {/* Clock In */}
-      <View style={styles.scheduleRow}>
-        <View>
-          <Text style={styles.rowTitle}>Clock In</Text>
-          <Text style={styles.rowSub}>
-            {formatTime(activeShift?.clockIn)}
-          </Text>
-        </View>
-
-        <Text style={styles.locationText}>
-          {activeShift?.clockInLocation || "--"}
-        </Text>
-      </View>
-
-      {/* Clock Out */}
-      <View style={styles.scheduleRow}>
-        <View>
-          <Text style={styles.rowTitle}>Clock Out</Text>
-          <Text style={styles.rowSub}>
-            {formatTime(activeShift?.clockOut)}
-          </Text>
-        </View>
-
-        <Text style={styles.locationText}>
-          {activeShift?.clockOutLocation || "--"}
-        </Text>
-      </View>
-
-      {/* Buttons */}
-      <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
-        <Pressable
-          onPress={onClockIn}
-          disabled={!activeShift || activeShift?.clockIn}
-          style={[
-            styles.greenBtn,
-            (!activeShift || activeShift?.clockIn) && {
-              backgroundColor: "#9ca3af",
-            },
-          ]}
-        >
-          <Text style={styles.btnText}>
-            {activeShift?.clockIn ? "Clocked In" : "Clock In"}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={onClockOut}
-          disabled={!activeShift || !activeShift?.clockIn || activeShift?.clockOut}
-          style={[
-            styles.outlineBtn,
-            (!activeShift || activeShift?.clockOut) && {
-              borderColor: "#9ca3af",
-            },
-          ]}
-        >
-          <Text style={{ textAlign: "center" }}>
-            {activeShift?.clockOut ? "Clocked Out" : "Clock Out"}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-
-function LeaveTab({ onEmergency, onDayOff }) {
-  return (
-    <View style={styles.card}>
-      <Text style={{ fontWeight: "700", fontSize: 16 }}>
-        Apply Leave
-      </Text>
-
-      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
-        UPCOMING LEAVE
-      </Text>
-
-      <Text style={{ fontSize: 20, fontWeight: "700" }}>
-        09-04-2025
-      </Text>
-
-      <View style={{ marginTop: 12 }}>
-        {leaveRow("Leaves Taken", 3)}
-        {/* {leaveRow("Sick Leaves", 2)}
-        {leaveRow("Paid Leaves", 0)}
-        {leaveRow("Earned Leaves", 1)} */}
-      </View>
-
-     
-
-      {/* Buttons */}
-      <View
-        style={{
+    <View style={{ marginBottom: 14 }}>
+      {/* Confirmation Required Banner */}
+      {!shift.shiftConfirmed && (
+        <View style={{
+          backgroundColor: "#fef3c7",
+          paddingHorizontal: 14,
+          paddingVertical: 10,
+          borderRadius: 10,
+          marginBottom: 10,
           flexDirection: "row",
-          justifyContent: "flex-end",
-          gap: 12,
-          marginTop: 14,
-        }}
-      >
-        <Pressable
-          onPress={onEmergency}
-          style={{
-            borderWidth: 1,
-            borderColor: "#DC2626",
+          alignItems: "center",
+          gap: 10,
+        }}>
+          <Ionicons name="alert-circle" size={18} color="#d97706" />
+          <Text style={{ fontSize: 13, fontWeight: "700", color: "#92400e" }}>
+            Confirmation required
+          </Text>
+        </View>
+      )}
+
+      {/* Shift Card */}
+      <View style={{
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: "#f0f0f0",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        elevation: 1,
+      }}>
+        {/* Top row: service badge + time */}
+        <View style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}>
+          <View style={{
+            backgroundColor: "#dbeafe",
             paddingHorizontal: 12,
             paddingVertical: 6,
-            borderRadius: 6,
-          }}
-        >
-          <Text style={{ color: "#DC2626", fontWeight: "600" }}>
-            Emergency Calls
+            borderRadius: 8,
+          }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: "#0c4a6e" }}>
+              {shift.serviceType || "Service"}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151" }}>
+            {shift.startTime} – {shift.endTime}
           </Text>
-        </Pressable>
+        </View>
 
-        <Pressable
-          onPress={onDayOff}
-          style={{
-            backgroundColor: "#1f5f3b",
-            paddingHorizontal: 14,
-            paddingVertical: 6,
-            borderRadius: 6,
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>
-            Day Off
-          </Text>
-        </Pressable>
-
-        
-      </View>
-       <View style={{
-          marginTop: 14
+        {/* Client row: initials + name */}
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 14,
         }}>
-        <Text  style={{ fontSize: 10, fontWeight: "700" }}>
-          *Note:You have to apply or inform for the leave two days before.
-        </Text>
-        
+          <View style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: "#f3f4f6",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <Text style={{ fontSize: 13, fontWeight: "800", color: "#374151" }}>
+              {getInitials(shift.clientName || shift.name)}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, fontWeight: "800", color: "#111827" }}>
+              {shift.clientName || shift.name || "Client"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Locations as pills */}
+        {locations.length > 0 && (
+          <View style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 6,
+            marginBottom: 12,
+          }}>
+            {locations.slice(0, 3).map((loc, idx) => (
+              <View
+                key={idx}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  backgroundColor: "#f3f4f6",
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 6,
+                }}
+              >
+                <Ionicons name="location" size={12} color="#6b7280" />
+                <Text style={{ fontSize: 11, color: "#6b7280", fontWeight: "500" }}>
+                  {loc.length > 15 ? loc.slice(0, 15) + "..." : loc}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Confirm Button */}
+        {!shift.shiftConfirmed ? (
+          <Pressable
+            onPress={onConfirm}
+            style={{
+              borderWidth: 2,
+              borderColor: PRIMARY_GREEN,
+              borderRadius: 12,
+              paddingVertical: 13,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "transparent",
+            }}
+          >
+            <Text style={{ fontSize: 15, fontWeight: "800", color: PRIMARY_GREEN, letterSpacing: -0.2 }}>
+              Confirm Shift
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={{
+            backgroundColor: "#d1fae5",
+            borderRadius: 12,
+            paddingVertical: 13,
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <Text style={{ fontSize: 15, fontWeight: "800", color: PRIMARY_GREEN, letterSpacing: -0.2 }}>
+              ✓ Confirmed
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
 }
-
-
-function TransportTab() {
-  return (
-    <View style={styles.card}>
-      <Text style={{ fontWeight: "600" }}>Transportations</Text>
-      <Text style={{ fontSize: 22 }}>72¢</Text>
-      <Text>Total Rides: 50</Text>
-      <Text>CRA Mileage: 4500 KM</Text>
-    </View>
-  );
-}
-
-function statCard(label, value) {
-  return (
-    <View style={styles.stat}>
-      <Text style={{ color: "#6b7280", fontSize: 12 }}>
-        {label}
-      </Text>
-      <Text style={{ fontSize: 20, fontWeight: "600" }}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function leaveRow(label, value) {
-  return (
-    <View style={styles.rowBetween}>
-      <Text>{label}</Text>
-      <Text>{value}</Text>
-    </View>
-  );
-}
-
-/* ===================== */
-/* STYLES */
-/* ===================== */
-
-const styles = {
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 18,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  bell: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#1f5f3b",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  welcome: {
-    marginBottom: 14,
-  },
-  stat: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-  },
-  tabActive: {
-    backgroundColor: "#1f5f3b",
-    borderWidth: 0,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-  },
-  rowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 8,
-  },
-  greenBtn: {
-    flex: 1,
-    backgroundColor: "#1f5f3b",
-    padding: 12,
-    borderRadius: 8,
-  },
-  outlineBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 12,
-    borderRadius: 8,
-  },
-  btnText: {
-    color: "#fff",
-    textAlign: "center",
-  },
-  scheduleTitle: {
-  fontSize: 16,
-  fontWeight: "600",
-},
-
-label: {
-  fontSize: 11,
-  color: "#6b7280",
-},
-
-currentTime: {
-  fontSize: 22,
-  fontWeight: "700",
-  marginTop: 2,
-},
-
-scheduleRow: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  paddingVertical: 10,
-  borderBottomWidth: 1,
-  borderBottomColor: "#e5e7eb",
-  marginTop: 8,
-},
-
-rowTitle: {
-  fontSize: 14,
-  fontWeight: "500",
-},
-
-rowSub: {
-  fontSize: 13,
-  color: "#6b7280",
-  marginTop: 2,
-},
-
-locationText: {
-  fontSize: 12,
-  color: "#6b7280",
-  maxWidth: "45%",
-  textAlign: "right",
-},
-
-};

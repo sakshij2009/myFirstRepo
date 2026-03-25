@@ -62,11 +62,12 @@ function FilterDropdown({ label, value, options, onChange }) {
   );
 }
 
-function ClientCard({ client, service, onEdit, onDelete, onToggle }) {
+function ClientCard({ client, service, parentContact, onEdit, onDelete, onToggle }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const svcColors = getServiceTypeColor(service);
-  const agcColors = getAgencyColor(client.agencyName);
+  const agencyDisplay = client.agencyName || client.agency || "—";
+  const agcColors = getAgencyColor(agencyDisplay);
 
   useEffect(() => {
     const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
@@ -151,7 +152,7 @@ function ClientCard({ client, service, onEdit, onDelete, onToggle }) {
               className="inline-block px-3 py-1 rounded-lg font-medium"
               style={{ fontSize: "12px", fontWeight: 500, color: agcColors.text, backgroundColor: agcColors.bg }}
             >
-              {client.agencyName || "—"}
+              {agencyDisplay}
             </span>
           </div>
         </div>
@@ -163,7 +164,7 @@ function ClientCard({ client, service, onEdit, onDelete, onToggle }) {
           </p>
           <div className="flex items-center gap-2">
             <Mail size={13} strokeWidth={2} className="text-gray-400 shrink-0" />
-            <span style={{ fontSize: "13px", color: "#4b5563" }}>{client.email || "—"}</span>
+            <span style={{ fontSize: "13px", color: "#4b5563" }}>{parentContact || "—"}</span>
           </div>
         </div>
 
@@ -285,6 +286,7 @@ const ManageClients = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [agencyTypeOptions, setAgencyTypeOptions] = useState([]);
   const [servicesMap, setServicesMap] = useState({});
+  const [parentContactMap, setParentContactMap] = useState({});
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -294,7 +296,7 @@ const ManageClients = () => {
           .map((d) => ({ id: d.id, ...d.data() }))
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setClients(list);
-        fetchServiceTypes(list);
+        enrichFromIntake(list);
       } catch (e) { console.error(e); }
     };
     fetchClients();
@@ -310,26 +312,89 @@ const ManageClients = () => {
     fetchAgencyTypes();
   }, []);
 
-  const fetchServiceTypes = async (clientList) => {
+  // Enrich each client with service type + parent contact from intake forms
+  const enrichFromIntake = async (clientList) => {
     try {
+      const [formsSnap, catsSnap] = await Promise.all([
+        getDocs(collection(db, "InTakeForms")),
+        getDocs(collection(db, "shiftCategories")),
+      ]);
+      const forms = formsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const catsMap = {};
+      catsSnap.docs.forEach((d) => { catsMap[d.id] = d.data().name; });
+
       const services = {};
-      const snap = await getDocs(collection(db, "InTakeForms"));
-      const forms = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const parentContacts = {};
+
       for (const client of clientList) {
-        const matched = forms.find((f) =>
-          f.inTakeClients?.some((c) => c.name?.trim() === client.name?.trim())
-        );
-        if (matched) {
-          const cd = matched.inTakeClients.find((c) => c.name?.trim() === client.name?.trim());
-          services[client.name?.trim()] = Array.isArray(cd?.serviceRequired)
-            ? cd.serviceRequired.join(", ")
-            : cd?.serviceRequired || "—";
+        const key = client.id; // use doc ID as map key
+
+        // ── Find the linked intake form ──────────────────────────────────
+        // 1. Direct intakeId link
+        let form = client.intakeId ? forms.find((f) => f.id === client.intakeId) : null;
+
+        // 2. Name match in new clients object format { client1: { fullName } }
+        if (!form) {
+          const nameLower = client.name?.trim()?.toLowerCase();
+          form = forms.find((f) => {
+            const obj = f.clients || {};
+            return Object.values(obj).some(
+              (c) => c.fullName?.trim()?.toLowerCase() === nameLower
+            );
+          });
+        }
+
+        // 3. Old inTakeClients array format
+        if (!form) {
+          const nameLower = client.name?.trim()?.toLowerCase();
+          form = forms.find((f) =>
+            f.inTakeClients?.some(
+              (c) => c.name?.trim()?.toLowerCase() === nameLower
+            )
+          );
+        }
+
+        // ── Service Type ─────────────────────────────────────────────────
+        if (!form) {
+          services[key] = "—";
         } else {
-          services[client.name?.trim()] = "—";
+          const ids = form.services?.serviceType;
+          if (Array.isArray(ids) && ids.length > 0) {
+            services[key] = ids.map((id) => catsMap[id] || id).join(", ");
+          } else {
+            // old format
+            const nameLower = client.name?.trim()?.toLowerCase();
+            const cd = form.inTakeClients?.find(
+              (c) => c.name?.trim()?.toLowerCase() === nameLower
+            );
+            services[key] = Array.isArray(cd?.serviceRequired)
+              ? cd.serviceRequired.join(", ")
+              : cd?.serviceRequired || "—";
+          }
+        }
+
+        // ── Parent Contact ────────────────────────────────────────────────
+        // First try the client doc itself
+        const directEmail = client.parentEmail || client.email || "";
+        if (directEmail) {
+          parentContacts[key] = directEmail;
+        } else if (form) {
+          // Look in parentInfoList for a parent linked to this client name
+          const nameLower = client.name?.trim()?.toLowerCase();
+          const parent = (form.parentInfoList || []).find(
+            (p) => p.clientName?.trim()?.toLowerCase() === nameLower
+          );
+          parentContacts[key] = parent?.parentEmail || parent?.email || "—";
+        } else {
+          parentContacts[key] = "—";
         }
       }
+
       setServicesMap(services);
-    } catch (e) { console.error(e); }
+      setParentContactMap(parentContacts);
+    } catch (e) {
+      console.error("Intake enrichment error:", e);
+    }
   };
 
   const handleToggle = async (clientId, value) => {
@@ -431,7 +496,8 @@ const ManageClients = () => {
               <ClientCard
                 key={client.id}
                 client={client}
-                service={servicesMap[client.name?.trim()]}
+                service={servicesMap[client.id]}
+                parentContact={parentContactMap[client.id]}
                 onEdit={() => navigate(`/admin-dashboard/add/update-client/${client.id}`)}
                 onDelete={() => handleDelete(client.id)}
                 onToggle={handleToggle}

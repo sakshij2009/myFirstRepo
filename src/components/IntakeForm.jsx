@@ -14,10 +14,10 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db, storage, auth } from "../firebase";
+import { sendSignInLinkToEmail } from "firebase/auth";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload, X } from "lucide-react";
-import SignatureCanvas from "react-signature-canvas";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
@@ -81,6 +81,22 @@ const calculateAgeYears = (dateStr) => {
   return age;
 };
 
+// age string formatted as X years and Y months
+const calculateAgeDisplay = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  let years = today.getFullYear() - d.getFullYear();
+  let months = today.getMonth() - d.getMonth();
+  if (today.getDate() < d.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 0) return null;
+  if (years === 0) return `0 year and ${months} month${months !== 1 ? "s" : ""}`;
+  if (months > 0) return `${years} year${years !== 1 ? "s" : ""} and ${months} month${months !== 1 ? "s" : ""}`;
+  return `${years} year${years !== 1 ? "s" : ""}`;
+};
+
 // Alberta-style rules → car seat recommendation
 const deriveCarSeatFromAge = (ageYears) => {
   if (ageYears == null || ageYears < 0) {
@@ -123,6 +139,7 @@ const createEmptyInitialValues = () => ({
       gender: "",
       birthDate: "",
       address: "",
+      apartmentUnit: "",
       latitude: "",
       longitude: "",
       startDate: "",
@@ -130,8 +147,14 @@ const createEmptyInitialValues = () => ({
       phone: "",
       email: "",
       photos: [], // per-client photos
+      cfsStatus: "",
+      dfnaNumber: "",
+      treatyNumber: "",
     },
   ],
+
+  // Family name (shared across all siblings)
+  familyName: "",
 
   // Billing
   billingInfo: {
@@ -359,6 +382,7 @@ const mapOldIntakeToInitialValues = (raw) => {
     uploadDocs: [],
     uploadMedicalDocs: [],
     status: raw.status || "Submitted",
+    familyName: raw.familyName || "",
   };
 };
 
@@ -371,12 +395,12 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: pro
   const [showServiceCalendar, setShowServiceCalendar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [shiftCategories, setShiftCategories] = useState([]);
-  const [manualTransport, setManualTransport] = useState(false);
-  const [manualVisitation, setManualVisitation] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
   const fileInputRefMedical = useRef(null);
-  const hasResigned = useRef(false);
 
 const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const serviceDropdownRef = useRef(null);
@@ -403,8 +427,6 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const urlCaseWorker = formType === "Intake Worker";
   const isCaseWorker = propCaseWorker ?? urlCaseWorker;
 
-  // signature canvas ref
-  const sigCanvas = useRef(null);
 
   const [initialValues, setInitialValues] = useState(createEmptyInitialValues);
 
@@ -576,10 +598,6 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         };
 
         if (data.avatar) setAvatarPreview(data.avatar);
-        if (data.workerInfo?.signature && sigCanvas.current) {
-          sigCanvas.current.fromDataURL(data.workerInfo.signature);
-          hasResigned.current = false;
-        }
 
 
 
@@ -817,28 +835,8 @@ await setDoc(doc(db, "clients", clientId), {
 
 const handleSubmit = async (values, { resetForm }) => {
   try {
-    // ================== SIGNATURE UPLOAD ==================
-    let signatureURL = values.workerInfo.signature || "";
-
-    if (
-      sigCanvas.current &&
-      hasResigned.current &&
-      !sigCanvas.current.isEmpty()
-    ) {
-      const dataURL = sigCanvas.current
-        .getTrimmedCanvas()
-        .toDataURL("image/png");
-
-      const res = await fetch(dataURL);
-      const blob = await res.blob();
-
-      const sigRef = ref(
-        storage,
-        `intake_signatures/${Date.now()}_${values.workerInfo.workerName}.png`
-      );
-      await uploadBytes(sigRef, blob);
-      signatureURL = await getDownloadURL(sigRef);
-    }
+    // ================== SIGNATURE ==================
+    const signatureURL = values.workerInfo.signature || "";
 
     // ================== CLIENT PHOTOS ==================
     const clientsWithPhotos = await Promise.all(
@@ -901,7 +899,9 @@ const handleSubmit = async (values, { resetForm }) => {
       intakeworkerPhone: values.intakeworkerPhone || "",
       intakeworkerEmail: values.intakeworkerEmail || "",
 
+      familyName: values.familyName || "",
       isCaseWorker: !!isCaseWorker,
+      formType: isCaseWorker ? "intake-worker" : "private",
       status: values.status || "Submitted",
 
       // 🔐 IMPORTANT FLAG
@@ -929,7 +929,6 @@ const handleSubmit = async (values, { resetForm }) => {
 
     resetForm();
     setAvatarPreview(null);
-    sigCanvas.current?.clear();
   } catch (err) {
     console.error("❌ Intake submit failed:", err);
     alert("Something went wrong while submitting the form");
@@ -980,14 +979,20 @@ const handleSubmit = async (values, { resetForm }) => {
 
             const selectedServiceIds = values.services?.serviceType || [];
             const selectedServiceCategories = shiftCategories.filter((cat) => selectedServiceIds.includes(cat.id));
-            const showTransportationSection = selectedServiceCategories.some((cat) => (cat.name || "").toLowerCase().includes("transport"));
-            const showVisitationSection = selectedServiceCategories.some((cat) => {
+
+            const showCombinedSection = selectedServiceCategories.some((cat) => {
+              const name = (cat.name || "").toLowerCase();
+              return (name.includes("supervised") || name.includes("visitation")) && name.includes("transport");
+            });
+
+            const showTransportationSection = !showCombinedSection && selectedServiceCategories.some((cat) => (cat.name || "").toLowerCase().includes("transport"));
+            const showVisitationSection = !showCombinedSection && selectedServiceCategories.some((cat) => {
               const name = (cat.name || "").toLowerCase();
               return name.includes("supervised") || name.includes("supervisitation") || name.includes("visitation");
             });
 
-            const showTransportSection = showTransportationSection || manualTransport;
-            const showVisitSection = showVisitationSection || manualVisitation;
+            const showTransportSection = showTransportationSection;
+            const showVisitSection = showVisitationSection;
 
             const iCls = (err) =>
               `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${err ? "border-red-400" : "border-[#e5e7eb]"}`;
@@ -1022,54 +1027,6 @@ const handleSubmit = async (values, { resetForm }) => {
                   {/* ── LEFT: Main content ── */}
                   <div className="flex-1 min-w-0 flex flex-col gap-4">
 
-                  {/* Avatar + Transport toggles */}
-                  <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
-                          onClick={() => fileInputRef.current?.click()}>
-                          {avatarPreview
-                            ? <img src={avatarPreview} className="w-full h-full object-cover" alt="avatar" />
-                            : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                          }
-                        </div>
-                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                          onChange={(e) => {
-                            const file = e.currentTarget.files[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => setAvatarPreview(reader.result);
-                              reader.readAsDataURL(file);
-                            }
-                          }} />
-                        <div>
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className="text-sm font-semibold text-gray-700 hover:text-gray-900">Change Avatar</button>
-                          <p className="text-xs text-gray-400 mt-0.5">JPG, PNG up to 5MB</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => setManualTransport(v => !v)}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
-                          style={{
-                            borderColor: showTransportSection ? "#145228" : "#e5e7eb",
-                            color: showTransportSection ? "#145228" : "#374151",
-                            background: showTransportSection ? "#f0fdf4" : "white"
-                          }}>
-                          {showTransportSection ? "✓" : "+"} Add Transportation
-                        </button>
-                        <button type="button" onClick={() => setManualVisitation(v => !v)}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
-                          style={{
-                            borderColor: showVisitSection ? "#145228" : "#e5e7eb",
-                            color: showVisitSection ? "#145228" : "#374151",
-                            background: showVisitSection ? "#f0fdf4" : "white"
-                          }}>
-                          {showVisitSection ? "✓" : "+"} Add Supervised Visitations
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Status (update mode) */}
                   {mode === "update" && (
                     <div className="bg-white rounded-xl border p-5 flex items-center gap-3" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -1086,6 +1043,17 @@ const handleSubmit = async (values, { resetForm }) => {
                       </div>
                     </div>
                   )}
+
+                {/* ── Family Name Card ── */}
+                <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                  <SectionTitle title="Family Name" />
+                  <div className="max-w-sm">
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Family Name <span className="text-red-500">*</span></label>
+                    <Field name="familyName" type="text" placeholder="Enter family / client name"
+                      className="w-full px-3 py-2.5 rounded-lg border text-sm border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                    <p className="text-xs text-gray-400 mt-1">All siblings added below will be grouped under this name.</p>
+                  </div>
+                </div>
 
                 {/* ── Services Card ── */}
                 <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -1113,7 +1081,11 @@ const handleSubmit = async (values, { resetForm }) => {
                             {shiftCategories
                               .filter(item => {
                                 const l = (item.name || "").toLowerCase();
-                                return l !== "supervisitation + transportation" && l !== "supervisitation+transportation";
+                                return (
+                                  l.includes("emergent") ||
+                                  (l.includes("transport") && !l.includes("supervised") && !l.includes("visitation")) ||
+                                  ((l.includes("supervised") || l.includes("visitation")) && l.includes("transport"))
+                                );
                               })
                               .map(item => {
                                 const isSelected = values.services.serviceType.includes(item.id);
@@ -1226,7 +1198,7 @@ const handleSubmit = async (values, { resetForm }) => {
                   <div className="flex items-center justify-between mb-5">
                     <SectionTitle title="Client Info" />
                     <button type="button"
-                      onClick={() => setFieldValue("clients", [...values.clients, { fullName: "", gender: "", birthDate: "", address: "", latitude: "", longtitude: "", startDate: "", clientInfo: "", phone: "", email: "", photos: [] }])}
+                      onClick={() => setFieldValue("clients", [...values.clients, { fullName: "", gender: "", birthDate: "", address: "", apartmentUnit: "", latitude: "", longitude: "", startDate: "", clientInfo: "", phone: "", email: "", photos: [], cfsStatus: "", dfnaNumber: "", treatyNumber: "" }])}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
                       style={{ backgroundColor: "#145228" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1301,6 +1273,7 @@ const handleSubmit = async (values, { resetForm }) => {
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
                                 <Field name={`clients.${index}.birthDate`} type="date" className={iCls(touched.clients?.[index]?.birthDate && errors.clients?.[index]?.birthDate)} />
+                                {(() => { const age = calculateAgeDisplay(values.clients?.[index]?.birthDate); return age ? <p className="text-xs text-gray-500 mt-1">Age: {age}</p> : null; })()}
                               </div>
 
                               <div>
@@ -1327,13 +1300,42 @@ const handleSubmit = async (values, { resetForm }) => {
                                   className={iCls(touched.clients?.[index]?.startDate && errors.clients?.[index]?.startDate)} />
                               </div>
 
-                              <div className="col-span-3">
+                              <div className="col-span-2">
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
                                 <PlacesAutocomplete
                                   value={values.clients[index].address}
                                   placeholder="Enter client address"
                                   className={iCls(touched.clients?.[index]?.address && errors.clients?.[index]?.address)}
                                   onChange={(val) => setFieldValue(`clients.${index}.address`, val)} />
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Apartment / Unit No.</label>
+                                <Field name={`clients.${index}.apartmentUnit`} type="text" placeholder="e.g. Apt 4B" className={iCls(false)} />
+                              </div>
+
+                              <div className="relative">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>CFS Status</label>
+                                <Field as="select" name={`clients.${index}.cfsStatus`}
+                                  className={sCls(false, !values.clients[index].cfsStatus)}>
+                                  <option value="">Select CFS status</option>
+                                  <option value="CAG">CAG</option>
+                                  <option value="ICO">ICO</option>
+                                  <option value="TGO">TGO</option>
+                                  <option value="PGO">PGO</option>
+                                  <option value="SFP">SFP</option>
+                                </Field>
+                                <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>DFNA Number</label>
+                                <Field name={`clients.${index}.dfnaNumber`} type="text" placeholder="Enter DFNA number" className={iCls(false)} />
+                              </div>
+
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Treaty #</label>
+                                <Field name={`clients.${index}.treatyNumber`} type="text" placeholder="Enter treaty number" className={iCls(false)} />
                               </div>
 
                               <div className="col-span-3">
@@ -1382,7 +1384,14 @@ const handleSubmit = async (values, { resetForm }) => {
                 {/* ── Intake Worker Info ── */}
                 {isCaseWorker && (
                   <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <SectionTitle title="Intake Worker Information" />
+                    <div className="flex items-center justify-between mb-5">
+                      <SectionTitle title="Intake Worker Information" />
+                      <button type="button" onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        + Add Intake Worker
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-5">
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
@@ -1765,6 +1774,151 @@ const handleSubmit = async (values, { resetForm }) => {
                   </div>
                 )}
 
+                {/* ── Combined Supervised Visitation & Transportation Card ── */}
+                {showCombinedSection && (
+                  <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-5">
+                      <SectionTitle title="Supervised Visitation & Transportation Info" />
+                      <button type="button"
+                        onClick={() => {
+                          const lastT = values.transportationInfoList?.[values.transportationInfoList.length - 1] || { clientName: "", pickupAddress: "", dropoffAddress: "", pickupTime: "", dropOffTime: "", transportationOverview: "", carSeatType: "", carSeatRequired: "" };
+                          const lastV = values.supervisedVisitations?.[values.supervisedVisitations.length - 1] || { clientName: "", visitStartTime: "", visitEndTime: "", visitDuration: "", visitPurpose: "", visitAddress: "", visitOverview: "" };
+                          setFieldValue("transportationInfoList", [...values.transportationInfoList, { ...lastT, clientName: "" }]);
+                          setFieldValue("supervisedVisitations", [...values.supervisedVisitations, { ...lastV, clientName: "" }]);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Combined Info
+                      </button>
+                    </div>
+                    <FieldArray name="transportationInfoList">
+                      {({ remove }) => (
+                        <div className="flex flex-col gap-4">
+                          {values.transportationInfoList.map((trans, index) => (
+                            <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+                              <div className="flex items-center justify-between mb-4">
+                                <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Combined Info {index + 1}</p>
+                                {values.transportationInfoList.length > 1 && (
+                                  <button type="button" onClick={() => {
+                                    remove(index);
+                                    const newVisits = [...values.supervisedVisitations];
+                                    newVisits.splice(index, 1);
+                                    setFieldValue("supervisedVisitations", newVisits);
+                                  }} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-5">
+                                {/* Client Name */}
+                                <div className="col-span-3 relative">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
+                                  <select
+                                    value={trans.clientName || ""}
+                                    className={sCls(false, !trans.clientName)}
+                                    onChange={(e) => {
+                                      setFieldValue(`transportationInfoList.${index}.clientName`, e.target.value);
+                                      setFieldValue(`supervisedVisitations.${index}.clientName`, e.target.value);
+                                    }}>
+                                    <option value="">Select Client</option>
+                                    {values.clients.filter(c => c.fullName).map((c, i) => (
+                                      <option key={i} value={c.fullName}>{c.fullName}</option>
+                                    ))}
+                                  </select>
+                                  <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                </div>
+
+                                {/* Transportation fields */}
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Address</label>
+                                  <PlacesAutocomplete value={trans.pickupAddress || ""} placeholder="Enter pickup address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`transportationInfoList.${index}.pickupAddress`, val)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Dropoff Address</label>
+                                  <PlacesAutocomplete value={trans.dropoffAddress || ""} placeholder="Enter dropoff address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`transportationInfoList.${index}.dropoffAddress`, val)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Time</label>
+                                  <Field name={`transportationInfoList.${index}.pickupTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Dropoff Time</label>
+                                  <Field name={`transportationInfoList.${index}.dropOffTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div className="relative">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Car Seat Required</label>
+                                  <Field as="select" name={`transportationInfoList.${index}.carSeatRequired`}
+                                    className={sCls(false, !trans.carSeatRequired)}
+                                    onChange={(e) => {
+                                      setFieldValue(`transportationInfoList.${index}.carSeatRequired`, e.target.value);
+                                      if (e.target.value === "no") setFieldValue(`transportationInfoList.${index}.carSeatType`, "");
+                                    }}>
+                                    <option value="">Select</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                  </Field>
+                                  <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                </div>
+                                {trans.carSeatRequired === "yes" && (
+                                  <div className="relative">
+                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Car Seat Type</label>
+                                    <Field as="select" name={`transportationInfoList.${index}.carSeatType`}
+                                      className={sCls(false, !trans.carSeatType)}>
+                                      <option value="">Select seat type</option>
+                                      <option value="Rear-facing seat">Rear-facing seat</option>
+                                      <option value="Forward-facing seat">Forward-facing seat</option>
+                                      <option value="Booster seat">Booster seat</option>
+                                      <option value="Seat belt only">Seat belt only</option>
+                                    </Field>
+                                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                                  </div>
+                                )}
+                                <div className="col-span-3">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Transportation Overview</label>
+                                  <Field as="textarea" name={`transportationInfoList.${index}.transportationOverview`}
+                                    placeholder="Add transportation overview" rows={2} className={`${iCls(false)} resize-none`} />
+                                </div>
+
+                                {/* Supervised Visitation fields */}
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Start Time</label>
+                                  <Field name={`supervisedVisitations.${index}.visitStartTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit End Time</label>
+                                  <Field name={`supervisedVisitations.${index}.visitEndTime`} type="time" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Duration</label>
+                                  <Field name={`supervisedVisitations.${index}.visitDuration`} type="text" placeholder="e.g. 2 hours" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Purpose of Visit</label>
+                                  <Field name={`supervisedVisitations.${index}.visitPurpose`} type="text" placeholder="Enter purpose" className={iCls(false)} />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Address</label>
+                                  <PlacesAutocomplete value={values.supervisedVisitations[index]?.visitAddress || ""} placeholder="Enter visit address"
+                                    className={iCls(false)}
+                                    onChange={(val) => setFieldValue(`supervisedVisitations.${index}.visitAddress`, val)} />
+                                </div>
+                                <div className="col-span-3">
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Overview</label>
+                                  <Field as="textarea" name={`supervisedVisitations.${index}.visitOverview`}
+                                    placeholder="Write down the visit overview" rows={2} className={`${iCls(false)} resize-none`} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </FieldArray>
+                  </div>
+                )}
+
                 {/* ── Acknowledgement Card ── */}
                 <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <SectionTitle title="Acknowledgement" />
@@ -1781,25 +1935,27 @@ const handleSubmit = async (values, { resetForm }) => {
                     </div>
                     <div className="col-span-2">
                       <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
-                        {isCaseWorker ? "Worker Signature" : "Parent / Guardian Signature"}
+                        {isCaseWorker ? "Worker Digital Signature" : "Parent / Guardian Digital Signature"}
                       </label>
-                      <div className="relative border rounded-xl overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
-                        <SignatureCanvas
-                          ref={sigCanvas}
-                          penColor="black"
-                          backgroundColor="#ffffff"
-                          canvasProps={{ width: 600, height: 140, className: "w-full" }}
-                          minWidth={0.4}
-                          maxWidth={1.0}
-                          velocityFilterWeight={0.7}
-                          onBegin={() => { hasResigned.current = true; }}
-                        />
-                        <button type="button"
-                          onClick={() => { if (sigCanvas.current) sigCanvas.current.clear(); setFieldValue("workerInfo.signature", ""); }}
-                          className="absolute top-2 right-2 px-3 py-1 text-xs font-semibold rounded-lg border hover:bg-gray-50"
-                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>
-                          Clear
-                        </button>
+                      <input
+                        type="text"
+                        value={values.workerInfo.signature}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                          setFieldValue("workerInfo.signature", cleaned);
+                        }}
+                        placeholder="Type your full name to sign"
+                        className={iCls(false)}
+                      />
+                      {/* Live cursive preview */}
+                      <div className="mt-3 border border-dashed rounded-xl p-6 bg-gray-50 flex flex-col items-center justify-center min-h-[120px]" style={{ borderColor: "#d1d5db" }}>
+                        {values.workerInfo.signature ? (
+                          <span className="text-4xl text-blue-900" style={{ fontFamily: "'Dancing Script', cursive" }}>
+                            {values.workerInfo.signature}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 italic text-sm">Signature will appear here...</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1888,6 +2044,68 @@ const handleSubmit = async (values, { resetForm }) => {
           }}
         </Formik>
       </EditableProvider>
+
+      {/* ── Add Intake Worker Modal ── */}
+      {showInviteModal && (
+        <>
+          <div className="fixed inset-0 z-50" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => setShowInviteModal(false)}></div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="bg-white rounded-xl shadow-xl w-[500px] p-6 pointer-events-auto">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-bold text-xl text-gray-900">Add Intake Worker</h3>
+                  <p className="text-sm text-gray-500 mt-1">Enter email to generate registration link</p>
+                </div>
+                <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-semibold text-gray-800">Email Address</label>
+                  <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="worker@example.com"
+                    className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-green-700 text-gray-800 text-sm" />
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+                  A unique registration link will be generated. The link will expire in 7 days.
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button onClick={() => setShowInviteModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold text-sm cursor-pointer">Cancel</button>
+                <button
+                  onClick={async () => {
+                    if (!inviteEmail) { alert("Please enter an email address"); return; }
+                    setInviting(true);
+                    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
+                    const actionCodeSettings = {
+                      url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
+                      handleCodeInApp: true,
+                    };
+                    try {
+                      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+                      window.localStorage.setItem("emailForSignIn", inviteEmail.trim().toLowerCase());
+                      alert(`Invitation link sent to ${inviteEmail}`);
+                      setShowInviteModal(false);
+                      setInviteEmail("");
+                    } catch (error) {
+                      console.error("Error sending invite:", error);
+                      alert("Error sending invite: " + error.message);
+                    } finally {
+                      setInviting(false);
+                    }
+                  }}
+                  disabled={inviting}
+                  className="px-4 py-2 rounded-lg text-white font-semibold text-sm disabled:opacity-70 cursor-pointer"
+                  style={{ backgroundColor: "#145228" }}>
+                  {inviting ? "Sending..." : "Send Link"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

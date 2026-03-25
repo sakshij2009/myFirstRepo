@@ -1,6 +1,7 @@
 import "./App.css";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { Toaster } from "sonner";
 
 import AdminHomePage from "./components/AdminHomePage";
 import IntakeFormMainPage from "./components/IntakeFormMainPage";
@@ -46,6 +47,7 @@ function App() {
 
   return (
     <Router>
+      <Toaster position="top-right" richColors />
       <Routes>
         {/* 🌐 Main Public Login */}
         <Route path="/" element={<Login setUser={setUser}/>} />

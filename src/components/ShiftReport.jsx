@@ -213,11 +213,18 @@ const ShiftReport = ({ user }) => {
   const [shiftData, setShiftData]       = useState(null);
   const [loading, setLoading]           = useState(true);
   const [intakeData, setIntakeData]     = useState(null);
+  const [clientData, setClientData]     = useState(null);
   const [recentReports, setRecentReports] = useState([]);
   const [primaryStaff, setPrimaryStaff] = useState(null);
   const [showFullReport, setShowFullReport] = useState(false);
   const [activeModal, setActiveModal]   = useState(null); // 'critical'|'medical'|'noteworthy'|'followthrough'
   const [agencyData, setAgencyData]     = useState(null);
+
+  // ── Clock In/Out edit state ──
+  const [editingClock, setEditingClock] = useState(false);
+  const [editClockIn, setEditClockIn]   = useState("");
+  const [editClockOut, setEditClockOut] = useState("");
+  const [clockSaving, setClockSaving]   = useState(false);
 
   // ── Medications tab state ──
   const [showAddMed, setShowAddMed]     = useState(false);
@@ -296,6 +303,25 @@ const ShiftReport = ({ user }) => {
         const snap = await getDoc(doc(db, "InTakeForms", shiftData.clientId));
         if (snap.exists()) setIntakeData(snap.data());
       } catch (e) { console.error(e); }
+    })();
+  }, [shiftData]);
+
+  // ── Fetch client (for medication check) ──
+  useEffect(() => {
+    if (!shiftData) return;
+    const clientId = shiftData.clientId || shiftData.client || shiftData.clientDetails?.id || "";
+    if (!clientId) return;
+    (async () => {
+      try {
+        // Try by doc ID first
+        const direct = await getDoc(doc(db, "clients", clientId));
+        if (direct.exists()) { setClientData(direct.data()); return; }
+        // Fall back: query by userId or clientId field
+        const snap = await getDocs(query(collection(db, "clients"), where("userId", "==", clientId)));
+        if (!snap.empty) { setClientData(snap.docs[0].data()); return; }
+        const snap2 = await getDocs(query(collection(db, "clients"), where("clientId", "==", clientId)));
+        if (!snap2.empty) setClientData(snap2.docs[0].data());
+      } catch (e) { console.error("clientData fetch:", e); }
     })();
   }, [shiftData]);
 
@@ -394,8 +420,10 @@ const ShiftReport = ({ user }) => {
   useEffect(() => {
     if (!shiftData?.extraShiftPoints?.length) return;
     const last = shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1];
-    setTotalKm(String(last.totalKilometer || last.totalKM || ""));
-    setStaffKm(String(last.staffTraveledKM || last.staffKilometer || ""));
+    const rawTotal = parseFloat(last.totalKilometer || last.totalKM || 0);
+    const rawStaff = parseFloat(last.staffTraveledKM || last.staffKilometer || 0);
+    setTotalKm(rawTotal ? String(Math.round(rawTotal)) : "");
+    setStaffKm(rawStaff ? String(Math.round(rawStaff)) : "");
     setApprovedKm(String(last.approvedKM || last.approvedKm || ""));
     setApprovedBy(last.approvedBy || "");
     setTravelComments(shiftData.travelComments || "");
@@ -577,28 +605,63 @@ const ShiftReport = ({ user }) => {
   const initials = normalized.clientName.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?";
   const staffInitials = (primaryStaff?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
+  // Parse clockIn/Out — handles ISO timestamps and HH:mm strings
+  const parseClockTime = (val) => {
+    if (!val) return null;
+    // ISO timestamp
+    if (val.includes("T") || val.includes("Z")) {
+      const d = new Date(val);
+      return isNaN(d) ? null : d;
+    }
+    // HH:mm string
+    const [h, m] = val.split(":").map(Number);
+    if (isNaN(h)) return null;
+    const d = new Date(); d.setHours(h, m || 0, 0, 0);
+    return d;
+  };
+
+  const formatClockDisplay = (val) => {
+    const d = parseClockTime(val);
+    if (!d) return "—";
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  };
+
   const computeDuration = () => {
-    if (!normalized.clockIn || !normalized.clockOut) return "—";
-    const parse = t => { const [h, m] = t.split(":").map(Number); return isNaN(h) ? null : h * 60 + (m || 0); };
-    const s = parse(normalized.clockIn), e = parse(normalized.clockOut);
-    if (!s || !e || e - s <= 0) return "—";
-    const m = e - s;
-    return `${Math.floor(m / 60)}h ${m % 60}m`;
+    const s = parseClockTime(normalized.clockIn);
+    const e = parseClockTime(normalized.clockOut);
+    if (!s || !e) return "—";
+    const diffMs = e - s;
+    if (diffMs <= 0) return "—";
+    const totalMin = Math.floor(diffMs / 60000);
+    return `${Math.floor(totalMin / 60)}h ${totalMin % 60}m`;
   };
 
   const duration = computeDuration();
 
   // Shift timeline bar percent
-  const toMinutes = t => { if (!t) return null; const [h, m] = t.split(":").map(Number); return isNaN(h) ? null : h * 60 + (m || 0); };
-  const clockInMins  = toMinutes(normalized.clockIn);
-  const clockOutMins = toMinutes(normalized.clockOut);
+  const toMinutesOfDay = (val) => {
+    const d = parseClockTime(val);
+    if (!d) return null;
+    return d.getHours() * 60 + d.getMinutes();
+  };
+  const clockInMins  = toMinutesOfDay(normalized.clockIn);
+  const clockOutMins = toMinutesOfDay(normalized.clockOut);
   const barLeft  = clockInMins  != null ? `${(clockInMins / 1440) * 100}%`  : "37.5%";
   const barWidth = (clockInMins != null && clockOutMins != null) ? `${((clockOutMins - clockInMins) / 1440) * 100}%` : "25%";
 
+  const hasMedication = Array.isArray(clientData?.medications) &&
+    clientData.medications.some((m) => m.medicationName?.trim());
+
+  const shiftCategoryName = (shiftData?.categoryName || shiftData?.shiftCategory || "").toLowerCase();
+  const hasTransportation =
+    shiftCategoryName.includes("transport") ||
+    shiftCategoryName.includes("supervised") ||
+    shiftCategoryName.includes("visitation");
+
   const TABS = [
     { key: "reports",        label: "Reports"        },
-    { key: "medications",    label: "Medications"    },
-    { key: "transportation", label: "Transportation" },
+    ...(hasMedication ? [{ key: "medications", label: "Medications" }] : []),
+    ...(hasTransportation ? [{ key: "transportation", label: "Transportation" }] : []),
   ];
 
   const actBg   = { success: "#f0fdf4", info: "#eff6ff", warning: "#fef3c7" };
@@ -739,10 +802,10 @@ const ShiftReport = ({ user }) => {
                 {/* 4 KPI cards */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
                   {[
-                    { label: "Clock In",  value: normalized.clockIn  || "—", sub: "Start time",  color: "#145228", bg: "#f0fdf4" },
-                    { label: "Clock Out", value: normalized.clockOut || "—", sub: "End time",    color: "#dc2626", bg: "#fef2f2" },
-                    { label: "Duration",  value: duration,                    sub: "Total hours", color: "#374151", bg: "#f9fafb" },
-                    { label: "Status",    value: statusVal,                   sub: "Report filed", color: sc.text,  bg: sc.bg   },
+                    { label: "Clock In",  value: formatClockDisplay(normalized.clockIn),  sub: "Start time",   color: "#145228", bg: "#f0fdf4" },
+                    { label: "Clock Out", value: formatClockDisplay(normalized.clockOut), sub: "End time",     color: "#dc2626", bg: "#fef2f2" },
+                    { label: "Duration",  value: duration,                                 sub: "Total hours",  color: "#374151", bg: "#f9fafb" },
+                    { label: "Status",    value: statusVal,                                sub: "Report filed", color: sc.text,   bg: sc.bg    },
                   ].map((kpi, i) => (
                     <div key={i} className="rounded-xl p-3.5 border" style={{ background: kpi.bg, borderColor: "#f3f4f6" }}>
                       <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{kpi.label}</p>
@@ -751,6 +814,85 @@ const ShiftReport = ({ user }) => {
                     </div>
                   ))}
                 </div>
+
+                {/* Admin: Edit Clock In / Out */}
+                {!editingClock ? (
+                  <div className="flex justify-end mb-3">
+                    <button
+                      onClick={() => {
+                        const toInputVal = (val) => {
+                          const d = parseClockTime(val);
+                          if (!d) return "";
+                          return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                        };
+                        setEditClockIn(toInputVal(normalized.clockIn));
+                        setEditClockOut(toInputVal(normalized.clockOut));
+                        setEditingClock(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:bg-gray-50"
+                      style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                    >
+                      <Edit size={12} strokeWidth={2} />
+                      Edit Clock In / Out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border p-4 mb-3" style={{ borderColor: "#e5e7eb", background: "#fafafa" }}>
+                    <p className="font-semibold mb-3" style={{ fontSize: 13, color: "#111827" }}>Adjust Clock In / Clock Out</p>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: "#6b7280" }}>CLOCK IN</label>
+                        <input type="time" value={editClockIn} onChange={(e) => setEditClockIn(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                          style={{ borderColor: "#e5e7eb", color: "#111827" }} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-1" style={{ color: "#6b7280" }}>CLOCK OUT</label>
+                        <input type="time" value={editClockOut} onChange={(e) => setEditClockOut(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
+                          style={{ borderColor: "#e5e7eb", color: "#111827" }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => setEditingClock(false)}
+                        className="px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-gray-100"
+                        style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
+                        Cancel
+                      </button>
+                      <button
+                        disabled={clockSaving}
+                        onClick={async () => {
+                          if (!shiftId) return;
+                          setClockSaving(true);
+                          try {
+                            const toISO = (timeStr) => {
+                              if (!timeStr) return null;
+                              const base = shiftData?.startDate?.toDate?.() || new Date();
+                              const [h, m] = timeStr.split(":").map(Number);
+                              const d = new Date(base);
+                              d.setHours(h, m, 0, 0);
+                              return d.toISOString();
+                            };
+                            const updates = {};
+                            if (editClockIn)  updates.clockIn  = toISO(editClockIn);
+                            if (editClockOut) updates.clockOut = toISO(editClockOut);
+                            await updateDoc(doc(db, "shifts", shiftId), updates);
+                            setShiftData((prev) => ({ ...prev, ...updates }));
+                            setEditingClock(false);
+                          } catch (e) {
+                            console.error("Failed to save clock times:", e);
+                          } finally {
+                            setClockSaving(false);
+                          }
+                        }}
+                        className="px-4 py-1.5 rounded-lg text-white text-xs font-semibold transition-opacity hover:opacity-90"
+                        style={{ background: "#145228" }}
+                      >
+                        {clockSaving ? "Saving…" : "Save Changes"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Staff row with timeline */}
                 <div className="flex items-center gap-4 p-3.5 rounded-xl mb-4" style={{ background: "#fafafa", border: "1px solid #f3f4f6" }}>
@@ -767,8 +909,8 @@ const ShiftReport = ({ user }) => {
                   </div>
                   <div className="flex-shrink-0" style={{ width: 200 }}>
                     <div className="flex items-center justify-between mb-1">
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>{normalized.clockIn || "—"}</span>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>{normalized.clockOut || "—"}</span>
+                      <span style={{ fontSize: 10, color: "#9ca3af" }}>{formatClockDisplay(normalized.clockIn)}</span>
+                      <span style={{ fontSize: 10, color: "#9ca3af" }}>{formatClockDisplay(normalized.clockOut)}</span>
                     </div>
                     <div className="relative rounded-full overflow-hidden" style={{ height: 7, background: "#f3f4f6" }}>
                       <div className="absolute top-0 rounded-full"
@@ -976,64 +1118,80 @@ const ShiftReport = ({ user }) => {
                     ))}
                   </div>
 
-                  {/* KM Rates */}
-                  <div className="grid grid-cols-3 gap-4">
-                    {[
-                      { label: "Rate (0–5000 km)",    value: agencyData?.kilometerRate ? `${agencyData.kilometerRate}¢` : agencyData?.kmRate ? `${agencyData.kmRate}¢` : "72¢", sub: "per kilometre" },
-                      { label: "Rate (after 5000 km)", value: agencyData?.kilometerRateHigh ? `${agencyData.kilometerRateHigh}¢` : agencyData?.kmRateHigh ? `${agencyData.kmRateHigh}¢` : "66¢", sub: "per kilometre" },
-                      { label: "Shift Hours",           value: duration, sub: "total duration" },
-                    ].map((k, i) => (
-                      <div key={i} className="rounded-xl border p-4 text-center" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
-                        <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>{k.label}</p>
-                        <p className="font-bold" style={{ fontSize: 22, color: i < 2 ? "#145228" : "#374151" }}>{k.value}</p>
-                        <p style={{ fontSize: 10, color: "#9ca3af" }}>{k.sub}</p>
-                      </div>
-                    ))}
-                  </div>
+                  {/* Shift Transportation Info (read-only from shift data) */}
+                  {(() => {
+                    const sp = shiftData?.shiftPoints?.[0] || shiftData?.clientDetails?.shiftPoints?.[0] || {};
+                    const pickupLoc      = sp.pickupLocation   || shiftData?.pickupLocation   || "N/A";
+                    const pickupTime     = sp.pickupTime       || shiftData?.pickupTime       || "N/A";
+                    const pickedUpTime   = sp.pickedUpTime     || shiftData?.pickedUpTime     || "N/A";
+                    const pickedUpLoc    = sp.pickedUpLocation || shiftData?.pickedUpLocation || "N/A";
+                    const visitLoc       = sp.visitLocation    || shiftData?.visitLocation    || "N/A";
+                    const visitStartTime = sp.visitStartTime   || shiftData?.visitStartOfficialTime || "N/A";
+                    const visitEndTime   = sp.visitEndTime     || shiftData?.visitEndOfficialTime   || "N/A";
+                    const dropLoc        = sp.dropLocation     || shiftData?.dropLocation     || "N/A";
+                    const dropTime       = sp.dropTime         || shiftData?.dropTime         || "N/A";
 
-                  {/* Visit Destinations (transportation shifts only) */}
-                  {isTransportation && (
-                    <div>
-                      <label className="font-bold mb-2 block" style={{ fontSize: 13, color: "#2b3232" }}>Visit Destinations</label>
-                      {stops.map((s, i) => (
-                        <div key={i} className="flex items-center gap-2 mb-2">
-                          <PlacesAutocomplete className={inp} placeholder={`Stop ${i + 1} address`} value={s}
-                            onChange={v => setStops(prev => prev.map((x, xi) => xi === i ? v : x))} />
-                          {stops.length > 1 && (
-                            <button onClick={() => setStops(prev => prev.filter((_, xi) => xi !== i))}
-                              className="flex-shrink-0 p-2 rounded-lg border hover:bg-red-50" style={{ borderColor: "#e5e7eb" }}>
-                              <X size={14} style={{ color: "#dc2626" }} />
-                            </button>
+                    const mapLink = (addr) => addr && addr !== "N/A"
+                      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
+                      : null;
+
+                    const Field = ({ label, value, mapUrl }) => (
+                      <div>
+                        <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>{label}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="font-semibold" style={{ fontSize: 13, color: value === "N/A" ? "#9ca3af" : "#111827" }}>{value}</p>
+                          {mapUrl && (
+                            <a href={mapUrl} target="_blank" rel="noreferrer"
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-white font-semibold flex-shrink-0"
+                              style={{ fontSize: 10, background: "#1f7a3c" }}>
+                              <MapPin size={10} /> Map
+                            </a>
                           )}
                         </div>
-                      ))}
-                      <button onClick={() => setStops(prev => [...prev, ""])}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold text-sm hover:bg-gray-50" style={{ borderColor: "#e5e7eb", color: "#374151" }}>
-                        <Plus size={13} /> Add another stop
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    );
 
-                  {/* Journey Details */}
-                  <div>
-                    <label className="font-bold mb-2 block" style={{ fontSize: 13, color: "#2b3232" }}>Journey Details</label>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div><label className="block mb-1" style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>Starting Point</label>
-                        <PlacesAutocomplete className={inp} placeholder="Starting address" value={startPoint} onChange={setStartPoint} /></div>
-                      <div><label className="block mb-1" style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>Ending Point</label>
-                        <PlacesAutocomplete className={inp} placeholder="Ending address" value={endPoint} onChange={setEndPoint} /></div>
-                      <div><label className="block mb-1" style={{ fontSize: 11, color: "#6b7280", fontWeight: 600 }}>Total Km</label>
-                        <input className={inp} placeholder="0.00" value={isDriving ? liveDistance.toFixed(2) : totalKilometer} onChange={e => setTotalKm(e.target.value)} readOnly={isDriving} /></div>
-                    </div>
-                  </div>
+                    return (
+                      <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
+                        <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Transport Information</p>
 
-                  {/* Drive tracking */}
-                  <div className="flex items-center gap-3">
-                    {!isDriving
-                      ? <button onClick={handleStartDrive} className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white hover:opacity-90" style={{ background: "#145228", fontSize: 13 }}><Truck size={14} /> Start Drive</button>
-                      : <button onClick={handleEndDrive}   className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white hover:opacity-90" style={{ background: "#dc2626", fontSize: 13 }}><X size={14} /> End Drive</button>}
-                    {isDriving && <span style={{ fontSize: 12, color: "#145228", fontWeight: 600 }}>Live: {liveDistance.toFixed(2)} km</span>}
-                  </div>
+                        {/* Pickup */}
+                        <div>
+                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Pickup</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Pickup Time" value={pickupTime} />
+                            <Field label="Pickup Location" value={pickupLoc} mapUrl={mapLink(pickupLoc)} />
+                            <Field label="Picked Up Time (Actual)" value={pickedUpTime} />
+                            <Field label="Picked Up Location (Actual)" value={pickedUpLoc} mapUrl={mapLink(pickedUpLoc)} />
+                          </div>
+                        </div>
+
+                        <hr style={{ borderColor: "#e5e7eb" }} />
+
+                        {/* Visit */}
+                        <div>
+                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Visit</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Visit Location" value={visitLoc} mapUrl={mapLink(visitLoc)} />
+                            <div />
+                            <Field label="Visit Start Time" value={visitStartTime} />
+                            <Field label="Visit End Time" value={visitEndTime} />
+                          </div>
+                        </div>
+
+                        <hr style={{ borderColor: "#e5e7eb" }} />
+
+                        {/* Drop Off */}
+                        <div>
+                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Drop Off</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Drop Off Location" value={dropLoc} mapUrl={mapLink(dropLoc)} />
+                            <Field label="Drop Off Time" value={dropTime} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* KM by Staff */}
                   <div style={{ maxWidth: 300 }}>
@@ -1376,11 +1534,11 @@ const ShiftReport = ({ user }) => {
             </div>
             <div className="px-4 py-3 space-y-2">
               {[
-                { icon: <FileText size={13} />, label: "View Full Report",  color: "#145228", bg: "#f0fdf4", action: () => setShowFullReport(true)       },
-                { icon: <Pill size={13} />,     label: "Medications",       color: "#7c3aed", bg: "#faf5ff", action: () => setActiveTab("medications")    },
-                { icon: <Truck size={13} />,    label: "Transportation",    color: "#2563eb", bg: "#eff6ff", action: () => setActiveTab("transportation") },
-                { icon: <AlertTriangle size={13} />, label: "Log Incident", color: "#dc2626", bg: "#fef2f2", action: () => setActiveModal("critical")     },
-              ].map((a, i) => (
+                { icon: <FileText size={13} />, label: "View Full Report",  color: "#145228", bg: "#f0fdf4", action: () => setShowFullReport(true),        show: true            },
+                { icon: <Pill size={13} />,     label: "Medications",       color: "#7c3aed", bg: "#faf5ff", action: () => setActiveTab("medications"),    show: hasMedication   },
+                { icon: <Truck size={13} />,    label: "Transportation",    color: "#2563eb", bg: "#eff6ff", action: () => setActiveTab("transportation"), show: true            },
+                { icon: <AlertTriangle size={13} />, label: "Log Incident", color: "#dc2626", bg: "#fef2f2", action: () => setActiveModal("critical"),     show: true            },
+              ].filter((a) => a.show).map((a, i) => (
                 <button key={i} onClick={a.action}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border font-semibold transition-all hover:bg-gray-50"
                   style={{ borderColor: "#f3f4f6", fontSize: 12, color: "#374151", textAlign: "left" }}>

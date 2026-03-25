@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, getDocs, query, where } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
@@ -49,11 +49,8 @@ const ManageIntakeWorkers = () => {
   const handleDeleteIntakeWorker = async (worker) => {
     if (!window.confirm(`Are you sure you want to delete "${worker.name}"?`)) return;
     try {
-      const q = query(collection(db, "intakeUsers"), where("email", "==", worker.email));
-      const snap = await getDocs(q);
-      if (snap.empty) return;
-      await deleteDoc(doc(db, "intakeWorkers", snap.docs[0].id));
-      setIntakeWorkers((prev) => prev.filter((w) => w.email !== worker.email));
+      await deleteDoc(doc(db, "intakeUsers", worker.id));
+      setIntakeWorkers((prev) => prev.filter((w) => w.id !== worker.id));
     } catch (e) {
       console.error("Error deleting intake worker:", e);
     }

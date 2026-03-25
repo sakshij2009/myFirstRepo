@@ -7,7 +7,6 @@ import {
   Baby, User, Heart, AlertCircle, Building2, CheckCircle2,
   X, Plus, ChevronRight, Clock, MoreHorizontal,
 } from "lucide-react";
-import IntakeFormChoiceModel from "./IntakeFormChoiceModel";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getServiceColor(type) {
@@ -198,8 +197,7 @@ export default function ManageIntakeForms() {
   const [serviceFilter, setServiceFilter]   = useState("All");
   const [agencyFilter, setAgencyFilter]     = useState("All");
   const [statusFilter, setStatusFilter]     = useState("All");
-  const [showModal, setShowModal]           = useState(false);
-  const [viewRecord, setViewRecord]         = useState(null);
+const [viewRecord, setViewRecord]         = useState(null);
   const [successBanner, setSuccessBanner]   = useState(null);
 
   useEffect(() => {
@@ -411,7 +409,7 @@ export default function ManageIntakeForms() {
           <div className="grid grid-cols-2" style={{ borderTop: "none" }}>
             {/* Private Family */}
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => navigate("/admin-dashboard/add/add-intake-form?type=Private")}
               className="flex items-center gap-4 px-6 py-5 text-left transition-all group hover:bg-green-50/40 border-r"
               style={{ borderColor: "#f3f4f6" }}
             >
@@ -433,7 +431,7 @@ export default function ManageIntakeForms() {
 
             {/* Intake Worker */}
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => navigate("/admin-dashboard/add/add-intake-form?type=Intake Worker")}
               className="flex items-center gap-4 px-6 py-5 text-left transition-all group hover:bg-blue-50/40"
             >
               <div className="rounded-xl flex items-center justify-center flex-shrink-0 transition-colors group-hover:bg-blue-100"
@@ -699,7 +697,6 @@ export default function ManageIntakeForms() {
       </div>
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      {showModal && <IntakeFormChoiceModel setShowModal={setShowModal} />}
       {viewRecord && <ViewFormModal record={viewRecord} onClose={() => setViewRecord(null)} />}
     </div>
   );

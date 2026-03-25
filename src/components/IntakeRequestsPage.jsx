@@ -19,31 +19,84 @@ export default function IntakeRequestsPage() {
     const fetchRequests = async () => {
       try {
         const snap = await getDocs(collection(db, "InTakeForms"));
-        const data = snap.docs.map((doc) => ({
-          id: doc.id,
-          firestoreId: doc.id,
-          source: doc.data().submitterRole ? "intake-worker" : "private-family",
-          status: doc.data().status || "new",
-          childName: doc.data().childName || doc.data().clientName || "Unknown",
-          submitterName: doc.data().submitterName || doc.data().parentName || "Unknown",
-          submitterRole: doc.data().submitterRole || null,
-          agencyName: doc.data().agencyName || null,
-          serviceType: doc.data().serviceType || doc.data().service || "Emergency Care",
-          urgency: doc.data().urgency || "standard",
-          priority: doc.data().priority || null,
-          preferredStartDate: doc.data().preferredStartDate || doc.data().startDate || new Date().toISOString(),
-          phone: doc.data().phone || doc.data().contactPhone || "N/A",
-          email: doc.data().email || doc.data().contactEmail || "N/A",
-          location: doc.data().location || doc.data().address || null,
-          descriptionPreview: doc.data().description || doc.data().notes || "No description provided.",
-          dataQuality: doc.data().dataQuality || "complete",
-          clientId: doc.data().clientId || null,
-          caseReference: doc.data().caseReference || null,
-          hasDocuments: doc.data().hasDocuments || false,
-          approvalStatus: doc.data().approvalStatus || null,
-          submittedDate: doc.data().submittedDate || doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          ...doc.data(),
-        }));
+        const data = snap.docs.map((doc) => {
+          const d = doc.data();
+
+          // ── Determine form type ──
+          const isIntakeWorker = (() => {
+            if (d.formType === "intake-worker") return true;
+            if (d.formType === "private") return false;
+            if (d.isCaseWorker === true) return true;
+            if (d.intakeworkerName?.trim()) return true;
+            return false;
+          })();
+
+          // ── Who filed the form ──
+          // Intake worker: intakeworkerName → caseworkerName → workerInfo.workerName
+          // Private family: parentInfoList[0].parentName → workerInfo.workerName → parentName
+          const filerName = isIntakeWorker
+            ? (d.intakeworkerName?.trim() || d.caseworkerName?.trim() || d.workerInfo?.workerName?.trim() || "Unknown")
+            : (d.parentInfoList?.[0]?.parentName?.trim() || d.workerInfo?.workerName?.trim() || d.parentName?.trim() || d.submitterName?.trim() || "Unknown");
+
+          // ── Filer role/agency ──
+          const filerRole = isIntakeWorker
+            ? (d.caseworkerName ? "Case Worker" : "Intake Worker")
+            : (d.parentInfoList?.[0]?.relationShip?.trim() || null);
+
+          const filerAgency = isIntakeWorker
+            ? (d.agencyName?.trim() || d.caseworkerAgencyName?.trim() || null)
+            : null;
+
+          // ── Contact info (prefer from filer) ──
+          const filerPhone = isIntakeWorker
+            ? (d.intakeworkerPhone || d.caseworkerPhone || d.phone || "N/A")
+            : (d.parentInfoList?.[0]?.parentPhone || d.phone || "N/A");
+
+          const filerEmail = isIntakeWorker
+            ? (d.intakeworkerEmail || d.caseworkerEmail || d.email || "N/A")
+            : (d.parentInfoList?.[0]?.parentEmail || d.email || "N/A");
+
+          // ── Client/child name ──
+          const clientName = (() => {
+            // Try clients object keys
+            if (d.clients && typeof d.clients === "object" && !Array.isArray(d.clients)) {
+              const names = Object.values(d.clients).map(c => c.fullName || c.name || "").filter(Boolean);
+              if (names.length) return names.join(", ");
+            }
+            // Try inTakeClients array
+            if (Array.isArray(d.inTakeClients)) {
+              const names = d.inTakeClients.map(c => c.name || "").filter(Boolean);
+              if (names.length) return names.join(", ");
+            }
+            return d.childName || d.clientName || "Unknown";
+          })();
+
+          return {
+            id: doc.id,
+            firestoreId: doc.id,
+            source: isIntakeWorker ? "intake-worker" : "private-family",
+            status: (d.status || "new").toLowerCase(),
+            childName: clientName,
+            submitterName: filerName,
+            submitterRole: filerRole,
+            agencyName: filerAgency,
+            serviceType: d.serviceType || d.services?.serviceType?.[0] || d.service || "N/A",
+            urgency: d.urgency || "standard",
+            priority: d.priority || null,
+            preferredStartDate: d.preferredStartDate || d.startDate || d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            phone: filerPhone,
+            email: filerEmail,
+            location: d.location || d.address || null,
+            descriptionPreview: d.description || d.notes || d.jobDescription || "No description provided.",
+            dataQuality: d.dataQuality || "complete",
+            clientId: d.clientId || null,
+            caseReference: d.caseReference || null,
+            hasDocuments: !!(d.hasDocuments || (d.uploadedDocs?.length > 0)),
+            approvalStatus: d.approvalStatus || null,
+            submittedDate: d.submittedDate || d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            ...d,
+          };
+        });
         setRequests(data);
       } catch (err) {
         console.error("Error fetching intake requests:", err);
