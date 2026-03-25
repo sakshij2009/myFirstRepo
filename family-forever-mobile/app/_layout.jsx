@@ -134,6 +134,7 @@ export default function Layout() {
       <Tabs.Screen name="_report" options={{ href: null }} />
 
       {/* New screens — hidden from tab bar */}
+      <Tabs.Screen name="_shift-details" options={{ href: null }} />
       <Tabs.Screen name="shift-detail" options={{ href: null }} />
       <Tabs.Screen name="client-detail" options={{ href: null }} />
       <Tabs.Screen name="geo-checkin" options={{ href: null }} />
