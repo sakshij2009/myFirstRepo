@@ -626,10 +626,15 @@ function ShiftCard({ shift, onAction, onDetails, getInitials }) {
         )}
 
         {status === 'completed' && (
-           <View style={{ backgroundColor: LIGHT_GREEN, borderRadius: 14, paddingVertical: 14, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontSize: 15, fontWeight: "800", color: PRIMARY_GREEN }}>
-              ✓ Completed
-            </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <View style={{ flex: 1, backgroundColor: LIGHT_GREEN, borderRadius: 14, paddingVertical: 14, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 15, fontWeight: "800", color: PRIMARY_GREEN }}>
+                ✓ Completed
+              </Text>
+            </View>
+            <Pressable onPress={onDetails}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: PRIMARY_GREEN, fontFamily: "Inter" }}>Details &gt;</Text>
+            </Pressable>
           </View>
         )}
       </View>
