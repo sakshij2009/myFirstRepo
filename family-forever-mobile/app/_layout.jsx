@@ -130,8 +130,28 @@ export default function Layout() {
       <Tabs.Screen name="_ReportTransportationTab" options={{ href: null }} />
       <Tabs.Screen name="_TransferShiftModal" options={{ href: null }} />
       <Tabs.Screen name="_employee-card" options={{ href: null }} />
+      <Tabs.Screen name="_ActionCard" options={{ href: null }} />
       <Tabs.Screen name="_report" options={{ href: null }} />
-      <Tabs.Screen name="_shift-details" options={{ href: null }} />
+
+      {/* New screens — hidden from tab bar */}
+      <Tabs.Screen name="shift-detail" options={{ href: null }} />
+      <Tabs.Screen name="client-detail" options={{ href: null }} />
+      <Tabs.Screen name="geo-checkin" options={{ href: null }} />
+      <Tabs.Screen name="geo-checkout" options={{ href: null }} />
+      <Tabs.Screen name="gps-unavailable" options={{ href: null }} />
+      <Tabs.Screen name="availability" options={{ href: null }} />
+      <Tabs.Screen name="request-time-off" options={{ href: null }} />
+      <Tabs.Screen name="set-recurring-hours" options={{ href: null }} />
+      <Tabs.Screen name="transfer-shift" options={{ href: null }} />
+      <Tabs.Screen name="staff-id-card" options={{ href: null }} />
+      <Tabs.Screen name="staff-reports" options={{ href: null }} />
+      <Tabs.Screen name="shift-medications" options={{ href: null }} />
+      <Tabs.Screen name="shift-transportations" options={{ href: null }} />
+      <Tabs.Screen name="intake-form" options={{ href: null }} />
+      <Tabs.Screen name="active-route" options={{ href: null }} />
+      <Tabs.Screen name="vehicle-check" options={{ href: null }} />
+      <Tabs.Screen name="shift-completion" options={{ href: null }} />
+      <Tabs.Screen name="complete-shift" options={{ href: null }} />
     </Tabs>
   );
 }
