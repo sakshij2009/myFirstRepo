@@ -3,18 +3,19 @@ import {
   Text,
   ScrollView,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, onSnapshot, orderBy, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config.jsx";
 
 const GREEN = "#1f5f3b";
 const BG = "#f4f6f5";
 
-const SAMPLE_ALERTS = [
+const FALLBACK_ALERTS = [
   {
     id: "s1",
     type: "warning",
@@ -80,10 +81,36 @@ const TYPE_STYLES = {
   },
 };
 
+const TYPE_MAP = {
+  transfer: { type: "info", icon: "swap-horizontal" },
+  leave: { type: "success", icon: "calendar" },
+  shift: { type: "warning", icon: "calendar-outline" },
+  alert: { type: "warning", icon: "alert-circle" },
+  info: { type: "info", icon: "information-circle" },
+  success: { type: "success", icon: "checkmark-circle" },
+  warning: { type: "warning", icon: "alert-circle" },
+};
+
+const formatTime = (ts) => {
+  if (!ts) return "";
+  try {
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const diff = Date.now() - d.getTime();
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return `${Math.floor(diff / 86400000)}d ago`;
+  } catch {
+    return "";
+  }
+};
+
 export default function Alerts() {
   const [user, setUser] = useState(null);
-  const [alerts, setAlerts] = useState(SAMPLE_ALERTS);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all | unread | read
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -93,19 +120,89 @@ export default function Alerts() {
     load();
   }, []);
 
-  const dismissAlert = (id) => {
+  useEffect(() => {
+    if (!user?.username) return;
+    let unsub;
+    try {
+      const notifRef = collection(db, "notifications", user.username, "userNotifications");
+      const q = query(notifRef, orderBy("createdAt", "desc"));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          if (snap.empty) {
+            setAlerts(FALLBACK_ALERTS);
+            setUsingFallback(true);
+          } else {
+            const data = snap.docs.map((d) => {
+              const raw = d.data();
+              const typeCfg = TYPE_MAP[raw.type] || TYPE_MAP.info;
+              return {
+                id: d.id,
+                firestoreId: d.id,
+                type: typeCfg.type,
+                icon: raw.icon || typeCfg.icon,
+                title: raw.title || "Notification",
+                message: raw.message || raw.body || "",
+                time: formatTime(raw.createdAt),
+                read: raw.read || false,
+              };
+            });
+            setAlerts(data);
+            setUsingFallback(false);
+          }
+          setLoading(false);
+        },
+        () => {
+          setAlerts(FALLBACK_ALERTS);
+          setUsingFallback(true);
+          setLoading(false);
+        }
+      );
+    } catch {
+      setAlerts(FALLBACK_ALERTS);
+      setUsingFallback(true);
+      setLoading(false);
+    }
+    return () => unsub && unsub();
+  }, [user]);
+
+  const dismissAlert = async (id) => {
+    if (!usingFallback && user?.username) {
+      try {
+        await deleteDoc(doc(db, "notifications", user.username, "userNotifications", id));
+      } catch {}
+    }
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const markRead = (id) => {
+  const markRead = async (id) => {
+    if (!usingFallback && user?.username) {
+      try {
+        await updateDoc(doc(db, "notifications", user.username, "userNotifications", id), { read: true });
+      } catch {}
+    }
     setAlerts((prev) => prev.map((a) => a.id === id ? { ...a, read: true } : a));
   };
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
+    if (!usingFallback && user?.username) {
+      alerts.filter((a) => !a.read).forEach(async (a) => {
+        try {
+          await updateDoc(doc(db, "notifications", user.username, "userNotifications", a.id), { read: true });
+        } catch {}
+      });
+    }
     setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
   };
 
-  const clearAll = () => {
+  const clearAll = async () => {
+    if (!usingFallback && user?.username) {
+      alerts.forEach(async (a) => {
+        try {
+          await deleteDoc(doc(db, "notifications", user.username, "userNotifications", a.id));
+        } catch {}
+      });
+    }
     setAlerts([]);
   };
 
@@ -116,6 +213,14 @@ export default function Alerts() {
   });
 
   const unreadCount = alerts.filter((a) => !a.read).length;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={GREEN} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>

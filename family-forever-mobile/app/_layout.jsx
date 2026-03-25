@@ -152,6 +152,8 @@ export default function Layout() {
       <Tabs.Screen name="vehicle-check" options={{ href: null }} />
       <Tabs.Screen name="shift-completion" options={{ href: null }} />
       <Tabs.Screen name="complete-shift" options={{ href: null }} />
+      <Tabs.Screen name="transportation-detail" options={{ href: null }} />
+      <Tabs.Screen name="transportation-shift-detail" options={{ href: null }} />
     </Tabs>
   );
 }
