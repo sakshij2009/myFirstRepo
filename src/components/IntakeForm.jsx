@@ -1081,11 +1081,8 @@ const handleSubmit = async (values, { resetForm }) => {
                             {shiftCategories
                               .filter(item => {
                                 const l = (item.name || "").toLowerCase();
-                                return (
-                                  l.includes("emergent") ||
-                                  (l.includes("transport") && !l.includes("supervised") && !l.includes("visitation")) ||
-                                  ((l.includes("supervised") || l.includes("visitation")) && l.includes("transport"))
-                                );
+                                const allowed = ["emergent care", "respite care", "supervised visitation", "transportation"];
+                                return allowed.includes(l);
                               })
                               .map(item => {
                                 const isSelected = values.services.serviceType.includes(item.id);

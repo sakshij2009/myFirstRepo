@@ -1,4 +1,4 @@
-import { Stack, Tabs } from "expo-router";
+import { Stack, Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,6 +9,7 @@ const GRAY_TEXT = "#9CA3AF";
 
 export default function Layout() {
   const [isLoggedIn, setIsLoggedIn] = useState(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -16,7 +17,7 @@ export default function Layout() {
       setIsLoggedIn(!!user);
     };
     checkAuth();
-  }, []);
+  }, [pathname]);
 
   if (isLoggedIn === null) return null;
 
@@ -30,26 +31,22 @@ export default function Layout() {
   }
 
   const CustomTabIcon = ({ name, focused }) => (
-    focused ? (
-      <View style={{
-        backgroundColor: "#F0FDF4",
-        width: 48,
-        height: 32,
-        borderRadius: 16,
-        alignItems: "center",
-        justifyContent: "center",
-        marginTop: 4,
-      }}>
-        <Ionicons name={name} size={24} color={PRIMARY_GREEN} />
-      </View>
-    ) : (
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
       <Ionicons
-        name={`${name}-outline`}
+        name={focused ? name : `${name}-outline`}
         size={24}
-        color={GRAY_TEXT}
-        style={{ marginTop: 4 }}
+        color={focused ? PRIMARY_GREEN : GRAY_TEXT}
       />
-    )
+      {focused && (
+        <View style={{
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: PRIMARY_GREEN,
+          marginTop: 4,
+        }} />
+      )}
+    </View>
   );
 
   return (
@@ -60,21 +57,21 @@ export default function Layout() {
         tabBarInactiveTintColor: GRAY_TEXT,
         tabBarStyle: {
           backgroundColor: "#FFFFFF",
-          borderTopColor: "#E5E7EB",
-          borderTopWidth: 1,
-          height: 80, // Needs sufficient height
-          paddingBottom: 24, // Keep labels above the home indicator
-          paddingTop: 8,
-          elevation: 10,
+          borderTopWidth: 0,
+          height: 85,
+          paddingBottom: 25,
+          paddingTop: 10,
+          elevation: 15,
           shadowColor: "#000",
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: -2 },
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 10,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "700",
-          marginTop: 4,
+          fontSize: 10,
+          fontWeight: "500",
+          fontFamily: "Inter",
+          marginTop: 2,
         },
       }}
     >
@@ -96,42 +93,21 @@ export default function Layout() {
         name="routes"
         options={{
           title: "Routes",
-          tabBarIcon: ({ focused }) => (
-            focused ? (
-              <View style={{
-                backgroundColor: "#F0FDF4",
-                width: 48,
-                height: 32,
-                borderRadius: 16,
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 4,
-              }}>
-                <Ionicons name={"navigate"} size={24} color={PRIMARY_GREEN} />
-              </View>
-            ) : (
-              <Ionicons
-                name={"navigate-outline"}
-                size={24}
-                color={GRAY_TEXT}
-                style={{ marginTop: 4 }}
-              />
-            )
-          ),
+          tabBarIcon: ({ focused }) => <CustomTabIcon name="navigate" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="alerts"
         options={{
           title: "Alerts",
-          tabBarBadge: 2,
+          tabBarBadge: 3,
           tabBarBadgeStyle: {
             backgroundColor: "#EF4444",
-            fontSize: 10,
-            fontWeight: "700",
-            minWidth: 18,
-            height: 18,
-            borderRadius: 9,
+            fontSize: 9,
+            fontWeight: "bold",
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
           },
           tabBarIcon: ({ focused }) => <CustomTabIcon name="notifications" focused={focused} />,
         }}
@@ -147,6 +123,7 @@ export default function Layout() {
       {/* Explicitly hide all auto-generated non-tab screens */}
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="login" options={{ href: null }} />
+      <Tabs.Screen name="_ActionCard" options={{ href: null }} />
       <Tabs.Screen name="_Availability" options={{ href: null }} />
       <Tabs.Screen name="_IntakeView" options={{ href: null }} />
       <Tabs.Screen name="_MedicationTab" options={{ href: null }} />
@@ -154,6 +131,7 @@ export default function Layout() {
       <Tabs.Screen name="_TransferShiftModal" options={{ href: null }} />
       <Tabs.Screen name="_employee-card" options={{ href: null }} />
       <Tabs.Screen name="_report" options={{ href: null }} />
+      <Tabs.Screen name="_shift-details" options={{ href: null }} />
     </Tabs>
   );
 }

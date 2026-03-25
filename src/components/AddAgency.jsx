@@ -34,15 +34,8 @@ const AddAgency = ({  mode = "add", user }) => {
   const serviceList = [
     { name: "Emergent Care", key: "emergentBillingCare" },
     { name: "Respite Care", key: "respiteCareBilling" },
-    { name: "Administration", key: "administrationsBilling" },
+    { name: "Supervised Visitation", key: "supervisedVisitationsBilling" },
     { name: "Transportation", key: "transportationsBilling" },
-    { name: "Shadow Shift", key: "shadowShiftBilling" },
-    { name: "Supervised Visitation",
-      key: "supervisedVisitationsBilling"},
-    {
-      name: "Supervised Visitation + Transportation",
-      key: "supervisedVisitationsTransportationBilling",
-    },
   ];
 
   // Fetch agency types dynamically
@@ -282,6 +275,7 @@ const handleSubmit = async (values, { resetForm }) => {
               address: "",
               description: "",
               avatar: null,
+              globalKmRate: "",
               rateList: serviceList.map(() => ({ billingRate: "", kmRate: "" })),
             }
           }
@@ -390,8 +384,28 @@ const handleSubmit = async (values, { resetForm }) => {
 
               {/* ── Service Rates Card ── */}
               <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                <p className="font-bold text-gray-900 mb-1" style={{ fontSize: 15 }}>Agency Service Rates</p>
-                <p className="text-[12px] text-gray-400 mb-5">Billing and kilometre rates per service type</p>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <p className="font-bold text-gray-900 mb-1" style={{ fontSize: 15 }}>Agency Service Rates</p>
+                    <p className="text-[12px] text-gray-400">Billing and kilometre rates per service type</p>
+                  </div>
+                  <div className="w-1/3">
+                    <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Standard KM Rate</label>
+                    <Field 
+                      name="globalKmRate" 
+                      type="number" 
+                      placeholder="Apply to all services" 
+                      className={inputCls(false)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFieldValue("globalKmRate", val);
+                        values.rateList.forEach((_, idx) => {
+                          setFieldValue(`rateList[${idx}].kmRate`, val);
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
                 <FieldArray name="rateList">
                   {() => (
                     <div className="grid grid-cols-2 gap-4">

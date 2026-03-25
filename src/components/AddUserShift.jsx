@@ -174,9 +174,13 @@ const AddUserShift = ({ mode = "add", user }) => {
         setShiftTypes(
           shiftTypeSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
         );
-        setShiftCategories(
-          shiftCategorySnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-        );
+        const allowedCategories = [
+          { id: "emergent", name: "Emergent Care" },
+          { id: "respite", name: "Respite Care" },
+          { id: "supervised", name: "Supervised Visitation" },
+          { id: "transportation", name: "Transportation" },
+        ];
+        setShiftCategories(allowedCategories);
         setClients(clientSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         setUsers(userSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
       } catch (error) {

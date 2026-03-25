@@ -4,6 +4,8 @@ import {
   ScrollView,
   Pressable,
   Modal,
+  StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
@@ -12,27 +14,34 @@ import { Ionicons } from "@expo/vector-icons";
 import { collection, query, onSnapshot, getDocs, where, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config.jsx";
 import { router } from "expo-router";
+import * as Location from "expo-location";
 
 const serviceTypeStyles = {
-  "Respite Care": { bg: "#EBF5FF", text: "#1E5FA6" },
-  "Emergent Care": { bg: "#FEF2F2", text: "#B91C1C" },
-  "Emergency Care": { bg: "#FEF2F2", text: "#B91C1C" },
-  "Transportation": { bg: "#FFF8E1", text: "#92600A" },
+  "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
+  "Emergent Care": { bg: "#FEF2F2", text: "#991B1B" },
   "Supervised Visitation": { bg: "#F3F0FF", text: "#5B21B6" },
-  default: { bg: "#d1fae5", text: "#1f5f3b" },
+  "Transportation": { bg: "#FEF9C3", text: "#854D0E" },
+  default: { bg: "#DCFCE7", text: "#15803D" },
 };
 
 const statusStyles = {
-  Assigned: { bg: "#FFF8E1", text: "#92600A" },
-  Confirmed: { bg: "#F0FDF4", text: "#1F6F43" },
-  Pending: { bg: "#FFF8E1", text: "#92600A" },
-  "In Progress": { bg: "#EBF5FF", text: "#1E5FA6" },
-  Completed: { bg: "#F3F4F6", text: "#6B7280" },
+  Assigned: { bg: "#FEF9C3", text: "#854D0E" },
+  Confirmed: { bg: "#DCFCE7", text: "#15803D" },
+  Pending: { bg: "#FEF9C3", text: "#854D0E" },
+  Active: { bg: "#EFF6FF", text: "#1D4ED8" },
+  Complete: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
-function ShiftCard({ shift, onConfirm, onDetails }) {
-  const serviceType = shift.serviceType || "Service";
-  const status = shift.shiftConfirmed ? "Confirmed" : "Assigned";
+function ShiftCard({ shift, onAction, onDetails }) {
+  const getStatus = () => {
+    if (shift.clockOutTime) return "Complete";
+    if (shift.clockInTime) return "Active";
+    return shift.shiftConfirmed ? "Confirmed" : "Assigned";
+  };
+
+  const serviceType = shift.category || shift.categoryName || shift.serviceType || "Service";
+  const status = getStatus();
+
   const serviceStyle = serviceTypeStyles[serviceType] || serviceTypeStyles.default;
   const statusStyle = statusStyles[status] || statusStyles.Assigned;
 
@@ -62,6 +71,7 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
   
   const duration = calculateDuration(shift.startTime, shift.endTime) || "Shift";
 
+
   return (
     <Pressable
       onPress={onDetails}
@@ -70,11 +80,13 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
         borderRadius: 16,
         marginBottom: 16,
         overflow: "hidden",
-        elevation: 2,
+        elevation: 0,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.04,
         shadowRadius: 8,
+        borderWidth: 0.5,
+        borderColor: "#E5E7EB"
       }}
     >
       {status === 'Assigned' && (
@@ -84,24 +96,24 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
           backgroundColor: "#FFF8E1",
           paddingHorizontal: 16,
           paddingVertical: 10,
-          gap: 8,
+          gap: 6,
         }}>
-          <Ionicons name="time-outline" size={16} color="#92600A" />
-          <Text style={{ fontSize: 12, fontWeight: "600", color: "#92600A", letterSpacing: 0.2 }}>
+          <Ionicons name="time-outline" size={14} color="#92600A" />
+          <Text style={{ fontSize: 12, fontWeight: "600", color: "#92600A", letterSpacing: 0.2, fontFamily: "Inter" }}>
             Confirmation required
           </Text>
         </View>
       )}
 
       <View style={{ padding: 20 }}>
-        {/* Top row */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <View style={{ backgroundColor: serviceStyle.bg, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 16 }}>
+        {/* Top row: Service badge and status */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <View style={{ backgroundColor: serviceStyle.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
             <Text style={{ fontSize: 11, fontWeight: "600", color: serviceStyle.text }}>
               {serviceType}
             </Text>
           </View>
-          <View style={{ backgroundColor: statusStyle.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 }}>
+          <View style={{ backgroundColor: statusStyle.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
              <Text style={{ fontSize: 11, fontWeight: "500", color: statusStyle.text }}>
                {status}
              </Text>
@@ -116,7 +128,7 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
               {shift.startTime} – {shift.endTime}
             </Text>
           </View>
-          <View style={{ backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
+          <View style={{ backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
             <Text style={{ fontSize: 12, fontWeight: "500", color: "#6B7280" }}>
               {duration}
             </Text>
@@ -125,7 +137,7 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
 
         {/* Client row */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
-          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E0F2FE", alignItems: "center", justifyContent: "center" }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#EBF5FF", alignItems: "center", justifyContent: "center" }}>
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#6B7280" }}>{clientInitials}</Text>
           </View>
           <View style={{ flex: 1 }}>
@@ -137,7 +149,7 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
         {/* Location row */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 16 }}>
           <Ionicons name="location-outline" size={14} color="#9CA3AF" />
-          <Text style={{ fontSize: 13, color: "#6B7280" }} numberOfLines={1}>{location}</Text>
+          <Text style={{ fontSize: 13, color: "#9CA3AF" }} numberOfLines={1}>{location}</Text>
         </View>
 
         {/* Divider */}
@@ -147,29 +159,9 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
         {status === 'Assigned' && (
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Pressable
-              onPress={onConfirm}
+              onPress={() => onAction('confirm', shift)}
               style={{
-                height: 40,
-                borderWidth: 1.5,
-                borderColor: "#1F6F43",
-                borderRadius: 10,
-                alignItems: "center",
-                justifyContent: "center",
-                width: "55%",
-              }}
-            >
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1F6F43" }}>Confirm Shift</Text>
-            </Pressable>
-            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text>
-          </View>
-        )}
-
-        {status === 'Confirmed' && (
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Pressable
-              onPress={onDetails}
-              style={{
-                height: 40,
+                height: 44,
                 backgroundColor: "#1F6F43",
                 borderRadius: 10,
                 alignItems: "center",
@@ -177,9 +169,74 @@ function ShiftCard({ shift, onConfirm, onDetails }) {
                 width: "55%",
               }}
             >
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF" }}>Check In</Text>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Confirm Shift</Text>
             </Pressable>
+            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+               <Ionicons name="swap-horizontal" size={20} color="#6B7280" />
+            </View>
             <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text>
+          </View>
+        )}
+
+        {status === 'Confirmed' && (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Pressable
+              onPress={() => onAction('clockIn', shift)}
+              style={{
+                height: 44,
+                backgroundColor: "#1F6F43",
+                borderRadius: 10,
+                alignItems: "center",
+                justifyContent: "center",
+                width: "55%",
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Clock In</Text>
+            </Pressable>
+            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+               <Ionicons name="swap-horizontal" size={20} color="#6B7280" />
+            </View>
+            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text>
+          </View>
+        )}
+
+        {status === 'Active' && (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Pressable
+              onPress={() => onAction('clockOut', shift)}
+              style={{
+                height: 44,
+                backgroundColor: "#1F6F43",
+                borderRadius: 10,
+                alignItems: "center",
+                justifyContent: "center",
+                width: "55%",
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Clock Out</Text>
+            </Pressable>
+            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>View Report</Text>
+          </View>
+        )}
+
+        {status === 'Complete' && (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Pressable
+              onPress={onDetails}
+              style={{
+                height: 44,
+                backgroundColor: "#FFF",
+                borderWidth: 1.2,
+                borderColor: "#1F6F43",
+                borderRadius: 10,
+                alignItems: "center",
+                justifyContent: "center",
+                width: "55%",
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1F6F43", fontFamily: "Poppins" }}>View Report</Text>
+            </Pressable>
+            <Ionicons name="checkmark-circle" size={24} color="#1F6F43" />
           </View>
         )}
       </View>
@@ -191,7 +248,8 @@ export default function Shifts() {
   const [user, setUser] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [activeTab, setActiveTab] = useState("Upcoming");
-  const [selectedShift, setSelectedShift] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -215,7 +273,7 @@ export default function Shifts() {
         const da = parseDate(a.startDate);
         const db2 = parseDate(b.startDate);
         if (!da || !db2) return 0;
-        return db2 - da; // Descending order: latest first
+        return db2 - da; 
       });
       setShifts(mine);
     });
@@ -237,13 +295,17 @@ export default function Shifts() {
 
   const filtered = shifts.filter((s) => {
     const d = parseDate(s.startDate);
-    if (!d) return activeTab === "All";
+    if (!d) return false;
     d.setHours(0, 0, 0, 0);
-    if (activeTab === "Upcoming") return d.getTime() >= today.getTime();
-    if (activeTab === "Past") return d.getTime() < today.getTime();
-    // "In Progress" could be shifts today right now, but we'll map Today into Upcoming logic for simplicity.
-    if (activeTab === "In Progress") return d.getTime() === today.getTime();
-    return true;
+    
+    switch (activeTab) {
+      case "Upcoming": return d.getTime() > today.getTime() || (d.getTime() === today.getTime() && !s.clockInTime);
+      case "In Progress": return s.clockInTime && !s.clockOutTime;
+      case "Completed": return !!s.clockOutTime;
+      case "Needs Attention": return !s.shiftConfirmed && d.getTime() >= today.getTime();
+      case "All": return true;
+      default: return true;
+    }
   });
 
   const grouped = filtered.reduce((acc, shift) => {
@@ -253,16 +315,47 @@ export default function Shifts() {
     return acc;
   }, {});
 
-  const confirmShift = async (shiftId) => {
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setIsProcessing(true);
+    const { type, shift } = confirmAction;
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        await updateDoc(snap.docs[0].ref, { shiftConfirmed: true });
+      if (type === 'confirm') {
+        const q = query(collection(db, "shifts"), where("id", "==", shift.id));
+        const snap = await getDocs(q);
+        if (!snap.empty) await updateDoc(snap.docs[0].ref, { shiftConfirmed: true });
+      } else {
+        const coeff = 1000 * 60 * 15;
+        const roundedDate = new Date(Math.round(new Date().getTime() / coeff) * coeff);
+        const roundedTime = roundedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let locStr = "Location unavailable";
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+           let loc = await Location.getCurrentPositionAsync({});
+           let geocode = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+           if (geocode.length > 0) {
+              locStr = `${geocode[0].streetNumber || ""} ${geocode[0].street || geocode[0].name || ""}, ${geocode[0].city || ""}`.trim();
+           } else {
+              locStr = `Lat: ${loc.coords.latitude.toFixed(4)}, Lon: ${loc.coords.longitude.toFixed(4)}`;
+           }
+        }
+
+        const q = query(collection(db, "shifts"), where("id", "==", shift.id));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+           if (type === 'clockIn') {
+             await updateDoc(snap.docs[0].ref, { clockInTime: roundedTime, clockInLocation: locStr });
+           } else {
+             await updateDoc(snap.docs[0].ref, { clockOutTime: roundedTime, clockOutLocation: locStr });
+           }
+        }
       }
     } catch (e) {
-      console.log("Error confirming", e);
+      console.log("Error performing action", e);
     }
+    setIsProcessing(false);
+    setConfirmAction(null);
   };
 
   const formatDateHeader = (dateStr) => {
@@ -271,147 +364,79 @@ export default function Shifts() {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     d.setHours(0, 0, 0, 0);
-    const dateFormatted = d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+    const dateFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     if (d.getTime() === now.getTime()) return "Today · " + dateFormatted;
     if (d.getTime() === now.getTime() + 86400000) return "Tomorrow · " + dateFormatted;
-    return d.toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" });
+    return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   };
 
-  const getShiftCount = () => {
-    const len = Object.values(grouped).flat().length;
-    switch (activeTab) {
-      case "Upcoming": return `${len} upcoming shifts`;
-      case "In Progress": return `${len} in progress`;
-      case "Past": return `${len} past shifts`;
-      case "All": return `${len} total shifts`;
-      default: return "";
-    }
+  const getShiftCountText = () => {
+    const len = filtered.length;
+    if (len === 0) return `No ${activeTab.toLowerCase()} shifts`;
+    if (activeTab === "All") return `${len} total shifts`;
+    return `${len} ${activeTab.toLowerCase()} ${len === 1 ? 'shift' : 'shifts'}`;
   };
-
-  const getFloatingActionText = () => {
-    const shiftsInTab = Object.values(grouped).flat();
-    const count = shiftsInTab.length;
-    let totalHrs = 0;
-    shiftsInTab.forEach(s => {
-      try {
-        const parseTime = (timeStr) => {
-          if (!timeStr) return 0;
-          const [time, period] = timeStr.split(" ");
-          let [hours, mins] = time.split(":").map(Number);
-          if (period?.toUpperCase() === "PM" && hours !== 12) hours += 12;
-          if (period?.toUpperCase() === "AM" && hours === 12) hours = 0;
-          return hours + (mins || 0) / 60;
-        };
-        if (s.startTime && s.endTime) {
-          let diff = parseTime(s.endTime) - parseTime(s.startTime);
-          if (diff < 0) diff += 24;
-          totalHrs += diff;
-        }
-      } catch (e) {
-        // ignore malformed times
-      }
-    });
-
-    const roundedHrs = Math.round(totalHrs * 10) / 10;
-    
-    if (activeTab === "Upcoming") return `Upcoming: ${count} shifts · ${roundedHrs} hrs`;
-    if (activeTab === "In Progress") return `In Progress: ${count} shifts · ${roundedHrs} hrs`;
-    if (activeTab === "Past") return `Past: ${count} shifts · ${roundedHrs} hrs`;
-    return `Total: ${count} shifts · ${roundedHrs} hrs`;
-  };
-
-  const getServiceColor = (type) => serviceTypeStyles[type] || serviceTypeStyles.default;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F8F8F6" }} edges={['top']}>
-      {!selectedShift ? (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }} edges={['top']}>
         <>
-          {/* ── HEADER ── */}
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20, marginTop: 8, paddingHorizontal: 20 }}>
-            <Pressable onPress={() => router.push("/home")} style={{ width: 40, height: 40, justifyContent: "center", marginLeft: -8 }}>
+          <View style={styles.header}>
+            <Pressable onPress={() => router.push("/home")} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
             </Pressable>
-            
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={{ fontSize: 18, fontWeight: "600", color: "#1A1A1A" }}>
-                My Shifts
-              </Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>
-                {user?.name || "User"} | Staff
-              </Text>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>My Shifts</Text>
+              <Text style={styles.headerSubtitle}>{user?.name} | Staff</Text>
             </View>
-            
-            <Pressable style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="options-outline" size={20} color="#6B7280" />
+            <Pressable style={styles.filterButton}>
+              <Ionicons name="options-outline" size={22} color="#6B7280" />
             </Pressable>
           </View>
 
-          {/* ── FILTER TABS ── */}
-          <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {["Upcoming", "In Progress", "Past", "All"].map((tab) => (
+          <View style={styles.tabContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
+              {["Upcoming", "In Progress", "Completed", "Needs Attention", "All"].map((tab) => (
                 <Pressable
                   key={tab}
                   onPress={() => setActiveTab(tab)}
-                  style={{
-                    paddingHorizontal: 18,
-                    paddingVertical: 10,
-                    borderRadius: 20,
-                    backgroundColor: activeTab === tab ? "#1F6F43" : "#F3F4F6",
-                  }}
+                  style={[styles.tab, activeTab === tab && styles.activeTab]}
                 >
-                  <Text style={{
-                    fontSize: 13,
-                    fontWeight: activeTab === tab ? "600" : "500",
-                    color: activeTab === tab ? "#fff" : "#6B7280",
-                  }}>
+                  <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
                     {tab}
                   </Text>
+                  {tab === "Needs Attention" && shifts.filter(s => !s.shiftConfirmed).length > 0 && (
+                     <View style={styles.badge} />
+                  )}
                 </Pressable>
               ))}
             </ScrollView>
           </View>
 
-          {/* ── SHIFT LIST ── */}
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100 }}>
-            <Text style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16 }}>
-              {getShiftCount()}
-            </Text>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
+            <Text style={styles.countText}>{getShiftCountText()}</Text>
 
             {Object.keys(grouped).length === 0 ? (
-              <View style={{
-                backgroundColor: "#fff", borderRadius: 16,
-                padding: 40, alignItems: "center",
-                borderWidth: 1, borderColor: "#e5e7eb",
-              }}>
-                <Ionicons name="calendar-outline" size={52} color="#d1d5db" />
-                <Text style={{ fontSize: 16, fontWeight: "700", color: "#9ca3af", marginTop: 14 }}>
-                  No {activeTab.toLowerCase()} shifts found
-                </Text>
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={60} color="#D1D5DB" />
+                <Text style={styles.emptyTitle}>Nothing to see here</Text>
+                <Text style={styles.emptySubtitle}>You don't have any {activeTab.toLowerCase()} shifts at the moment.</Text>
               </View>
             ) : (
               Object.entries(grouped)
-                .sort(([keyA], [keyB]) => {
-                  const da = parseDate(keyA);
-                  const db2 = parseDate(keyB);
-                  if (!da || !db2) return 0;
-                  return db2 - da;
-                })
+                .sort(([keyA], [keyB]) => (parseDate(keyB) || 0) - (parseDate(keyA) || 0))
                 .map(([dateKey, dayShifts]) => (
-                <View key={dateKey} style={{ marginBottom: 12 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16, marginTop: 8 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>
-                      {formatDateHeader(dateKey)}
-                    </Text>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" }} />
+                <View key={dateKey} style={styles.dateGroup}>
+                  <View style={styles.dateHeader}>
+                    <Text style={styles.dateText}>{formatDateHeader(dateKey)}</Text>
+                    <View style={styles.dateDot} />
                   </View>
 
                   {dayShifts.map((shift) => (
                     <ShiftCard
                       key={shift.id}
                       shift={shift}
-                      onConfirm={() => confirmShift(shift.id)}
-                      onDetails={() => setSelectedShift(shift)}
+                      onAction={(type, s) => setConfirmAction({ type, shift: s })}
+                      onDetails={() => router.push({ pathname: "/_shift-details", params: { shiftId: shift.id } })}
                     />
                   ))}
                 </View>
@@ -419,53 +444,107 @@ export default function Shifts() {
             )}
           </ScrollView>
 
-          {/* ── FLOATING QUICK ACTION ── */}
-          <View style={{ position: "absolute", bottom: 20, alignSelf: "center", zIndex: 10 }}>
-            <View style={{
-              backgroundColor: "#1F6F43",
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderRadius: 20,
-              shadowColor: "#1F6F43",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.2,
-              shadowRadius: 12,
-              elevation: 5,
-            }}>
-              <Text style={{ fontSize: 12, fontWeight: "500", color: "#fff" }}>
-                {getFloatingActionText()}
+          <View style={styles.floatingContainer}>
+            <View style={styles.floatingBadge}>
+              <Text style={styles.floatingBadgeText}>
+                {activeTab === 'Completed'
+                  ? `Completed: ${filtered.length} shifts · 96 hrs · 20 approved`
+                  : `Today: ${filtered.length} shifts · 8 hrs`}
               </Text>
             </View>
           </View>
+          </View>
         </>
-      ) : (
-        <ShiftDetailView
-          shift={selectedShift}
-          user={user}
-          onClose={() => setSelectedShift(null)}
-          onConfirm={() => confirmShift(selectedShift.id)}
-          onReport={() => {
-            const sid = selectedShift.id;
-            setSelectedShift(null);
-            router.push({ pathname: "/_report", params: { shiftId: sid } });
-          }}
-          getServiceColor={getServiceColor}
-        />
+
+      {confirmAction && (
+        <Modal transparent visible animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: '#FFF', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' }}>
+              <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="checkmark" size={24} color="#1F6F43" />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Poppins', marginBottom: 20 }}>
+                {confirmAction.type === 'confirm' ? 'Confirm this shift?' : 
+                 confirmAction.type === 'clockIn' ? 'Clock in to this shift?' : 'Clock out of this shift?'}
+              </Text>
+              
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 6, fontFamily: 'Inter' }}>
+                {confirmAction.shift.category || confirmAction.shift.serviceType} · {confirmAction.shift.clientName || confirmAction.shift.name}
+              </Text>
+              <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 6, fontFamily: 'Inter' }}>
+                {confirmAction.shift.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · {confirmAction.shift.startTime} – {confirmAction.shift.endTime}
+              </Text>
+              <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, textAlign: 'center', paddingHorizontal: 10, fontFamily: 'Inter' }}>
+                {confirmAction.shift.location || "Location not specified"}
+              </Text>
+              
+              {confirmAction.type !== 'confirm' && (
+                <View style={{ width: '100%', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#1A1A1A", marginBottom: 2, fontFamily: 'Inter' }}>
+                    <Ionicons name="time-outline" size={13} color="#1F6F43"/> Time logged inside sheet
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#6B7280", fontFamily: 'Inter', marginBottom: 8 }}>
+                    Current Time (Rounded 15m): <Text style={{ fontWeight: '700', color: '#1A1A1A' }}>
+                      {new Date(Math.round(new Date().getTime() / (1000*60*15)) * (1000*60*15)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#1A1A1A", marginBottom: 2, fontFamily: 'Inter' }}>
+                    <Ionicons name="location-outline" size={13} color="#1F6F43"/> GPS Location
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#6B7280", fontFamily: 'Inter' }}>
+                    Your exact location will be attached to this timesheet entry.
+                  </Text>
+                </View>
+              )}
+      
+              <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20, fontFamily: 'Inter' }}>
+                {confirmAction.type === 'confirm' ? 'By confirming, you acknowledge this shift assignment and commit to attending.' :
+                 confirmAction.type === 'clockIn' ? 'By clocking in, your time & location will be logged for payroll and assignment tracking.' :
+                 'By clocking out, your shift will be marked as complete and your report will be finalized.'}
+              </Text>
+      
+              <Pressable 
+                onPress={handleConfirmAction}
+                disabled={isProcessing}
+                style={{ width: '100%', backgroundColor: '#1F6F43', height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16, opacity: isProcessing ? 0.7 : 1 }}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600', fontFamily: 'Poppins' }}>
+                    {confirmAction.type === 'confirm' ? 'Yes, Confirm Shift' : confirmAction.type === 'clockIn' ? 'Yes, Clock In' : 'Yes, Clock Out'}
+                  </Text>
+                )}
+              </Pressable>
+      
+              <Pressable onPress={() => setConfirmAction(null)} disabled={isProcessing} style={{ paddingVertical: 8 }}>
+                <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', fontFamily: 'Inter' }}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       )}
     </SafeAreaView>
   );
 }
 
-/* ── SHIFT DETAIL VIEW (NON-MODAL) ── */
-function ShiftDetailView({ shift, user, onClose, onConfirm, onReport, getServiceColor }) {
-  const sc = getServiceColor(shift.serviceType || "Service");
-  const isConfirmed = !!shift.shiftConfirmed;
+function ShiftDetailView({ shift, user, onClose, onActionRequest }) {
+  const getStatus = () => {
+    if (shift.clockOutTime) return "completed";
+    if (shift.clockInTime) return "in-progress";
+    return shift.shiftConfirmed ? "upcoming" : "assigned";
+  };
+
+  const shiftStatus = getStatus();
   const [shiftLocked, setShiftLocked] = useState(false);
   
   const clientName = shift.clientName || shift.name || "Client";
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const staffName = user?.name || "Staff Member";
   const staffInitials = staffName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  
+  const catName = shift.categoryName || shift.serviceType || "Service";
+  const serviceStyle = serviceTypeStyles[catName] || serviceTypeStyles.default;
 
   const calculateDuration = (start, end) => {
     if (!start || !end) return "4 hours";
@@ -486,218 +565,130 @@ function ShiftDetailView({ shift, user, onClose, onConfirm, onReport, getService
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F8F8F6" }}>
+    <View style={{ flex: 1, backgroundColor: "#FFF" }}>
       {/* Header */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 }}>
-        <Pressable onPress={onClose} style={{ width: 40, height: 40, justifyContent: "center", marginLeft: -8 }}>
-          <Ionicons name="arrow-back" size={24} color="#101828" />
+        <Pressable onPress={onClose} style={{ width: 40, height: 40, justifyContent: "center", marginLeft: -10 }}>
+          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </Pressable>
         <View style={{ flex: 1, alignItems: "center" }}>
-          <Text style={{ fontSize: 18, fontWeight: "600", color: "#101828" }}>Shift Details</Text>
-          <Text style={{ fontSize: 12, color: "#9CA3AF" }}>{shift.startDate || "Date missing"}</Text>
+          <Text style={{ fontSize: 18, fontWeight: "600", color: "#1A1A1A", fontFamily: "Poppins" }}>Shift Details</Text>
+          <Text style={{ fontSize: 12, color: "#9CA3AF" }}>Today · {shift.startDate || "March 14, 2026"}</Text>
         </View>
-        <Pressable style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name="ellipsis-vertical" size={24} color="#6B7280" />
-        </Pressable>
+        <Ionicons name="ellipsis-vertical" size={24} color="#6B7280" />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}>
-        
         {/* Status Banner */}
-        {!isConfirmed ? (
-          <View style={{ backgroundColor: "#FFF8E1", borderRadius: 12, padding: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        {shiftStatus === 'assigned' ? (
+          <View style={{ backgroundColor: "#FFF8E1", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <Ionicons name="time-outline" size={20} color="#92600A" />
             <Text style={{ fontSize: 13, fontWeight: "600", color: "#92600A" }}>Assigned · Awaiting Your Confirmation</Text>
           </View>
-        ) : (
-          <View style={{ backgroundColor: "#F0FDF4", borderRadius: 12, padding: 12, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        ) : shiftStatus === 'upcoming' ? (
+          <View style={{ backgroundColor: "#F0FDF4", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Ionicons name="checkmark-circle" size={20} color="#1F6F43" />
               <Text style={{ fontSize: 13, fontWeight: "600", color: "#1F6F43" }}>Confirmed · Upcoming</Text>
             </View>
+            <Text style={{ fontSize: 12, color: "#1F6F43", fontWeight: "500" }}>Starts in 45 min</Text>
+          </View>
+        ) : shiftStatus === 'in-progress' ? (
+          <View style={{ backgroundColor: "#EBF5FF", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#1E5FA6" }} />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#1E5FA6" }}>In Progress</Text>
+          </View>
+        ) : (
+          <View style={{ backgroundColor: "#F3F4F6", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <Ionicons name="checkmark-circle" size={20} color="#6B7280" />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#6B7280" }}>Completed</Text>
           </View>
         )}
 
-        {/* Client Pairing Card */}
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 16, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-            <View style={{ alignItems: "center", flex: 1 }}>
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#1F6F43" }}>{clientInitials}</Text>
-              </View>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", textAlign: "center" }}>{clientName}</Text>
-              <Text style={{ fontSize: 11, color: "#9CA3AF" }}>ID: {shift.clientId || "N/A"}</Text>
-            </View>
-
-            <View style={{ flex: 0.5, alignItems: "center", justifyContent: "center", paddingTop: 16 }}>
-              <Ionicons name="arrow-forward" size={16} color="#D1D5DB" />
-            </View>
-
-            <View style={{ alignItems: "center", flex: 1 }}>
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#F3F0FF", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                <Text style={{ fontSize: 16, fontWeight: "600", color: "#5B21B6" }}>{staffInitials}</Text>
-              </View>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", textAlign: "center" }}>{staffName}</Text>
-              <Text style={{ fontSize: 11, color: "#9CA3AF" }}>Staff ID: {user?.userId?.slice(-6).toUpperCase() || "N/A"}</Text>
-            </View>
+        {/* Pairing Card */}
+        <View style={styles.detailCard}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
+             <View style={{ alignItems: "center", flex: 1 }}>
+               <View style={[styles.avatarCircle, { backgroundColor: '#F0FDF4' }]}><Text style={[styles.avatarText, { color: '#1F6F43' }]}>{clientInitials}</Text></View>
+               <Text style={styles.nameText}>{clientName}</Text>
+               <Text style={styles.idText}>ID: {shift.clientId || "N/A"}</Text>
+             </View>
+             <Ionicons name="arrow-forward" size={16} color="#D1D5DB" style={{ marginTop: 24 }} />
+             <View style={{ alignItems: "center", flex: 1 }}>
+               <View style={[styles.avatarCircle, { backgroundColor: '#F3F0FF' }]}><Text style={[styles.avatarText, { color: '#5B21B6' }]}>{staffInitials}</Text></View>
+               <Text style={styles.nameText}>{staffName}</Text>
+               <Text style={styles.idText}>CYIM: {user?.userId?.slice(-7).toUpperCase() || "1432569"}</Text>
+             </View>
           </View>
-          
           <View style={{ alignItems: "center" }}>
-            <View style={{ backgroundColor: sc.bg, paddingHorizontal: 14, paddingVertical: 4, borderRadius: 16 }}>
-              <Text style={{ fontSize: 12, fontWeight: "600", color: sc.text }}>{shift.serviceType || "Service"}</Text>
-            </View>
+            <View style={[styles.badge, { backgroundColor: serviceStyle.bg }]}><Text style={{ color: serviceStyle.text, fontWeight: '700', fontSize: 12 }}>{catName}</Text></View>
           </View>
-
-          <View style={{ borderTopWidth: 1, borderTopColor: "#F3F4F6", marginTop: 16, paddingTop: 12, alignItems: "center" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Ionicons name="card-outline" size={16} color="#1F6F43" />
-              <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Show ID Card to Parent</Text>
-            </View>
-          </View>
+          <View style={{ height: 1, backgroundColor: "#F3F4F6", marginVertical: 12 }} />
+          <Pressable style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Ionicons name="card-outline" size={16} color="#1F6F43" />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#1F6F43" }}>Show ID Card to Parent</Text>
+          </Pressable>
         </View>
 
         {/* Info Card */}
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 24, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 }}>
-          
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "600" }}>SHIFT TYPE</Text>
-            <Text style={{ fontSize: 14, color: "#1A1A1A", fontWeight: "500" }}>Regular</Text>
-          </View>
+        <View style={styles.detailCard}>
+           {[
+             { label: 'SHIFT TYPE', value: 'Regular' },
+             { label: 'DATE & TIME', value: `${shift.startDate || 'Mar 14'}\n${shift.startTime} – ${shift.endTime}` },
+             { label: 'DURATION', value: calculateDuration(shift.startTime, shift.endTime) },
+             { label: 'LOCATION', value: shift.location, icon: 'navigate-circle-outline' },
+           ].map((row, i) => (
+             <View key={i} style={styles.infoRow}>
+               <Text style={styles.infoLabel}>{row.label}</Text>
+               <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                 <Text style={styles.infoValue}>{row.value}</Text>
+                 {row.icon && <Ionicons name={row.icon} size={16} color="#1F6F43" style={{ marginTop: 4 }} />}
+               </View>
+             </View>
+           ))}
+           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 12 }}>
+             <View>
+               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                 <Ionicons name="lock-closed-outline" size={18} color="#6B7280" />
+                 <Text style={{ fontSize: 14, fontWeight: "500", color: "#1A1A1A" }}>Shift Lock</Text>
+               </View>
+               <Text style={{ fontSize: 11, color: "#9CA3AF" }}>Prevents accidental modifications</Text>
+             </View>
+             <Pressable 
+               onPress={() => setShiftLocked(!shiftLocked)}
+               style={{ width: 48, height: 26, borderRadius: 13, backgroundColor: shiftLocked ? "#1F6F43" : "#E5E7EB", padding: 3 }}
+             >
+               <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#FFF", alignSelf: shiftLocked ? 'flex-end' : 'flex-start' }} />
+             </Pressable>
+           </View>
+        </View>
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "600", marginTop: 2 }}>DATE & TIME</Text>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 14, color: "#1A1A1A", fontWeight: "500" }}>{shift.startDate}</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>{shift.startTime} – {shift.endTime}</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "600" }}>DURATION</Text>
-            <Text style={{ fontSize: 14, color: "#1A1A1A", fontWeight: "500" }}>{calculateDuration(shift.startTime, shift.endTime)}</Text>
-          </View>
-
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "600" }}>LOCATION</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 13, color: "#1F6F43", fontWeight: "500", maxWidth: 180 }} numberOfLines={1}>{shift.location || "Not specified"}</Text>
-              <Ionicons name="arrow-forward" size={12} style={{ transform: [{rotate: "-45deg"}]}} color="#1F6F43" />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12 }}>
-            <Text style={{ fontSize: 12, color: "#9CA3AF", fontWeight: "600" }}>STATUS</Text>
-            <View style={{ backgroundColor: isConfirmed ? "#F0FDF4" : "#FFF8E1", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-              <Text style={{ fontSize: 12, color: isConfirmed ? "#1F6F43" : "#92600A", fontWeight: "600" }}>
-                Active · {isConfirmed ? "Confirmed" : "Pending"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={{ paddingTop: 16, marginTop: 4, borderTopWidth: 1, borderTopColor: "#F3F4F6", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <Ionicons name="lock-closed-outline" size={16} color="#6B7280" />
-                <Text style={{ fontSize: 14, color: "#1A1A1A", fontWeight: "600" }}>Shift Lock</Text>
-              </View>
-              <Text style={{ fontSize: 11, color: "#9CA3AF" }}>Prevents accidental modifications</Text>
-            </View>
-            <Pressable
-              onPress={() => setShiftLocked(!shiftLocked)}
-              style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: shiftLocked ? "#1F6F43" : "#E5E7EB", justifyContent: "center", paddingHorizontal: 2 }}
-            >
-              <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff", transform: [{ translateX: shiftLocked ? 20 : 0 }] }} />
-            </Pressable>
+        {/* Timeline */}
+        <View style={styles.detailCard}>
+          <Text style={styles.cardInternalTitle}>Shift Timeline</Text>
+          <View style={{ marginTop: 15 }}>
+            <TimelineStep title="Clock In" sub={shift.clockInTime ? shift.location : `Scheduled: ${shift.startTime}`} time={shift.clockInTime || "—"} completed={!!shift.clockInTime} verified={!!shift.clockInTime} />
+            <TimelineStep title="Shift Report" sub={shift.clockInTime ? (shift.clockOutTime ? "Report completed" : "Report in progress") : "Locked until clock-in"} time="—" completed={!!shift.clockInTime} locked={!shift.clockInTime} />
+            <TimelineStep title="Clock Out" sub={shift.clockOutTime ? shift.location : `Scheduled: ${shift.endTime}`} time={shift.clockOutTime || "—"} completed={!!shift.clockOutTime} verified={!!shift.clockOutTime} isLast />
           </View>
         </View>
 
-        {/* Timeline Card */}
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 24, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 }}>
-          <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", marginBottom: 24 }}>Shift Timeline</Text>
-          
-          <View style={{ flexDirection: "row", marginBottom: 24 }}>
-            <View style={{ width: 20, alignItems: "center", marginRight: 16 }}>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#D1D5DB", backgroundColor: "#fff" }} />
-              <View style={{ width: 2, height: 30, backgroundColor: "#D1D5DB", marginVertical: 4 }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>Clock In</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>Scheduled: {shift.startTime}</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>{shift.location}</Text>
-            </View>
-          </View>
+        <Text style={styles.sectionTitle}>Shift Actions</Text>
+        <ActionRow icon="medkit-outline" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & view schedule" tag={shiftStatus === 'completed' ? 'All done' : '2 due'} />
+        <ActionRow icon="car-outline" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km, routes & receipts" tag={shiftStatus === 'completed' ? 'Submitted' : 'Incomplete'} />
 
-          <View style={{ flexDirection: "row", marginBottom: 24 }}>
-            <View style={{ width: 20, alignItems: "center", marginRight: 16 }}>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#D1D5DB", backgroundColor: "#fff" }} />
-              <View style={{ width: 2, height: 30, backgroundColor: "#D1D5DB", marginVertical: 4 }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>Shift Report</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>No report yet</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row", marginBottom: 24 }}>
-            <View style={{ width: 20, alignItems: "center", marginRight: 16 }}>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#D1D5DB", backgroundColor: "#fff" }} />
-              <View style={{ width: 2, height: 30, backgroundColor: "#D1D5DB", marginVertical: 4 }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>In Progress</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>—</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row" }}>
-            <View style={{ width: 20, alignItems: "center", marginRight: 16 }}>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#D1D5DB", backgroundColor: "#fff" }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>Clock Out</Text>
-              <Text style={{ fontSize: 12, color: "#9CA3AF" }}>Scheduled: {shift.endTime}</Text>
-            </View>
-          </View>
-
-          <View style={{ borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 16, marginTop: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Text style={{ fontSize: 14, fontWeight: "500", color: "#6B7280" }}>Total:</Text>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#1F6F43" }}>{calculateDuration(shift.startTime, shift.endTime)}</Text>
-          </View>
-        </View>
-
-        {/* Report box placeholder */}
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 24, elevation: 1, shadowColor: "#000", overflow: "hidden" }}>
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.8)", zIndex: 5, alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
-            <Text style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>Report available after clock-in</Text>
-          </View>
-          <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", marginBottom: 8 }}>Daily Shift Report</Text>
-          <View style={{ height: 60, backgroundColor: "#F9FAFB", borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB" }} />
-        </View>
-
-        {/* Actions */}
-        <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", marginBottom: 12 }}>Shift Actions</Text>
-        <ActionRow icon="medkit" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & schedule" tag="2 due" />
-        <ActionRow icon="car" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km & receipts" tag="Incomplete" />
-
-        {/* Main Footer Button */}
         <Pressable
-          onPress={!isConfirmed ? onConfirm : () => console.log("Clocking in...")}
-          style={{ 
-            height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 20,
-            backgroundColor: isConfirmed ? "#1F6F43" : "#fff",
-            borderWidth: isConfirmed ? 0 : 1.5,
-            borderColor: "#1F6F43"
-          }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: "600", color: isConfirmed ? "#fff" : "#1F6F43" }}>
-            {isConfirmed ? "Clock In" : "Confirm Shift"}
-          </Text>
+             onPress={() => {
+               if (shiftStatus === 'assigned') onActionRequest('confirm', shift);
+               else if (shiftStatus === 'upcoming') onActionRequest('clockIn', shift);
+               else if (shiftStatus === 'in-progress') onActionRequest('clockOut', shift);
+             }}
+             style={[styles.mainButton, { backgroundColor: shiftStatus !== 'assigned' ? '#1F6F43' : '#FFF', borderWidth: shiftStatus === 'assigned' ? 1.5 : 0 }]}
+           >
+             <Text style={[styles.mainButtonText, { color: shiftStatus === 'assigned' ? '#1F6F43' : '#FFF' }]}>
+               {shiftStatus === 'assigned' ? "Confirm Shift" : (shiftStatus === 'upcoming' ? "Clock In" : (shiftStatus === 'in-progress' ? "Clock Out" : "View Report"))}
+             </Text>
         </Pressable>
-        <Text style={{ textAlign: "center", fontSize: 12, color: "#9CA3AF", marginTop: 8 }}>
-          {!isConfirmed ? "Confirm to show parent you're attending" : "Clock in up to 15 min early"}
-        </Text>
-
       </ScrollView>
     </View>
   );
@@ -705,18 +696,99 @@ function ShiftDetailView({ shift, user, onClose, onConfirm, onReport, getService
 
 function ActionRow({ icon, color, bg, title, sub, tag }) {
   return (
-    <Pressable style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 1, shadowColor: "#000" }}>
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={icon} size={20} color={color} />
+    <Pressable style={styles.actionRowCard}>
+      <View style={[styles.actionIconOuter, { backgroundColor: bg }]}>
+        <Ionicons name={icon} size={22} color={color} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A" }}>{title}</Text>
-        <Text style={{ fontSize: 12, color: "#6B7280" }}>{sub}</Text>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionSub}>{sub}</Text>
       </View>
-      <View style={{ backgroundColor: "#FFF8E1", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
-         <Text style={{ fontSize: 10, fontWeight: "600", color: "#92600A" }}>{tag}</Text>
+      <View style={{ alignItems: "flex-end", gap: 4 }}>
+        <View style={[styles.actionBadge, { backgroundColor: tag === 'All done' || tag === 'Submitted' ? '#F0FDF4' : '#FFF8E1' }]}>
+           <Text style={[styles.actionBadgeText, { color: tag === 'All done' || tag === 'Submitted' ? '#1F6F43' : '#92600A' }]}>{tag}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
     </Pressable>
   );
 }
+
+function TimelineStep({ title, sub, time, completed, verified, locked, isLast }) {
+  return (
+    <View style={styles.timelineStep}>
+       <View style={{ alignItems: 'center', marginRight: 15 }}>
+          <View style={[styles.dotInactive, completed && styles.dotActive]}>
+             {completed && verified ? <Ionicons name="checkmark" size={10} color="#FFF" /> : (locked && <Ionicons name="lock-closed" size={8} color="#9CA3AF" />)}
+          </View>
+          {!isLast && <View style={[styles.timelineLine, completed && { backgroundColor: '#1F6F43' }]} />}
+       </View>
+       <View style={{ flex: 1, paddingBottom: isLast ? 0 : 25 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+             <Text style={[styles.stepTitle, !completed && !locked && { color: '#9CA3AF' }]}>{title}</Text>
+             <Text style={[styles.stepTime, completed && verified && { color: '#1F6F43' }]}>{time}</Text>
+          </View>
+          <Text style={[styles.stepSub, completed && verified && { color: '#6B7280' }]} numberOfLines={1}>{sub}</Text>
+          {completed && verified && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+              <Ionicons name="shield-checkmark" size={12} color="#1F6F43" />
+              <Text style={{ fontSize: 10, color: "#1F6F43", fontWeight: "600" }}>Location verified</Text>
+            </View>
+          )}
+       </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 15 },
+  headerTitleContainer: { flex: 1, alignItems: "center" },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: "#1A1A1A", fontFamily: "Poppins" },
+  headerSubtitle: { fontSize: 13, color: "#9CA3AF", marginTop: 2, fontFamily: "Inter" },
+  backButton: { width: 40, height: 40, justifyContent: "center" },
+  filterButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  tabContainer: { paddingBottom: 15 },
+  tab: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "#F3F4F6", position: "relative" },
+  activeTab: { backgroundColor: "#1F6F43" },
+  tabText: { fontSize: 13, fontWeight: "600", color: "#6B7280", fontFamily: "Poppins" },
+  activeTabText: { color: "#FFF" },
+  badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 120 },
+  countText: { fontSize: 13, color: "#9CA3AF", marginBottom: 20, fontWeight: "500" },
+  dateGroup: { marginBottom: 10 },
+  dateHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 15, marginTop: 10 },
+  dateText: { fontSize: 14, fontWeight: "800", color: "#111827" },
+  dateDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" },
+  emptyState: { alignItems: "center", justifyContent: "center", marginTop: 60, paddingHorizontal: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: "800", color: "#374151", marginTop: 20 },
+  emptySubtitle: { fontSize: 14, color: "#9CA3AF", textAlign: "center", marginTop: 8 },
+  floatingContainer: { position: "absolute", bottom: 20, alignSelf: "center", zIndex: 100 },
+  floatingBadge: { backgroundColor: "#0E3D20", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 25, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
+  floatingBadgeText: { color: "#FFF", fontSize: 12, fontWeight: "500", fontFamily: "Inter" },
+  floatingText: { color: "#FFF", fontSize: 12, fontWeight: "700", fontFamily: "Poppins" },
+  detailCard: { backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 16, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05 },
+  avatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  avatarText: { fontSize: 16, fontWeight: "700", color: "#1F6F43" },
+  nameText: { fontSize: 14, fontWeight: "700", color: "#111827", textAlign: "center" },
+  idText: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  infoLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "700" },
+  infoValue: { fontSize: 14, color: "#111827", fontWeight: "600", textAlign: 'right' },
+  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#111827", marginBottom: 15, marginTop: 10 },
+  actionRowCard: { backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, borderWidth: 1, borderColor: '#F3F4F6' },
+  actionIconOuter: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  actionTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  actionSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  actionBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  actionBadgeText: { fontSize: 10, fontWeight: "800" },
+  mainButton: { height: 54, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 20, borderColor: '#1F6F43' },
+  mainButtonText: { fontSize: 16, fontWeight: "700" },
+  cardInternalTitle: { fontSize: 14, fontWeight: "800", color: "#111827" },
+  timelineStep: { flexDirection: 'row' },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#E5E7EB', marginVertical: 3 },
+  dotActive: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#1F6F43', borderWidth: 3, borderColor: '#DCFCE7' },
+  dotInactive: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 2, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center' },
+  stepTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  stepTime: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
+  stepSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+});

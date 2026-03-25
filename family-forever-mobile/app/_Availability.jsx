@@ -5,26 +5,36 @@ import {
   Pressable,
   ScrollView,
   SafeAreaView,
+  StyleSheet,
+  Dimensions,
+  ActivityIndicator,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   doc,
-  updateDoc,
-  getDoc,
-  deleteField,
-  serverTimestamp,
-  getDocs,
   query,
   collection,
   where,
+  onSnapshot,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
-/* ===================== */
-/* CONSTANTS */
-/* ===================== */
+const { width } = Dimensions.get("window");
+
+// Figma Color Palette
+const PRIMARY_GREEN = "#18633F"; // Deep Emerald from Figma
+const LIGHT_GREEN_BG = "#DCFCE7";
+const TEXT_GREEN = "#166534";
+const PENDING_YELLOW_BG = "#FEF9C3";
+const PENDING_YELLOW_TEXT = "#854D0E";
+const GRAY_TEXT = "#6B7280";
+const DARK_TEXT = "#111827";
+const GRAY_BORDER = "#F3F4F6";
+const PAGE_BG = "#F9FAFB";
 
 const SERVICES = [
   { key: "emergentCare", label: "Emergent Care" },
@@ -39,425 +49,373 @@ const PERIODS = [
   { key: "night", label: "Night", time: "22:00 - 06:00", icon: "🌙" },
 ];
 
-const EMPTY_DAY = {
-  morning: {
-    emergentCare: false,
-    respiteCare: false,
-    transportations: false,
-    supervisedVisitations: false,
-  },
-  evening: {
-    emergentCare: false,
-    respiteCare: false,
-    transportations: false,
-    supervisedVisitations: false,
-  },
-  night: {
-    emergentCare: false,
-    respiteCare: false,
-    transportations: false,
-    supervisedVisitations: false,
-  },
-};
-
-/* ===================== */
-/* HELPERS */
-/* ===================== */
-
 const pad2 = (n) => String(n).padStart(2, "0");
-const toDateKey = (d) =>
-  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const toDateKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-const isSameDay = (a, b) =>
-  a.getFullYear() === b.getFullYear() &&
-  a.getMonth() === b.getMonth() &&
-  a.getDate() === b.getDate();
+function RequestCard({ icon, title, date, note, status }) {
+  const isApproved = status === "Approved";
+  const isPending = status === "Pending";
+  
+  // Icon style mapping based on Figma
+  const getIconStyle = () => {
+    switch(title) {
+      case "Vacation": return { bg: "#FFF7ED", color: "#F59E0B", icon: "sunny-outline" };
+      case "Personal": return { bg: "#EEF2FF", color: "#4F46E5", icon: "briefcase-outline" };
+      case "Sick Leave": return { bg: "#FEE2E2", color: "#EF4444", icon: "alert-circle-outline" };
+      default: return { bg: "#F3F4F6", color: "#6B7280", icon: "document-text-outline" };
+    }
+  };
 
-const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const style = getIconStyle();
 
-const isPastDate = (date) => {
-  const t = new Date();
-  t.setHours(0, 0, 0, 0);
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d < t;
-};
-
-// ✅ highlight only if there is at least ONE true in that day
-const dayHasAnyTrue = (day) => {
-  if (!day) return false;
-  return PERIODS.some((p) =>
-    SERVICES.some((s) => Boolean(day?.[p.key]?.[s.key]))
-  );
-};
-
-const formatHeader = (d) =>
-  d.toLocaleString(undefined, { month: "long", year: "numeric" });
-
-const formatSelectedTitle = (d) =>
-  `${d.toLocaleString(undefined, { weekday: "long" })} (${pad2(
-    d.getDate()
-  )}-${d.toLocaleString(undefined, { month: "short" })}-${d.getFullYear()})`;
-
-/* ===================== */
-/* CHECKBOX */
-/* ===================== */
-
-function Checkbox({ checked }) {
   return (
-    <View
-      style={{
-        height: 22,
-        width: 22,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: checked ? "#047857" : "#cbd5e1",
-        backgroundColor: checked ? "#047857" : "transparent",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-      pointerEvents="none"
-    >
-      {checked ? (
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>
-          ✓
-        </Text>
-      ) : null}
+    <View style={styles.requestCard}>
+      <View style={[styles.requestIconContainer, { backgroundColor: style.bg }]}>
+        <Ionicons name={style.icon} size={22} color={style.color} />
+      </View>
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <View style={styles.requestHeaderRow}>
+          <Text style={styles.requestTitle}>{title}</Text>
+          <View style={[
+            styles.statusBadge, 
+            { backgroundColor: isApproved ? LIGHT_GREEN_BG : PENDING_YELLOW_BG }
+          ]}>
+            <Ionicons 
+              name={isApproved ? "checkmark-circle" : "time"} 
+              size={14} 
+              color={isApproved ? TEXT_GREEN : PENDING_YELLOW_TEXT} 
+            />
+            <Text style={[
+              styles.statusText, 
+              { color: isApproved ? TEXT_GREEN : PENDING_YELLOW_TEXT }
+            ]}>
+              {status}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.requestDate}>{date}</Text>
+        {note ? <Text style={styles.requestNote}>{note}</Text> : null}
+      </View>
     </View>
   );
 }
-
-/* ===================== */
-/* MAIN COMPONENT */
-/* ===================== */
 
 export default function Availability() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
 
-  const today = useMemo(() => new Date(), []);
-  const [monthCursor, setMonthCursor] = useState(startOfMonth(today));
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [activeTab, setActiveTab] = useState("My Availability");
+  const [isEditing, setIsEditing] = useState(false);
+  const [user, setUser] = useState(null);
+  const [draftAvail, setDraftAvail] = useState({});
+  const [timeOffRequests, setTimeOffRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  });
 
-  // ✅ Separate saved vs draft to avoid “auto-saved UI”
-  const [savedAvailability, setSavedAvailability] = useState({});
-  const [draftAvailability, setDraftAvailability] = useState({});
-
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const selectedKey = toDateKey(selectedDate);
-  const selectedAvailability = draftAvailability[selectedKey] || EMPTY_DAY;
 
-  /* ===== LOAD EXISTING AVAILABILITY ===== */
   useEffect(() => {
-    const load = async () => {
-      if (!userId) return;
-
-      const snap = await getDoc(doc(db, "users", userId));
+    if (!userId) return;
+    const unsubUser = onSnapshot(doc(db, "users", userId), (snap) => {
       if (snap.exists()) {
-        const data = snap.data()?.availability || {};
-        setSavedAvailability(data);
-        // deep copy into draft so edits don’t affect “saved”
-        setDraftAvailability(JSON.parse(JSON.stringify(data)));
+        const data = snap.data();
+        setUser(data);
+        setDraftAvail(JSON.parse(JSON.stringify(data.availability || {})));
       }
-    };
-    load();
+      setLoading(false);
+    });
+
+    const q = query(collection(db, "timeOffRequests"), where("userId", "==", userId));
+    const unsubTimeOff = onSnapshot(q, (snap) => {
+      setTimeOffRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => { unsubUser(); unsubTimeOff(); };
   }, [userId]);
 
-  /* ===== CALENDAR GRID ===== */
-  const calendarCells = useMemo(() => {
-    const start = startOfMonth(monthCursor);
-    const firstDay = start.getDay();
-    const gridStart = new Date(start);
-    gridStart.setDate(start.getDate() - firstDay);
-
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(gridStart);
-      d.setDate(gridStart.getDate() + i);
-      return { date: d, inMonth: d.getMonth() === monthCursor.getMonth() };
-    });
-  }, [monthCursor]);
-
-  /* ===== TOGGLES ===== */
-  const toggleService = (period, service) => {
-    setDraftAvailability((prev) => {
-      const prevDay = prev[selectedKey] || EMPTY_DAY;
-      return {
-        ...prev,
-        [selectedKey]: {
-          ...prevDay,
-          [period]: {
-            ...prevDay[period],
-            [service]: !prevDay[period][service],
-          },
-        },
-      };
-    });
-  };
-
-  // ✅ Clear all removes the date key entirely (so it won’t highlight)
-  const clearAllForDay = () => {
-    setDraftAvailability((prev) => {
-      const next = { ...prev };
-      delete next[selectedKey];
-      return next;
-    });
-  };
-
-  const isDayEmpty = (day) =>
-  !Object.values(day).some(period =>
-    Object.values(period).some(Boolean)
-  );
-
-  const clone = (obj) => JSON.parse(JSON.stringify(obj || {}));
-
-
-
-  /* ===== SAVE ===== */
- 
-
-const saveAvailability = async () => {
-  try {
-    console.log("SAVE BUTTON PRESSED");
-
-    if (!userId) {
-      Alert.alert("Error", "User not found. Please login again.");
-      return;
-    }
-
-    const q = query(collection(db, "users"), where("userId", "==", userId));
-    const qs = await getDocs(q);
-
-    if (qs.empty) {
-      Alert.alert("Error", "User record not found.");
-      return;
-    }
-
-    const userDoc = qs.docs[0];
-    const userRef = userDoc.ref;
-
-    const todayKey = toDateKey(new Date());
-    const existing = userDoc.data().availability || {};
-    const updates = {};
-
-    Object.keys(existing).forEach((k) => {
-      if (k < todayKey) {
-        updates[`availability.${k}`] = deleteField();
+  const weekDaysData = useMemo(() => {
+    const days = [];
+    const source = isEditing ? draftAvail : (user?.availability || {});
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(currentWeekStart);
+      d.setDate(currentWeekStart.getDate() + i);
+      const key = toDateKey(d);
+      const availData = source[key] || null;
+      
+      const dayAvail = [];
+      if (availData) {
+        if (Object.values(availData.morning || {}).some(v => v === true)) dayAvail.push("8:00AM-4:00PM");
+        if (Object.values(availData.evening || {}).some(v => v === true)) dayAvail.push("2:00PM-10:00PM");
+        if (Object.values(availData.night || {}).some(v => v === true)) dayAvail.push("10:00PM-6:00AM");
       }
-    });
 
-    const dayData = draftAvailability[selectedKey];
+      const isSelected = toDateKey(d) === toDateKey(selectedDate);
 
-    if (!dayData || isDayEmpty(dayData)) {
-      updates[`availability.${selectedKey}`] = deleteField();
-    } else {
-      updates[`availability.${selectedKey}`] = dayData;
+      days.push({
+        day: d.toLocaleString("en-US", { weekday: "short" }).toUpperCase(),
+        date: d.getDate().toString(),
+        avail: dayAvail,
+        icon: (dayAvail.length === 0 && !isEditing) ? "moon-outline" : null,
+        highlighted: isSelected,
+        key: key,
+        rawDate: new Date(d)
+      });
     }
+    return days;
+  }, [currentWeekStart, user, isEditing, draftAvail, selectedDate]);
 
-    updates.updatedAt = serverTimestamp();
+  const stats = useMemo(() => {
+    let daysCount = 0, hoursCount = 0;
+    weekDaysData.forEach(d => { if (d.avail.length > 0) { daysCount++; hoursCount += d.avail.length * 8; } });
+    return { days: daysCount, hours: hoursCount };
+  }, [weekDaysData]);
 
-    await updateDoc(userRef, updates);
-
-    // ✅ ADD THIS BLOCK HERE (updates UI immediately)
-    const nextSaved = clone(savedAvailability);
-
-    // remove old past keys locally too
-    Object.keys(existing).forEach((k) => {
-      if (k < todayKey) delete nextSaved[k];
-    });
-
-    if (!dayData || isDayEmpty(dayData)) {
-      delete nextSaved[selectedKey];
-    } else {
-      nextSaved[selectedKey] = dayData;
+  const saveToFirebase = async () => {
+    try {
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        availability: draftAvail,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditing(false);
+      Alert.alert("Success", "Availability updated successfully");
+    } catch (e) {
+      Alert.alert("Error", "Failed to save availability");
     }
+  };
 
-    setSavedAvailability(nextSaved);
-    setDraftAvailability(clone(nextSaved));
-    // ✅ END BLOCK
+  const toggleService = (period, service) => {
+    const key = selectedKey;
+    const next = JSON.parse(JSON.stringify(draftAvail));
+    if (!next[key]) next[key] = { morning: {}, evening: {}, night: {} };
+    if (!next[key][period]) next[key][period] = {};
+    next[key][period][service] = !next[key][period][service];
+    setDraftAvail(next);
+  };
 
-    Alert.alert("Saved", "Availability updated successfully");
-  } catch (err) {
-    console.error("SAVE ERROR:", err);
-    Alert.alert("Error", "Failed to save availability");
-  }
-};
- 
-  /* ===================== */
-  /* UI */
-  /* ===================== */
+  if (loading) return <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator size="large" color={PRIMARY_GREEN} /></View>;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8fafc" }}>
-      <ScrollView   keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 110 }}>
-        {/* Header */}
-        <View
-          style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}
-        >
-          <Pressable onPress={() => router.back()} style={{ paddingRight: 10 }}>
-            <Ionicons name="arrow-back" size={24} />
-          </Pressable>
-          <Text style={{ fontSize: 22, fontWeight: "700" }}>
-            Set Your Availability
-          </Text>
-        </View>
-
-        {/* Calendar */}
-        <View style={{ backgroundColor: "white", borderRadius: 18, padding: 14 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Pressable onPress={() => setMonthCursor(addMonths(monthCursor, -1))}>
-              <Text style={{ fontSize: 20 }}>‹</Text>
-            </Pressable>
-            <Text style={{ fontWeight: "700" }}>{formatHeader(monthCursor)}</Text>
-            <Pressable onPress={() => setMonthCursor(addMonths(monthCursor, 1))}>
-              <Text style={{ fontSize: 20 }}>›</Text>
-            </Pressable>
-          </View>
-
-          <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 10 }}>
-            {calendarCells.map(({ date, inMonth }) => {
-              const key = toDateKey(date);
-              const past = isPastDate(date);
-              const selected = isSameDay(date, selectedDate);
-
-              // ✅ highlight ONLY saved days that have at least one true
-              const savedDay = savedAvailability[key];
-              const hasSavedAvail = dayHasAnyTrue(savedDay);
-
-              let bg = "transparent";
-              let color = inMonth ? "#0f172a" : "#cbd5e1";
-
-              if (past) color = "#cbd5e1";
-              else if (selected) {
-                bg = "#059669";
-                color = "white";
-              } else if (hasSavedAvail) {
-                bg = "#d1fae5";
-                color = "#065f46";
-              }
-
-              return (
-                <Pressable
-                  key={key}
-                  disabled={past}
-                  onPress={() => {
-  if (past) return;
-
-  // ✅ discard unsaved edits when switching dates
-  setDraftAvailability(clone(savedAvailability));
-  setSelectedDate(date);
-}}
-
-                  style={{
-                    width: "14.28%",
-                    alignItems: "center",
-                    padding: 6,
-                    opacity: past ? 0.5 : 1,
-                  }}
-                >
-                  <View
-                    style={{
-                      height: 38,
-                      width: 38,
-                      borderRadius: 12,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: bg,
-                    }}
-                  >
-                    <Text style={{ fontWeight: "600", color }}>
-                      {date.getDate()}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Periods */}
-        <View style={{ marginTop: 14 }}>
-          <Text style={{ fontWeight: "700", marginBottom: 10 }}>
-            {formatSelectedTitle(selectedDate)}
-          </Text>
-
-          {PERIODS.map((p) => (
-            <View
-              key={p.key}
-              style={{
-                backgroundColor: "#f1f5f9",
-                padding: 14,
-                borderRadius: 16,
-                marginBottom: 12,
-              }}
-            >
-              <Text style={{ fontWeight: "700" }}>
-                {p.icon} {p.label} ({p.time})
-              </Text>
-
-              {SERVICES.map((s) => (
-                <Pressable
-                  key={s.key}
-                  onPress={() => toggleService(p.key, s.key)}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginTop: 10,
-                  }}
-                  hitSlop={10}
-                >
-                  <View style={{ marginRight: 10 }}>
-                    <Checkbox checked={selectedAvailability[p.key][s.key]} />
-                  </View>
-                  <Text>{s.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-
-      {/* Bottom */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          padding: 14,
-          backgroundColor: "white",
-          flexDirection: "row",
-          gap: 10,
-        }}
-      >
-        <Pressable
-          onPress={clearAllForDay}
-          style={{
-            flex: 1,
-            borderWidth: 1,
-            borderRadius: 16,
-            padding: 12,
-          }}
-        >
-          <Text style={{ textAlign: "center", fontWeight: "700" }}>
-            Clear All
-          </Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: PAGE_BG }}>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Pressable onPress={() => isEditing ? setIsEditing(false) : router.back()} style={styles.backButton}>
+          <Ionicons name={isEditing ? "close" : "arrow-back"} size={24} color={DARK_TEXT} />
         </Pressable>
-
-        <Pressable
-          onPress={saveAvailability}
-          style={{
-            flex: 1,
-            backgroundColor: "#047857",
-            borderRadius: 16,
-            padding: 12,
-          }}
-        >
-          <Text style={{ textAlign: "center", color: "white", fontWeight: "700" }}>
-            Save Availability
-          </Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{isEditing ? "Edit Availability" : "Availability"}</Text>
+          <Text style={styles.headerSubtitle}>{user?.name} · Staff</Text>
+        </View>
+        <Pressable style={styles.plusButton}>
+          <Ionicons name="add" size={28} color={PRIMARY_GREEN} />
         </Pressable>
       </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        {!isEditing && (
+          <View style={styles.tabContainer}>
+            {["My Availability", "Schedule Overview"].map(t => (
+              <Pressable key={t} onPress={() => setActiveTab(t)} style={[styles.tab, activeTab === t && styles.activeTab]}>
+                <Text style={[styles.tabText, activeTab === t && styles.activeTabText]}>{t}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {/* WEEK SELECTOR */}
+        <View style={styles.weekSelector}>
+          <Pressable onPress={() => setCurrentWeekStart(new Date(new Date(currentWeekStart).setDate(currentWeekStart.getDate() - 7)))}>
+            <Ionicons name="chevron-back" size={24} color={GRAY_TEXT} />
+          </Pressable>
+          <View style={{ alignItems: "center" }}>
+            <Text style={styles.dateRange}>{currentWeekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {new Date(new Date(currentWeekStart).setDate(currentWeekStart.getDate() + 6)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</Text>
+            <View style={styles.thisWeekBadge}>
+              <Text style={styles.thisWeekText}>This Week</Text>
+            </View>
+          </View>
+          <Pressable onPress={() => setCurrentWeekStart(new Date(new Date(currentWeekStart).setDate(currentWeekStart.getDate() + 7)))}>
+            <Ionicons name="chevron-forward" size={24} color={GRAY_TEXT} />
+          </Pressable>
+        </View>
+
+        {!isEditing && (
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Ionicons name="calendar-outline" size={20} color={PRIMARY_GREEN} />
+              <Text style={styles.statText}><Text style={styles.boldStat}>{stats.days} days</Text> available</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="time-outline" size={20} color={PRIMARY_GREEN} />
+              <Text style={styles.statText}><Text style={styles.boldStat}>{stats.hours}h</Text> total</Text>
+            </View>
+          </View>
+        )}
+
+        {/* CALENDAR GRID */}
+        <View style={styles.gridCard}>
+          <View style={styles.gridHeader}>
+            {weekDaysData.map((wd, i) => (
+              <Pressable key={i} onPress={() => setSelectedDate(wd.rawDate)} style={styles.gridHeaderItem}>
+                <Text style={styles.gridDayName}>{wd.day}</Text>
+                <View style={[styles.gridDateCircle, wd.highlighted && styles.activeDateCircle]}>
+                  <Text style={[styles.gridDateText, wd.highlighted && styles.activeDateText]}>{wd.date}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.gridDivider} />
+          <View style={styles.gridBody}>
+            {weekDaysData.map((wd, i) => (
+              <View key={i} style={styles.gridColumn}>
+                {wd.avail.map((time, idx) => (
+                  <View key={idx} style={styles.timePill}>
+                    <Text style={styles.timePillText}>{time.split("-")[0]}</Text>
+                    <Text style={styles.timePillText}>{time.split("-")[1]}</Text>
+                  </View>
+                ))}
+                {wd.icon && <View style={styles.moonContainer}><Ionicons name={wd.icon} size={18} color="#D1D5DB" /></View>}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {isEditing ? (
+          <View style={{ paddingHorizontal: 20, marginTop: 25 }}>
+            <Text style={{ fontWeight: "800", marginBottom: 15, fontSize: 16 }}>Set Hours for {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</Text>
+            {PERIODS.map(p => (
+              <View key={p.key} style={styles.editPeriodCard}>
+                <Text style={{ fontWeight: "700", marginBottom: 10 }}>{p.icon} {p.label} ({p.time})</Text>
+                {SERVICES.map(s => (
+                  <Pressable key={s.key} onPress={() => toggleService(p.key, s.key)} style={styles.serviceRow}>
+                    <View style={[
+                      styles.checkbox, 
+                       draftAvail[selectedKey]?.[p.key]?.[s.key] && styles.checkboxActive
+                    ]}>
+                      {draftAvail[selectedKey]?.[p.key]?.[s.key] && <Ionicons name="checkmark" size={14} color="white" />}
+                    </View>
+                    <Text style={styles.serviceLabel}>{s.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ))}
+            <Pressable onPress={saveToFirebase} style={styles.filledButton}>
+              <Text style={styles.filledButtonText}>Save Availability</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.actionButtonRow}>
+              <Pressable style={styles.outlinedButton}>
+                <Text style={styles.outlinedButtonText}>Copy to Next Week</Text>
+              </Pressable>
+              <Pressable onPress={() => setIsEditing(true)} style={styles.filledButton}>
+                <Text style={styles.filledButtonText}>Edit Availability</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Time-Off Requests</Text>
+              <Pressable>
+                <Text style={styles.newRequestLink}>+ New Request</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.requestList}>
+              {timeOffRequests.length === 0 ? (
+                <View style={styles.emptyRequests}>
+                  <Text style={styles.emptyText}>No requests found</Text>
+                </View>
+              ) : (
+                timeOffRequests.map((req, idx) => (
+                  <RequestCard 
+                    key={req.id || idx} 
+                    title={req.type} 
+                    date={req.dateRange} 
+                    note={req.note} 
+                    status={req.status} 
+                  />
+                ))
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    paddingHorizontal: 20, 
+    paddingVertical: 15,
+    backgroundColor: PAGE_BG
+  },
+  headerTitleContainer: { alignItems: "center", flex: 1 },
+  headerTitle: { fontSize: 20, fontWeight: "800", color: DARK_TEXT },
+  headerSubtitle: { fontSize: 13, color: GRAY_TEXT, marginTop: 2 },
+  backButton: { padding: 8 },
+  plusButton: { backgroundColor: "#FFF", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: GRAY_BORDER },
+  tabContainer: { flexDirection: "row", backgroundColor: "#F3F4F6", marginHorizontal: 20, borderRadius: 14, padding: 4, marginTop: 10 },
+  tab: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: 10 },
+  activeTab: { backgroundColor: "#FFF", elevation: 2 },
+  tabText: { fontSize: 14, fontWeight: "600", color: GRAY_TEXT },
+  activeTabText: { color: DARK_TEXT },
+  weekSelector: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 30, marginTop: 25 },
+  dateRange: { fontSize: 18, fontWeight: "800", color: DARK_TEXT },
+  thisWeekBadge: { backgroundColor: LIGHT_GREEN_BG, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 4 },
+  thisWeekText: { fontSize: 11, fontWeight: "700", color: TEXT_GREEN },
+  statsBar: { flexDirection: "row", justifyContent: "space-around", backgroundColor: "#FFF", borderWidth: 1, borderColor: GRAY_BORDER, marginHorizontal: 20, borderRadius: 16, paddingVertical: 15, marginTop: 25 },
+  statItem: { flexDirection: "row", alignItems: "center", gap: 8 },
+  statText: { fontSize: 14, color: GRAY_TEXT },
+  boldStat: { fontWeight: "800", color: DARK_TEXT },
+  gridCard: { marginHorizontal: 20, marginTop: 25, backgroundColor: "#FFF", borderRadius: 20, borderWidth: 1, borderColor: GRAY_BORDER, paddingVertical: 20 },
+  gridHeader: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 10 },
+  gridHeaderItem: { alignItems: "center" },
+  gridDayName: { fontSize: 11, fontWeight: "700", color: "#9CA3AF", marginBottom: 8 },
+  gridDateCircle: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  activeDateCircle: { backgroundColor: PRIMARY_GREEN },
+  gridDateText: { fontSize: 16, fontWeight: "800", color: DARK_TEXT },
+  activeDateText: { color: "#FFF" },
+  gridDivider: { height: 1, backgroundColor: GRAY_BORDER, marginVertical: 15 },
+  gridBody: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 10 },
+  gridColumn: { width: width * 0.11, alignItems: "center", gap: 6 },
+  timePill: { backgroundColor: LIGHT_GREEN_BG, paddingVertical: 6, paddingHorizontal: 2, borderRadius: 8, width: "100%", alignItems: "center" },
+  timePillText: { fontSize: 7, fontWeight: "800", color: TEXT_GREEN },
+  moonContainer: { width: 34, height: 34, borderRadius: 17, backgroundColor: PAGE_BG, alignItems: "center", justifyContent: "center" },
+  actionButtonRow: { flexDirection: "row", paddingHorizontal: 20, gap: 12, marginTop: 30 },
+  outlinedButton: { flex: 1, borderWidth: 1.5, borderColor: PRIMARY_GREEN, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  outlinedButtonText: { fontSize: 15, fontWeight: "800", color: PRIMARY_GREEN },
+  filledButton: { flex: 1, backgroundColor: PRIMARY_GREEN, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  filledButtonText: { fontSize: 15, fontWeight: "800", color: "#FFF" },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginTop: 40, marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: DARK_TEXT },
+  newRequestLink: { fontSize: 14, color: PRIMARY_GREEN, fontWeight: "600" },
+  requestList: { paddingHorizontal: 20, gap: 12 },
+  requestCard: { flexDirection: "row", backgroundColor: "#FFF", borderRadius: 18, padding: 20, borderWidth: 1, borderColor: GRAY_BORDER, marginBottom: 12 },
+  requestIconContainer: { width: 50, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  requestHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  requestTitle: { fontSize: 16, fontWeight: "800", color: DARK_TEXT },
+  statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, gap: 6 },
+  statusText: { fontSize: 12, fontWeight: "700" },
+  requestDate: { fontSize: 14, color: GRAY_TEXT, marginTop: 2 },
+  requestNote: { fontSize: 14, color: GRAY_TEXT, marginTop: 12 },
+  editPeriodCard: { backgroundColor: "#FFF", borderRadius: 18, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: GRAY_BORDER },
+  serviceRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
+  checkbox: { height: 22, width: 22, borderRadius: 6, borderWidth: 1.5, borderColor: "#CBD5E1", alignItems: "center", justifyContent: "center", marginRight: 12 },
+  checkboxActive: { backgroundColor: PRIMARY_GREEN, borderColor: PRIMARY_GREEN },
+  serviceLabel: { fontSize: 14, color: DARK_TEXT, fontWeight: "500" },
+  emptyRequests: { padding: 30, alignItems: "center" },
+  emptyText: { color: "#9CA3AF", fontSize: 14, fontWeight: "500" },
+});

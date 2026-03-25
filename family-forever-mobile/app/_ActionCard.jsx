@@ -80,7 +80,7 @@ export const ActionCard = ({
    - Looks like your screenshot layout
    - Simple + small (as requested)
    - Uses shift data to prefill where possible
-================================================================= */
+ ================================================================= */
 export const MedicalContactLogModal = ({
   visible,
   onClose,
@@ -128,7 +128,10 @@ export const MedicalContactLogModal = ({
 
   const handleSubmit = () => {
     const err = validate();
-    if (err) return alert(err);
+    if (err) {
+      alert(err);
+      return;
+    }
 
     // send to parent to save to firestore
     onSubmit?.(form);
@@ -164,7 +167,6 @@ export const MedicalContactLogModal = ({
           </Text>
 
           <FieldLabel label="Client Name" required />
-          {/* if you want dropdown later, keep as TextInput now */}
           <TextInput
             value={form.clientName}
             onChangeText={(t) => set("clientName", t)}
@@ -176,7 +178,7 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.cyimId}
             onChangeText={(t) => set("cyimId", t)}
-            placeholder="Please enter the phone number"
+            placeholder="Please enter ID"
             style={stylesForm.input}
           />
 
@@ -184,7 +186,7 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.staffName}
             onChangeText={(t) => set("staffName", t)}
-            placeholder="Please enter the phone number"
+            placeholder="Staff Name"
             style={stylesForm.input}
           />
 
@@ -192,7 +194,7 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.dateOfContact}
             onChangeText={(t) => set("dateOfContact", t)}
-            placeholder="Please select the service start details"
+            placeholder="Date"
             style={stylesForm.input}
           />
 
@@ -200,7 +202,7 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.personOfContact}
             onChangeText={(t) => set("personOfContact", t)}
-            placeholder="Please enter the e-mail"
+            placeholder="Person of Contact"
             style={stylesForm.input}
           />
 
@@ -208,11 +210,11 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.timeOfContact}
             onChangeText={(t) => set("timeOfContact", t)}
-            placeholder="Please enter the e-mail"
+            placeholder="Time"
             style={stylesForm.input}
           />
 
-          {/* PROGRAM (checkbox list) */}
+          {/* PROGRAM */}
           <Text style={stylesForm.subTitle}>Program</Text>
           <CheckRow
             label="Transportation"
@@ -253,16 +255,6 @@ export const MedicalContactLogModal = ({
             onPress={() => toggleMulti("contactType", "Face to Face")}
           />
           <CheckRow
-            label="Professional"
-            checked={form.contactType.includes("Professional")}
-            onPress={() => toggleMulti("contactType", "Professional")}
-          />
-          <CheckRow
-            label="Significant Person/ Family"
-            checked={form.contactType.includes("Significant Person/ Family")}
-            onPress={() => toggleMulti("contactType", "Significant Person/ Family")}
-          />
-          <CheckRow
             label="Other"
             checked={form.contactType.includes("Other")}
             onPress={() => toggleMulti("contactType", "Other")}
@@ -275,9 +267,9 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.details}
             onChangeText={(t) => set("details", t)}
-            placeholder="Write down description who was involved during the incident"
+            placeholder="Details of contact"
             multiline
-            style={[stylesForm.textArea, { height: 140 }]}
+            style={[stylesForm.textArea, { height: 120 }]}
             textAlignVertical="top"
           />
 
@@ -288,55 +280,29 @@ export const MedicalContactLogModal = ({
           <TextInput
             value={form.followUpRequired}
             onChangeText={(t) => set("followUpRequired", t)}
-            placeholder="Write down description who was involved during the incident"
+            placeholder="Follow-up actions"
             multiline
-            style={[stylesForm.textArea, { height: 140 }]}
+            style={[stylesForm.textArea, { height: 120 }]}
             textAlignVertical="top"
           />
 
-          {/* SIGNATURE + DATE */}
+          {/* SIGNATURE */}
           <Text style={stylesForm.sectionTitle}>Employee Signature</Text>
           <TextInput
             value={form.employeeSignature}
             onChangeText={(t) => set("employeeSignature", t)}
-            placeholder="Please write the name of client"
-            style={stylesForm.input}
-          />
-
-          <Text style={stylesForm.sectionTitle}>Date</Text>
-          <TextInput
-            value={form.date}
-            onChangeText={(t) => set("date", t)}
-            placeholder="Please provide the date of filling the form"
+            placeholder="Signature"
             style={stylesForm.input}
           />
 
           {/* SUBMISSION CARD */}
           <View style={stylesForm.submitCard}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <View style={stylesForm.submitIcon}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#2563eb" />
-              </View>
-              <Text style={stylesForm.submitTitle}>Critical Incident Report Submission</Text>
-            </View>
-
-            <Text style={stylesForm.submitText}>
-              This report must be submitted immediately upon completion. Management will be automatically notified.
-              Ensure all sections are complete and accurate as this is a legal document.
-            </Text>
-
-            <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-              <Pressable
-                onPress={onClose}
-                style={stylesForm.draftBtn}
-              >
-                <Text style={stylesForm.draftText}>Save Draft</Text>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Pressable onPress={onClose} style={stylesForm.draftBtn}>
+                <Text style={stylesForm.draftText}>Close</Text>
               </Pressable>
 
-              <Pressable
-                onPress={handleSubmit}
-                style={stylesForm.submitBtn}
-              >
+              <Pressable onPress={handleSubmit} style={stylesForm.submitBtn}>
                 <Text style={stylesForm.submitBtnText}>Submit</Text>
               </Pressable>
             </View>
@@ -371,161 +337,32 @@ function CheckRow({ label, checked, onPress }) {
   );
 }
 
-/* ---------- FORM STYLES (matches your screenshot) ---------- */
 const stylesForm = {
-  topCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  topIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: "#DBEAFE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  topSub: {
-    marginTop: 4,
-    fontSize: 11.5,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionTitle: {
-    marginTop: 16,
-    marginBottom: 8,
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    fontSize: 13,
-  },
-  subTitle: {
-    marginTop: 4,
-    marginBottom: 10,
-    fontSize: 12.5,
-    fontWeight: "900",
-    color: "#111827",
-  },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxOn: {
-    backgroundColor: "#14532D",
-    borderColor: "#14532D",
-  },
-  checkText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  textArea: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 13,
-    marginBottom: 12,
-  },
-
-  submitCard: {
-    marginTop: 14,
-    backgroundColor: "#EFF6FF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
-    padding: 14,
-  },
-  submitIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#DBEAFE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitTitle: {
-    fontSize: 12.5,
-    fontWeight: "900",
-    color: "#2563eb",
-    flex: 1,
-  },
-  submitText: {
-    marginTop: 8,
-    fontSize: 11.5,
-    lineHeight: 16,
-    color: "#2563eb",
-    fontWeight: "600",
-  },
-  draftBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#14532D",
-    backgroundColor: "#E7F5EC",
-  },
-  draftText: {
-    textAlign: "center",
-    fontWeight: "900",
-    color: "#14532D",
-  },
-  submitBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#2563EB",
-  },
-  submitBtnText: {
-    textAlign: "center",
-    fontWeight: "900",
-    color: "#fff",
-  },
+  topCard: { backgroundColor: "#fff", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "#E5E7EB" },
+  topIcon: { width: 34, height: 34, borderRadius: 8, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
+  topTitle: { fontSize: 14, fontWeight: "900", color: "#111827" },
+  topSub: { marginTop: 4, fontSize: 11.5, color: "#6B7280" },
+  closeBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  sectionTitle: { marginTop: 16, marginBottom: 8, fontSize: 13, fontWeight: "900" },
+  label: { fontSize: 12, fontWeight: "800", marginBottom: 6 },
+  input: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 12 },
+  subTitle: { marginTop: 4, marginBottom: 10, fontSize: 12.5, fontWeight: "900" },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "#D1D5DB", alignItems: "center", justifyContent: "center" },
+  checkboxOn: { backgroundColor: "#14532D", borderColor: "#14532D" },
+  checkText: { fontSize: 13, fontWeight: "700" },
+  textArea: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, marginBottom: 12 },
+  submitCard: { marginTop: 14 },
+  draftBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: "#14532D", backgroundColor: "#E7F5EC" },
+  draftText: { textAlign: "center", fontWeight: "900", color: "#14532D" },
+  submitBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#14532D" },
+  submitBtnText: { textAlign: "center", fontWeight: "900", color: "#fff" },
 };
+
+export default function ActionCardRoute() {
+  return (
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <Text>Action Card Components</Text>
+    </View>
+  );
+}

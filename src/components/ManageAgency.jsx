@@ -33,10 +33,9 @@ function getRate(rateList, name) {
 
 const RATE_KEYS = [
   "Emergent Care",
-  "Administration",
-  "Supervised Visitation",
   "Respite Care",
-  "Supervised Visitation + Transportation",
+  "Supervised Visitation",
+  "Transportation",
 ];
 
 function KPICard({ icon, label, value, bg, iconColor }) {
