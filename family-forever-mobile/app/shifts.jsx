@@ -171,10 +171,10 @@ function ShiftCard({ shift, onAction, onDetails }) {
             >
               <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Confirm Shift</Text>
             </Pressable>
-            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+            <Pressable onPress={() => router.push(`/transfer-shift?shiftId=${shift.id}`)} style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
                <Ionicons name="swap-horizontal" size={20} color="#6B7280" />
-            </View>
-            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text>
+            </Pressable>
+            <Pressable onPress={onDetails}><Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text></Pressable>
           </View>
         )}
 
@@ -193,10 +193,10 @@ function ShiftCard({ shift, onAction, onDetails }) {
             >
               <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Clock In</Text>
             </Pressable>
-            <View style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+            <Pressable onPress={() => router.push(`/transfer-shift?shiftId=${shift.id}`)} style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
                <Ionicons name="swap-horizontal" size={20} color="#6B7280" />
-            </View>
-            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text>
+            </Pressable>
+            <Pressable onPress={onDetails}><Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>Details &gt;</Text></Pressable>
           </View>
         )}
 
@@ -215,7 +215,7 @@ function ShiftCard({ shift, onAction, onDetails }) {
             >
               <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFF", fontFamily: "Poppins" }}>Clock Out</Text>
             </Pressable>
-            <Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>View Report</Text>
+            <Pressable onPress={onDetails}><Text style={{ fontSize: 13, fontWeight: "500", color: "#1F6F43" }}>View Report</Text></Pressable>
           </View>
         )}
 
