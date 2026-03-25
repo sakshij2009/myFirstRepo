@@ -46,7 +46,7 @@ export default function ShiftTransportations() {
 
   const startRoute = (task) => {
     updateStatus(task.id, "In Progress");
-    router.push(`/active-route?shiftId=${shiftId}&taskId=${task.id}&pickup=${encodeURIComponent(task.pickup)}&destination=${encodeURIComponent(task.destination)}&passenger=${encodeURIComponent(task.passenger)}`);
+    router.push(`/transportation-shift-detail?shiftId=${shiftId}&taskId=${task.id}`);
   };
 
   const completeTask = (id) => {

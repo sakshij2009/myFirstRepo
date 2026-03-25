@@ -97,7 +97,7 @@ export default function Profile() {
 
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, { fontFamily: 'Poppins' }]}>Profile</Text>
+          <Text style={styles.headerTitle}>Profile</Text>
           <Pressable style={styles.headerIcon}>
             <Ionicons name="settings-outline" size={22} color="#1A1A1A" />
           </Pressable>
@@ -120,7 +120,7 @@ export default function Profile() {
 
           <Text style={styles.userName}>{user?.name || "Staff Member"}</Text>
           <Text style={styles.userRole}>{user?.designation || "Staff Consultant"}</Text>
-          
+
           <View style={styles.idBadge}>
             <Text style={styles.idBadgeText}>CYIM: {user?.userId || "1432569"}</Text>
           </View>
@@ -144,7 +144,7 @@ export default function Profile() {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Staff ID Card</Text>
-            <Pressable onPress={() => router.push("/_employee-card")}>
+            <Pressable onPress={() => router.push("/staff-id-card")}>
               <Text style={styles.sectionLink}>View Full Card &gt;</Text>
             </Pressable>
           </View>
@@ -159,9 +159,15 @@ export default function Profile() {
              </View>
              <View style={styles.idCardBody}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Image source={{ uri: user?.profilePhotoUrl || 'https://via.placeholder.com/100' }} style={styles.idCardThumb} />
+                  {user?.profilePhotoUrl ? (
+                    <Image source={{ uri: user.profilePhotoUrl }} style={styles.idCardThumb} />
+                  ) : (
+                    <View style={[styles.idCardThumb, { backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center' }]}>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: PRIMARY }}>{initials}</Text>
+                    </View>
+                  )}
                   <View>
-                    <Text style={styles.idCardName}>{user?.name}</Text>
+                    <Text style={styles.idCardName}>{user?.name || "Staff Member"}</Text>
                     <Text style={styles.idCardRole}>{user?.designation || 'Staff Intake Worker'}</Text>
                   </View>
                 </View>
@@ -173,7 +179,10 @@ export default function Profile() {
 
         {/* MENU */}
         <View style={styles.menuContainer}>
-           <MenuItem icon="calendar-check-outline" title="My Availability" sub="Manage shift preferences" onPress={() => router.push("/_Availability")} />
+           <MenuItem icon="badge-account-outline" title="My Staff ID Card" sub="View digital ID & QR code" onPress={() => router.push("/staff-id-card")} />
+           <MenuItem icon="calendar-check-outline" title="My Availability" sub="Manage shift preferences" onPress={() => router.push("/availability")} />
+           <MenuItem icon="chart-bar" title="My Reports" sub="View shift history & stats" onPress={() => router.push("/staff-reports")} />
+           <MenuItem icon="bell-outline" title="Notifications" sub="View alerts & messages" onPress={() => router.push("/alerts")} />
            <MenuItem icon="help-circle-outline" title="Support Center" sub="FAQs & Contact Admin" onPress={() => Alert.alert("Support", "Contact support@familyforever.org")} />
            <MenuItem icon="logout" title="Sign Out" sub="Securely exit your account" danger onPress={handleLogout} />
         </View>
@@ -190,7 +199,7 @@ function MenuItem({ icon, title, sub, onPress, danger }) {
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[styles.menuTitle, danger && { color: '#DC2626' }]}>{title}</Text>
-        <Text style={styles.menuSub}>{sub}</Text>
+        {sub ? <Text style={styles.menuSub}>{sub}</Text> : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
     </Pressable>
@@ -207,27 +216,27 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFF' },
   avatarText: { fontSize: 32, fontWeight: '800', color: '#1F6F43' },
   cameraBadge: { position: 'absolute', bottom: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: '#1F6F43', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFF' },
-  userName: { fontSize: 20, fontWeight: '800', color: '#1A1A1A', fontFamily: 'Poppins' },
-  userRole: { fontSize: 13, color: '#9CA3AF', fontWeight: '500', marginBottom: 12, fontFamily: 'Inter' },
+  userName: { fontSize: 20, fontWeight: '800', color: '#1A1A1A' },
+  userRole: { fontSize: 13, color: '#9CA3AF', fontWeight: '500', marginBottom: 12 },
   idBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, marginBottom: 20 },
-  idBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280', fontFamily: 'Inter' },
+  idBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
   statsRow: { flexDirection: 'row', width: '100%', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 20 },
   statCol: { flex: 1, alignItems: 'center' },
   statVal: { fontSize: 17, fontWeight: '800', color: '#111827' },
   statLab: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 },
   sectionContainer: { marginTop: 30, paddingHorizontal: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Poppins' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
   sectionLink: { fontSize: 13, fontWeight: '600', color: '#1F6F43' },
   idCardPreview: { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
   idCardHeader: { backgroundColor: '#0E3D20', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10 },
-  idCardLogo: { color: '#FFF', fontSize: 12, fontWeight: '700', fontFamily: 'Inter' },
+  idCardLogo: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   idCardTagText: { color: '#FFF', fontSize: 11, fontWeight: '500' },
   idCardBody: { backgroundColor: '#F3F4F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
   idCardThumb: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#FFF' },
-  idCardName: { color: '#1A1A1A', fontSize: 15, fontWeight: '700', fontFamily: 'Poppins' },
-  idCardRole: { color: '#6B7280', fontSize: 12, fontFamily: 'Inter' },
-  idFooter: { textAlign: 'center', fontSize: 11, color: '#9CA3AF', marginTop: 12, fontFamily: 'Inter' },
+  idCardName: { color: '#1A1A1A', fontSize: 15, fontWeight: '700' },
+  idCardRole: { color: '#6B7280', fontSize: 12 },
+  idFooter: { textAlign: 'center', fontSize: 11, color: '#9CA3AF', marginTop: 12 },
   menuContainer: { marginTop: 20, paddingHorizontal: 20, gap: 12 },
   menuItem: { backgroundColor: '#FFF', padding: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 15, borderWidth: 1, borderColor: '#F3F4F6' },
   menuIconCircle: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
