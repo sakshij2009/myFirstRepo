@@ -29,7 +29,6 @@ export default function ShiftDetailsPage() {
   const [shift, setShift] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  const [shiftLocked, setShiftLocked] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -213,21 +212,6 @@ export default function ShiftDetailsPage() {
                </View>
              </View>
            ))}
-           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 12 }}>
-             <View>
-               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                 <Ionicons name="lock-closed-outline" size={18} color="#6B7280" />
-                 <Text style={{ fontSize: 14, fontWeight: "500", color: "#1A1A1A" }}>Shift Lock</Text>
-               </View>
-               <Text style={{ fontSize: 11, color: "#9CA3AF" }}>Prevents accidental modifications</Text>
-             </View>
-             <Pressable 
-               onPress={() => setShiftLocked(!shiftLocked)}
-               style={{ width: 48, height: 26, borderRadius: 13, backgroundColor: shiftLocked ? "#1F6F43" : "#E5E7EB", padding: 3 }}
-             >
-               <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#FFF", alignSelf: shiftLocked ? 'flex-end' : 'flex-start' }} />
-             </Pressable>
-           </View>
         </View>
 
         {/* Timeline */}
@@ -243,6 +227,7 @@ export default function ShiftDetailsPage() {
         <Text style={styles.sectionTitle}>Shift Actions</Text>
         <ActionRow icon="medkit-outline" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & view schedule" tag={shiftStatus === 'completed' ? 'All done' : '2 due'} onPress={() => router.push(`/shift-medications?shiftId=${shift.id}`)} />
         <ActionRow icon="car-outline" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km, routes & receipts" tag={shiftStatus === 'completed' ? 'Submitted' : 'Incomplete'} onPress={() => router.push(`/shift-transportations?shiftId=${shift.id}`)} />
+        <ActionRow icon="document-text-outline" color="#7C3AED" bg="#F5F3FF" title="Shift Report" sub="Notes, checklist & completion" tag={shiftStatus === 'completed' ? 'Submitted' : shiftStatus === 'in-progress' ? 'In progress' : 'Pending'} onPress={() => router.push(`/complete-shift?shiftId=${shift.id}`)} />
 
         <Pressable
              onPress={() => {
