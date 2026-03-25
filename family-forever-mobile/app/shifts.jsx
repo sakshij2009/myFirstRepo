@@ -453,7 +453,6 @@ export default function Shifts() {
               </Text>
             </View>
           </View>
-          </View>
         </>
 
       {confirmAction && (
