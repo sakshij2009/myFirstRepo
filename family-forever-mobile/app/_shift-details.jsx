@@ -241,8 +241,8 @@ export default function ShiftDetailsPage() {
         </View>
 
         <Text style={styles.sectionTitle}>Shift Actions</Text>
-        <ActionRow icon="medkit-outline" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & view schedule" tag={shiftStatus === 'completed' ? 'All done' : '2 due'} />
-        <ActionRow icon="car-outline" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km, routes & receipts" tag={shiftStatus === 'completed' ? 'Submitted' : 'Incomplete'} />
+        <ActionRow icon="medkit-outline" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & view schedule" tag={shiftStatus === 'completed' ? 'All done' : '2 due'} onPress={() => router.push(`/shift-medications?shiftId=${shift.id}`)} />
+        <ActionRow icon="car-outline" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km, routes & receipts" tag={shiftStatus === 'completed' ? 'Submitted' : 'Incomplete'} onPress={() => router.push(`/shift-transportations?shiftId=${shift.id}`)} />
 
         <Pressable
              onPress={() => {
@@ -331,9 +331,9 @@ export default function ShiftDetailsPage() {
   );
 }
 
-function ActionRow({ icon, color, bg, title, sub, tag }) {
+function ActionRow({ icon, color, bg, title, sub, tag, onPress }) {
   return (
-    <Pressable style={styles.actionRowCard}>
+    <Pressable style={styles.actionRowCard} onPress={onPress}>
       <View style={[styles.actionIconOuter, { backgroundColor: bg }]}>
         <Ionicons name={icon} size={22} color={color} />
       </View>
