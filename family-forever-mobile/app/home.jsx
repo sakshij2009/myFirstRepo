@@ -84,6 +84,29 @@ export default function Home() {
     return d.getTime() === today.getTime();
   });
 
+  const calcTotalHours = (shiftList) => {
+    let total = 0;
+    shiftList.forEach((s) => {
+      try {
+        const parseTime = (t) => {
+          if (!t) return 0;
+          const [time, period] = t.split(" ");
+          let [h, m] = time.split(":").map(Number);
+          if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+          if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+          return h + (m || 0) / 60;
+        };
+        const diff = parseTime(s.endTime) - parseTime(s.startTime);
+        total += diff > 0 ? diff : diff + 24;
+      } catch {}
+    });
+    return Math.round(total * 10) / 10;
+  };
+
+  const totalShifts = shifts.length;
+  const totalHours = calcTotalHours(shifts);
+  const confirmedShifts = shifts.filter((s) => s.shiftConfirmed || s.clockInTime || s.clockOutTime).length;
+
   const upcomingShifts = shifts.filter((s) => {
     const d = parseDate(s.startDate);
     if (!d) return false;
@@ -251,21 +274,21 @@ export default function Home() {
             <View style={{ flex: 1, alignItems: "center" }}>
               <Text style={{ fontSize: 10, color: "#9CA3AF", fontWeight: "600", marginBottom: 4, textTransform: "uppercase" }}>Shifts</Text>
               <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT }}>
-                8 total
+                {totalShifts} total
               </Text>
             </View>
             <View style={{ width: 1, height: 24, backgroundColor: "#E5E7EB" }} />
             <View style={{ flex: 1, alignItems: "center" }}>
               <Text style={{ fontSize: 10, color: "#9CA3AF", fontWeight: "600", marginBottom: 4, textTransform: "uppercase" }}>Hours</Text>
               <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT }}>
-                96 hrs
+                {totalHours} hrs
               </Text>
             </View>
             <View style={{ width: 1, height: 24, backgroundColor: "#E5E7EB" }} />
             <View style={{ flex: 1, alignItems: "center" }}>
-              <Text style={{ fontSize: 10, color: "#9CA3AF", fontWeight: "600", marginBottom: 4, textTransform: "uppercase" }}>Approved</Text>
+              <Text style={{ fontSize: 10, color: "#9CA3AF", fontWeight: "600", marginBottom: 4, textTransform: "uppercase" }}>Confirmed</Text>
               <Text style={{ fontSize: 13, fontWeight: "700", color: "#1F6F43" }}>
-                20 items
+                {confirmedShifts} shifts
               </Text>
             </View>
           </View>
@@ -282,7 +305,7 @@ export default function Home() {
             <Text style={{ fontSize: 18, fontWeight: "800", color: DARK_TEXT }}>
               Coming up
             </Text>
-            <Pressable onPress={() => router.push({ pathname: "/_Availability", params: { userId: user?.userId } })} style={{ flexDirection: "row", alignItems: "center" }}>
+            <Pressable onPress={() => router.push("/availability")} style={{ flexDirection: "row", alignItems: "center" }}>
               <Text style={{ fontSize: 14, color: PRIMARY_GREEN, fontWeight: "600" }}>
                 My Availability
               </Text>
