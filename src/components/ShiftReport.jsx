@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { collection, doc, getDoc, getDocs, query, where, updateDoc, arrayUnion } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
@@ -226,6 +227,12 @@ const ShiftReport = ({ user }) => {
   const [editClockOut, setEditClockOut] = useState("");
   const [clockSaving, setClockSaving]   = useState(false);
 
+  // ── Shift Report submission state ──
+  const [reportExpanded, setReportExpanded]   = useState(false);
+  const [reportDraft, setReportDraft]         = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportSubmitted, setReportSubmitted]   = useState(false);
+
   // ── Medications tab state ──
   const [showAddMed, setShowAddMed]     = useState(false);
   const [selectedMedDay, setSelMedDay]  = useState(null);
@@ -297,13 +304,95 @@ const ShiftReport = ({ user }) => {
 
   // ── Fetch intake ──
   useEffect(() => {
-    if (!shiftData?.clientId) return;
-    (async () => {
+    const fetchIntake = async () => {
+      const clientId = shiftData?.clientId || shiftData?.client || shiftData?.clientDetails?.id;
+      const clientName = shiftData?.clientName || shiftData?.clientDetails?.name;
+      const intakeIdFromShift = shiftData?.intakeId;
+      
+      let foundId = intakeIdFromShift;
+
+      // --- Helper to verify a candidate ID by direct doc fetch or field search ---
+      const resolveToDocId = async (inputId) => {
+        if (!inputId || inputId === "undefined") return null;
+        
+        // Strategy A: Direct Doc ID
+        const direct = await getDoc(doc(db, "InTakeForms", String(inputId)));
+        if (direct.exists()) return direct.id;
+
+        // Strategy B: Search internal ID fields with type-safety (Number vs String)
+        const searchFields = ["id", "clientId", "formId", "inTakeFormId"];
+        const variants = [String(inputId)];
+        if (!isNaN(inputId)) variants.push(Number(inputId));
+
+        for (const field of searchFields) {
+          for (const val of variants) {
+            const q = query(collection(db, "InTakeForms"), where(field, "==", val));
+            const snap = await getDocs(q);
+            if (!snap.empty) return snap.docs[0].id;
+          }
+        }
+
+        return null;
+      };
+
       try {
-        const snap = await getDoc(doc(db, "InTakeForms", shiftData.clientId));
-        if (snap.exists()) setIntakeData(snap.data());
-      } catch (e) { console.error(e); }
-    })();
+        // 1. Try resolving what we already have from shift
+        let resolved = await resolveToDocId(foundId);
+
+        // 2. Fallback to client mapping if needed
+        if (!resolved && clientId) {
+          const clientSnap = await getDoc(doc(db, "clients", String(clientId)));
+          if (clientSnap.exists()) {
+            const cData = clientSnap.data();
+            resolved = await resolveToDocId(cData.intakeId || cData.InTakeId);
+          }
+        }
+
+        // 3. Fallback to searching IntakeForms by ANY clientId match
+        if (!resolved && clientId) {
+           resolved = await resolveToDocId(clientId);
+        }
+
+        // 4. Aggressive Name Search (Last Resort)
+        if (!resolved && clientName) {
+          const cleaned = clientName.trim();
+          const parts = cleaned.split(" ").filter(p => p.length > 1);
+          const searchFields = ["familyName", "clientName", "name", "nameInClientTable", "nameOfPerson", "parentName", "filledBy"];
+          const terms = [cleaned];
+          if (parts.length > 0) {
+            terms.push(parts[0]);
+            if (parts.length > 1) terms.push(parts[parts.length-1]);
+            if (cleaned.toLowerCase().includes("family")) {
+              const i = cleaned.toLowerCase().indexOf("family");
+              terms.push(cleaned.substring(0, i).trim());
+            }
+          }
+
+          for (const f of searchFields) {
+            if (resolved) break;
+            for (const t of terms) {
+              if (!t || t.length < 2 || resolved) continue;
+              const snapE = await getDocs(query(collection(db, "InTakeForms"), where(f, "==", t)));
+              if (!snapE.empty) { resolved = snapE.docs[0].id; break; }
+              
+              const snapR = await getDocs(query(collection(db, "InTakeForms"), where(f, ">=", t), where(f, "<=", t + "\uf8ff")));
+              if (!snapR.empty) { resolved = snapR.docs[0].id; break; }
+            }
+          }
+        }
+
+        if (resolved) {
+          const finalSnap = await getDoc(doc(db, "InTakeForms", resolved));
+          if (finalSnap.exists()) {
+            setIntakeData({ ...finalSnap.data(), id: finalSnap.id });
+          }
+        }
+      } catch (e) {
+        console.error("Intake fetch error:", e);
+      }
+    };
+
+    if (shiftData) fetchIntake();
   }, [shiftData]);
 
   // ── Fetch client (for medication check) ──
@@ -746,6 +835,15 @@ const ShiftReport = ({ user }) => {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50" style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}><Phone size={13} style={{ color: "#6b7280" }} /></button>
           <button className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50" style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}><Mail size={13} style={{ color: "#6b7280" }} /></button>
+          <button
+            onClick={() => {
+              const targetId = intakeData?.id || shiftData?.intakeId || shiftData?.clientId || shiftData?.clientDetails?.id;
+              navigate(`/admin-dashboard/view-intake-form/${targetId || 'unknown'}`);
+            }}
+            className="px-3 py-1.5 rounded-lg border font-semibold text-white transition-all hover:opacity-90 flex items-center gap-1.5"
+            style={{ fontSize: 12, background: "#145228", borderColor: "#145228", color: "#fff" }}>
+            <FileText size={12} /> View Intake Form
+          </button>
         </div>
       </div>
 
@@ -755,7 +853,18 @@ const ShiftReport = ({ user }) => {
         {/* ── LEFT COLUMN ── */}
         <div className="overflow-auto flex flex-col gap-4 pr-0.5">
 
-          {/* ★ TODAY'S SHIFT REPORT CARD ★ */}
+          <div className="bg-white rounded-xl border p-4 flex-shrink-0" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <h3 className="font-bold mb-3" style={{ fontSize: 14, color: "#111827" }}>Shift Description</h3>
+            <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+              {intakeData?.services?.serviceDesc || 
+               intakeData?.serviceDesc || 
+               (Array.isArray(intakeData?.serviceRequired) ? intakeData.serviceRequired.join(", ") : intakeData?.serviceRequired) || 
+               intakeData?.serviceDetail || 
+               "No service description available from intake form."}
+            </p>
+          </div>
+
+        {/* ★ TODAY'S SHIFT REPORT CARD ★ */}
           <div className="bg-white rounded-xl border border-[#e5e7eb] flex-shrink-0" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
             {/* Card Header */}
@@ -922,7 +1031,7 @@ const ShiftReport = ({ user }) => {
                 {/* Shift Notes */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>Shift Notes</h4>
+                    <h4 className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>Daily Staff Narrative</h4>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold"
                       style={{ fontSize: 10, background: shiftData?.shiftReport ? "#f0fdf4" : "#fef3c7", color: shiftData?.shiftReport ? "#15803d" : "#b45309" }}>
                       {shiftData?.shiftReport ? <><CheckCircle size={9} /> Report Filed</> : <><AlertCircle size={9} /> Pending</>}
@@ -1357,6 +1466,97 @@ const ShiftReport = ({ user }) => {
             </div>
             <div className="px-5 py-4 space-y-3">
 
+              {/* ── Shift Report Submission ── */}
+              <div className="rounded-xl border p-4" style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ width: 36, height: 36, background: "#dcfce7", border: "1px solid #bbf7d0" }}>
+                      <PenLine size={17} style={{ color: "#145228" }} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Shift Report</p>
+                        {(shiftData?.shiftReport || reportSubmitted) && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold" style={{ fontSize: 10, background: "#dcfce7", color: "#15803d" }}>
+                            <CheckCircle size={9} /> Submitted
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 12, color: "#6b7280", marginTop: 2, lineHeight: 1.5 }}>Write and submit your daily shift narrative report for this shift.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setReportDraft(shiftData?.shiftReport || "");
+                      setReportExpanded(v => !v);
+                    }}
+                    className="flex items-center justify-center gap-2 py-2 rounded-lg font-semibold text-white flex-shrink-0 hover:opacity-90 transition-all"
+                    style={{ background: "#145228", fontSize: 13, width: 210, boxShadow: "0 1px 2px rgba(20,82,40,0.2)" }}>
+                    <PenLine size={14} /> {shiftData?.shiftReport || reportSubmitted ? "Edit Report" : "Write Shift Report"}
+                  </button>
+                </div>
+
+                {/* Inline report editor */}
+                {reportExpanded && (
+                  <div className="mt-4 space-y-3">
+                    <textarea
+                      rows={8}
+                      className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:border-[#145228] resize-none"
+                      style={{ borderColor: "#d1fae5", background: "#fff", color: "#374151", lineHeight: 1.7 }}
+                      placeholder="Describe the shift activities, client behaviour, any observations, goals worked on, and any other relevant notes…"
+                      value={reportDraft}
+                      onChange={e => setReportDraft(e.target.value)}
+                    />
+                    <div className="flex items-center justify-between">
+                      <p style={{ fontSize: 11, color: "#9ca3af" }}>{reportDraft.length} characters</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setReportExpanded(false)}
+                          className="px-3 py-1.5 rounded-lg border font-semibold text-xs hover:bg-gray-50"
+                          style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
+                          Cancel
+                        </button>
+                        <button
+                          disabled={reportSubmitting || !reportDraft.trim()}
+                          onClick={async () => {
+                            if (!reportDraft.trim() || !shiftId) return;
+                            setReportSubmitting(true);
+                            try {
+                              await updateDoc(doc(db, "shifts", shiftId), {
+                                shiftReport: reportDraft.trim(),
+                                shiftReportSubmittedAt: new Date().toISOString(),
+                                shiftReportSubmittedBy: user?.name || user?.email || "Unknown",
+                              });
+                              setShiftData(prev => ({ ...prev, shiftReport: reportDraft.trim() }));
+                              setReportSubmitted(true);
+                              setReportExpanded(false);
+                              toast.success("Shift report submitted successfully!");
+                            } catch (e) {
+                              console.error("Report submit error:", e);
+                              toast.error("Failed to submit report. Please try again.");
+                            } finally {
+                              setReportSubmitting(false);
+                            }
+                          }}
+                          className="px-4 py-1.5 rounded-lg font-semibold text-xs text-white hover:opacity-90 disabled:opacity-50"
+                          style={{ background: "#145228" }}>
+                          {reportSubmitting ? "Submitting…" : "Submit Report"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show existing report preview if filed */}
+                {!reportExpanded && (shiftData?.shiftReport || reportSubmitted) && (
+                  <div className="mt-3 pl-12">
+                    <p className="rounded-lg px-3 py-2" style={{ fontSize: 12, color: "#374151", background: "#dcfce7", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                      {(shiftData?.shiftReport || "").slice(0, 200)}{(shiftData?.shiftReport || "").length > 200 ? "…" : ""}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Critical Incident */}
               <div className="rounded-xl border p-4" style={{ background: "#fff5f5", borderColor: "#fecaca" }}>
                 <div className="flex items-start justify-between gap-4">
@@ -1571,6 +1771,7 @@ const ShiftReport = ({ user }) => {
           )}
         </div>
       </div>
+
     </div>
   );
 };
