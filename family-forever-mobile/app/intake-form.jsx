@@ -13,6 +13,7 @@ const ACTIVITIES = ["Meal Preparation", "Personal Hygiene", "Bathing/Showering",
 export default function IntakeForm() {
   const { shiftId } = useLocalSearchParams();
   const [shift, setShift] = useState(null);
+  const [formType, setFormType] = useState("intake"); // 'intake' or 'private'
   const [arrivalCondition, setArrivalCondition] = useState("");
   const [conditionNotes, setConditionNotes] = useState("");
   const [vitals, setVitals] = useState({ bp: "", pulse: "", temp: "", spo2: "", weight: "" });
@@ -46,12 +47,15 @@ export default function IntakeForm() {
       const user = JSON.parse(await AsyncStorage.getItem("user") || "{}");
       await addDoc(collection(db, "intakeForms"), {
         shiftId, clientName: shift?.clientName || shift?.name,
+        formType, // 'intake' or 'private'
         arrivalCondition, conditionNotes, vitals, activitiesCompleted: activities,
         hasIncident, incidentDescription: incidentDesc, staffNotes,
         staffId: user?.userId, staffName: user?.name,
+        showWorkerInfo: formType === "intake", // Flag for showing worker information
         submittedAt: serverTimestamp(),
       });
-      Alert.alert("Submitted", "Intake form saved successfully.", [{ text: "OK", onPress: () => router.back() }]);
+      const typeLabel = formType === "intake" ? "Intake Form" : "Private Form";
+      Alert.alert("Submitted", `${typeLabel} saved successfully.`, [{ text: "OK", onPress: () => router.back() }]);
     } catch {
       Alert.alert("Error", "Failed to save form. Try again.");
     } finally {
@@ -83,6 +87,43 @@ export default function IntakeForm() {
         </View>
 
         <View style={{ padding: 20 }}>
+          {/* Form Type Selector */}
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#6b7280", marginBottom: 12 }}>FORM TYPE</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {["intake", "private"].map((type) => (
+                <Pressable
+                  key={type}
+                  onPress={() => setFormType(type)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    paddingHorizontal: 16,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: formType === type ? GREEN : "#e5e7eb",
+                    backgroundColor: formType === type ? GREEN + "15" : "#fff",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "600",
+                      color: formType === type ? GREEN : "#6b7280",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {type === "intake" ? "Intake" : "Private"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {formType === "private" && (
+              <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>Private forms won't display staff worker information in reports.</Text>
+            )}
+          </View>
+
           {/* Client Banner */}
           {shift && (
             <View style={{ backgroundColor: GREEN, borderRadius: 14, padding: 16, marginBottom: 20 }}>

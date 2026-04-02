@@ -205,6 +205,39 @@ export default function ClientDetail() {
               <Text style={styles.serviceTypeText}>{client.serviceType}</Text>
             </View>
           )}
+
+          {/* Quick Contact Row (Prompt 5, line 220) */}
+          <View style={styles.quickContactRow}>
+            <Pressable 
+              onPress={() => client.phone && Linking.openURL(`tel:${client.phone}`)}
+              style={styles.quickContactBtn}
+            >
+              <View style={styles.quickContactIconBox}>
+                <Ionicons name="call" size={24} color={PRIMARY_GREEN} />
+              </View>
+              <Text style={styles.quickContactLabel}>Call</Text>
+            </Pressable>
+
+            <Pressable 
+              onPress={() => client.phone && Linking.openURL(`sms:${client.phone}`)}
+              style={styles.quickContactBtn}
+            >
+              <View style={styles.quickContactIconBox}>
+                <Ionicons name="chatbubble" size={24} color="#1E5FA6" />
+              </View>
+              <Text style={styles.quickContactLabel}>Message</Text>
+            </Pressable>
+
+            <Pressable 
+              onPress={() => client.email && Linking.openURL(`mailto:${client.email}`)}
+              style={styles.quickContactBtn}
+            >
+              <View style={styles.quickContactIconBox}>
+                <Ionicons name="mail" size={24} color="#5B21B6" />
+              </View>
+              <Text style={styles.quickContactLabel}>Email</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* ── Contact Information ── */}
@@ -701,5 +734,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: GRAY_TEXT,
     fontWeight: "500",
+  },
+  quickContactRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 20,
+    marginTop: 24,
+    width: '100%',
+  },
+  quickContactBtn: {
+    alignItems: "center",
+  },
+  quickContactIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  quickContactLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: GRAY_TEXT,
+    fontFamily: "Inter",
   },
 });

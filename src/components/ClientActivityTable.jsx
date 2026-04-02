@@ -52,12 +52,18 @@ const money = (v) => new Intl.NumberFormat("en-US", { style: "currency", currenc
 
 const BILLING_RATE = 45;
 
+const truncateName = (name, length = 20) => {
+  if (!name || name === "—") return name;
+  if (name.length <= length) return name;
+  return name.substring(0, length) + "...";
+};
+
 const TABS = [
   { id: "all",         label: "All Services",          svc: null,             icon: <Grid3x3 size={14} strokeWidth={1.7} /> },
   { id: "respite",     label: "Respite Care",           svc: "Respite Care",   icon: <Shield size={14} strokeWidth={1.7} /> },
-  { id: "emergency",   label: "Emergency Care",         svc: "Emergency Care", icon: <Heart size={14} strokeWidth={1.7} /> },
-  { id: "supervised",  label: "Supervised Visitations", svc: "Supervised Visits", icon: <Eye size={14} strokeWidth={1.7} /> },
-  { id: "transport",   label: "Transportations",        svc: "Transportations",icon: <Car size={14} strokeWidth={1.7} /> },
+  { id: "emergency",   label: "Emergent Care",         svc: "Emergent Care", icon: <Heart size={14} strokeWidth={1.7} /> },
+  { id: "supervised",  label: "Supervised Visitations", svc: "Supervised Visitation", icon: <Eye size={14} strokeWidth={1.7} /> },
+  { id: "transport",   label: "Transportation",        svc: "Transportation",icon: <Car size={14} strokeWidth={1.7} /> },
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -98,6 +104,14 @@ function matchesSelectedDates(shift, selectedDates) {
 
 export default function ClientActivityTable({ onNavigateToReport }) {
   const navigate = useNavigate();
+
+  const handleTabClick = (tabId, svc) => {
+    if (svc) {
+      navigate(`/admin-dashboard/shifts?service=${encodeURIComponent(svc)}`);
+    } else {
+      navigate("/admin-dashboard/shifts");
+    }
+  };
   const [rows, setRows]             = useState([]);
   const [activeTab, setActiveTab]   = useState("all");
   const [lockTarget, setLockTarget] = useState(null);
@@ -106,6 +120,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   const [processing, setProcessing] = useState(false);
   const [selectedDates, setSelectedDates] = useState([new Date()]);
   const [calendarOpen, setCalendarOpen]   = useState(false);
+  const [showFullClientNames, setShowFullClientNames] = useState(false);
+  const [rowsToShow, setRowsToShow] = useState(5);
 
   // Fetch shifts + enrich
   useEffect(() => {
@@ -273,6 +289,22 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           <button className="flex items-center gap-1 font-semibold transition-colors" style={{ fontSize: 12, color: "#1f7a3c" }}>
             <span>View All</span><ArrowRight size={12} strokeWidth={2.5} />
           </button>
+
+          {/* Toggle for client names */}
+          <div
+            onClick={() => setShowFullClientNames(!showFullClientNames)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer transition-all"
+            style={{
+              borderColor: showFullClientNames ? "#145228" : "#e5e7eb",
+              background: showFullClientNames ? "#f0fdf4" : "#fff",
+              color: showFullClientNames ? "#145228" : "#374151",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <Eye size={12} strokeWidth={2} />
+            <span>{showFullClientNames ? "Full Names" : "Short Names"}</span>
+          </div>
         </div>
       </div>
 
@@ -282,9 +314,13 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           const isActive = activeTab === tab.id;
           const dateFiltered = rows.filter(r => matchesSelectedDates(r, selectedDates));
           const count = tab.svc ? dateFiltered.filter(r => r.service === tab.svc).length : dateFiltered.length;
+
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className="relative flex items-center gap-2 px-4 py-3 transition-all"
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabClick(tab.id, tab.svc)}
+              className="relative flex items-center gap-2 px-4 py-3 transition-all hover:bg-gray-50 cursor-pointer"
               style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 500, color: isActive ? "#111827" : "#9ca3af" }}>
               <span style={{ opacity: isActive ? 0.85 : 0.45 }}>{tab.icon}</span>
               <span>{tab.label}</span>
@@ -311,13 +347,27 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No records found</td></tr>
-            ) : filtered.map(row => {
+            ) : filtered.slice(0, rowsToShow).map(row => {
               const bCfg       = BILLING_CFG[row.billingStatus] || BILLING_CFG["Pending Review"];
               const isInvoiced = row.billingStatus === "Invoiced";
               return (
                 <tr key={row.id} className="border-t transition-colors" style={{ borderColor: "#f3f4f6", backgroundColor: row.locked ? "#fafbfc" : undefined }}>
                   <td className="px-4 py-3">
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1f2937" }}>{row.clientName}</div>
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        color: "#1f2937",
+                        cursor: "help",
+                        maxWidth: 200,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={showFullClientNames ? "" : row.clientName}
+                    >
+                      {showFullClientNames ? row.clientName : truncateName(row.clientName, 20)}
+                    </div>
                     <div style={{ fontSize: 10.5, color: "#9ca3af" }}>{row.clientId}</div>
                   </td>
                   <td className="px-4 py-3"><div style={{ fontSize: 12, fontWeight: 500, color: "#4b5563" }}>{row.staff}</div></td>
@@ -341,7 +391,22 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                       {bCfg.icon}{row.billingStatus}
                     </span>
                   </td>
-                  <td className="px-4 py-3"><div style={{ fontSize: 12, color: "#4b5563" }}>{row.agency}</div></td>
+                  <td className="px-4 py-3">
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#4b5563",
+                        cursor: "help",
+                        maxWidth: 120,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={showFullClientNames ? "" : row.agency}
+                    >
+                      {showFullClientNames ? row.agency : truncateName(row.agency, 14)}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center">
                       {row.locked ? (
@@ -384,6 +449,24 @@ export default function ClientActivityTable({ onNavigateToReport }) {
             })}
           </tbody>
         </table>
+
+        {/* Load More Button */}
+        {filtered.length > rowsToShow && (
+          <div className="px-5 py-4 border-t flex items-center justify-center" style={{ borderColor: "#e5e7eb" }}>
+            <button
+              onClick={() => setRowsToShow(rowsToShow + 1)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border font-semibold transition-all hover:bg-green-50"
+              style={{
+                fontSize: 13,
+                borderColor: "#1f7a3c",
+                color: "#1f7a3c",
+                background: "#f0fdf4",
+              }}
+            >
+              <span>+{Math.min(1, filtered.length - rowsToShow)} more</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lock Modal */}

@@ -7,6 +7,7 @@ import {
   Alert,
   SafeAreaView,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -23,17 +24,28 @@ const SECONDARY = "#DCFCE7";
 export default function Profile() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsub;
     const load = async () => {
-      const stored = await AsyncStorage.getItem("user");
-      if (!stored) return;
-      const parsed = JSON.parse(stored);
-      const ref = doc(db, "users", parsed.username);
-      unsub = onSnapshot(ref, (snap) => {
-        if (snap.exists()) setUser({ username: parsed.username, ...snap.data() });
-      });
+      try {
+        const stored = await AsyncStorage.getItem("user");
+        if (!stored) {
+          setLoading(false);
+          return;
+        }
+        const parsed = JSON.parse(stored);
+        const ref = doc(db, "users", parsed.username || parsed.userId);
+        unsub = onSnapshot(ref, (snap) => {
+          if (snap.exists()) {
+            setUser({ username: parsed.username || parsed.userId, ...snap.data() });
+          }
+          setLoading(false);
+        }, () => setLoading(false));
+      } catch {
+        setLoading(false);
+      }
     };
     load();
     return () => unsub && unsub();
@@ -69,8 +81,12 @@ export default function Profile() {
 
   const savePhoto = async (uri) => {
     if (!user) return;
-    const url = await uploadProfilePhoto(uri, user.username);
-    await updateDoc(doc(db, "users", user.username), { profilePhotoUrl: url });
+    try {
+      const url = await uploadProfilePhoto(uri, user.username);
+      await updateDoc(doc(db, "users", user.username), { profilePhotoUrl: url });
+    } catch (e) {
+      Alert.alert("Error", "Could not upload photo.");
+    }
   };
 
   const handleLogout = () => {
@@ -81,7 +97,7 @@ export default function Profile() {
         style: "destructive",
         onPress: async () => {
           await AsyncStorage.removeItem("user");
-          router.replace("/");
+          router.replace("/login");
         },
       },
     ]);
@@ -91,115 +107,131 @@ export default function Profile() {
     ? user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
     : "?";
 
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
 
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <Pressable style={styles.headerIcon}>
-            <Ionicons name="settings-outline" size={22} color="#1A1A1A" />
+          <Text style={styles.headerTitle}>My Profile</Text>
+          <Pressable onPress={handleLogout} style={styles.logoutBtn}>
+            <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+            <Text style={styles.logoutText}>Logout</Text>
           </Pressable>
         </View>
 
-        {/* PROFILE MAIN CARD */}
-        <View style={styles.profileCard}>
-          <Pressable onPress={handleChangePhoto} style={styles.avatarWrapper}>
-            {user?.profilePhotoUrl ? (
-              <Image source={{ uri: user.profilePhotoUrl }} style={styles.avatarImg} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
-            )}
-            <View style={styles.cameraBadge}>
-              <Ionicons name="camera" size={12} color="#fff" />
-            </View>
-          </Pressable>
-
-          <Text style={styles.userName}>{user?.name || "Staff Member"}</Text>
-          <Text style={styles.userRole}>{user?.designation || "Staff Consultant"}</Text>
-
-          <View style={styles.idBadge}>
-            <Text style={styles.idBadgeText}>CYIM: {user?.userId || "1432569"}</Text>
-          </View>
-
-          <View style={styles.statsRow}>
-            {[
-              { val: "148", lab: "Total Shifts" },
-              { val: "592", lab: "Hours Logged" },
-              { val: "4.9★", lab: "Rating" },
-              { val: "2 yrs", lab: "Tenure" },
-            ].map((s, i) => (
-              <View key={i} style={styles.statCol}>
-                <Text style={styles.statVal}>{s.val}</Text>
-                <Text style={styles.statLab}>{s.lab}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* STAFF ID SECTION */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Staff ID Card</Text>
-            <Pressable onPress={() => router.push("/staff-id-card")}>
-              <Text style={styles.sectionLink}>View Full Card &gt;</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.idCardPreview}>
-             <View style={styles.idCardHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="people-circle" size={16} color="#FFF" />
-                  <Text style={styles.idCardLogo}>Family Forever Inc.</Text>
+        {/* PROFILE HERO */}
+        <View style={styles.profileHero}>
+           <View style={styles.avatarContainer}>
+              {user?.profilePhotoUrl ? (
+                <Image source={{ uri: user.profilePhotoUrl }} style={styles.avatarImg} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                   <Text style={styles.avatarInitials}>{initials}</Text>
                 </View>
-                <Text style={styles.idCardTagText}>Employee ID 27</Text>
-             </View>
-             <View style={styles.idCardBody}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  {user?.profilePhotoUrl ? (
-                    <Image source={{ uri: user.profilePhotoUrl }} style={styles.idCardThumb} />
-                  ) : (
-                    <View style={[styles.idCardThumb, { backgroundColor: '#D1FAE5', alignItems: 'center', justifyContent: 'center' }]}>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: PRIMARY }}>{initials}</Text>
-                    </View>
-                  )}
-                  <View>
-                    <Text style={styles.idCardName}>{user?.name || "Staff Member"}</Text>
-                    <Text style={styles.idCardRole}>{user?.designation || 'Staff Intake Worker'}</Text>
-                  </View>
-                </View>
-                <MaterialCommunityIcons name="qrcode" size={32} color="#1A1A1A" />
-             </View>
-          </View>
-          <Text style={styles.idFooter}>Tap to show full card for parent verification</Text>
+              )}
+              <Pressable onPress={handleChangePhoto} style={styles.cameraBtn}>
+                 <Ionicons name="camera" size={16} color="#FFF" />
+              </Pressable>
+           </View>
+           <Text style={styles.profileName}>{user?.name || "Staff Member"}</Text>
+           <Text style={styles.profileRole}>{user?.designation || "Healthcare Staff"}</Text>
+           <View style={styles.idBadge}>
+              <Text style={styles.idBadgeText}>EMPLOYEE ID: {user?.userId || "—"}</Text>
+           </View>
         </View>
 
-        {/* MENU */}
-        <View style={styles.menuContainer}>
-           <MenuItem icon="badge-account-outline" title="My Staff ID Card" sub="View digital ID & QR code" onPress={() => router.push("/staff-id-card")} />
-           <MenuItem icon="calendar-check-outline" title="My Availability" sub="Manage shift preferences" onPress={() => router.push("/availability")} />
-           <MenuItem icon="chart-bar" title="My Reports" sub="View shift history & stats" onPress={() => router.push("/staff-reports")} />
-           <MenuItem icon="bell-outline" title="Notifications" sub="View alerts & messages" onPress={() => router.push("/alerts")} />
-           <MenuItem icon="help-circle-outline" title="Support Center" sub="FAQs & Contact Admin" onPress={() => Alert.alert("Support", "Contact support@familyforever.org")} />
-           <MenuItem icon="logout" title="Sign Out" sub="Securely exit your account" danger onPress={handleLogout} />
+        {/* STATISTICS GRID */}
+        <View style={{ paddingHorizontal: 20, marginBottom: 30 }}>
+           <Text style={styles.sectionHeading}>PERFORMANCE STATS</Text>
+           <View style={styles.statsGrid}>
+              <View style={styles.statCell}>
+                 <Text style={styles.statValue}>124</Text>
+                 <Text style={styles.statLabel}>Shifts Done</Text>
+              </View>
+              <View style={styles.statCell}>
+                 <Text style={styles.statValue}>~482h</Text>
+                 <Text style={styles.statLabel}>Hours Total</Text>
+              </View>
+              <View style={styles.statCell}>
+                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                    <Text style={styles.statValue}>4.9</Text>
+                    <Ionicons name="star" size={14} color="#F59E0B" />
+                 </View>
+                 <Text style={styles.statLabel}>Avg Rating</Text>
+              </View>
+              <View style={styles.statCell}>
+                 <Text style={styles.statValue}>98%</Text>
+                 <Text style={styles.statLabel}>Attendance</Text>
+              </View>
+           </View>
         </View>
+
+        {/* DOCUMENTS SECTION */}
+        <View style={{ paddingHorizontal: 20, marginBottom: 30 }}>
+           <Text style={styles.sectionHeading}>CERTIFICATIONS & DOCS</Text>
+           <View style={styles.docCard}>
+              <View style={styles.docRow}>
+                 <View style={[styles.docIconBox, { backgroundColor: "#F0FDF4" }]}>
+                    <Ionicons name="document-text" size={20} color={PRIMARY} />
+                 </View>
+                 <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.docName}>CPR & First Aid</Text>
+                    <Text style={styles.docExpiry}>Valid until Aug 2026</Text>
+                 </View>
+                 <Ionicons name="checkmark-circle" size={18} color={PRIMARY} />
+              </View>
+              <View style={styles.docDivider} />
+              <View style={styles.docRow}>
+                 <View style={[styles.docIconBox, { backgroundColor: "#FEFCE8" }]}>
+                    <Ionicons name="shield-checkmark" size={20} color="#854D0E" />
+                 </View>
+                 <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.docName}>Police Background Check</Text>
+                    <Text style={[styles.docExpiry, { color: "#854D0E" }]}>Renewal due in 12 days</Text>
+                 </View>
+                 <Ionicons name="alert-circle" size={18} color="#F59E0B" />
+              </View>
+           </View>
+           <Pressable style={styles.uploadBtn}>
+              <Ionicons name="cloud-upload-outline" size={18} color={PRIMARY} />
+              <Text style={styles.uploadBtnText}>Upload New Document</Text>
+           </Pressable>
+        </View>
+
+        {/* SETTINGS MENU */}
+        <View style={{ paddingHorizontal: 20 }}>
+           <Text style={styles.sectionHeading}>GENERAL SETTINGS</Text>
+           <MenuItem icon="badge-account-outline" title="Digital ID Card" sub="View security QR code" onPress={() => router.push("/staff-id-card")} />
+           <MenuItem icon="calendar-check-outline" title="My Availability" sub="Shift preferences & regions" onPress={() => router.push("/availability")} />
+           <MenuItem icon="business-outline" title="Agency Information" sub="View assigned agency support" onPress={() => router.push("/agency")} />
+           <MenuItem icon="help-circle-outline" title="Help & Support" sub="Contact administrator" onPress={() => Alert.alert("Support", "Contact support@familyforever.ca")} />
+        </View>
+
+        <Text style={styles.versionText}>App Version 4.2.0 • Build 20260401</Text>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function MenuItem({ icon, title, sub, onPress, danger }) {
+function MenuItem({ icon, title, sub, onPress }) {
   return (
     <Pressable onPress={onPress} style={styles.menuItem}>
-      <View style={[styles.menuIconCircle, { backgroundColor: danger ? '#FEF2F2' : SECONDARY }]}>
-        <MaterialCommunityIcons name={icon} size={22} color={danger ? '#DC2626' : PRIMARY} />
+      <View style={styles.menuIconCircle}>
+        <MaterialCommunityIcons name={icon} size={22} color={PRIMARY} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.menuTitle, danger && { color: '#DC2626' }]}>{title}</Text>
-        {sub ? <Text style={styles.menuSub}>{sub}</Text> : null}
+        <Text style={styles.menuTitle}>{title}</Text>
+        <Text style={styles.menuSub}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
     </Pressable>
@@ -207,39 +239,236 @@ function MenuItem({ icon, title, sub, onPress, danger }) {
 }
 
 const styles = StyleSheet.create({
-  header: { padding: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
-  headerIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  profileCard: { backgroundColor: '#FFF', marginHorizontal: 20, borderRadius: 24, padding: 25, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.05, shadowRadius: 20 },
-  avatarWrapper: { position: 'relative', marginBottom: 15 },
-  avatarImg: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#F0FDF4' },
-  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFF' },
-  avatarText: { fontSize: 32, fontWeight: '800', color: '#1F6F43' },
-  cameraBadge: { position: 'absolute', bottom: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: '#1F6F43', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#FFF' },
-  userName: { fontSize: 20, fontWeight: '800', color: '#1A1A1A' },
-  userRole: { fontSize: 13, color: '#9CA3AF', fontWeight: '500', marginBottom: 12 },
-  idBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, marginBottom: 20 },
-  idBadgeText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
-  statsRow: { flexDirection: 'row', width: '100%', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 20 },
-  statCol: { flex: 1, alignItems: 'center' },
-  statVal: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  statLab: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', marginTop: 2 },
-  sectionContainer: { marginTop: 30, paddingHorizontal: 20 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
-  sectionLink: { fontSize: 13, fontWeight: '600', color: '#1F6F43' },
-  idCardPreview: { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
-  idCardHeader: { backgroundColor: '#0E3D20', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10 },
-  idCardLogo: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  idCardTagText: { color: '#FFF', fontSize: 11, fontWeight: '500' },
-  idCardBody: { backgroundColor: '#F3F4F6', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15 },
-  idCardThumb: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#FFF' },
-  idCardName: { color: '#1A1A1A', fontSize: 15, fontWeight: '700' },
-  idCardRole: { color: '#6B7280', fontSize: 12 },
-  idFooter: { textAlign: 'center', fontSize: 11, color: '#9CA3AF', marginTop: 12 },
-  menuContainer: { marginTop: 20, paddingHorizontal: 20, gap: 12 },
-  menuItem: { backgroundColor: '#FFF', padding: 15, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 15, borderWidth: 1, borderColor: '#F3F4F6' },
-  menuIconCircle: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  menuTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
-  menuSub: { fontSize: 12, color: '#9CA3AF', marginTop: 1 },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#111827",
+    fontFamily: "Poppins",
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+  },
+  logoutText: {
+    color: "#EF4444",
+    fontWeight: "700",
+    marginLeft: 6,
+    fontSize: 13,
+    fontFamily: "Inter",
+  },
+  profileHero: {
+    alignItems: "center",
+    paddingVertical: 35,
+  },
+  avatarContainer: {
+    position: "relative",
+    marginBottom: 16,
+  },
+  avatarImg: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: PRIMARY,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: SECONDARY,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: PRIMARY,
+  },
+  avatarInitials: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: PRIMARY,
+    fontFamily: "Poppins",
+  },
+  cameraBtn: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: PRIMARY,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFF",
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#111827",
+    fontFamily: "Poppins",
+    marginBottom: 4,
+  },
+  profileRole: {
+    fontSize: 14,
+    color: "#4B5563",
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginBottom: 14,
+  },
+  idBadge: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  idBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#6B7280",
+    fontFamily: "Inter",
+    letterSpacing: 0.5,
+  },
+  sectionHeading: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#9CA3AF",
+    letterSpacing: 1.2,
+    marginBottom: 16,
+    textTransform: "uppercase",
+  },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  statCell: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: "#FFF",
+    padding: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#111827",
+    fontFamily: "Poppins",
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+  docCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    marginBottom: 16,
+  },
+  docRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  docIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  docName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    fontFamily: "Poppins",
+  },
+  docExpiry: {
+    fontSize: 11,
+    color: PRIMARY,
+    fontWeight: "600",
+    marginTop: 2,
+    fontFamily: "Inter",
+  },
+  docDivider: {
+    height: 1,
+    backgroundColor: "#F9FAFB",
+    marginVertical: 15,
+  },
+  uploadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 15,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+    borderStyle: "dashed",
+    backgroundColor: "#FAFFFE",
+  },
+  uploadBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: PRIMARY,
+    fontFamily: "Poppins",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+    backgroundColor: "#FFF",
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  menuIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+    fontFamily: "Poppins",
+  },
+  menuSub: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 2,
+    fontFamily: "Inter",
+  },
+  versionText: {
+    textAlign: "center",
+    fontSize: 11,
+    color: "#D1D5DB",
+    marginTop: 20,
+    fontFamily: "Inter",
+    fontWeight: "500",
+  },
 });

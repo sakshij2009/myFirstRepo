@@ -134,6 +134,9 @@ const AdminHomePage = ({ user, setUser }) => {
               <Route path="update-intakeworker/:id" element={<AddIntakeWorker mode="update" user={user} />} />
             </Route>
 
+            {/* View intake form (read-only) */}
+            <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={true} />} />
+
             <Route path="*" element={<Dashboard user={user} />} />
           </Routes>
         </main>

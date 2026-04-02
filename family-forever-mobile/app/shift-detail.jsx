@@ -3,738 +3,438 @@ import {
   Text,
   ScrollView,
   Pressable,
-  ActivityIndicator,
   StyleSheet,
+  ActivityIndicator,
+  Modal
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../src/firebase/config";
+import { doc, onSnapshot, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "../src/firebase/config.jsx";
 import { router, useLocalSearchParams } from "expo-router";
+import * as Location from "expo-location";
 
-// ── Color tokens ─────────────────────────────────────────────────────────────
 const PRIMARY_GREEN = "#1F6F43";
-const LIGHT_GREEN = "#F0FDF4";
-const DARK_TEXT = "#1A1A1A";
 const GRAY_TEXT = "#9CA3AF";
-const GRAY_LIGHT = "#F8F8F6";
-const GRAY_BORDER = "#E5E7EB";
-const ERROR_RED = "#EF4444";
-const WARNING_AMBER = "#F59E0B";
 
-// ── Status config ─────────────────────────────────────────────────────────────
-const STATUS_CONFIG = {
-  Confirmed: { bg: LIGHT_GREEN, text: PRIMARY_GREEN, dot: "#22C55E" },
-  Assigned: { bg: "#FFF8E1", text: "#92600A", dot: WARNING_AMBER },
-  "In Progress": { bg: "#EBF5FF", text: "#1E5FA6", dot: "#3B82F6" },
-  Completed: { bg: "#F3F4F6", text: "#6B7280", dot: "#9CA3AF" },
-};
-
-// ── Service type colors ───────────────────────────────────────────────────────
-const SERVICE_CONFIG = {
-  "Respite Care": { bg: "#EBF5FF", text: "#1E5FA6" },
-  "Emergent Care": { bg: "#FEF2F2", text: "#B91C1C" },
-  "Emergency Care": { bg: "#FEF2F2", text: "#B91C1C" },
-  Transportation: { bg: "#FFF8E1", text: "#92600A" },
+const serviceTypeStyles = {
+  "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
+  "Emergent Care": { bg: "#FEF2F2", text: "#991B1B" },
   "Supervised Visitation": { bg: "#F3F0FF", text: "#5B21B6" },
-  default: { bg: "#D1FAE5", text: "#1F6F43" },
+  "Transportation": { bg: "#FEF9C3", text: "#854D0E" },
+  default: { bg: "#DCFCE7", text: "#15803D" },
 };
 
-const getInitials = (name) => {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-};
-
-export default function ShiftDetail() {
+export default function ShiftDetailsPage() {
   const { shiftId } = useLocalSearchParams();
+  const [user, setUser] = useState(null);
   const [shift, setShift] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const [confirming, setConfirming] = useState(false);
+  
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    const loadUser = async () => {
+    const load = async () => {
       const stored = await AsyncStorage.getItem("user");
       if (stored) setUser(JSON.parse(stored));
     };
-    loadUser();
+    load();
   }, []);
 
   useEffect(() => {
-    if (!shiftId) {
+    if (!shiftId) return;
+    const shiftRef = doc(db, "shifts", shiftId);
+    const unsub = onSnapshot(shiftRef, (snap) => {
+      if (snap.exists()) {
+        setShift({ id: snap.id, ...snap.data() });
+      }
       setLoading(false);
-      return;
-    }
-    fetchShift();
+    });
+    return () => unsub();
   }, [shiftId]);
 
-  const fetchShift = async () => {
-    try {
-      // Try direct doc lookup first
-      const docRef = doc(db, "shifts", shiftId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setShift({ id: docSnap.id, ...docSnap.data() });
-        setLoading(false);
-        return;
-      }
-      // Fallback: query by "id" field
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
-      }
-    } catch (e) {
-      console.log("Error fetching shift:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const confirmShift = async () => {
-    if (!shift || confirming) return;
-    setConfirming(true);
-    try {
-      const q = query(
-        collection(db, "shifts"),
-        where("id", "==", shift.id)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        await updateDoc(snap.docs[0].ref, { shiftConfirmed: true });
-        setShift((prev) => ({ ...prev, shiftConfirmed: true }));
-      } else {
-        // Try direct doc ref
-        const docRef = doc(db, "shifts", shift.id);
-        await updateDoc(docRef, { shiftConfirmed: true });
-        setShift((prev) => ({ ...prev, shiftConfirmed: true }));
-      }
-    } catch (e) {
-      console.log("Error confirming shift:", e);
-    } finally {
-      setConfirming(false);
-    }
-  };
-
-  // Derive status
-  const deriveStatus = (s) => {
-    if (!s) return "Assigned";
-    if (s.status) return s.status;
-    if (s.checkedIn && !s.checkedOut) return "In Progress";
-    if (s.shiftConfirmed) return "Confirmed";
-    return "Assigned";
-  };
-
-  if (loading) {
+  if (loading || !shift) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <ActivityIndicator size="large" color={PRIMARY_GREEN} />
-        <Text style={styles.loadingText}>Loading shift details…</Text>
-      </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: "#FFF", justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#1F6F43" />
+      </View>
     );
   }
 
-  if (!shift) {
-    return (
-      <SafeAreaView style={styles.centered}>
-        <Ionicons name="calendar-outline" size={56} color={GRAY_BORDER} />
-        <Text style={styles.emptyTitle}>Shift not found</Text>
-        <Text style={styles.emptySubtitle}>
-          We couldn't load this shift. Please go back and try again.
-        </Text>
-        <Pressable style={styles.backButtonFull} onPress={() => router.back()}>
-          <Text style={styles.backButtonFullText}>Go Back</Text>
-        </Pressable>
-      </SafeAreaView>
-    );
-  }
+  const getStatus = () => {
+    if (shift.clockOutTime) return "completed";
+    if (shift.clockInTime) return "in-progress";
+    return shift.shiftConfirmed ? "upcoming" : "assigned";
+  };
+  const shiftStatus = getStatus();
 
-  const status = deriveStatus(shift);
-  const statusCfg = STATUS_CONFIG[status] || STATUS_CONFIG["Assigned"];
-  const serviceStyle =
-    SERVICE_CONFIG[shift.serviceType] || SERVICE_CONFIG.default;
   const clientName = shift.clientName || shift.name || "Client";
-  const clientInitials = getInitials(clientName);
+  const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const staffName = user?.name || "Staff Member";
+  const staffInitials = staffName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  
+  const catName = shift.category || shift.serviceType || "Service";
+  const serviceStyle = serviceTypeStyles[catName] || serviceTypeStyles.default;
+
+  const calculateDuration = (start, end) => {
+    if (!start || !end) return "4 hours";
+    try {
+      const parseTime = (timeStr) => {
+        const [time, period] = timeStr.split(" ");
+        let [hours, mins] = time.split(":").map(Number);
+        if (period?.toUpperCase() === "PM" && hours !== 12) hours += 12;
+        if (period?.toUpperCase() === "AM" && hours === 12) hours = 0;
+        return hours * 60 + (mins || 0);
+      };
+      const diff = parseTime(end) - parseTime(start);
+      const m = diff < 0 ? diff + 1440 : diff;
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return rem > 0 ? `${h}h ${rem}m` : `${h} hours`;
+    } catch { return "4 hours"; }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setIsProcessing(true);
+    const { type, shift: actionShift } = confirmAction;
+    try {
+      const shiftRef = doc(db, "shifts", actionShift.id);
+      if (type === 'confirm') {
+        await updateDoc(shiftRef, { shiftConfirmed: true });
+      } else {
+        const coeff = 1000 * 60 * 15;
+        const roundedDate = new Date(Math.round(new Date().getTime() / coeff) * coeff);
+        const roundedTime = roundedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let locStr = "Location unavailable";
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+           let loc = await Location.getCurrentPositionAsync({});
+           let geocode = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+           if (geocode.length > 0) {
+              locStr = `${geocode[0].streetNumber || ""} ${geocode[0].street || geocode[0].name || ""}, ${geocode[0].city || ""}`.trim();
+           } else {
+              locStr = `Lat: ${loc.coords.latitude.toFixed(4)}, Lon: ${loc.coords.longitude.toFixed(4)}`;
+           }
+        }
+        if (type === 'clockIn') {
+          await updateDoc(shiftRef, { clockInTime: roundedTime, clockInLocation: locStr });
+        } else {
+          await updateDoc(shiftRef, { clockOutTime: roundedTime, clockOutLocation: locStr });
+        }
+      }
+    } catch (e) {
+      console.log("Error performing action", e);
+    }
+    setIsProcessing(false);
+    setConfirmAction(null);
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerBack}>
-          <Ionicons name="chevron-back" size={26} color={DARK_TEXT} />
+    <View style={{ flex: 1, backgroundColor: "#FFF" }}>
+      {/* Header */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 }}>
+        <Pressable onPress={() => router.back()} style={{ width: 40, height: 40, justifyContent: "center", marginLeft: -10 }}>
+          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </Pressable>
-        <Text style={styles.headerTitle}>Shift Details</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={{ fontSize: 18, fontWeight: "600", color: "#1A1A1A", fontFamily: "Poppins" }}>Shift Details</Text>
+          <Text style={{ fontSize: 12, color: "#9CA3AF" }}>{shift.startDate || "March 14, 2026"}</Text>
+        </View>
+        <Ionicons name="ellipsis-vertical" size={24} color="#6B7280" />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* ── Status + Service + Time Hero Card ── */}
-        <View style={styles.heroCard}>
-          {/* Status badge */}
-          <View style={styles.heroTopRow}>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusCfg.dot }]} />
-              <Text style={[styles.statusText, { color: statusCfg.text }]}>
-                {status}
-              </Text>
-            </View>
-            {/* Service type badge */}
-            <View
-              style={[
-                styles.serviceBadge,
-                { backgroundColor: serviceStyle.bg },
-              ]}
-            >
-              <Text style={[styles.serviceText, { color: serviceStyle.text }]}>
-                {shift.serviceType || "General Care"}
-              </Text>
-            </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}>
+        {/* Status Banner */}
+        {shiftStatus === 'assigned' ? (
+          <View style={{ backgroundColor: "#FFF8E1", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <Ionicons name="time-outline" size={20} color="#92600A" />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#92600A" }}>Assigned · Awaiting Your Confirmation</Text>
           </View>
-
-          {/* Time */}
-          <View style={styles.timeRow}>
-            <Ionicons name="time-outline" size={20} color={PRIMARY_GREEN} />
-            <Text style={styles.timeText}>
-              {shift.startTime || "—"} – {shift.endTime || "—"}
-            </Text>
-          </View>
-
-          {/* Date */}
-          <View style={styles.dateRow}>
-            <Ionicons name="calendar-outline" size={18} color={GRAY_TEXT} />
-            <Text style={styles.dateText}>
-              {shift.startDate || shift.date || "Date not set"}
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Client Section ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>CLIENT</Text>
-          <View style={styles.clientRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{clientInitials}</Text>
+        ) : shiftStatus === 'upcoming' ? (
+          <View style={{ backgroundColor: "#F0FDF4", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="checkmark-circle" size={20} color="#1F6F43" />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: "#1F6F43" }}>Confirmed · Upcoming</Text>
             </View>
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>{clientName}</Text>
-              {shift.clientId && (
-                <Text style={styles.clientId}>ID: {shift.clientId}</Text>
-              )}
-            </View>
+            <Text style={{ fontSize: 12, color: "#1F6F43", fontWeight: "500" }}></Text>
           </View>
-          <Pressable
-            style={styles.viewClientBtn}
-            onPress={() =>
-              router.push(
-                `/client-detail?clientId=${shift.clientId || shift.id}`
-              )
-            }
-          >
-            <Ionicons name="person-circle-outline" size={18} color={PRIMARY_GREEN} />
-            <Text style={styles.viewClientText}>View Client Profile</Text>
-            <Ionicons name="chevron-forward" size={16} color={PRIMARY_GREEN} />
-          </Pressable>
-        </View>
-
-        {/* ── Location Section ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>LOCATION</Text>
-          <View style={styles.infoRow}>
-            <View style={[styles.iconBox, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="map-outline" size={20} color="#D97706" />
-            </View>
-            <Text style={styles.infoText} numberOfLines={2}>
-              {shift.location || "Location not specified"}
-            </Text>
+        ) : shiftStatus === 'in-progress' ? (
+          <View style={{ backgroundColor: "#EBF5FF", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#1E5FA6" }} />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#1E5FA6" }}>In Progress</Text>
           </View>
-        </View>
-
-        {/* ── Staff Section ── */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>ASSIGNED STAFF</Text>
-          <View style={styles.infoRow}>
-            <View style={[styles.iconBox, { backgroundColor: LIGHT_GREEN }]}>
-              <Ionicons name="person-outline" size={20} color={PRIMARY_GREEN} />
-            </View>
-            <Text style={styles.infoText}>
-              {user?.name || shift.staffName || "You"}
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Action Buttons based on status ── */}
-        {status === "Confirmed" && (
-          <Pressable
-            style={styles.primaryBtn}
-            onPress={() =>
-              router.push(`/geo-checkin?shiftId=${shiftId}`)
-            }
-          >
-            <Ionicons name="location" size={20} color="#fff" />
-            <Text style={styles.primaryBtnText}>Check In</Text>
-          </Pressable>
-        )}
-
-        {status === "In Progress" && (
-          <View style={styles.actionGroup}>
-            <Pressable
-              style={styles.primaryBtn}
-              onPress={() =>
-                router.push(`/geo-checkout?shiftId=${shiftId}`)
-              }
-            >
-              <Ionicons name="log-out-outline" size={20} color="#fff" />
-              <Text style={styles.primaryBtnText}>Check Out</Text>
-            </Pressable>
+        ) : (
+          <View style={{ backgroundColor: "#F3F4F6", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <Ionicons name="checkmark-circle" size={20} color="#6B7280" />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#6B7280" }}>Completed</Text>
           </View>
         )}
 
-        {status === "Assigned" && (
-          <Pressable
-            style={styles.outlineBtn}
-            onPress={confirmShift}
-            disabled={confirming}
-          >
-            {confirming ? (
-              <ActivityIndicator size="small" color={PRIMARY_GREEN} />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color={PRIMARY_GREEN} />
-                <Text style={styles.outlineBtnText}>Confirm Shift</Text>
-              </>
-            )}
-          </Pressable>
-        )}
-
-        {/* ── Quick Actions Grid ── */}
-        <Text style={styles.quickActionsLabel}>QUICK ACTIONS</Text>
-        <View style={styles.quickGrid}>
-          {/* Medications */}
-          <Pressable
-            style={styles.quickCard}
-            onPress={() =>
-              router.push(`/shift-medications?shiftId=${shiftId}`)
-            }
-          >
-            <View style={[styles.quickIconBox, { backgroundColor: "#EBF5FF" }]}>
-              <Ionicons name="medical-outline" size={24} color="#1E5FA6" />
-            </View>
-            <Text style={styles.quickCardTitle}>Medications</Text>
-            <Text style={styles.quickCardSub}>Track & log meds</Text>
-          </Pressable>
-
-          {/* Transportation */}
-          <Pressable
-            style={styles.quickCard}
-            onPress={() =>
-              router.push(`/shift-transportations?shiftId=${shiftId}`)
-            }
-          >
-            <View style={[styles.quickIconBox, { backgroundColor: "#FFF8E1" }]}>
-              <Ionicons name="car-outline" size={24} color="#D97706" />
-            </View>
-            <Text style={styles.quickCardTitle}>Transportation</Text>
-            <Text style={styles.quickCardSub}>Log trips & miles</Text>
-          </Pressable>
-
-          {/* Intake Form */}
-          <Pressable
-            style={styles.quickCard}
-            onPress={() =>
-              router.push(`/intake-form?shiftId=${shiftId}`)
-            }
-          >
-            <View style={[styles.quickIconBox, { backgroundColor: "#F3F0FF" }]}>
-              <Ionicons name="document-text-outline" size={24} color="#5B21B6" />
-            </View>
-            <Text style={styles.quickCardTitle}>Intake Form</Text>
-            <Text style={styles.quickCardSub}>Complete intake</Text>
-          </Pressable>
-
-          {/* Transfer Shift */}
-          <Pressable
-            style={styles.quickCard}
-            onPress={() =>
-              router.push(`/transfer-shift?shiftId=${shiftId}`)
-            }
-          >
-            <View style={[styles.quickIconBox, { backgroundColor: "#FEF2F2" }]}>
-              <Ionicons name="swap-horizontal-outline" size={24} color={ERROR_RED} />
-            </View>
-            <Text style={styles.quickCardTitle}>Transfer Shift</Text>
-            <Text style={styles.quickCardSub}>Reassign shift</Text>
+        {/* Pairing Card */}
+        <View style={styles.detailCard}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
+             <View style={{ alignItems: "center", flex: 1 }}>
+               <View style={[styles.avatarCircle, { backgroundColor: '#F0FDF4' }]}><Text style={[styles.avatarText, { color: '#1F6F43' }]}>{clientInitials}</Text></View>
+               <Text style={styles.nameText}>{clientName}</Text>
+               <Text style={styles.idText}>ID: {shift.clientId || "N/A"}</Text>
+             </View>
+             <Ionicons name="arrow-forward" size={16} color="#D1D5DB" style={{ marginTop: 24 }} />
+             <View style={{ alignItems: "center", flex: 1 }}>
+               <View style={[styles.avatarCircle, { backgroundColor: '#F3F0FF' }]}><Text style={[styles.avatarText, { color: '#5B21B6' }]}>{staffInitials}</Text></View>
+               <Text style={styles.nameText}>{staffName}</Text>
+               <Text style={styles.idText}>CYIM: {user?.userId?.slice(-7).toUpperCase() || "1432569"}</Text>
+             </View>
+          </View>
+          <View style={{ alignItems: "center" }}>
+            <View style={[styles.badge, { backgroundColor: serviceStyle.bg }]}><Text style={{ color: serviceStyle.text, fontWeight: '700', fontSize: 12 }}>{catName}</Text></View>
+          </View>
+          <View style={{ height: 1, backgroundColor: "#F3F4F6", marginVertical: 12 }} />
+          <Pressable style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Ionicons name="card-outline" size={16} color="#1F6F43" />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: "#1F6F43" }}>Show ID Card to Parent</Text>
           </Pressable>
         </View>
 
-        {/* ── Notes Section ── */}
-        {!!shift.notes && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionLabel}>NOTES</Text>
-            <Text style={styles.notesText}>{shift.notes}</Text>
+        {/* Info Card */}
+        <View style={styles.detailCard}>
+           {[
+             { label: 'SHIFT TYPE', value: 'Regular' },
+             { label: 'DATE & TIME', value: `${shift.startDate || 'Mar 14'}\n${shift.startTime} – ${shift.endTime}` },
+             { label: 'DURATION', value: calculateDuration(shift.startTime, shift.endTime) },
+             { label: 'LOCATION', value: shift.location, icon: 'navigate-circle-outline' },
+           ].map((row, i) => (
+             <View key={i} style={styles.infoRow}>
+               <Text style={styles.infoLabel}>{row.label}</Text>
+               <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                 <Text style={styles.infoValue}>{row.value}</Text>
+                 {row.icon && <Ionicons name={row.icon} size={16} color="#1F6F43" style={{ marginTop: 4 }} />}
+               </View>
+             </View>
+           ))}
+        </View>
+
+        {/* Timeline */}
+        <View style={styles.detailCard}>
+          <Text style={styles.cardInternalTitle}>Shift Timeline</Text>
+          <View style={{ marginTop: 15 }}>
+            <TimelineStep title="Clock In" sub={shift.clockInTime ? shift.clockInLocation || shift.location : `Scheduled: ${shift.startTime}`} time={shift.clockInTime || "—"} completed={!!shift.clockInTime} verified={!!shift.clockInTime} />
+            <TimelineStep title="Shift Report" sub={shift.clockInTime ? (shift.clockOutTime ? "Report completed" : "Report in progress") : "Locked until clock-in"} time="—" completed={!!shift.clockInTime} locked={!shift.clockInTime} />
+            <TimelineStep title="Clock Out" sub={shift.clockOutTime ? shift.clockOutLocation || shift.location : `Scheduled: ${shift.endTime}`} time={shift.clockOutTime || "—"} completed={!!shift.clockOutTime} verified={!!shift.clockOutTime} isLast />
           </View>
-        )}
+        </View>
+
+        <Text style={styles.sectionTitle}>Shift Actions</Text>
+
+        {/* Daily Shift Report Card */}
+        <View style={styles.detailCard}>
+          <View style={styles.reportHeader}>
+            <View>
+              <Text style={styles.cardInternalTitle}>Daily Shift Report</Text>
+              <Text style={styles.reportSub}>Required for shift completion</Text>
+            </View>
+            <View style={styles.progressRing}>
+              <Ionicons name="document-text-outline" size={16} color={PRIMARY_GREEN} />
+            </View>
+          </View>
+          
+          <View style={[styles.reportInputWrapper, shiftStatus === 'in-progress' && styles.activeReportBorder]}>
+            <Text style={styles.reportPlaceholder}>Summary of shift activities, client well-being, and any notable incidents...</Text>
+            <View style={{ height: 100 }} />
+          </View>
+
+          <View style={styles.reportFooter}>
+            <Text style={styles.charCount}>0 / 1000 recommended minimum</Text>
+            <View style={styles.autoSave}>
+              <Ionicons name="cloud-done-outline" size={12} color={GRAY_TEXT} />
+              <Text style={styles.autoSaveText}>Auto-saved</Text>
+            </View>
+          </View>
+
+          <View style={styles.reportActionRow}>
+             <Pressable style={styles.reportSecondaryBtn}><Text style={styles.reportSecondaryBtnText}>Save Draft</Text></Pressable>
+             <Pressable style={styles.reportSecondaryBtn}><Text style={styles.reportSecondaryBtnText}>Download</Text></Pressable>
+          </View>
+        </View>
+
+        <ActionRow icon="medkit-outline" color="#1F6F43" bg="#F0FDF4" title="Medications" sub="Log meds & view schedule" tag={shiftStatus === 'completed' ? 'All done' : '2 due'} onPress={() => router.push(`/shift-medications?shiftId=${shift.id}`)} />
+        <ActionRow icon="car-outline" color="#1E5FA6" bg="#EBF5FF" title="Transportations" sub="Log km, routes & receipts" tag={shiftStatus === 'completed' ? 'Submitted' : 'Incomplete'} onPress={() => router.push(`/shift-transportations?shiftId=${shift.id}`)} />
+        <ActionRow icon="alert-circle-outline" color="#DC2626" bg="#FEF2F2" title="Critical Incident" sub="Safety concern or emergency" tag="Report" onPress={() => console.log('Incident report')} />
+
+        <Pressable
+             onPress={() => {
+               if (shiftStatus === 'assigned') setConfirmAction({ type: 'confirm', shift });
+               else if (shiftStatus === 'upcoming') setConfirmAction({ type: 'clockIn', shift });
+               else if (shiftStatus === 'in-progress') setConfirmAction({ type: 'clockOut', shift });
+             }}
+             style={[styles.mainButton, { backgroundColor: shiftStatus !== 'assigned' ? '#1F6F43' : '#FFF', borderWidth: shiftStatus === 'assigned' ? 1.5 : 0 }]}
+           >
+             <Text style={[styles.mainButtonText, { color: shiftStatus === 'assigned' ? '#1F6F43' : '#FFF' }]}>
+               {shiftStatus === 'assigned' ? "Confirm Shift" : (shiftStatus === 'upcoming' ? "Clock In" : (shiftStatus === 'in-progress' ? "Clock Out" : "View Report"))}
+             </Text>
+        </Pressable>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Confirmation Modal overlay exactly like we have it */}
+      {confirmAction && (
+        <Modal transparent visible animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: '#FFF', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center' }}>
+              <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="checkmark" size={24} color="#1F6F43" />
+              </View>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Poppins', marginBottom: 20 }}>
+                {confirmAction.type === 'confirm' ? 'Confirm this shift?' : 
+                 confirmAction.type === 'clockIn' ? 'Clock in to this shift?' : 'Clock out of this shift?'}
+              </Text>
+              
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 6, fontFamily: 'Inter' }}>
+                {confirmAction.shift.category || confirmAction.shift.serviceType} · {confirmAction.shift.clientName || confirmAction.shift.name}
+              </Text>
+              <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 6, fontFamily: 'Inter' }}>
+                {confirmAction.shift.startDate || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · {confirmAction.shift.startTime} – {confirmAction.shift.endTime}
+              </Text>
+              <Text style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, textAlign: 'center', paddingHorizontal: 10, fontFamily: 'Inter' }}>
+                {confirmAction.shift.location || "Location not specified"}
+              </Text>
+
+              {confirmAction.type !== 'confirm' && (
+                <View style={{ width: '100%', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#1A1A1A", marginBottom: 2, fontFamily: 'Inter' }}>
+                    <Ionicons name="time-outline" size={13} color="#1F6F43"/> Time logged inside sheet
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#6B7280", fontFamily: 'Inter', marginBottom: 8 }}>
+                    Current Time (Rounded 15m): <Text style={{ fontWeight: '700', color: '#1A1A1A' }}>
+                      {new Date(Math.round(new Date().getTime() / (1000*60*15)) * (1000*60*15)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: "#1A1A1A", marginBottom: 2, fontFamily: 'Inter' }}>
+                    <Ionicons name="location-outline" size={13} color="#1F6F43"/> GPS Location
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#6B7280", fontFamily: 'Inter' }}>
+                    Your exact location will be attached to this timesheet entry.
+                  </Text>
+                </View>
+              )}
+      
+              <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 24, lineHeight: 20, fontFamily: 'Inter' }}>
+                {confirmAction.type === 'confirm' ? 'By confirming, you acknowledge this shift assignment and commit to attending.' :
+                 confirmAction.type === 'clockIn' ? 'By clocking in, your time & location will be logged for payroll and assignment tracking.' :
+                 'By clocking out, your shift will be marked as complete and your report will be finalized.'}
+              </Text>
+      
+              <Pressable 
+                onPress={handleConfirmAction}
+                disabled={isProcessing}
+                style={{ width: '100%', backgroundColor: '#1F6F43', height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16, opacity: isProcessing ? 0.7 : 1 }}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600', fontFamily: 'Poppins' }}>
+                    {confirmAction.type === 'confirm' ? 'Yes, Confirm Shift' : confirmAction.type === 'clockIn' ? 'Yes, Clock In' : 'Yes, Clock Out'}
+                  </Text>
+                )}
+              </Pressable>
+      
+              <Pressable onPress={() => setConfirmAction(null)} disabled={isProcessing} style={{ paddingVertical: 8 }}>
+                <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', fontFamily: 'Inter' }}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </View>
+  );
+}
+
+function ActionRow({ icon, color, bg, title, sub, tag, onPress }) {
+  return (
+    <Pressable style={styles.actionRowCard} onPress={onPress}>
+      <View style={[styles.actionIconOuter, { backgroundColor: bg }]}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionSub}>{sub}</Text>
+      </View>
+      <View style={{ alignItems: "flex-end", gap: 4 }}>
+        <View style={[styles.actionBadge, { backgroundColor: tag === 'All done' || tag === 'Submitted' ? '#F0FDF4' : '#FFF8E1' }]}>
+           <Text style={[styles.actionBadgeText, { color: tag === 'All done' || tag === 'Submitted' ? '#1F6F43' : '#92600A' }]}>{tag}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+      </View>
+    </Pressable>
+  );
+}
+
+function TimelineStep({ title, sub, time, completed, verified, locked, isLast }) {
+  return (
+    <View style={styles.timelineStep}>
+       <View style={{ alignItems: 'center', marginRight: 15 }}>
+          <View style={[styles.dotInactive, completed && styles.dotActive]}>
+             {completed && verified ? <Ionicons name="checkmark" size={10} color="#FFF" /> : (locked && <Ionicons name="lock-closed" size={8} color="#9CA3AF" />)}
+          </View>
+          {!isLast && <View style={[styles.timelineLine, completed && { backgroundColor: '#1F6F43' }]} />}
+       </View>
+       <View style={{ flex: 1, paddingBottom: isLast ? 0 : 25 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+             <Text style={[styles.stepTitle, !completed && !locked && { color: '#9CA3AF' }]}>{title}</Text>
+             <Text style={[styles.stepTime, completed && verified && { color: '#1F6F43' }]}>{time}</Text>
+          </View>
+          <Text style={[styles.stepSub, completed && verified && { color: '#6B7280' }]} numberOfLines={1}>{sub}</Text>
+          {completed && verified && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+              <Ionicons name="shield-checkmark" size={12} color="#1F6F43" />
+              <Text style={{ fontSize: 10, color: "#1F6F43", fontWeight: "600" }}>Location verified</Text>
+            </View>
+          )}
+       </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: GRAY_LIGHT,
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  loadingText: {
-    marginTop: 14,
-    fontSize: 15,
-    color: GRAY_TEXT,
-    fontWeight: "500",
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    marginTop: 16,
-    letterSpacing: -0.3,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: GRAY_TEXT,
-    marginTop: 8,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  backButtonFull: {
-    marginTop: 24,
-    backgroundColor: PRIMARY_GREEN,
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  backButtonFullText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  // Header
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: GRAY_BORDER,
-  },
-  headerBack: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    letterSpacing: -0.3,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 120,
-  },
-  // Hero card
-  heroCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  heroTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-    flexWrap: "wrap",
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: -0.1,
-  },
-  serviceBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  serviceText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: -0.1,
-  },
-  timeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
-  },
-  timeText: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    letterSpacing: -0.5,
-  },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  dateText: {
-    fontSize: 14,
-    color: GRAY_TEXT,
-    fontWeight: "500",
-  },
-  // Section card
-  sectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: GRAY_TEXT,
-    letterSpacing: 0.8,
-    marginBottom: 14,
-  },
-  // Client
-  clientRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#DBEAFE",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1E5FA6",
-  },
-  clientInfo: {
-    flex: 1,
-  },
-  clientName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  clientId: {
-    fontSize: 13,
-    color: GRAY_TEXT,
-    fontWeight: "500",
-  },
-  viewClientBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: LIGHT_GREEN,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D1FAE5",
-  },
-  viewClientText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    color: PRIMARY_GREEN,
-    letterSpacing: -0.2,
-  },
-  // Info row
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 14,
-  },
-  iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 15,
-    color: DARK_TEXT,
-    fontWeight: "500",
-    lineHeight: 22,
-    paddingTop: 10,
-  },
-  // Primary button
-  primaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: PRIMARY_GREEN,
-    borderRadius: 16,
-    paddingVertical: 17,
-    marginBottom: 14,
-    shadowColor: PRIMARY_GREEN,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  primaryBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: -0.3,
-  },
-  // Outline button
-  outlineBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    borderWidth: 2,
-    borderColor: PRIMARY_GREEN,
-    borderRadius: 16,
-    paddingVertical: 15,
-    marginBottom: 14,
-    backgroundColor: "#fff",
-  },
-  outlineBtnText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: PRIMARY_GREEN,
-    letterSpacing: -0.3,
-  },
-  actionGroup: {
-    gap: 10,
-    marginBottom: 4,
-  },
-  // Quick actions
-  quickActionsLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: GRAY_TEXT,
-    letterSpacing: 0.8,
-    marginBottom: 12,
-    marginTop: 4,
-  },
-  quickGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 14,
-  },
-  quickCard: {
-    width: "47%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  quickIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  quickCardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: DARK_TEXT,
-    letterSpacing: -0.2,
-    marginBottom: 4,
-  },
-  quickCardSub: {
-    fontSize: 12,
-    color: GRAY_TEXT,
-    fontWeight: "400",
-    lineHeight: 16,
-  },
-  // Notes
-  notesText: {
-    fontSize: 14,
-    color: "#374151",
-    lineHeight: 22,
-    fontWeight: "400",
-  },
+  badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  detailCard: { backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 16, elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05 },
+  avatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  avatarText: { fontSize: 16, fontWeight: "700", color: "#1F6F43" },
+  nameText: { fontSize: 14, fontWeight: "700", color: "#111827", textAlign: "center" },
+  idText: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  infoLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "700" },
+  infoValue: { fontSize: 14, color: "#111827", fontWeight: "600", textAlign: 'right' },
+  sectionTitle: { fontSize: 15, fontWeight: "800", color: "#111827", marginBottom: 15, marginTop: 10 },
+  actionRowCard: { backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 12, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, borderWidth: 1, borderColor: '#F3F4F6' },
+  actionIconOuter: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  actionTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  actionSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  actionBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  actionBadgeText: { fontSize: 10, fontWeight: "800" },
+  mainButton: { height: 54, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 20, borderColor: '#1F6F43' },
+  mainButtonText: { fontSize: 16, fontWeight: "700" },
+  cardInternalTitle: { fontSize: 14, fontWeight: "800", color: "#111827", fontFamily: "Poppins" },
+  timelineStep: { flexDirection: 'row' },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#E5E7EB', marginVertical: 3 },
+  dotActive: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#1F6F43', borderWidth: 3, borderColor: '#DCFCE7' },
+  dotInactive: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', borderWidth: 2, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center' },
+  stepTitle: { fontSize: 14, fontWeight: '700', color: '#111827', fontFamily: "Inter" },
+  stepTime: { fontSize: 11, color: '#9CA3AF', fontWeight: '600', fontFamily: "Inter" },
+  stepSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2, fontFamily: "Inter" },
+  reportHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  reportSub: { fontSize: 11, color: "#9CA3AF", marginTop: 2, fontFamily: "Inter" },
+  progressRing: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: "#E5E7EB", alignItems: "center", justifyContent: "center" },
+  reportInputWrapper: { height: 140, backgroundColor: "#F9FAFB", borderRadius: 12, padding: 16, borderWidth: 1.5, borderColor: "#EAECEF" },
+  activeReportBorder: { borderColor: "#1F6F43" },
+  reportPlaceholder: { fontSize: 13, color: "#9CA3AF", lineHeight: 20, fontFamily: "Inter" },
+  reportFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
+  charCount: { fontSize: 11, color: "#9CA3AF", fontFamily: "Inter" },
+  autoSave: { flexDirection: "row", alignItems: "center", gap: 4 },
+  autoSaveText: { fontSize: 11, color: GRAY_TEXT, fontFamily: "Inter" },
+  reportActionRow: { flexDirection: "row", gap: 10, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#F3F4F6" },
+  reportSecondaryBtn: { flex: 1, height: 38, borderRadius: 8, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  reportSecondaryBtnText: { fontSize: 12, fontWeight: "600", color: "#6B7280", fontFamily: "Inter" },
 });

@@ -45,7 +45,7 @@ function RoleSelectionScreen({ onSelectRole }) {
       </h2>
 
       {/* Cards */}
-      <div className="flex flex-row items-stretch justify-center gap-4" style={{ width: 576 }}>
+      <div className="flex flex-row items-stretch justify-center gap-4" style={{ width: "100%", maxWidth: 600, padding: "0 20px", flexWrap: "wrap" }}>
         {roles.map((role) => {
           const isHovered = hovered === role.key;
           return (
@@ -136,19 +136,19 @@ function OwnerLoginScreen({ onBack, setUser }) {
   };
 
   const inputStyle = (hasError) => ({
-    width: "100%", height: 44, borderRadius: 8,
+    width: "100%", height: 48, borderRadius: 10,
     border: hasError ? "1px solid #EF4444" : "1px solid #D1D5DB",
     paddingLeft: 42, paddingRight: 16, fontSize: 14,
     fontFamily: "'Inter', sans-serif", color: "#111827",
     background: "#FFFFFF", outline: "none",
-    transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+    transition: "all 0.15s ease",
   });
 
   return (
-    <div className="flex w-screen min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="flex flex-col md:flex-row w-screen min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
 
-      {/* ── Left panel 55% ── */}
-      <div className="relative hidden md:flex flex-col items-center justify-center overflow-hidden" style={{ width: "55%", minHeight: "100vh", background: "linear-gradient(160deg, #1B5E37 0%, #14472A 50%, #0D3520 100%)" }}>
+      {/* ── Left panel ── */}
+      <div className="relative flex flex-col items-center justify-center overflow-hidden h-[30vh] md:h-auto md:w-[55%]" style={{ background: "linear-gradient(160deg, #1B5E37 0%, #14472A 50%, #0D3520 100%)" }}>
         {/* Orbs */}
         {[
           { w: 500, h: 500, top: -100, right: -120, opacity: 0.06 },
@@ -161,27 +161,16 @@ function OwnerLoginScreen({ onBack, setUser }) {
             top: orb.top, bottom: orb.bottom, left: orb.left, right: orb.right,
           }} />
         ))}
-        {/* Arcs */}
-        {[
-          { w: 600, h: 600, top: "10%", left: "-15%" },
-          { w: 350, h: 350, bottom: "5%", right: "-8%" },
-        ].map((arc, i) => (
-          <div key={i} className="absolute pointer-events-none" style={{
-            width: arc.w, height: arc.h, borderRadius: "50%",
-            border: `1px solid rgba(255,255,255,0.0${i === 0 ? 4 : 5})`,
-            top: arc.top, bottom: arc.bottom, left: arc.left, right: arc.right,
-          }} />
-        ))}
-
-        {/* Brand */}
-        <div className="relative z-10 flex flex-col items-center" style={{ maxWidth: 400, textAlign: "center", padding: "0 32px" }}>
+        
+        {/* Brand Content */}
+        <div className="relative z-10 flex flex-col items-center" style={{ maxWidth: 420, textAlign: "center", padding: "0 32px" }}>
           <div className="flex items-center justify-center overflow-hidden" style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.15)", marginBottom: 28, backdropFilter: "blur(8px)" }}>
             <img src="/images/logo.png" alt="Family Forever" style={{ width: 72, height: 72, objectFit: "contain" }} />
           </div>
           <h1 style={{ fontSize: 32, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>Family Forever</h1>
           <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", lineHeight: 1.6, marginBottom: 48 }}>Caring for every family, every step of the way.</p>
 
-          <div className="flex flex-col" style={{ gap: 16 }}>
+          <div className="hidden md:flex flex-col" style={{ gap: 16 }}>
             {[
               { icon: <Shield size={16} strokeWidth={2} />, label: "Secure & Confidential" },
               { icon: <Accessibility size={16} strokeWidth={2} />, label: "WCAG Accessible" },
@@ -198,88 +187,114 @@ function OwnerLoginScreen({ onBack, setUser }) {
         </div>
       </div>
 
-      {/* ── Right panel 45% ── */}
-      <div className="flex flex-col items-center justify-center relative flex-1" style={{ background: "#FFFFFF", padding: "48px 64px" }}>
-        {/* Back */}
+      {/* ── Right panel (Form) ── */}
+      <div className="flex flex-col items-center justify-center relative flex-1 bg-white p-6 md:p-16">
+        {/* Back Link */}
         <button onClick={onBack} className="absolute flex items-center cursor-pointer transition-colors"
-          style={{ top: 32, left: 48, fontSize: 13, fontWeight: 500, color: "#6B7280", background: "none", border: "none", gap: 6 }}
+          style={{ top: 32, left: 48, fontSize: 13, fontWeight: 500, color: "#9CA3AF", background: "none", border: "none", gap: 6 }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#1B5E37")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#6B7280")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#9CA3AF")}
         >
           ← Back to Role Select
         </button>
 
-        <div style={{ width: "100%", maxWidth: 420 }}>
-          {/* Header */}
+        <div style={{ width: "100%", maxWidth: 400 }}>
+          {/* Header Labels */}
           <div style={{ marginBottom: 32 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Owner Portal</p>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: "#111827", lineHeight: 1.2, marginBottom: 8 }}>Welcome back</h2>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Owner Portal</p>
+            <h2 style={{ fontSize: 32, fontWeight: 700, color: "#111827", lineHeight: 1.1, marginBottom: 12 }}>Welcome back</h2>
             <p style={{ fontSize: 14, color: "#6B7280" }}>Sign in to manage your operations</p>
           </div>
 
           <form onSubmit={handleSubmit}>
-            {/* Email */}
-            <div style={{ marginBottom: 20 }}>
+            {/* Email Field */}
+            <div style={{ marginBottom: 24 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Email Address</label>
-              <div className="relative">
+              <div className="relative group">
                 <div className="absolute flex items-center justify-center" style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
-                  <Mail size={16} strokeWidth={2} />
+                  <Mail size={18} strokeWidth={1.8} />
                 </div>
-                <input type="email" value={email} placeholder="you@familyforever.com"
+                <input 
+                  type="email" 
+                  value={email} 
+                  placeholder="you@familyforever.com"
                   onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                   style={inputStyle(!!emailError)}
-                  onFocus={(e) => { if (!emailError) { e.target.style.borderColor = "#1B5E37"; e.target.style.boxShadow = "0 0 0 3px rgba(27,94,55,0.1)"; } }}
+                  onFocus={(e) => { if (!emailError) { e.target.style.borderColor = "#1B5E37"; e.target.style.boxShadow = "0 0 0 4px rgba(27,94,55,0.08)"; } }}
                   onBlur={(e) => { if (!emailError) { e.target.style.borderColor = "#D1D5DB"; e.target.style.boxShadow = "none"; } }}
                 />
               </div>
-              {emailError && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6 }}>{emailError}</p>}
+              {emailError && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{emailError}</p>}
             </div>
 
-            {/* Password */}
-            <div style={{ marginBottom: 20 }}>
+            {/* Password Field */}
+            <div style={{ marginBottom: 24 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Password</label>
-              <div className="relative">
+              <div className="relative group">
                 <div className="absolute flex items-center justify-center" style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
-                  <Lock size={16} strokeWidth={2} />
+                  <Lock size={18} strokeWidth={1.8} />
                 </div>
-                <input type={showPassword ? "text" : "password"} value={password} placeholder="Enter your password"
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password} 
+                  placeholder="Enter your password"
                   onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError(""); }}
                   style={{ ...inputStyle(!!passwordError), paddingRight: 44 }}
-                  onFocus={(e) => { if (!passwordError) { e.target.style.borderColor = "#1B5E37"; e.target.style.boxShadow = "0 0 0 3px rgba(27,94,55,0.1)"; } }}
+                  onFocus={(e) => { if (!passwordError) { e.target.style.borderColor = "#1B5E37"; e.target.style.boxShadow = "0 0 0 4px rgba(27,94,55,0.08)"; } }}
                   onBlur={(e) => { if (!passwordError) { e.target.style.borderColor = "#D1D5DB"; e.target.style.boxShadow = "none"; } }}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute flex items-center justify-center"
                   style={{ right: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#6B7280")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#9CA3AF")}
                 >
-                  {showPassword ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
+                  {showPassword ? <EyeOff size={18} strokeWidth={1.8} /> : <Eye size={18} strokeWidth={1.8} />}
                 </button>
               </div>
-              {passwordError && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6 }}>{passwordError}</p>}
+              {passwordError && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{passwordError}</p>}
             </div>
 
-            {/* Remember + Forgot */}
-            <div className="flex items-center justify-between" style={{ marginBottom: 28 }}>
-              <label className="flex items-center cursor-pointer" style={{ gap: 8 }}>
-                <div className="flex items-center justify-center cursor-pointer" onClick={() => setRememberMe(!rememberMe)}
-                  style={{ width: 16, height: 16, borderRadius: 4, border: rememberMe ? "none" : "1.5px solid #D1D5DB", background: rememberMe ? "#1B5E37" : "#FFFFFF", transition: "all 0.15s ease" }}>
-                  {rememberMe && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+            {/* Actions: Remember + Forgot */}
+            <div className="flex items-center justify-between" style={{ marginBottom: 32 }}>
+              <label className="flex items-center cursor-pointer select-none" style={{ gap: 10 }}>
+                <input 
+                  type="checkbox" 
+                  checked={rememberMe} 
+                  onChange={() => setRememberMe(!rememberMe)} 
+                  className="hidden" 
+                />
+                <div 
+                  style={{ 
+                    width: 18, height: 18, borderRadius: 5, 
+                    border: rememberMe ? "none" : "1.5px solid #D1D5DB", 
+                    background: rememberMe ? "#1B5E37" : "#FFFFFF", 
+                    display: "flex", alignItems: "center", justifyContent: "center", 
+                    transition: "all 0.2s ease" 
+                  }}
+                >
+                  {rememberMe && <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </div>
-                <span style={{ fontSize: 13, color: "#374151" }}>Remember me</span>
+                <span style={{ fontSize: 14, color: "#4B5563", fontWeight: 500 }}>Remember me</span>
               </label>
-              <button type="button" style={{ fontSize: 13, fontWeight: 500, color: "#1B5E37", background: "none", border: "none", cursor: "pointer" }}>Forgot password?</button>
+              <button type="button" style={{ fontSize: 14, fontWeight: 600, color: "#1B5E37", background: "none", border: "none", cursor: "pointer" }}>Forgot password?</button>
             </div>
 
-            {/* Sign In */}
-            <button type="submit" disabled={isLoading} className="w-full flex items-center justify-center cursor-pointer"
-              style={{ height: 48, borderRadius: 10, background: isLoading ? "#9CA3AF" : "#1B5E37", color: "#FFFFFF", fontSize: 15, fontWeight: 600, border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.1)", transition: "all 0.2s ease", cursor: isLoading ? "not-allowed" : "pointer" }}
-              onMouseEnter={(e) => { if (!isLoading) { e.currentTarget.style.background = "#166534"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(27,94,55,0.3)"; } }}
-              onMouseLeave={(e) => { if (!isLoading) { e.currentTarget.style.background = "#1B5E37"; e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)"; } }}
+            {/* Submit Button */}
+            <button 
+              type="submit" 
+              disabled={isLoading} 
+              className="w-full flex items-center justify-center"
+              style={{ 
+                height: 52, borderRadius: 12, 
+                background: isLoading ? "#9CA3AF" : "#1B5E37", 
+                color: "#FFFFFF", fontSize: 16, fontWeight: 600, 
+                border: "none", boxShadow: "0 2px 4px rgba(27,94,55,0.2)", 
+                transition: "all 0.2s ease", cursor: isLoading ? "not-allowed" : "pointer" 
+              }}
+              onMouseEnter={(e) => { if (!isLoading) { e.currentTarget.style.background = "#166534"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+              onMouseLeave={(e) => { if (!isLoading) { e.currentTarget.style.background = "#1B5E37"; e.currentTarget.style.transform = "translateY(0)"; } }}
             >
               {isLoading ? (
-                <div className="flex items-center" style={{ gap: 8 }}>
-                  <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <div className="flex items-center" style={{ gap: 10 }}>
+                  <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
                     <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
                   </svg>
@@ -290,19 +305,19 @@ function OwnerLoginScreen({ onBack, setUser }) {
           </form>
 
           {/* Divider */}
-          <div className="flex items-center" style={{ margin: "28px 0", gap: 16 }}>
+          <div className="flex items-center" style={{ margin: "32px 0", gap: 16 }}>
             <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-            <span style={{ fontSize: 12, fontWeight: 500, color: "#9CA3AF" }}>or continue with</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>or continue with</span>
             <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
           </div>
 
-          {/* Google */}
-          <button type="button" className="w-full flex items-center justify-center cursor-pointer"
-            style={{ height: 44, borderRadius: 8, border: "1px solid #E5E7EB", background: "#FFFFFF", fontSize: 14, fontWeight: 500, color: "#374151", gap: 10, transition: "all 0.15s ease" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; e.currentTarget.style.borderColor = "#D1D5DB"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "#FFFFFF"; e.currentTarget.style.borderColor = "#E5E7EB"; }}
+          {/* Social Logins */}
+          <button type="button" className="w-full flex items-center justify-center"
+            style={{ height: 48, borderRadius: 10, border: "1.5px solid #E5E7EB", background: "#FFFFFF", fontSize: 14, fontWeight: 600, color: "#374151", gap: 12, transition: "all 0.15s ease", cursor: "pointer" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#F9FAFB")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#FFFFFF")}
           >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
               <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
               <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
               <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
@@ -311,8 +326,9 @@ function OwnerLoginScreen({ onBack, setUser }) {
             Continue with Google
           </button>
 
-          <p className="text-center" style={{ marginTop: 32, fontSize: 13, color: "#9CA3AF" }}>
-            Don't have an account? <span style={{ color: "#6B7280" }}>Contact your administrator.</span>
+          {/* Footer */}
+          <p className="text-center" style={{ marginTop: 40, fontSize: 14, color: "#9CA3AF" }}>
+            Don't have an account? <span style={{ color: "#6B7280", fontWeight: 500 }}>Contact your administrator.</span>
           </p>
         </div>
       </div>
@@ -320,19 +336,16 @@ function OwnerLoginScreen({ onBack, setUser }) {
   );
 }
 
-// ─── Root ──────────────────────────────────────────────────────────────────
+// ─── Root Login Component ──────────────────────────────────────────────────
 
 const Login = ({ setUser }) => {
   const navigate = useNavigate();
-  const [screen, setScreen] = useState("role");
+  const [screen, setScreen] = useState("owner"); // Default to Owner Portal login as requested
 
+  // Removed auto-redirect to ensure we always show the login portal at root
   useEffect(() => {
-    const saved = localStorage.getItem("user");
-    if (saved) {
-      const u = JSON.parse(saved);
-      navigate(u.role === "admin" ? "/admin-dashboard" : "/user-dashboard");
-    }
-  }, [navigate]);
+    // No auto-redirect
+  }, []);
 
   if (screen === "owner") return <OwnerLoginScreen onBack={() => setScreen("role")} setUser={setUser} />;
 

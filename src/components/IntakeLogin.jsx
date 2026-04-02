@@ -1,326 +1,411 @@
-import React, { useState, useEffect } from "react";
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
-import { db, auth } from "../firebase";
-import {
-  sendSignInLinkToEmail,
-  signInWithEmailLink,
-  isSignInWithEmailLink,
-} from "firebase/auth";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
+import { Mail, ArrowRight, ClipboardList, Shield, Heart } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const IntakeLogin = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [isSignUp, setIsSignUp] = useState(false);
 
-  // UI Toggle
-  const [isLogin, setIsLogin] = useState(true);
-
-  // SIGNUP FIELDS
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [agency, setAgency] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [invoiceEmail, setInvoiceEmail] = useState("");
-
-  // LOGIN FIELD
+  // Sign In
   const [loginEmail, setLoginEmail] = useState("");
 
-  // Messages
+  // Sign Up
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [email, setEmail] = useState("");
+
+  // UI state
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-   const UPCS_EMAIL_OPTIONS = [
-    "billing@upcs.com",
-    "accounts@upcs.com",
-  ];
-
-  const isUPCSAgency =
-    agency.trim().toLowerCase().startsWith("upcs");
-
-  
-  // Detect magic link login
-  useEffect(() => {
-    if (isSignInWithEmailLink(auth, window.location.href)) {
-      let storedEmail = window.localStorage.getItem("emailForSignIn");
-
-      if (!storedEmail) {
-        storedEmail = window.prompt("Please confirm your email:");
-      }
-
-      signInWithEmailLink(auth, storedEmail, window.location.href)
-        .then(async () => {
-          window.localStorage.removeItem("emailForSignIn");
-
-          const q = query(
-            collection(db, "intakeUsers"),
-            where("email", "==", storedEmail)
-          );
-          const snap = await getDocs(q);
-
-          if (!snap.empty) {
-            navigate("/intake-form/dashboard");
-          } else {
-            setError("User not found in database.");
-          }
-        })
-        .catch((err) => setError("Sign-in failed: " + err.message));
+  // Pre-fill email from magic link URL param (e.g. ?email=worker@example.com)
+  React.useEffect(() => {
+    const emailParam = searchParams.get("email");
+    if (emailParam) {
+      const decoded = decodeURIComponent(emailParam);
+      setLoginEmail(decoded);
+      setEmail(decoded);
     }
-  }, [navigate]);
+  }, [searchParams]);
 
-  // -----------------------------
-  // SIGNUP HANDLER (UPDATED)
-  // -----------------------------
-  const handleSignup = async () => {
+  // ── Sign In — verify email from Firestore ───────────────────────────────
+  const handleSignIn = async () => {
     setError("");
-    setMessage("");
-
-    if (!name || !role || !phone || !email || !invoiceEmail) {
-      setError("All fields are required.");
+    if (!loginEmail) {
+      setError("Please enter your email address.");
       return;
     }
 
-    if (role === "Intake Worker" && !agency) {
-      setError("Agency Name is required for Intake Workers.");
-      return;
-    }
-
-    
-
+    setIsLoading(true);
     try {
-      const q = query(collection(db, "intakeUsers"), where("email", "==", email));
-      const snapshot = await getDocs(q);
+      // Search all intakeUsers — Firestore doesn't support case-insensitive queries
+      // So we fetch all and match manually
+      const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
+      const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", loginEmail.trim().toLowerCase()));
+      const snap = await getDocs(q);
 
-      if (!snapshot.empty) {
-        setError("User already exists.");
+      if (snap.empty) {
+        setError("No account found with this email. Please sign up first.");
+        setIsLoading(false);
         return;
       }
 
-      await addDoc(collection(db, "intakeUsers"), {
+      const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+
+      // Store in localStorage — this acts as our auth session
+      localStorage.setItem("intakeUser", JSON.stringify(userData));
+      localStorage.setItem("user", JSON.stringify(userData));
+
+      navigate("/intake-form/dashboard");
+    } catch (err) {
+      setError("Sign in failed: " + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Sign Up — add new user to Firestore ────────────────────────────────
+  const handleSignUp = async () => {
+    setError("");
+    if (!name || !role || !email) {
+      setError("Please fill in all fields.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { collection: fbCollection, query: fbQuery, where, getDocs, addDoc } = await import("firebase/firestore");
+
+      // Check if email already exists
+      const q = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", email.trim().toLowerCase()));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        setError("An account with this email already exists. Please sign in.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Add to Firestore
+      const newUser = {
         name,
         role,
-        agency: role === "Intake Worker" ? agency : "",
-        phone,
-        email,
-        invoiceEmail,
+        email: email.trim().toLowerCase(),
         createdAt: new Date(),
-      });
-
-      alert("Signup successful! Please log in using your email.");
-
-      // Clear fields
-      setName("");
-      setRole("");
-      setAgency("");
-      setPhone("");
-      setEmail("");
-      setInvoiceEmail("");
-
-      setIsLogin(true);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // -----------------------------
-  // LOGIN HANDLER (unchanged)
-  // -----------------------------
-  const handleSendMagicLink = async () => {
-    setError("");
-    setMessage("");
-
-    if (!loginEmail) {
-      setError("Enter your email.");
-      return;
-    }
-
-    try {
-      const q = query(
-        collection(db, "intakeUsers"),
-        where("email", "==", loginEmail)
-      );
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        setError("User not found. Please sign up first.");
-        return;
-      }
-
-      const actionCodeSettings = {
-        url: "http://localhost:5173/intake-form/login",
-        handleCodeInApp: true,
       };
 
-      await sendSignInLinkToEmail(auth, loginEmail, actionCodeSettings);
-      window.localStorage.setItem("emailForSignIn", loginEmail);
+      const docRef = await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
-      setMessage("Login link sent! Please check your email.");
+      const userData = { id: docRef.id, ...newUser };
+      localStorage.setItem("intakeUser", JSON.stringify(userData));
+      localStorage.setItem("user", JSON.stringify(userData));
+
+      navigate("/intake-form/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError("Sign up failed: " + err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // ── Styles ─────────────────────────────────────────────────────────────
+  const inputStyle = () => ({
+    width: "100%",
+    height: 48,
+    borderRadius: 10,
+    border: "1px solid #D1D5DB",
+    padding: "0 14px",
+    fontSize: 14,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+    color: "#111827",
+    background: "#FFFFFF",
+    outline: "none",
+    transition: "border-color 0.15s ease",
+    boxSizing: "border-box",
+  });
+
   return (
-    <div className="flex bg-white min-h-screen justify-center items-center">
-      <div className=" bg-amber-200">
-        <img src="/images/loginPic.png" alt="login" className="h-max-screen" />
+    <div className="flex min-h-screen" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* ── Left panel ── */}
+      <div
+        className="relative hidden md:flex flex-col items-center justify-center overflow-hidden"
+        style={{ width: "55%", minHeight: "100vh", background: "linear-gradient(160deg, #1B5E37 0%, #14472A 50%, #0D3520 100%)" }}
+      >
+        {[
+          { w: 500, h: 500, top: -100, right: -120, opacity: 0.06 },
+          { w: 400, h: 400, bottom: -80, left: -60, opacity: 0.04 },
+          { w: 250, h: 250, top: "40%", left: "20%", opacity: 0.08 },
+        ].map((orb, i) => (
+          <div
+            key={i}
+            className="absolute pointer-events-none"
+            style={{
+              width: orb.w, height: orb.h, borderRadius: "50%",
+              background: `radial-gradient(circle, rgba(255,255,255,${orb.opacity}) 0%, transparent 70%)`,
+              top: orb.top, bottom: orb.bottom, left: orb.left, right: orb.right,
+            }}
+          />
+        ))}
+
+        <div className="relative z-10 flex flex-col items-center" style={{ textAlign: "center", padding: "0 40px" }}>
+          <div
+            className="flex items-center justify-center overflow-hidden"
+            style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)",
+              marginBottom: 28,
+            }}
+          >
+            <img src="/images/logo.png" alt="Family Forever" style={{ width: 72, height: 72, objectFit: "contain" }} />
+          </div>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>
+            Family Forever
+          </h1>
+          <p style={{ fontSize: 15, color: "rgba(255,255,255,0.75)", lineHeight: 1.6, marginBottom: 40 }}>
+            Intake Management Portal
+          </p>
+
+          <div className="flex flex-col" style={{ gap: 16 }}>
+            {[
+              { icon: <Shield size={16} strokeWidth={2} />, label: "Secure & Confidential" },
+              { icon: <Heart size={16} strokeWidth={2} />, label: "Built for Care Professionals" },
+              { icon: <ClipboardList size={16} strokeWidth={2} />, label: "Streamlined Intake Process" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center" style={{ gap: 12 }}>
+                <div
+                  className="flex items-center justify-center"
+                  style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.8)", flexShrink: 0,
+                  }}
+                >
+                  {item.icon}
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(255,255,255,0.75)" }}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="flex flex-col justify-center items-center m-auto py-4 px-6 w-[404px] gap-6 bg-white shadow-xl rounded-xl">
-        <p className="text-center font-bold text-[24px]">
-          {isLogin ? "Welcome Back" : "Create an Account"}
-        </p>
-
-        {error && <p className="text-red-500 text-sm">{error}</p>}
-        {message && <p className="text-green-600 text-sm">{message}</p>}
-
-        {isLogin ? (
-          <>
-            {/* LOGIN FORM */}
-            <InputField
-              label="Email"
-              type="email"
-              value={loginEmail}
-              onChange={setLoginEmail}
-              placeholder="your@email.com"
-            />
-
-            <button
-              onClick={handleSendMagicLink}
-              className="bg-dark-green text-white w-full rounded-[6px] py-[8px]"
-            >
-              Send Login Link
-            </button>
-
-            <SwitchText
-              text="Don't have an account?"
-              linkText="Sign Up"
-              onClick={() => setIsLogin(false)}
-            />
-          </>
-        ) : (
-          <>
-            {/* SIGNUP FORM */}
-
-            <InputField
-              label="Name"
-              value={name}
-              onChange={setName}
-              placeholder="Enter full name"
-            />
-
-            {/* ROLE DROPDOWN */}
-            <div className="flex flex-col gap-1 w-full">
-              <label className="font-bold text-[14px]">Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="border border-gray-300 rounded p-[10px] text-[14px]"
-              >
-                <option value="">Select Role</option>
-                <option value="Intake Worker">Intake Worker</option>
-                <option value="Parent">Parent</option>
-              </select>
+      {/* ── Right panel ── */}
+      <div
+        className="flex flex-col items-center justify-center relative flex-1 bg-white"
+        style={{ padding: "48px 40px" }}
+      >
+        <div style={{ width: "100%", maxWidth: 420 }}>
+          {/* Mobile logo */}
+          <div className="flex flex-col items-center mb-8 md:hidden">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden mb-2" style={{ background: "#1B5E37" }}>
+              <img src="/images/logo.png" alt="Logo" className="w-12 h-12 object-contain" />
             </div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>Family Forever</h1>
+          </div>
 
-            {/* AGENCY FIELD — only if role is Intake Worker */}
-            {role === "Intake Worker" && (
-              <InputField
-                label="Name of Agency / Organisation"
-                value={agency}
-                onChange={setAgency}
-                placeholder="Enter agency name"
-              />
-            )}
+          {/* Header */}
+          <div style={{ marginBottom: 32 }}>
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex items-center justify-center"
+                style={{ width: 36, height: 36, borderRadius: 10, background: "#F0FFF4", color: "#1B5E37" }}
+              >
+                <ClipboardList size={18} strokeWidth={2} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#1B5E37", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Intake Portal
+              </span>
+            </div>
+            <h2 style={{ fontSize: 26, fontWeight: 700, color: "#111827", lineHeight: 1.2, marginBottom: 6 }}>
+              {isSignUp ? "Create an Account" : "Welcome back"}
+            </h2>
+            <p style={{ fontSize: 14, color: "#6B7280" }}>
+              {isSignUp ? "Register to start submitting intake forms" : "Sign in to manage intake forms"}
+            </p>
+          </div>
 
-            <InputField
-              label="Phone Number"
-              value={phone}
-              onChange={setPhone}
-              placeholder="Enter phone number"
-              type="tel"
-            />
-
-            <InputField
-              label="E-mail"
-              value={email}
-              onChange={setEmail}
-              placeholder="Enter email address"
-              type="email"
-            />
-{/* INVOICE EMAIL FIELD */}
-{isUPCSAgency ? (
-  <div className="w-full">
-    <label className="font-semibold text-sm w-full">
-      Invoice E-mail
-    </label>
-
-    <select
-      value={invoiceEmail}
-      onChange={(e) => setInvoiceEmail(e.target.value)}
-      className="border border-gray p-2 rounded w-full"
-    >
-      <option value="">Select Invoice Email</option>
-      {UPCS_EMAIL_OPTIONS.map((email) => (
-        <option key={email} value={email}>
-          {email}
-        </option>
-      ))}
-    </select>
-  </div>
-) : (
-  <InputField
-    label="Invoice E-mail"
-    value={invoiceEmail}
-    onChange={setInvoiceEmail}
-    placeholder="Enter invoice email"
-    type="email"
-  />
-)}
-
-            <button
-              onClick={handleSignup}
-              className="bg-dark-green text-white w-full rounded-[6px] py-[8px]"
+          {/* Error */}
+          {error && (
+            <div
+              className="flex items-center gap-2 px-4 py-3 rounded-lg mb-4"
+              style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#DC2626", fontSize: 13 }}
             >
-              Sign Up
-            </button>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {error}
+            </div>
+          )}
 
-            <SwitchText
-              text="Already have an account?"
-              linkText="Log In"
-              onClick={() => setIsLogin(true)}
-            />
-          </>
-        )}
+          {isSignUp ? (
+            <>
+              {/* ── SIGN UP FORM ── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 18, marginBottom: 24 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    placeholder="Enter full name"
+                    onChange={(e) => { setName(e.target.value); setError(""); }}
+                    style={inputStyle()}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                    Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => { setRole(e.target.value); setError(""); }}
+                    style={{ ...inputStyle(), cursor: "pointer" }}
+                  >
+                    <option value="">Select Role</option>
+                    <option value="Intake Worker">Intake Worker</option>
+                    <option value="Parent">Parent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute flex items-center justify-center"
+                      style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
+                      <Mail size={16} strokeWidth={2} />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      placeholder="you@example.com"
+                      onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                      style={{ ...inputStyle(), paddingLeft: 42 }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSignUp}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center"
+                style={{
+                  height: 48, borderRadius: 10,
+                  background: isLoading ? "#9CA3AF" : "#1B5E37",
+                  color: "#FFFFFF", fontSize: 15, fontWeight: 600,
+                  border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  transition: "all 0.2s ease", gap: 8,
+                }}
+                onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.background = "#166534"; }}
+                onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.background = "#1B5E37"; }}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Creating account...
+                  </>
+                ) : (
+                  <>Create Account <ArrowRight size={16} strokeWidth={2} /></>
+                )}
+              </button>
+
+              <p className="text-center mt-5" style={{ fontSize: 13, color: "#6B7280" }}>
+                Already have an account?{" "}
+                <span
+                  className="font-medium cursor-pointer hover:underline"
+                  style={{ color: "#1B5E37" }}
+                  onClick={() => { setIsSignUp(false); setError(""); }}
+                >
+                  Sign In
+                </span>
+              </p>
+            </>
+          ) : (
+            <>
+              {/* ── SIGN IN FORM ── */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                  Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute flex items-center justify-center"
+                    style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
+                    <Mail size={16} strokeWidth={2} />
+                  </div>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    placeholder="you@familyforever.com"
+                    onChange={(e) => { setLoginEmail(e.target.value); setError(""); }}
+                    style={{ ...inputStyle(), paddingLeft: 42 }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleSignIn}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center"
+                style={{
+                  height: 48, borderRadius: 10,
+                  background: isLoading ? "#9CA3AF" : "#1B5E37",
+                  color: "#FFFFFF", fontSize: 15, fontWeight: 600,
+                  border: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  transition: "all 0.2s ease", gap: 8,
+                }}
+                onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.background = "#166534"; }}
+                onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.background = "#1B5E37"; }}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Signing in...
+                  </>
+                ) : (
+                  <>Sign In <ArrowRight size={16} strokeWidth={2} /></>
+                )}
+              </button>
+
+              <div className="flex items-center" style={{ margin: "24px 0", gap: 16 }}>
+                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
+                <span style={{ fontSize: 12, fontWeight: 500, color: "#9CA3AF" }}>or</span>
+                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
+              </div>
+
+              <p className="text-center" style={{ fontSize: 13, color: "#6B7280" }}>
+                Don't have an account?{" "}
+                <span
+                  className="font-medium cursor-pointer hover:underline"
+                  style={{ color: "#1B5E37" }}
+                  onClick={() => { setIsSignUp(true); setError(""); }}
+                >
+                  Sign Up
+                </span>
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 };
-
-// Reusable InputField
-const InputField = ({ label, value, onChange, placeholder, type = "text" }) => (
-  <div className="flex flex-col gap-1 w-full">
-    <label className="font-bold text-[14px]">{label}</label>
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="border border-gray-300 rounded p-[10px] text-[14px]"
-    />
-  </div>
-);
-
-// Switch text link
-const SwitchText = ({ text, linkText, onClick }) => (
-  <div className="text-center text-[14px] text-gray-700">
-    {text}{" "}
-    <span
-      className="text-dark-green font-medium cursor-pointer hover:underline"
-      onClick={onClick}
-    >
-      {linkText}
-    </span>
-  </div>
-);
 
 export default IntakeLogin;

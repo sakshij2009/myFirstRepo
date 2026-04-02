@@ -73,13 +73,13 @@ export default function TransferShift() {
           <Pressable onPress={() => (step > 1 ? setStep(step - 1) : router.back())} style={{ marginRight: 12 }}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
           </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Transfer Shift</Text>
-          <Text style={{ fontSize: 13, color: "#9ca3af" }}>Step {step} of 3</Text>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1, fontFamily: "Poppins" }}>Transfer Shift</Text>
+          <Text style={{ fontSize: 13, color: "#9ca3af", fontFamily: "Inter" }}>Step {step} of 4</Text>
         </View>
 
         {/* Progress */}
         <View style={{ flexDirection: "row", justifyContent: "center", paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#f3f4f6" }}>
-          {[1, 2, 3].map(stepDot)}
+          {[1, 2, 3, 4].map(stepDot)}
         </View>
 
         <View style={{ padding: 20 }}>
@@ -120,58 +120,114 @@ export default function TransferShift() {
           {/* STEP 2: Select Staff */}
           {step === 2 && (
             <>
-              <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 6 }}>Select Staff Member</Text>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 20 }}>Choose an available staff member to take over this shift.</Text>
+              <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 6, fontFamily: "Poppins" }}>Select Staff Member</Text>
+              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 20, fontFamily: "Inter" }}>Choose an available staff member to take over.</Text>
 
+              <View style={{ marginBottom: 20 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: "#e5e7eb" }}>
+                  <Ionicons name="search" size={20} color="#9ca3af" />
+                  <TextInput placeholder="Search by name or role..." style={{ flex: 1, height: 48, marginLeft: 10, fontSize: 14, fontFamily: "Inter" }} />
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#9ca3af", marginBottom: 15, letterSpacing: 0.5 }}>RECENT STAFF</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 25, marginHorizontal: -20, paddingHorizontal: 20 }}>
+                {DEMO_STAFF.map(s => (
+                  <Pressable key={s.id} onPress={() => setSelectedStaff(s)} style={{ alignItems: "center", marginRight: 20 }}>
+                    <View style={[{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" }, selectedStaff?.id === s.id && { borderColor: GREEN }]}>
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: GREEN }}>{s.initials}</Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: "#4b5563", marginTop: 6, fontWeight: "600", fontFamily: "Inter" }}>{s.name.split(" ")[0]}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#9ca3af", marginBottom: 15, letterSpacing: 0.5 }}>AVAILABILITY LIST</Text>
               {DEMO_STAFF.map(staff => (
                 <Pressable key={staff.id} onPress={() => staff.available && setSelectedStaff(staff)} style={{ flexDirection: "row", alignItems: "center", backgroundColor: selectedStaff?.id === staff.id ? "#f0fdf4" : "#fff", borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1.5, borderColor: selectedStaff?.id === staff.id ? GREEN : "#e5e7eb", opacity: staff.available ? 1 : 0.5 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: selectedStaff?.id === staff.id ? GREEN : "#e0f2fe", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "700", color: selectedStaff?.id === staff.id ? "#fff" : "#0369a1" }}>{staff.initials}</Text>
+                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: selectedStaff?.id === staff.id ? GREEN : "#F3F4F6", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: selectedStaff?.id === staff.id ? "#fff" : "#6B7280" }}>{staff.initials}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#1a1a1a" }}>{staff.name}</Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>{staff.role}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#1a1a1a", fontFamily: "Inter" }}>{staff.name}</Text>
+                    <Text style={{ fontSize: 13, color: "#6b7280", fontFamily: "Inter" }}>{staff.role}</Text>
                   </View>
                   <View style={{ backgroundColor: staff.available ? "#dcfce7" : "#fee2e2", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
-                    <Text style={{ fontSize: 11, fontWeight: "600", color: staff.available ? "#166534" : "#991b1b" }}>{staff.available ? "Available" : "Unavailable"}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: "600", color: staff.available ? "#166534" : "#991b1b", fontFamily: "Inter" }}>{staff.available ? "Available" : "Unavailable"}</Text>
                   </View>
                 </Pressable>
               ))}
             </>
           )}
 
-          {/* STEP 3: Confirm */}
+          {/* STEP 3: Message */}
           {step === 3 && (
             <>
-              <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 6 }}>Confirm Transfer</Text>
-              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 20 }}>Review the transfer details before submitting.</Text>
+               <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 6, fontFamily: "Poppins" }}>Add a Message</Text>
+               <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 20, fontFamily: "Inter" }}>Explain why you're requesting this transfer.</Text>
+               
+               <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#1a1a1a", marginBottom: 12, fontFamily: "Inter" }}>Transfer Message</Text>
+                  <TextInput 
+                    value={notes} 
+                    onChangeText={setNotes} 
+                    placeholder="Hi, I'm unable to make this shift because..." 
+                    placeholderTextColor="#9ca3af" 
+                    multiline 
+                    style={{ fontSize: 15, color: "#374151", minHeight: 120, textAlignVertical: "top", fontFamily: "Inter" }} 
+                  />
+               </View>
+               <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 10, textAlign: "right" }}>{notes.length} / 500 characters</Text>
+            </>
+          )}
 
-              <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, borderWidth: 1, borderColor: "#e5e7eb", marginBottom: 16 }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#9ca3af", marginBottom: 14 }}>TRANSFER SUMMARY</Text>
-                <View style={{ gap: 14 }}>
-                  <View>
-                    <Text style={{ fontSize: 12, color: "#9ca3af", marginBottom: 3 }}>SHIFT</Text>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{shift?.clientName || "Client"} • {shift?.startDate}</Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift?.startTime} – {shift?.endTime}</Text>
-                  </View>
-                  <View style={{ height: 1, backgroundColor: "#f3f4f6" }} />
-                  <View>
-                    <Text style={{ fontSize: 12, color: "#9ca3af", marginBottom: 3 }}>TRANSFERRING TO</Text>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{selectedStaff?.name}</Text>
-                    <Text style={{ fontSize: 13, color: "#6b7280" }}>{selectedStaff?.role}</Text>
-                  </View>
-                  <View style={{ height: 1, backgroundColor: "#f3f4f6" }} />
-                  <View>
-                    <Text style={{ fontSize: 12, color: "#9ca3af", marginBottom: 3 }}>REASON</Text>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{reason}</Text>
-                    {notes ? <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>{notes}</Text> : null}
-                  </View>
-                </View>
+          {/* STEP 4: Confirm */}
+          {step === 4 && (
+            <>
+              <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 6, fontFamily: "Poppins" }}>Confirm Transfer</Text>
+              <Text style={{ fontSize: 14, color: "#6b7280", marginBottom: 20, fontFamily: "Inter" }}>Review the details before submitting request.</Text>
+              
+              <View style={{ backgroundColor: "#F0FDF4", borderRadius: 16, padding: 20, borderWidth: 1, borderColor: "#DCFCE7", marginBottom: 16 }}>
+                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 15 }}>
+                    <Ionicons name="checkmark-circle" size={20} color={GREEN} />
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: GREEN, fontFamily: "Poppins" }}>Ready for Review</Text>
+                 </View>
+
+                 <View style={{ gap: 14 }}>
+                   <View>
+                     <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>SHIFT</Text>
+                     <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", fontFamily: "Poppins" }}>{shift?.clientName || "Client"} • {shift?.startDate}</Text>
+                     <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift?.startTime} – {shift?.endTime}</Text>
+                   </View>
+                   
+                   <View style={{ height: 1, backgroundColor: "#DCFCE7" }} />
+                   
+                   <View>
+                     <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>TRANSFERRING TO</Text>
+                     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}>
+                           <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "700" }}>{selectedStaff?.initials}</Text>
+                        </View>
+                        <View>
+                           <Text style={{ fontSize: 14, fontWeight: "700", color: "#1a1a1a" }}>{selectedStaff?.name}</Text>
+                           <Text style={{ fontSize: 12, color: "#6b7280" }}>{selectedStaff?.role}</Text>
+                        </View>
+                     </View>
+                   </View>
+
+                   <View style={{ height: 1, backgroundColor: "#DCFCE7" }} />
+
+                   <View>
+                     <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>REASON & MESSAGE</Text>
+                     <Text style={{ fontSize: 14, fontWeight: "700", color: "#1a1a1a" }}>{reason}</Text>
+                     {notes ? <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 4, lineHeight: 18 }}>"{notes}"</Text> : null}
+                   </View>
+                 </View>
               </View>
 
-              <View style={{ backgroundColor: "#fef3c7", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start" }}>
+              <View style={{ backgroundColor: "#FFFBEB", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start", borderWidth: 1, borderColor: "#FEF3C7" }}>
                 <Ionicons name="information-circle" size={18} color="#d97706" style={{ marginRight: 10, marginTop: 1 }} />
-                <Text style={{ fontSize: 13, color: "#92400e", flex: 1 }}>This request will be sent to your manager for approval before the shift is officially transferred.</Text>
+                <Text style={{ fontSize: 12, color: "#92400e", flex: 1, lineHeight: 18 }}>The shift remains your responsibility until the transfer is officially approved by administration.</Text>
               </View>
             </>
           )}
@@ -179,17 +235,21 @@ export default function TransferShift() {
       </ScrollView>
 
       {/* Bottom Navigation */}
-      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e5e7eb" }}>
-        {step < 3 ? (
+      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingVertical: 15, paddingHorizontal: 20, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e5e7eb" }}>
+        {step < 4 ? (
           <Pressable
-            onPress={() => { if (step === 1 && !reason) { Alert.alert("Required", "Please select a reason."); return; } if (step === 2 && !selectedStaff) { Alert.alert("Required", "Please select a staff member."); return; } setStep(step + 1); }}
-            style={{ backgroundColor: GREEN, paddingVertical: 16, borderRadius: 14, alignItems: "center" }}
+            onPress={() => { 
+                if (step === 1 && !reason) { Alert.alert("Required", "Please select a reason."); return; } 
+                if (step === 2 && !selectedStaff) { Alert.alert("Required", "Please select a staff member."); return; } 
+                setStep(step + 1); 
+            }}
+            style={{ backgroundColor: GREEN, height: 54, borderRadius: 15, alignItems: "center", justifyContent: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Continue</Text>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Poppins" }}>Continue</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={handleSubmit} disabled={submitting} style={{ backgroundColor: submitting ? "#9ca3af" : GREEN, paddingVertical: 16, borderRadius: 14, alignItems: "center" }}>
-            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Submit Transfer Request</Text>}
+          <Pressable onPress={handleSubmit} disabled={submitting} style={{ backgroundColor: submitting ? "#9ca3af" : GREEN, height: 54, borderRadius: 15, alignItems: "center", justifyContent: "center" }}>
+            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Poppins" }}>Submit Request</Text>}
           </Pressable>
         )}
       </View>

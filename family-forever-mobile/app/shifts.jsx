@@ -16,12 +16,13 @@ import { db } from "../src/firebase/config.jsx";
 import { router } from "expo-router";
 import * as Location from "expo-location";
 
+const ALLOWED_CATEGORIES = ["Respite Care", "Emergent Care", "Supervised Visitation", "Transportation"];
+
 const serviceTypeStyles = {
   "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
   "Emergent Care": { bg: "#FEF2F2", text: "#991B1B" },
   "Supervised Visitation": { bg: "#F3F0FF", text: "#5B21B6" },
   "Transportation": { bg: "#FEF9C3", text: "#854D0E" },
-  default: { bg: "#DCFCE7", text: "#15803D" },
 };
 
 const statusStyles = {
@@ -32,21 +33,23 @@ const statusStyles = {
   Complete: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
-function ShiftCard({ shift, onAction, onDetails }) {
+function ShiftCard({ shift, showFullNames, onAction, onDetails }) {
   const getStatus = () => {
     if (shift.clockOutTime) return "Complete";
     if (shift.clockInTime) return "Active";
     return shift.shiftConfirmed ? "Confirmed" : "Assigned";
   };
 
-  const serviceType = shift.category || shift.categoryName || shift.serviceType || "Service";
+  const rawServiceType = shift.category || shift.categoryName || shift.serviceType || "Transportation";
+  const serviceType = ALLOWED_CATEGORIES.includes(rawServiceType) ? rawServiceType : "Transportation";
   const status = getStatus();
 
-  const serviceStyle = serviceTypeStyles[serviceType] || serviceTypeStyles.default;
+  const serviceStyle = serviceTypeStyles[serviceType];
   const statusStyle = statusStyles[status] || statusStyles.Assigned;
 
-  const clientName = shift.clientName || shift.name || "Client";
-  const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const fullClientName = shift.clientName || shift.name || "Client";
+  const clientName = showFullNames ? fullClientName : fullClientName.split(" ").map(n => n[0]).join("").slice(0, 3);
+  const clientInitials = fullClientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const location = shift.location || "Location not specified";
   
   const calculateDuration = (start, end) => {
@@ -101,6 +104,32 @@ function ShiftCard({ shift, onAction, onDetails }) {
           <Ionicons name="time-outline" size={14} color="#92600A" />
           <Text style={{ fontSize: 12, fontWeight: "600", color: "#92600A", letterSpacing: 0.2, fontFamily: "Inter" }}>
             Confirmation required
+          </Text>
+        </View>
+      )}
+
+      {status === 'Complete' && (
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: shift.reportApproved ? "#F0FDF4" : shift.revisionRequested ? "#FEF2F2" : "#FFF8E1",
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          gap: 6,
+        }}>
+          <Ionicons 
+            name={shift.reportApproved ? "shield-checkmark" : shift.revisionRequested ? "alert-circle" : "time-outline"} 
+            size={14} 
+            color={shift.reportApproved ? "#1F6F43" : shift.revisionRequested ? "#EF4444" : "#92600A"} 
+          />
+          <Text style={{ 
+            fontSize: 12, 
+            fontWeight: "700", 
+            color: shift.reportApproved ? "#1F6F43" : shift.revisionRequested ? "#EF4444" : "#92600A",
+            letterSpacing: 0.2,
+            fontFamily: "Poppins"
+          }}>
+            {shift.reportApproved ? "Approved" : shift.revisionRequested ? "Revision Requested" : "Pending Review"}
           </Text>
         </View>
       )}
@@ -250,6 +279,7 @@ export default function Shifts() {
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [confirmAction, setConfirmAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showFullNames, setShowFullNames] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -265,9 +295,12 @@ export default function Shifts() {
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const mine = data.filter(
-        (s) =>
-          s?.name?.toLowerCase() === user?.name?.toLowerCase() ||
-          s?.userId === user?.userId
+        (s) => {
+          const isUserShift = s?.name?.toLowerCase() === user?.name?.toLowerCase() || s?.userId === user?.userId;
+          const category = s?.category || s?.categoryName || s?.serviceType;
+          const isValidCategory = !category || ALLOWED_CATEGORIES.includes(category);
+          return isUserShift && isValidCategory;
+        }
       );
       mine.sort((a, b) => {
         const da = parseDate(a.startDate);
@@ -388,9 +421,17 @@ export default function Shifts() {
               <Text style={styles.headerTitle}>My Shifts</Text>
               <Text style={styles.headerSubtitle}>{user?.name} | Staff</Text>
             </View>
-            <Pressable style={styles.filterButton}>
-              <Ionicons name="options-outline" size={22} color="#6B7280" />
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                onPress={() => setShowFullNames(!showFullNames)}
+                style={styles.filterButton}
+              >
+                <Ionicons name={showFullNames ? "eye-outline" : "eye-off-outline"} size={22} color="#6B7280" />
+              </Pressable>
+              <Pressable style={styles.filterButton}>
+                <Ionicons name="options-outline" size={22} color="#6B7280" />
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.tabContainer}>
@@ -435,6 +476,7 @@ export default function Shifts() {
                     <ShiftCard
                       key={shift.id}
                       shift={shift}
+                      showFullNames={showFullNames}
                       onAction={(type, s) => setConfirmAction({ type, shift: s })}
                       onDetails={() => router.push({ pathname: "/_shift-details", params: { shiftId: shift.id } })}
                     />

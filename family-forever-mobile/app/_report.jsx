@@ -231,23 +231,64 @@ const [showCritical, setShowCritical] = useState(false);
 
 const fetchIntakeForm = async () => {
   try {
-    if (!shift?.clientId) {
-      alert("Client ID not found in shift");
+    const clientId = shift?.clientId || shift?.clientDetails?.id;
+    const intakeId = shift?.intakeId;
+    const clientName = shift?.clientName || shift?.clientDetails?.name;
+
+    if (!clientId && !intakeId && !clientName) {
+      alert("Insufficient client information in shift to find intake form.");
       return;
     }
 
-    const snapshot = await getDocs(collection(db, "InTakeForms"));
-
     let matchedIntake = null;
 
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-
-      // ✅ DIRECT MATCH USING clientId
-      if (data?.clientId === shift.clientId) {
-        matchedIntake = data;
+    // 1. Quick check: Direct string match on Document ID if intakeId is present
+    if (intakeId) {
+      const docRef = doc(db, "InTakeForms", String(intakeId));
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        matchedIntake = snap.data();
       }
-    });
+    }
+
+    // 2. Comprehensive Search: Loop through all intakes for alternate IDs and Names
+    if (!matchedIntake) {
+      const snapshot = await getDocs(collection(db, "InTakeForms"));
+      
+      // Pass 1: Check all possible ID matchups
+      snapshot.forEach((docSnap) => {
+        if (matchedIntake) return;
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        
+        if (
+          (clientId && (data?.clientId === clientId || data?.id === clientId || docId === clientId)) ||
+          (intakeId && (data?.formId === intakeId || data?.id === intakeId || data?.inTakeFormId === intakeId))
+        ) {
+          matchedIntake = data;
+        }
+      });
+
+      // Pass 2: Fallback to exact or partial Name Matching 
+      if (!matchedIntake && clientName) {
+        const cleanedName = clientName.trim().toLowerCase();
+        snapshot.forEach((docSnap) => {
+          if (matchedIntake) return;
+          const data = docSnap.data();
+          const namesToTest = [
+            data?.clientName, data?.name, data?.familyName, 
+            data?.nameOfPerson, data?.nameInClientTable
+          ];
+          
+          for (let name of namesToTest) {
+            if (name && name.toLowerCase().includes(cleanedName)) {
+              matchedIntake = data;
+              break;
+            }
+          }
+        });
+      }
+    }
 
     if (matchedIntake) {
       setIntakeData(matchedIntake);
@@ -259,8 +300,6 @@ const fetchIntakeForm = async () => {
     alert("Failed to load intake form");
   }
 };
-
- 
 
     if (!shift) {
       return (
