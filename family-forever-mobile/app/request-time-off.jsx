@@ -139,8 +139,37 @@ export default function RequestTimeOff() {
               </View>
             </View>
 
-            {showStartPicker && <DateTimePicker value={startDate} mode="date" display="default" onChange={(e, d) => { setShowStartPicker(false); if (d) setStartDate(d); }} />}
-            {showEndPicker && <DateTimePicker value={endDate} mode="date" display="default" minimumDate={startDate} onChange={(e, d) => { setShowEndPicker(false); if (d) setEndDate(d); }} />}
+            {showStartPicker && (
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                  if (event.type === 'dismissed') {
+                    setShowStartPicker(false);
+                  } else if (selectedDate) {
+                    setStartDate(selectedDate);
+                    setShowStartPicker(false);
+                  }
+                }}
+              />
+            )}
+            {showEndPicker && (
+              <DateTimePicker
+                value={endDate}
+                mode="date"
+                display="spinner"
+                minimumDate={startDate}
+                onChange={(event, selectedDate) => {
+                  if (event.type === 'dismissed') {
+                    setShowEndPicker(false);
+                  } else if (selectedDate) {
+                    setEndDate(selectedDate);
+                    setShowEndPicker(false);
+                  }
+                }}
+              />
+            )}
 
             {/* Reason */}
             <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 }}>Reason</Text>

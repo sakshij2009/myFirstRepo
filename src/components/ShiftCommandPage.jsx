@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import {
@@ -58,6 +58,16 @@ function normaliseCategoryKey(cat) {
   if (c.includes("supervised")) return "supervised";
   if (c.includes("transport")) return "transportation";
   return "other";
+}
+
+function serviceNameToKey(serviceName) {
+  if (!serviceName) return "all";
+  const s = serviceName.toLowerCase();
+  if (s.includes("emergent") || s.includes("emergency")) return "emergency";
+  if (s.includes("respite")) return "respite";
+  if (s.includes("supervised")) return "supervised";
+  if (s.includes("transport")) return "transportation";
+  return "all";
 }
 
 function normaliseStatus(shift) {
@@ -665,11 +675,15 @@ function PastShiftsFullView({ shifts, navigate }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ShiftCommandPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const serviceParam = searchParams.get("service");
+  const initialFilter = serviceParam ? serviceNameToKey(serviceParam) : "all";
+
   const [view, setView]     = useState("month");
   const [calYear, setCalYear]   = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [anchorDate, setAnchorDate] = useState(todayStr());
-  const [filterService, setFilterService] = useState("all");
+  const [filterService, setFilterService] = useState(initialFilter);
   const [rawShifts, setRawShifts] = useState([]);
   const [loading, setLoading] = useState(true);
 

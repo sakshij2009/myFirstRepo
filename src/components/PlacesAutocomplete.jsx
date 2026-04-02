@@ -20,14 +20,18 @@ export default function PlacesAutocomplete({ value, onChange, placeholder, class
       if (!inputRef.current || acRef.current) return;
       if (!window.google?.maps?.places) return;
 
-      acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
-        types: ["address"],
-      });
+      try {
+        acRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
+          types: ["address"],
+        });
 
-      acRef.current.addListener("place_changed", () => {
-        const place = acRef.current.getPlace();
-        if (place?.formatted_address) onChange(place.formatted_address);
-      });
+        acRef.current.addListener("place_changed", () => {
+          const place = acRef.current.getPlace();
+          if (place?.formatted_address) onChange(place.formatted_address);
+        });
+      } catch (err) {
+        console.warn("Google Maps Autocomplete failed to initialize. Falling back to standard text input.", err);
+      }
     };
 
     if (window.google?.maps?.places) {

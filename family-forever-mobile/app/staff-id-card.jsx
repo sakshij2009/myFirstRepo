@@ -42,6 +42,8 @@ const buildCardNumber = (username) => {
 
 export default function StaffIdCard() {
   const [user, setUser] = useState(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const flipAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +56,27 @@ export default function StaffIdCard() {
     };
     load();
   }, []);
+
+  const handleFlip = () => {
+    Animated.timing(flipAnim, {
+      toValue: isFlipped ? 0 : 180,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+    setIsFlipped(!isFlipped);
+  };
+
+  const frontInterpolate = flipAnim.interpolate({
+    inputRange: [0, 180],
+    outputRange: ["0deg", "180deg"],
+  });
+  const backInterpolate = flipAnim.interpolate({
+    inputRange: [0, 180],
+    outputRange: ["180deg", "360deg"],
+  });
+
+  const frontAnimatedStyle = { transform: [{ rotateY: frontInterpolate }] };
+  const backAnimatedStyle = { transform: [{ rotateY: backInterpolate }] };
 
   const initials = getInitials(user?.name);
   const cardNumber = buildCardNumber(user?.username);
@@ -102,11 +125,12 @@ export default function StaffIdCard() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* ── SUBTITLE ── */}
-        <Text style={styles.subtitle}>Your official digital identification</Text>
+        <Text style={styles.subtitle}>Tap card to view security terms & verification</Text>
 
         {/* ── ID CARD ── */}
-        <View style={styles.cardShadowWrapper}>
-          <View style={styles.card}>
+        <Pressable onPress={handleFlip} style={styles.cardShadowWrapper}>
+          {/* FRONT SIDE */}
+          <Animated.View style={[styles.card, frontAnimatedStyle, { backfaceVisibility: 'hidden' }]}>
             {/* === GREEN HEADER SECTION === */}
             <View style={styles.cardHeader}>
               {/* Logo + Company row */}
@@ -236,8 +260,38 @@ export default function StaffIdCard() {
                 </Text>
               </View>
             </View>
-          </View>
-        </View>
+          </Animated.View>
+
+          {/* BACK SIDE */}
+          <Animated.View style={[styles.card, styles.cardBack, backAnimatedStyle, { backfaceVisibility: 'hidden', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}>
+             <View style={styles.cardHeaderBack}>
+               <Text style={styles.backTitle}>Security Terms & Conditions</Text>
+             </View>
+             <View style={styles.backContent}>
+               <View style={styles.backRow}>
+                 <Ionicons name="shield" size={14} color={PRIMARY_GREEN} />
+                 <Text style={styles.backText}>This card is official identification for Family Forever Inc. personnel.</Text>
+               </View>
+               <View style={styles.backRow}>
+                 <Ionicons name="lock-closed" size={14} color={PRIMARY_GREEN} />
+                 <Text style={styles.backText}>Unauthorized use or duplication is strictly prohibited and subject to legal action.</Text>
+               </View>
+               <View style={styles.backRow}>
+                 <Ionicons name="call" size={14} color={PRIMARY_GREEN} />
+                 <Text style={styles.backText}>If found, please contact the agency at (555) 0123-4567 or return to administrative headquarters.</Text>
+               </View>
+               
+               <View style={styles.agencyStamp}>
+                 <Text style={styles.stampText}>OFFICIAL AGENCY STAMP</Text>
+                 <MaterialCommunityIcons name="seal" size={48} color="rgba(31, 111, 67, 0.05)" />
+                 <Text style={styles.stampDate}>ISSUED 2026</Text>
+               </View>
+             </View>
+             <View style={styles.cardFooterBack}>
+               <Text style={styles.footerBackText}>FAMILY FOREVER INTERNAL SYSTEM • v4.2.0</Text>
+             </View>
+          </Animated.View>
+        </Pressable>
 
         {/* ── HINT TEXT ── */}
         <Text style={styles.hintText}>
@@ -633,5 +687,73 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#374151",
     lineHeight: 18,
+  },
+  // ── Card Back Styles ──
+  cardBack: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  cardHeaderBack: {
+    backgroundColor: "#111827",
+    padding: 18,
+    alignItems: "center",
+  },
+  backTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    fontFamily: "Poppins",
+  },
+  backContent: {
+    flex: 1,
+    padding: 24,
+    gap: 16,
+  },
+  backRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  backText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#4B5563",
+    lineHeight: 16,
+    fontFamily: "Inter",
+  },
+  agencyStamp: {
+    marginTop: "auto",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.8,
+    paddingVertical: 10,
+  },
+  stampText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: PRIMARY_GREEN,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  stampDate: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#9CA3AF",
+    marginTop: 4,
+  },
+  cardFooterBack: {
+    backgroundColor: "#F9FAFB",
+    paddingVertical: 10,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  footerBackText: {
+    fontSize: 9,
+    color: "#9CA3AF",
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
 });

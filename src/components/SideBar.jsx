@@ -9,14 +9,18 @@ import { collection, getCountFromServer } from "firebase/firestore";
 import { db } from "../firebase";
 
 const SideBar = ({ user, onLogout, onWidthChange }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // Default to collapsed
   const [badges, setBadges] = useState({ clients: null, shifts: null, intakeRequests: null, intakeWorkers: null });
   const navigate = useNavigate();
 
-  const toggle = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    if (onWidthChange) onWidthChange(next ? 64 : 242);
+  const handleMouseEnter = () => {
+    setCollapsed(false);
+    if (onWidthChange) onWidthChange(242);
+  };
+
+  const handleMouseLeave = () => {
+    setCollapsed(true);
+    if (onWidthChange) onWidthChange(64);
   };
 
   const initials = user?.name
@@ -81,7 +85,9 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
 
   return (
     <aside
-      className="h-screen flex flex-col shrink-0 transition-all duration-300 ease-out overflow-hidden"
+      className="h-screen flex flex-col shrink-0 transition-all duration-300 ease-out overflow-hidden z-50 cursor-pointer"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       style={{ width: collapsed ? 64 : 242, backgroundColor: "#145228", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
       {/* Logo */}
@@ -195,8 +201,8 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
           </button>
         )}
 
-        {/* User + collapse toggle */}
-        {!collapsed ? (
+        {/* User profile (only info, no toggle) */}
+        {!collapsed && (
           <div className="flex items-center gap-3 p-2">
             <div className="w-9 h-9 rounded-full bg-emerald-400 flex items-center justify-center text-white font-semibold text-sm shrink-0">
               {initials}
@@ -207,14 +213,7 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
                 {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Admin"}
               </div>
             </div>
-            <button onClick={toggle} className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors">
-              <ChevronLeft size={16} style={{ color: "rgba(255,255,255,0.52)" }} strokeWidth={2} />
-            </button>
           </div>
-        ) : (
-          <button onClick={toggle} className="w-full flex items-center justify-center p-2 rounded hover:bg-white/10 transition-colors">
-            <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.52)" }} strokeWidth={2} />
-          </button>
         )}
       </div>
     </aside>

@@ -3,6 +3,22 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { View, Text } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import { 
+  useFonts, 
+  Poppins_400Regular, 
+  Poppins_600SemiBold, 
+  Poppins_700Bold, 
+  Poppins_800ExtraBold 
+} from "@expo-google-fonts/poppins";
+import { 
+  Inter_400Regular, 
+  Inter_500Medium, 
+  Inter_600SemiBold, 
+  Inter_700Bold 
+} from "@expo-google-fonts/inter";
+
+SplashScreen.preventAutoHideAsync();
 
 const PRIMARY_GREEN = "#1F6F43";
 const GRAY_TEXT = "#9CA3AF";
@@ -10,6 +26,17 @@ const GRAY_TEXT = "#9CA3AF";
 export default function Layout() {
   const [isLoggedIn, setIsLoggedIn] = useState(null);
   const pathname = usePathname();
+
+  const [fontsLoaded] = useFonts({
+    Poppins: Poppins_400Regular,
+    "Poppins-SemiBold": Poppins_600SemiBold,
+    "Poppins-Bold": Poppins_700Bold,
+    "Poppins-ExtraBold": Poppins_800ExtraBold,
+    Inter: Inter_400Regular,
+    "Inter-Medium": Inter_500Medium,
+    "Inter-SemiBold": Inter_600SemiBold,
+    "Inter-Bold": Inter_700Bold,
+  });
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -19,7 +46,13 @@ export default function Layout() {
     checkAuth();
   }, [pathname]);
 
-  if (isLoggedIn === null) return null;
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded || isLoggedIn === null) return null;
 
   if (!isLoggedIn) {
     return (
@@ -32,20 +65,20 @@ export default function Layout() {
 
   const CustomTabIcon = ({ name, focused }) => (
     <View style={{ alignItems: "center", justifyContent: "center" }}>
+      {focused && (
+        <View style={{
+          width: 3,
+          height: 3,
+          borderRadius: 1.5,
+          backgroundColor: PRIMARY_GREEN,
+          marginBottom: 4,
+        }} />
+      )}
       <Ionicons
         name={focused ? name : `${name}-outline`}
         size={24}
         color={focused ? PRIMARY_GREEN : GRAY_TEXT}
       />
-      {focused && (
-        <View style={{
-          width: 4,
-          height: 4,
-          borderRadius: 2,
-          backgroundColor: PRIMARY_GREEN,
-          marginTop: 4,
-        }} />
-      )}
     </View>
   );
 
@@ -133,7 +166,7 @@ export default function Layout() {
       <Tabs.Screen name="_report" options={{ href: null }} />
 
       {/* New screens — hidden from tab bar */}
-      <Tabs.Screen name="_shift-details" options={{ href: null }} />
+      <Tabs.Screen name="agency" options={{ href: null }} />
       <Tabs.Screen name="shift-detail" options={{ href: null }} />
       <Tabs.Screen name="client-detail" options={{ href: null }} />
       <Tabs.Screen name="geo-checkin" options={{ href: null }} />

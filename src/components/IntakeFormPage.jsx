@@ -5,18 +5,21 @@ import IntakeForm from "./IntakeForm";
 import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-const IntakeFormPage = ({ user, onBack, id: propId }) => {
+const IntakeFormPage = ({ user, onBack, id: propId, isViewOnly }) => {
   const [isCaseWorker, setIsCaseWorker] = useState(false);
   const [formData, setFormData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isEditable, setIsEditable] = useState(true); // 👈 new state
+  const [isEditable, setIsEditable] = useState(true);
 
   const { id: routeId } = useParams();
   const location = useLocation();
-  const isUpdateMode = location.pathname.includes("update-intake-form");
 
   // determine final ID (from prop or route)
   const formId = propId || routeId;
+
+  const isUpdateMode = location.pathname.includes("update-intake-form") || location.pathname.includes("/edit/");
+  const isViewMode = isViewOnly || location.pathname.includes("/view/") || location.pathname.includes("view-intake-form");
+  const shouldFetch = isUpdateMode || isViewMode;
 
   useEffect(() => {
     if (user?.role === "Intake Worker") {
@@ -26,7 +29,7 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
 
   useEffect(() => {
     const fetchForm = async () => {
-      if (!isUpdateMode || !formId) {
+      if (!shouldFetch || !formId) {
         setLoading(false);
         return;
       }
@@ -38,7 +41,7 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           setFormData({ id: formId, ...data });
-          setIsEditable(data.isEditable ?? true); // ✅ use Firestore value
+          setIsEditable(isViewMode ? false : (data.isEditable ?? true));
         } else {
           console.warn("⚠️ Intake form not found:", formId);
         }
@@ -50,7 +53,7 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
     };
 
     fetchForm();
-  }, [formId, isUpdateMode]);
+  }, [formId, shouldFetch, isViewMode]);
 
   if (loading) {
     return (
@@ -61,9 +64,9 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
   }
 
   return (
-    <div className="flex flex-col p-2 gap-3 px-6 w-full">
+    <div className="flex flex-col p-4 gap-6 px-8 w-full">
       {/* ✅ Back button */}
-      <div className="flex items-center gap-3 py-3">
+      <div className="flex items-center gap-3 py-4">
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-dark-green hover:text-green-800 transition-colors"
@@ -74,14 +77,14 @@ const IntakeFormPage = ({ user, onBack, id: propId }) => {
       </div>
 
       {/* ✅ Intake Form (with editable flag) */}
-      <div className="flex w-full rounded py-3 justify-center">
+      <div className="flex w-full rounded py-4 justify-center">
         <IntakeForm
           user={user}
           isCaseWorker={isCaseWorker}
           existingData={formData}
-          mode={isUpdateMode ? "update" : "add"}
+          mode={isViewMode ? "view" : isUpdateMode ? "update" : "add"}
           id={formId}
-          isEditable={isEditable} // ✅ Pass here
+          isEditable={isEditable}
         />
       </div>
     </div>

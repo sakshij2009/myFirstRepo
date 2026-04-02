@@ -381,6 +381,27 @@ export default function Availability() {
               );
             })}
 
+            {/* Regions Section */}
+            <View style={{ marginTop: 24, marginBottom: 10 }}>
+              <Text style={{ fontSize: 13, fontWeight: "800", color: "#111827", letterSpacing: 0.8, marginBottom: 16 }}>PREFERRED REGIONS</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                {["Toronto", "Etobicoke", "North York", "Scarborough", "Mississauga", "Brampton"].map(region => {
+                  const selected = true; // For demo purposes as per prompt
+                  return (
+                    <Pressable key={region} style={{ 
+                      flexDirection: "row", alignItems: "center", gap: 6,
+                      backgroundColor: selected ? "#F0FDF4" : "#FFF",
+                      paddingHorizontal: 14, paddingVertical: 10,
+                      borderRadius: 12, borderWidth: 1, borderColor: selected ? PRIMARY_GREEN : GRAY_BORDER
+                    }}>
+                      {selected && <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />}
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: selected ? PRIMARY_GREEN : GRAY_TEXT }}>{region}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
             {savedAt && (
               <Text style={styles.savedHint}>
                 Last saved at {savedAt.toLocaleTimeString()}
@@ -495,7 +516,7 @@ export default function Availability() {
                         color={GRAY_TEXT}
                       />
                       <Text style={styles.requestDateText}>
-                        {req.startDate || "—"} → {req.endDate || "—"}
+                        {req.startDate ? new Date(req.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} → {req.endDate ? new Date(req.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
                       </Text>
                     </View>
                     {!!req.reason && (

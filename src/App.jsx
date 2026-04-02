@@ -3,9 +3,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { useState, useEffect } from "react";
 import { Toaster } from "sonner";
 
+import Login from "./components/Login";
 import AdminHomePage from "./components/AdminHomePage";
 import IntakeFormMainPage from "./components/IntakeFormMainPage";
-import Login from "./components/Login";
+import IntakeLogin from "./components/IntakeLogin";
 import UserHomePage from "./components/UserHomePage";
 
 // ✅ Protected Route – Main App Only (Admin + User)
@@ -49,8 +50,8 @@ function App() {
     <Router>
       <Toaster position="top-right" richColors />
       <Routes>
-        {/* 🌐 Main Public Login */}
-        <Route path="/" element={<Login setUser={setUser}/>} />
+        {/* 🌐 Main Public Login (Admin/Owner) */}
+        <Route path="/" element={<Login setUser={setUser} />} />
 
         {/* 🌐 Intake Form Application (with its own internal routes) */}
         <Route path="/intake-form/*" element={<IntakeFormMainPage />} />

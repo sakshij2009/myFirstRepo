@@ -291,7 +291,7 @@ const handleTransferShift = async () => {
                 <hr className="flex border-t border-dashed border-gray" />
 
                 <div className="flex justify-between text-light-green text-[14px] cursor-pointer ">
-                  <div className="flex justify-center items-center font-medium" onClick={() => handleViewIntakeReport(emp.clientId)}>
+                  <div className="flex justify-center items-center font-medium" onClick={() => handleViewIntakeReport(emp.intakeId || emp.clientId || emp.clientDetails?.id)}>
                     <p>View Intake Report</p>
                   </div>
 

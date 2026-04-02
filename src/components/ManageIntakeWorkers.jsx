@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+import { sendSignInLinkToEmail } from "firebase/auth";
+import { db, auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail,
+  Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X,
 } from "lucide-react";
 
 const ROLE_TABS = ["All", "Parent", "Intake Worker"];
@@ -30,6 +31,9 @@ const ManageIntakeWorkers = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [roleTab, setRoleTab] = useState("All");
   const [goToPage, setGoToPage] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   const navigate = useNavigate();
 
@@ -53,6 +57,35 @@ const ManageIntakeWorkers = () => {
       setIntakeWorkers((prev) => prev.filter((w) => w.id !== worker.id));
     } catch (e) {
       console.error("Error deleting intake worker:", e);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail) {
+      alert("Please enter an email address");
+      return;
+    }
+
+    setInviting(true);
+
+    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
+    const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
+    const actionCodeSettings = {
+      url: `${continueBase}/intake-form/login?email=${encodedEmail}`,
+      handleCodeInApp: true,
+    };
+
+    try {
+      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+
+      alert(`Invitation link sent to ${inviteEmail}`);
+      setShowModal(false);
+      setInviteEmail("");
+    } catch (error) {
+      console.error("Error sending invite:", error);
+      alert("Error sending invite: " + error.message);
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -90,14 +123,17 @@ const ManageIntakeWorkers = () => {
             {filtered.length} of {intakeWorkers.length} workers
           </p>
         </div>
-        <button
-          onClick={() => navigate("/admin-dashboard/add/add-intake-worker")}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold transition-opacity hover:opacity-90"
-          style={{ backgroundColor: "#1f7a3c", fontSize: 13 }}
+        <div
+          className="flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer font-semibold transition-all"
+          onClick={() => setShowModal(!showModal)}
+          style={{
+            backgroundColor: showModal ? "#1f7a3c" : "#f3f4f6",
+            color: showModal ? "#fff" : "#374151",
+          }}
         >
           <Plus size={15} strokeWidth={2.5} />
           Add Intake Worker
-        </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -172,15 +208,32 @@ const ManageIntakeWorkers = () => {
                     className="transition-colors hover:bg-gray-50"
                     style={{ borderBottom: "1px solid #f3f4f6" }}
                   >
-                    <td className="px-4 py-3">
-                      <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>
+                    <td className="px-4 py-3" style={{ width: 140 }}>
+                      <span
+                        className="font-semibold block truncate cursor-help"
+                        style={{
+                          fontSize: 13,
+                          color: "#111827",
+                          maxWidth: 120,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={worker.name || "—"}
+                      >
                         {worker.name || "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-1.5" style={{ fontSize: 13, color: "#6b7280" }}>
+                    <td className="px-4 py-3" style={{ width: 180 }}>
+                      <span
+                        className="flex items-center gap-1.5 truncate cursor-help"
+                        style={{ fontSize: 13, color: "#6b7280", maxWidth: 160 }}
+                        title={worker.email || "—"}
+                      >
                         <Mail size={13} />
-                        {worker.email || "—"}
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {worker.email || "—"}
+                        </span>
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ fontSize: 13, color: "#374151" }}>
@@ -189,11 +242,35 @@ const ManageIntakeWorkers = () => {
                     <td className="px-4 py-3">
                       {roleBadge(worker.role)}
                     </td>
-                    <td className="px-4 py-3" style={{ fontSize: 13, color: "#6b7280" }}>
-                      {worker.invoiceEmail || "—"}
+                    <td className="px-4 py-3" style={{ width: 180, fontSize: 13, color: "#6b7280" }}>
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 160,
+                          cursor: "help",
+                        }}
+                        title={worker.invoiceEmail || "—"}
+                      >
+                        {worker.invoiceEmail || "—"}
+                      </span>
                     </td>
-                    <td className="px-4 py-3" style={{ fontSize: 13, color: "#374151" }}>
-                      {worker.agency || "—"}
+                    <td className="px-4 py-3" style={{ width: 100, fontSize: 13, color: "#374151" }}>
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 80,
+                          cursor: "help",
+                        }}
+                        title={worker.agency || "—"}
+                      >
+                        {worker.agency || "—"}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
@@ -294,6 +371,78 @@ const ManageIntakeWorkers = () => {
           </div>
         </div>
       </div>
+
+      {/* ADD INTAKE WORKER MODAL */}
+      {showModal && (
+        <>
+          <div
+            className="fixed inset-0 z-50 transition-opacity"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+            onClick={() => setShowModal(false)}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="bg-white rounded-xl shadow-xl w-[450px] p-6 pointer-events-auto">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="font-bold text-lg text-gray-900">Add Intake Worker</h3>
+                  <p className="text-sm text-gray-500 mt-1">Enter email to generate registration link</p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-gray-900">Email Address</label>
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="worker@example.com"
+                    className="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                    style={{ fontSize: 13 }}
+                  />
+                </div>
+
+                <div
+                  className="rounded-lg p-3 text-sm"
+                  style={{
+                    backgroundColor: "#f0fdf4",
+                    borderLeft: "4px solid #1f7a3c",
+                    color: "#166534",
+                  }}
+                >
+                  A unique registration link will be generated. The link will expire in 7 days.
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleInvite}
+                  disabled={inviting}
+                  className="px-4 py-2 text-white rounded-lg hover:opacity-90 font-medium transition-all text-sm disabled:opacity-70"
+                  style={{ backgroundColor: "#1f7a3c" }}
+                >
+                  {inviting ? "Sending..." : "Send Invitation"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -4,9 +4,10 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { collection, query, onSnapshot, orderBy, updateDoc, doc, deleteDoc } from "firebase/firestore";
@@ -109,8 +110,18 @@ export default function Alerts() {
   const [user, setUser] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all"); // all | unread | read
+  const [filter, setFilter] = useState("all"); 
   const [usingFallback, setUsingFallback] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -367,9 +378,10 @@ export default function Alerts() {
                         </Text>
                       </View>
                       {!alert.read && (
-                        <View style={{
-                          width: 7, height: 7, borderRadius: 4,
+                        <Animated.View style={{
+                          width: 8, height: 8, borderRadius: 4,
                           backgroundColor: ts.iconColor,
+                          opacity: pulseAnim,
                         }} />
                       )}
                     </View>
