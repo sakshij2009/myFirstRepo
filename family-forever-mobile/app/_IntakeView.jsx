@@ -176,10 +176,10 @@ function Empty({ text }) {
 const styles = {
   container: {
     backgroundColor: CARD_BG,
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 12,
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: BORDER,
   },
@@ -197,10 +197,10 @@ const styles = {
 
   sectionBody: {
     backgroundColor: "#FAFAFA",
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
-    padding: 12,
+    padding: 16,
   },
 
   fieldRow: {

@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { safeString } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 const ACTIVITIES = ["Meal Preparation", "Personal Hygiene", "Bathing/Showering", "Medication Administration", "Exercise/Mobility", "Social Interaction", "Housekeeping", "Laundry", "Shopping/Errands"];
@@ -129,7 +130,7 @@ export default function IntakeForm() {
             <View style={{ backgroundColor: GREEN, borderRadius: 14, padding: 16, marginBottom: 20 }}>
               <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: "600" }}>CLIENT</Text>
               <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", marginTop: 2 }}>{shift.clientName || shift.name}</Text>
-              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>{shift.startDate} • {shift.startTime} – {shift.endTime}</Text>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>{safeString(shift.startDate)} • {safeString(shift.startTime)} – {safeString(shift.endTime)}</Text>
             </View>
           )}
 
