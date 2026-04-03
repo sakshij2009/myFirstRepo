@@ -39,8 +39,8 @@ const DAYS = [
 
 const SLOTS = [
   { id: "morning", label: "Morning", icon: "sunny", start: "06:00", end: "12:00" },
-  { id: "afternoon", label: "Afternoon", icon: "cloud", start: "12:00", end: "06:00" },
-  { id: "night", label: "Night", icon: "moon", start: "06:00", end: "11:00" },
+  { id: "afternoon", label: "Afternoon", icon: "cloud", start: "12:00", end: "18:00" },
+  { id: "night", label: "Night", icon: "moon", start: "18:00", end: "23:00" },
 ];
 
 export default function SetRecurringHours() {
@@ -58,23 +58,37 @@ export default function SetRecurringHours() {
       setUser(u);
       
       try {
-        const snap = await getDoc(doc(db, "users", u.username));
+        const uid = u.userId || u.uid || u.id || u.username;
+        const snap = await getDoc(doc(db, "users", uid));
         if (snap.exists() && snap.data().recurringHours) {
           setSchedule(snap.data().recurringHours);
+          if (snap.data().selectedActiveDays) {
+            setSelectedDays(snap.data().selectedActiveDays);
+          }
         } else {
           // Default schedule
           const initialSchedule = {};
           DAYS.forEach((d) => {
             initialSchedule[d.key] = {
               morning: { enabled: true, start: "06:00", end: "12:00" },
-              afternoon: { enabled: true, start: "12:00", end: "06:00" },
-              night: { enabled: false, start: "06:00", end: "11:00" },
+              afternoon: { enabled: true, start: "12:00", end: "18:00" },
+              night: { enabled: false, start: "18:00", end: "23:00" },
             };
           });
           setSchedule(initialSchedule);
         }
       } catch (err) {
         console.error(err);
+        // Set defaults on error
+        const initialSchedule = {};
+        DAYS.forEach((d) => {
+          initialSchedule[d.key] = {
+            morning: { enabled: true, start: "06:00", end: "12:00" },
+            afternoon: { enabled: true, start: "12:00", end: "18:00" },
+            night: { enabled: false, start: "18:00", end: "23:00" },
+          };
+        });
+        setSchedule(initialSchedule);
       }
     };
     loadData();
@@ -110,9 +124,10 @@ export default function SetRecurringHours() {
     if (!user) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, "users", user.username), { 
+      const uid = user.userId || user.uid || user.id || user.username;
+      await updateDoc(doc(db, "users", uid), {
         recurringHours: schedule,
-        selectedActiveDays: selectedDays 
+        selectedActiveDays: selectedDays,
       });
       Alert.alert("Success", "Recurring hours updated successfully.", [
         { text: "OK", onPress: () => router.back() }
@@ -276,7 +291,7 @@ export default function SetRecurringHours() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: PAGE_BG },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 15, backgroundColor: PAGE_BG },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15, backgroundColor: PAGE_BG },
   backBtn: { padding: 4 },
   headerTitleBox: { alignItems: "center" },
   headerTitle: { fontSize: 18, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
