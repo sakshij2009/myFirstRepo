@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { safeString } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 const REASONS = ["Emergency", "Personal", "Scheduling Conflict", "Medical", "Family Emergency", "Other"];
@@ -93,7 +94,7 @@ export default function TransferShift() {
                 <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
                   <Text style={{ fontSize: 12, fontWeight: "600", color: "#9ca3af", marginBottom: 10 }}>SHIFT TO TRANSFER</Text>
                   <Text style={{ fontSize: 16, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 }}>{shift.clientName || shift.name || "Client"}</Text>
-                  <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift.startDate} • {shift.startTime} – {shift.endTime}</Text>
+                  <Text style={{ fontSize: 13, color: "#6b7280" }}>{safeString(shift.startDate)} • {safeString(shift.startTime)} – {safeString(shift.endTime)}</Text>
                   {shift.serviceType && (
                     <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: "flex-start", marginTop: 8 }}>
                       <Text style={{ fontSize: 12, fontWeight: "600", color: "#1e40af" }}>{shift.serviceType}</Text>
@@ -196,7 +197,7 @@ export default function TransferShift() {
                  <View style={{ gap: 14 }}>
                    <View>
                      <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>SHIFT</Text>
-                     <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", fontFamily: "Poppins" }}>{shift?.clientName || "Client"} • {shift?.startDate}</Text>
+                     <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", fontFamily: "Poppins" }}>{safeString(shift?.clientName) || "Client"} • {safeString(shift?.startDate)}</Text>
                      <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift?.startTime} – {shift?.endTime}</Text>
                    </View>
                    

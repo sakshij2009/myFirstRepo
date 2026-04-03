@@ -1,230 +1,263 @@
-import { View, Text, ScrollView, Pressable, TextInput, Alert, Modal, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  TextInput,
+  Modal,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect } from "react";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { router } from "expo-router";
+import { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, addDoc, query, where, getDocs, serverTimestamp } from "firebase/firestore";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 
-const GREEN = "#1F6F43";
-const LEAVE_TYPES = ["Vacation", "Sick Leave", "Personal", "Emergency", "Bereavement", "Other"];
+// ── Color tokens ──────────────────────────────────────────────────────────────
+const PRIMARY_GREEN = "#1F6F43";
+const LIGHT_GREEN = "#DCFCE7";
+const TEXT_GREEN = "#166534";
+const DARK_TEXT = "#111827";
+const GRAY_TEXT = "#6B7280";
+const GRAY_BORDER = "#F3F4F6";
+const PAGE_BG = "#F9FAFB";
+const ERROR_RED = "#EF4444";
+const ERROR_BG = "#FEF2F2";
+
+const LEAVE_TYPES = [
+  { id: "vacation", label: "Vacation" },
+  { id: "sick", label: "Sick leave" },
+  { id: "personal", label: "Personal day" },
+  { id: "emergency", label: "Emergency" },
+];
 
 export default function RequestTimeOff() {
   const [user, setUser] = useState(null);
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date());
+  const [selectedType, setSelectedType] = useState("vacation");
+  const [startDate, setStartDate] = useState(new Date("2026-03-20"));
+  const [endDate, setEndDate] = useState(new Date("2026-03-22"));
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [leaveType, setLeaveType] = useState("Vacation");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [successModal, setSuccessModal] = useState(false);
-  const [requests, setRequests] = useState([]);
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
+    const loadUser = async () => {
       const stored = await AsyncStorage.getItem("user");
-      if (stored) {
-        const u = JSON.parse(stored);
-        setUser(u);
-        loadRequests(u);
-      }
+      if (stored) setUser(JSON.parse(stored));
     };
-    load();
+    loadUser();
   }, []);
 
-  const loadRequests = async (u) => {
-    try {
-      const q = query(collection(db, "leaveRequests"), where("userId", "==", u.userId || u.username));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRequests(data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-    } catch {}
+  const formatDate = (date) => {
+    const m = (date.getMonth() + 1).toString().padStart(2, "0");
+    const d = date.getDate().toString().padStart(2, "0");
+    const y = date.getFullYear();
+    return `${m}/${d}/${y}`;
   };
 
-  const formatDate = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
-  const getDuration = () => {
-    const diff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-    return diff <= 0 ? 1 : diff;
-  };
-
-  const handleSubmit = async () => {
-    if (!reason.trim()) { Alert.alert("Required", "Please add a reason for your request."); return; }
-    if (endDate < startDate) { Alert.alert("Invalid Dates", "End date must be on or after start date."); return; }
+  const handleRequest = async () => {
+    if (!user) return;
     setSubmitting(true);
     try {
       await addDoc(collection(db, "leaveRequests"), {
-        userId: user?.userId || user?.username,
-        staffName: user?.name,
-        leaveType,
+        userId: user.username || user.userId,
+        staffName: user.name,
+        leaveType: selectedType,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        reason,
+        reason: reason,
         status: "Pending",
         createdAt: serverTimestamp(),
       });
-      setSuccessModal(true);
-      setReason("");
-      loadRequests(user);
-    } catch {
-      Alert.alert("Error", "Failed to submit request. Try again.");
+      Alert.alert("Success", "Time-off request submitted successfully.", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Could not submit request.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const statusColor = (s) => ({ Pending: "#f59e0b", Approved: "#22c55e", Rejected: "#ef4444" }[s] || "#9ca3af");
-  const statusBg = (s) => ({ Pending: "#fef3c7", Approved: "#dcfce7", Rejected: "#fee2e2" }[s] || "#f3f4f6");
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
-          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Request Time Off</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color={DARK_TEXT} />
+        </Pressable>
+        <View style={styles.headerTitleBox}>
+          <Text style={styles.headerTitle}>Request time off</Text>
+          <Text style={styles.headerSubtitle}>Conflict check runs automatically</Text>
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Leave Type */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Leave type</Text>
+          <View style={styles.pillRow}>
+            {LEAVE_TYPES.map((type) => (
+              <Pressable
+                key={type.id}
+                onPress={() => setSelectedType(type.id)}
+                style={[styles.pill, selectedType === type.id && styles.pillActive]}
+              >
+                <Text style={[styles.pillText, selectedType === type.id && styles.pillTextActive]}>
+                  {type.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
-        <View style={{ padding: 20 }}>
-          {/* Duration preview */}
-          <View style={{ backgroundColor: GREEN, borderRadius: 16, padding: 20, marginBottom: 20, flexDirection: "row", alignItems: "center" }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: "600" }}>DURATION</Text>
-              <Text style={{ color: "#fff", fontSize: 28, fontWeight: "800", marginTop: 4 }}>{getDuration()} day{getDuration() !== 1 ? "s" : ""}</Text>
-            </View>
-            <Ionicons name="calendar" size={40} color="rgba(255,255,255,0.3)" />
-          </View>
-
-          {/* Form Card */}
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, borderWidth: 1, borderColor: "#e5e7eb", marginBottom: 20 }}>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: "#1a1a1a", marginBottom: 20 }}>Request Details</Text>
-
-            {/* Leave Type */}
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 }}>Leave Type</Text>
-            <Pressable onPress={() => setShowTypeDropdown(!showTypeDropdown)} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, marginBottom: showTypeDropdown ? 0 : 16, backgroundColor: "#fafafa" }}>
-              <Text style={{ fontSize: 14, color: "#374151" }}>{leaveType}</Text>
-              <Ionicons name={showTypeDropdown ? "chevron-up" : "chevron-down"} size={18} color="#6b7280" />
-            </Pressable>
-            {showTypeDropdown && (
-              <View style={{ borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
-                {LEAVE_TYPES.map((t, i) => (
-                  <Pressable key={t} onPress={() => { setLeaveType(t); setShowTypeDropdown(false); }} style={{ paddingHorizontal: 14, paddingVertical: 13, backgroundColor: leaveType === t ? "#f0fdf4" : "#fff", borderBottomWidth: i < LEAVE_TYPES.length - 1 ? 1 : 0, borderBottomColor: "#f3f4f6" }}>
-                    <Text style={{ fontSize: 14, color: leaveType === t ? GREEN : "#374151", fontWeight: leaveType === t ? "600" : "400" }}>{t}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            {/* Dates */}
-            <View style={{ flexDirection: "row", gap: 12, marginBottom: 16 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 }}>Start Date</Text>
-                <Pressable onPress={() => setShowStartPicker(true)} style={{ borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 13, backgroundColor: "#fafafa", flexDirection: "row", alignItems: "center" }}>
-                  <Ionicons name="calendar-outline" size={16} color="#9ca3af" style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, color: "#374151" }}>{formatDate(startDate)}</Text>
-                </Pressable>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 }}>End Date</Text>
-                <Pressable onPress={() => setShowEndPicker(true)} style={{ borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 13, backgroundColor: "#fafafa", flexDirection: "row", alignItems: "center" }}>
-                  <Ionicons name="calendar-outline" size={16} color="#9ca3af" style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, color: "#374151" }}>{formatDate(endDate)}</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {showStartPicker && (
-              <DateTimePicker
-                value={startDate}
-                mode="date"
-                display="spinner"
-                onChange={(event, selectedDate) => {
-                  if (event.type === 'dismissed') {
-                    setShowStartPicker(false);
-                  } else if (selectedDate) {
-                    setStartDate(selectedDate);
-                    setShowStartPicker(false);
-                  }
-                }}
-              />
-            )}
-            {showEndPicker && (
-              <DateTimePicker
-                value={endDate}
-                mode="date"
-                display="spinner"
-                minimumDate={startDate}
-                onChange={(event, selectedDate) => {
-                  if (event.type === 'dismissed') {
-                    setShowEndPicker(false);
-                  } else if (selectedDate) {
-                    setEndDate(selectedDate);
-                    setShowEndPicker(false);
-                  }
-                }}
-              />
-            )}
-
-            {/* Reason */}
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 }}>Reason</Text>
-            <TextInput
-              value={reason}
-              onChangeText={setReason}
-              placeholder="Briefly describe the reason for your request..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={4}
-              style={{ borderWidth: 1, borderColor: "#d1d5db", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: "#374151", backgroundColor: "#fafafa", textAlignVertical: "top", minHeight: 100 }}
-            />
-          </View>
-
-          {/* Submit */}
-          <Pressable onPress={handleSubmit} disabled={submitting} style={{ backgroundColor: submitting ? "#9ca3af" : GREEN, paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 28 }}>
-            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Submit Request</Text>}
+        {/* Date Inputs */}
+        <View style={styles.dateSection}>
+          <Text style={styles.sectionLabel}>From</Text>
+          <Pressable onPress={() => setShowStartPicker(true)} style={styles.dateInput}>
+            <Text style={styles.dateInputText}>{formatDate(startDate)}</Text>
           </Pressable>
 
-          {/* Recent Requests */}
-          {requests.length > 0 && (
-            <View>
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#1a1a1a", marginBottom: 14 }}>Recent Requests</Text>
-              {requests.slice(0, 5).map(r => (
-                <View key={r.id} style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#e5e7eb" }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{r.leaveType}</Text>
-                    <View style={{ backgroundColor: statusBg(r.status), paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
-                      <Text style={{ fontSize: 12, fontWeight: "600", color: statusColor(r.status) }}>{r.status}</Text>
-                    </View>
-                  </View>
-                  <Text style={{ fontSize: 13, color: "#6b7280" }}>{new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}</Text>
-                  {r.reason && <Text style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }} numberOfLines={1}>{r.reason}</Text>}
-                </View>
-              ))}
+          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>To</Text>
+          <Pressable onPress={() => setShowEndPicker(true)} style={styles.dateInput}>
+            <Text style={styles.dateInputText}>{formatDate(endDate)}</Text>
+          </Pressable>
+        </View>
+
+        {/* Date Pickers */}
+        {showStartPicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="date"
+            onChange={(e, d) => { setShowStartPicker(false); if (d) setStartDate(d); }}
+          />
+        )}
+        {showEndPicker && (
+          <DateTimePicker
+            value={endDate}
+            mode="date"
+            onChange={(e, d) => { setShowEndPicker(false); if (d) setEndDate(d); }}
+          />
+        )}
+
+        {/* Shifts Section */}
+        <View style={styles.shiftsSection}>
+          <Text style={styles.sectionLabel}>Shifts in this period</Text>
+          
+          <View style={styles.shiftItem}>
+            <View style={[styles.dot, { backgroundColor: ERROR_RED }]} />
+            <View style={styles.shiftInfo}>
+              <Text style={styles.shiftTitle}>Respite Care · Emma Thompson</Text>
+              <Text style={styles.shiftTimeText}>Mar 20, 2026 · 9:00 AM – 1:00 PM</Text>
             </View>
+            <Text style={[styles.statusText, { color: ERROR_RED }]}>Assigned</Text>
+          </View>
+
+          <View style={styles.shiftItem}>
+            <View style={[styles.dot, { backgroundColor: "#F59E0B" }]} />
+            <View style={styles.shiftInfo}>
+              <Text style={styles.shiftTitle}>Transportation · Liam Roberts</Text>
+              <Text style={styles.shiftTimeText}>Mar 20, 2026 · 2:00 PM – 4:00 PM</Text>
+            </View>
+            <Text style={[styles.statusText, { color: "#F59E0B" }]}>Pending</Text>
+          </View>
+
+          <View style={styles.shiftItem}>
+            <View style={[styles.dot, { backgroundColor: ERROR_RED }]} />
+            <View style={styles.shiftInfo}>
+              <Text style={styles.shiftTitle}>Supervised Visit · Lucas Martinez</Text>
+              <Text style={styles.shiftTimeText}>Mar 21, 2026 · 10:00 AM – 12:00 PM</Text>
+            </View>
+            <Text style={[styles.statusText, { color: ERROR_RED }]}>Assigned</Text>
+          </View>
+        </View>
+
+        {/* Conflict Alert */}
+        <View style={styles.alertBox}>
+          <View style={styles.alertHeader}>
+            <Ionicons name="warning" size={18} color={ERROR_RED} />
+            <Text style={styles.alertTitle}>Shift conflict detected</Text>
+          </View>
+          <Text style={styles.alertDesc}>
+            The following assigned shifts overlap with your requested time off. These will be marked for redistribution if approved.
+          </Text>
+        </View>
+
+        {/* Reason Input */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Reason (Optional)</Text>
+          <TextInput
+            style={styles.reasonInput}
+            placeholder="E.g. Family vacation"
+            placeholderTextColor="#9CA3AF"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+          />
+        </View>
+
+        {/* Submit Button */}
+        <Pressable 
+          onPress={handleRequest} 
+          disabled={submitting} 
+          style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.submitBtnText}>Submit Request</Text>
           )}
-        </View>
+        </Pressable>
       </ScrollView>
-
-      {/* Success Modal */}
-      <Modal visible={successModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 32, alignItems: "center", width: "100%" }}>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-              <Ionicons name="checkmark-circle" size={36} color={GREEN} />
-            </View>
-            <Text style={{ fontSize: 20, fontWeight: "800", color: "#1a1a1a", marginBottom: 8 }}>Request Submitted!</Text>
-            <Text style={{ fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 24 }}>Your time off request has been sent to your manager for review.</Text>
-            <Pressable onPress={() => setSuccessModal(false)} style={{ backgroundColor: GREEN, paddingVertical: 14, paddingHorizontal: 32, borderRadius: 12 }}>
-              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Done</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: PAGE_BG },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 15, backgroundColor: PAGE_BG },
+  backBtn: { padding: 4 },
+  headerTitleBox: { alignItems: "center" },
+  headerTitle: { fontSize: 18, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  headerSubtitle: { fontSize: 12, color: GRAY_TEXT, fontFamily: "Inter" },
+  
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 60 },
+  section: { marginTop: 30 },
+  sectionLabel: { fontSize: 14, fontWeight: "700", color: DARK_TEXT, marginBottom: 12, fontFamily: "Inter-Bold" },
+  
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "#FFF", borderWidth: 1, borderColor: GRAY_BORDER },
+  pillActive: { backgroundColor: PRIMARY_GREEN, borderColor: PRIMARY_GREEN },
+  pillText: { fontSize: 14, fontWeight: "600", color: GRAY_TEXT, fontFamily: "Inter-SemiBold" },
+  pillTextActive: { color: "#FFF" },
+  
+  dateSection: { marginTop: 30 },
+  dateInput: { backgroundColor: "#FFF", borderRadius: 14, borderWidth: 1, borderColor: GRAY_BORDER, padding: 18, justifyContent: "center" },
+  dateInputText: { fontSize: 15, fontWeight: "600", color: DARK_TEXT, fontFamily: "Inter-SemiBold" },
+  
+  shiftsSection: { marginTop: 40 },
+  shiftItem: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 12 },
+  shiftInfo: { flex: 1 },
+  shiftTitle: { fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" },
+  shiftTimeText: { fontSize: 12, color: GRAY_TEXT, marginTop: 2, fontFamily: "Inter" },
+  statusText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter-Bold" },
+  
+  alertBox: { backgroundColor: ERROR_BG, borderRadius: 16, padding: 16, marginTop: 10 },
+  alertHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  alertTitle: { fontSize: 14, fontWeight: "700", color: ERROR_RED, fontFamily: "Inter-Bold" },
+  alertDesc: { fontSize: 13, color: "#991B1B", lineHeight: 18, fontFamily: "Inter" },
+  
+  reasonInput: { backgroundColor: "#FFF", borderRadius: 14, borderWidth: 1, borderColor: GRAY_BORDER, padding: 16, minHeight: 120, textAlignVertical: "top", fontSize: 14, color: DARK_TEXT, fontFamily: "Inter" },
+  
+  submitBtn: { backgroundColor: PRIMARY_GREEN, borderRadius: 16, paddingVertical: 18, alignItems: "center", marginTop: 40 },
+  submitBtnText: { color: "#FFF", fontSize: 16, fontWeight: "700", fontFamily: "Inter-Bold" },
+});

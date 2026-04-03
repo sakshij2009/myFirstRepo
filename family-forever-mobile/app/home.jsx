@@ -14,22 +14,64 @@ import { Ionicons } from "@expo/vector-icons";
 import { collection, query, onSnapshot, getDocs, where, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { registerForPushNotifications } from "../src/utils/registerForPushNotifications";
+import { safeString, toDate, formatCanadaTime, parseDate } from "../src/utils/date";
 import { router } from "expo-router";
 import * as Location from "expo-location";
 
 const PRIMARY_GREEN = "#1F6F43";
 const LIGHT_GREEN = "#F0FDF4";
-const STATS_BG = "#F0FDF4";
+const STATS_BG = "#F0FDF4"; // Light green for stats
 const DARK_TEXT = "#1A1A1A";
-const GRAY_TEXT = "#9CA3AF";
-const GRAY_BORDER = "rgba(0, 0, 0, 0.1)";
-const ACCENT_YELLOW = "rgba(254, 249, 195, 0.5)";
-const TEXT_YELLOW = "#92600A";
-const BADGE_BLUE = "#EBF5FF";
-const TEXT_BLUE = "#1E5FA6";
-const RED_STATUS = "#EF4444";
+const GRAY_TEXT = "#6B7280"; // Refined gray
+const GRAY_BORDER = "rgba(0, 0, 0, 0.08)";
+const ACCENT_YELLOW = "#FEF9C3"; // Banner yellow
+const TEXT_YELLOW = "#854D0E"; // Darker brown/yellow
+const BADGE_BLUE = "#EFF6FF";
+const TEXT_BLUE = "#1D4ED8";
+const ERROR_RED = "#EF4444";
 
 const ALLOWED_CATEGORIES = ["Respite Care", "Emergent Care", "Supervised Visitation", "Transportation"];
+
+const serviceTypeStyles = {
+  "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
+  "Emergent Care": { bg: "#FEF2F2", text: "#991B1B" },
+  "Emergency Care": { bg: "#FEF2F2", text: "#991B1B" },
+  "Supervised Visitation": { bg: "#F3F0FF", text: "#5B21B6" },
+  "Transportation": { bg: "#FEF9C3", text: "#854D0E" },
+  default: { bg: "#F3F4F6", text: "#6B7280" },
+};
+
+const calcDuration = (start, end) => {
+  if (!start || !end) return "\u2014";
+  const parseTime = (t) => {
+    if (!t) return 0;
+    const [time, period] = t.split(" ");
+    let [h, m] = time.split(":").map(Number);
+    if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+    if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+    return h + (m || 0) / 60;
+  };
+  const diff = parseTime(end) - parseTime(start);
+  const hours = diff > 0 ? diff : diff + 24;
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return m > 0 ? `${h}h ${m}m` : `${h} hrs`;
+};
+
+const formatShiftDate = (dateStr) => {
+  const d = parseDate(dateStr);
+  if (!d) return safeString(dateStr) || "\u2014";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const t = new Date(d); t.setHours(0, 0, 0, 0);
+  const diff = (t - today) / 86400000;
+  const day = d.getDate();
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+  if (diff === 0) return `Today, ${month} ${day}`;
+  if (diff === 1) return `Tomorrow, ${month} ${day}`;
+  if (diff === -1) return `Yesterday, ${month} ${day}`;
+  return `${weekday}, ${month} ${day}`;
+};
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -55,27 +97,16 @@ export default function Home() {
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const userShifts = data.filter((s) => {
-        const isUserShift = s?.name?.toLowerCase() === user?.name?.toLowerCase() || s?.userId === user?.userId;
+        const nameMatch = s?.name?.toLowerCase() === user?.name?.toLowerCase();
+        const userMatch = s?.userId === user?.userId || s?.staffId === user?.userId;
         const category = s?.category || s?.categoryName || s?.serviceType;
         const isValidCategory = !category || ALLOWED_CATEGORIES.includes(category);
-        return isUserShift && isValidCategory;
+        return (nameMatch || userMatch) && isValidCategory;
       });
       setShifts(userShifts);
     });
     return () => unsub();
   }, [user]);
-
-  const parseDate = useCallback((dateStr) => {
-    if (!dateStr || typeof dateStr !== "string") return null;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const sep = dateStr.includes("-") ? "-" : " ";
-    const parts = dateStr.split(sep);
-    if (parts.length < 3) return null;
-    const [dd, mmm, yyyy] = parts;
-    const mi = months.indexOf((mmm || "").slice(0, 3));
-    if (mi >= 0) return new Date(Number(yyyy), mi, Number(dd));
-    return null;
-  }, []);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -217,16 +248,18 @@ export default function Home() {
               <Text style={styles.emptyText}>No shifts today</Text>
             </View>
           ) : (
-            todayShifts.map((shift) => (
-              <ShiftCard
-                key={shift.id}
-                shift={shift}
-                onAction={(type, s) => setConfirmAction({ type, shift: s })}
-                onDetails={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
-                getInitials={getInitials}
-                getServiceColor={getServiceColor}
-              />
-            ))
+            todayShifts.map((shift) => {
+              return (
+                <Pressable key={shift.id} onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}>
+                  <ShiftCard
+                    shift={shift}
+                    onAction={(type, s) => setConfirmAction({ type, shift: s })}
+                    onDetails={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
+                    parseDateFn={parseDate}
+                  />
+                </Pressable>
+              );
+            })
           )}
         </View>
 
@@ -244,7 +277,9 @@ export default function Home() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Completed</Text>
-            <Text style={[styles.statValue, { color: PRIMARY_GREEN }]}>{stats.completed}</Text>
+            <Text style={[styles.statValue, { fontWeight: "700" }]}>
+              <Text style={{ color: PRIMARY_GREEN }}>{stats.completed}</Text> of {stats.total}
+            </Text>
           </View>
         </View>
 
@@ -282,15 +317,15 @@ export default function Home() {
                   </View>
                   <View style={styles.upcomingInfo}>
                     <Text style={styles.upcomingTitle} numberOfLines={1}>
-                      {shift.serviceType || shift.category || "Shift"} · {shift.clientName || shift.name || "Client"}
+                      {safeString(shift.serviceType || shift.category) || "Shift"} · {safeString(shift.clientName || shift.name) || "Client"}
                     </Text>
                     <Text style={styles.upcomingTime}>
-                      {shift.startTime} – {shift.endTime}
+                      {safeString(shift.startTime)} – {safeString(shift.endTime)}
                     </Text>
                   </View>
-                  {!shift.shiftConfirmed && (
-                    <View style={styles.alertBadge}>
-                      <Ionicons name="alert" size={12} color="#FFF" />
+                  {!shift.shiftConfirmed && idx === 1 && (
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>2</Text>
                     </View>
                   )}
                   <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
@@ -315,10 +350,10 @@ export default function Home() {
               </Text>
 
               <Text style={styles.modalSubtitle}>
-                {confirmAction.shift.category || confirmAction.shift.serviceType} · {confirmAction.shift.clientName || confirmAction.shift.name}
+                {safeString(confirmAction.shift.category || confirmAction.shift.serviceType)} · {safeString(confirmAction.shift.clientName || confirmAction.shift.name)}
               </Text>
               <Text style={styles.modalMeta}>
-                {confirmAction.shift.startDate} · {confirmAction.shift.startTime} – {confirmAction.shift.endTime}
+                {safeString(confirmAction.shift.startDate)} · {safeString(confirmAction.shift.startTime)} – {safeString(confirmAction.shift.endTime)}
               </Text>
               <Text style={styles.modalLocation}>
                 {confirmAction.shift.location || "Location not specified"}
@@ -371,135 +406,120 @@ export default function Home() {
   );
 }
 
-function ShiftCard({ shift, onAction, onDetails, getInitials, getServiceColor }) {
+function ShiftCard({ shift, onAction, onDetails, parseDateFn }) {
   const getStatus = () => {
-    if (shift.clockOutTime) return "completed";
-    if (shift.clockInTime) return "active";
-    return shift.shiftConfirmed ? "confirmed" : "assigned";
+    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
+    if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
+    return shift.shiftConfirmed ? "Confirmed" : "Assigned";
   };
 
   const status = getStatus();
-  const serviceColor = getServiceColor(shift.serviceType || shift.category);
-  const parseLocations = (locationStr) => {
-    if (!locationStr) return [];
-    return locationStr.split(",").map((l) => l.trim()).filter((l) => l);
+  const rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType) || "Transportation";
+  const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
+  const clientName = safeString(shift.clientName || shift.name) || "Client";
+  const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const location = safeString(shift.location || shift.address) || "Location not specified";
+  const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
+  const displayDate = formatShiftDate(shift.startDate, parseDateFn);
+
+  const statusColors = {
+    "Completed": { dot: "#10B981", text: "#10B981" },
+    "In Progress": { dot: "#3B82F6", text: "#3B82F6" },
+    "Confirmed": { dot: "#22C55E", text: "#22C55E" },
+    "Assigned": { dot: "#F59E0B", text: "#F59E0B" },
   };
-  const locations = parseLocations(shift.location);
-  const isTransportation = (shift.serviceType || shift.category || "").toLowerCase().includes("transportation");
+  const sc = statusColors[status] || statusColors["Assigned"];
 
   return (
-    <View style={styles.shiftCard}>
-      {/* Confirmation banner for unconfirmed */}
-      {status === "assigned" && (
-        <View style={styles.confirmBanner}>
-          <Ionicons name="time-outline" size={16} color="#A16207" />
-          <Text style={styles.confirmBannerText}>Confirmation required</Text>
-          <View style={{ flex: 1 }} />
-          <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />
-          <Text style={styles.confirmBannerStatus}>Assigned</Text>
-        </View>
-      )}
-
-      {status === "confirmed" && (
-        <View style={[styles.confirmBanner, { backgroundColor: LIGHT_GREEN }]}>
-          <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />
-          <Text style={[styles.confirmBannerStatus, { color: PRIMARY_GREEN }]}>Confirmed</Text>
-        </View>
-      )}
-
-      {status === "active" && (
-        <View style={[styles.confirmBanner, { backgroundColor: BADGE_BLUE }]}>
-          <View style={styles.pulsingDotBlue} />
-          <Text style={[styles.confirmBannerStatus, { color: TEXT_BLUE }]}>In Progress · Checked in at {shift.clockInTime}</Text>
-        </View>
-      )}
-
-      <View style={styles.shiftCardContent}>
-        {/* Top Row: Service Badge + Time */}
-        <View style={styles.shiftTopRow}>
-          <View style={[styles.serviceBadge, { backgroundColor: serviceColor.bg }]}>
-            <Text style={[styles.serviceBadgeText, { color: serviceColor.text }]}>
-              {shift.serviceType || shift.category || "Service"}
-            </Text>
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1}}>
+          <View style={[styles.serviceTag, { backgroundColor: serviceStyle.bg }]}>
+            <Text style={[styles.serviceTagText, { color: serviceStyle.text }]}>{rawServiceType}</Text>
           </View>
-          <Text style={styles.shiftTime}>{shift.startTime} – {shift.endTime}</Text>
+          <Text style={styles.cardDateInline}>{displayDate}</Text>
+        </View>
+        <View style={styles.statusBox}>
+          <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
+          <Text style={[styles.statusText, { color: sc.text }]}>{status}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardBody}>
+        <View style={styles.timeRow}>
+          <Ionicons name="time-outline" size={16} color={GRAY_TEXT} />
+          <Text style={styles.timeText}>{safeString(shift.startTime) || "—"} – {safeString(shift.endTime) || "—"}</Text>
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{duration}</Text>
+          </View>
         </View>
 
-        {/* Client Row */}
         <View style={styles.clientRow}>
-          <View style={styles.clientAvatar}>
-            <Text style={styles.clientAvatarText}>{getInitials(shift.clientName || shift.name)}</Text>
-            {status !== "assigned" && <View style={styles.onlineDot} />}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{clientInitials}</Text>
           </View>
-          <Text style={styles.clientName}>{shift.clientName || shift.name || "Client"}</Text>
+          <View style={styles.clientInfo}>
+            <Text style={styles.clientNameText}>{clientName}</Text>
+            <Text style={styles.clientIdText}>ID: {safeString(shift.clientId) || "—"}</Text>
+          </View>
         </View>
 
-        {/* Location */}
-        {isTransportation && locations.length >= 2 ? (
-          <View style={styles.routeRow}>
-            <Ionicons name="navigate-outline" size={16} color={PRIMARY_GREEN} />
-            <View style={styles.routeStops}>
-              <Text style={styles.routeStopText} numberOfLines={1}>{locations[0]?.split(",")[0]}</Text>
-              <View style={styles.routeDashed} />
-              <Ionicons name="business-outline" size={14} color={PRIMARY_GREEN} />
-              <Text style={styles.routeStopText} numberOfLines={1}>{locations[1]?.split(",")[0]}</Text>
-              <View style={styles.routeDashed} />
-              <Ionicons name="flag-outline" size={14} color={RED_STATUS} />
-              <Text style={styles.routeStopText} numberOfLines={1}>{locations[2]?.split(",")[0] || "End"}</Text>
+
+
+        {status === "Completed" && (
+          <View style={styles.clockInOutBox}>
+            <View style={styles.clockCol}>
+              <View style={styles.clockIconRow}>
+                <Ionicons name="log-in-outline" size={14} color={PRIMARY_GREEN} />
+                <Text style={styles.clockLabel}>Clock In</Text>
+              </View>
+              <Text style={styles.clockValue}>{formatCanadaTime(shift.clockInTime || shift.clockIn || shift.clockin)}</Text>
+            </View>
+            <View style={styles.clockDivider} />
+            <View style={[styles.clockCol, { alignItems: "flex-end" }]}>
+              <View style={styles.clockIconRow}>
+                <Ionicons name="log-out-outline" size={14} color={ERROR_RED} />
+                <Text style={styles.clockLabel}>Clock Out</Text>
+              </View>
+              <Text style={styles.clockValue}>{formatCanadaTime(shift.clockOutTime || shift.clockOut || shift.clockout)}</Text>
             </View>
           </View>
-        ) : (
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={16} color={GRAY_TEXT} />
-            <Text style={styles.locationText} numberOfLines={1}>{locations[0] || "No location provided"}</Text>
-          </View>
         )}
+      </View>
 
-        {/* Action Buttons */}
-        {status === "assigned" && (
-          <View style={styles.actionRow}>
-            <Pressable onPress={() => onAction("confirm", shift)} style={styles.outlineBtn}>
-              <Text style={styles.outlineBtnText}>Confirm Shift</Text>
-            </Pressable>
-            <Pressable onPress={onDetails}>
-              <Text style={styles.detailsLink}>Details &gt;</Text>
-            </Pressable>
+      <View style={styles.cardActions}>
+        {status === "Assigned" && (
+          <Pressable onPress={() => onAction("confirm", shift)} style={styles.mainActionBtn}>
+            <Text style={styles.mainActionBtnText}>Confirm</Text>
+          </Pressable>
+        )}
+        {status === "Confirmed" && (
+          <Pressable onPress={() => onAction("clockIn", shift)} style={styles.mainActionBtn}>
+            <Text style={styles.mainActionBtnText}>Clock In</Text>
+          </Pressable>
+        )}
+        {status === "In Progress" && (
+          <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
+            <Text style={styles.mainActionBtnText}>Clock Out</Text>
+          </Pressable>
+        )}
+        {status === "Completed" && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+            <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
           </View>
         )}
-
-        {status === "confirmed" && (
-          <View style={styles.actionRow}>
-            <Pressable onPress={() => onAction("clockIn", shift)} style={styles.solidBtn}>
-              <Text style={styles.solidBtnText}>Check In</Text>
-            </Pressable>
-            <Pressable onPress={onDetails}>
-              <Text style={styles.detailsLink}>Details &gt;</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {status === "active" && (
-          <View style={styles.actionRow}>
-            <Pressable onPress={() => onAction("clockOut", shift)} style={styles.outlineBtn}>
-              <Text style={styles.outlineBtnTextGreen}>Check Out</Text>
-            </Pressable>
-            <Pressable onPress={onDetails}>
-              <Text style={styles.detailsLink}>Details &gt;</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {status === "completed" && (
-          <View style={styles.completedRow}>
-            <View style={styles.completedBadge}>
-              <Ionicons name="checkmark" size={14} color={PRIMARY_GREEN} />
-              <Text style={styles.completedText}>Completed</Text>
-            </View>
-            <Pressable onPress={onDetails}>
-              <Text style={styles.detailsLink}>Details &gt;</Text>
-            </Pressable>
-          </View>
-        )}
+        <View style={styles.secondaryActions}>
+          <Pressable
+            style={styles.swapBtn}
+            onPress={() => router.push({ pathname: "/transfer-shift", params: { shiftId: shift.id } })}
+          >
+            <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
+          </Pressable>
+          <Pressable onPress={onDetails} style={styles.detailsLink}>
+            <Text style={styles.detailsLinkText}>Details &gt;</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -509,48 +529,52 @@ const styles = StyleSheet.create({
   // Header
   header: {
     paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 8,
+    paddingTop: 10,
+    paddingBottom: 16,
     backgroundColor: "#F8F8F6",
   },
   headerLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: GRAY_TEXT,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    letterSpacing: 1,
+    marginBottom: 8,
+    fontFamily: "Inter-Bold",
   },
   headerWelcome: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "700",
     color: DARK_TEXT,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
     marginBottom: 4,
+    fontFamily: "Poppins-Bold",
   },
   headerOrg: {
-    fontSize: 13,
-    color: GRAY_TEXT,
+    fontSize: 14,
+    color: "#6B7280",
+    fontFamily: "Inter",
   },
   // Section
   section: {
     paddingHorizontal: 20,
-    marginTop: 28,
+    marginTop: 32,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     color: DARK_TEXT,
+    fontFamily: "Poppins-Bold",
   },
   pulsingDot: {
     width: 6,
@@ -567,12 +591,13 @@ const styles = StyleSheet.create({
   viewAllRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 4,
   },
   viewAllText: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
     color: PRIMARY_GREEN,
+    fontFamily: "Inter-SemiBold",
   },
   // Empty card
   emptyCard: {
@@ -598,370 +623,249 @@ const styles = StyleSheet.create({
   },
   // Stats
   statsCard: {
-    backgroundColor: STATS_BG,
-    borderRadius: 14,
-    paddingVertical: 18,
-    paddingHorizontal: 8,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
     marginHorizontal: 20,
-    marginTop: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(31, 111, 67, 0.08)",
   },
   statItem: {
     flex: 1,
     alignItems: "center",
   },
   statLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: GRAY_TEXT,
-    marginBottom: 4,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#4B5563",
+    marginBottom: 8,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
+    fontFamily: "Inter-Bold",
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: DARK_TEXT,
-    fontFamily: "Poppins",
+    fontFamily: "Poppins-Bold",
   },
   statDivider: {
     width: 1,
-    height: 28,
-    backgroundColor: "#E5E7EB",
+    height: 32,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
   },
   // Upcoming rows
   upcomingRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 18,
   },
   upcomingRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
   dateBadge: {
-    width: 44,
-    height: 44,
-    backgroundColor: LIGHT_GREEN,
-    borderRadius: 10,
+    width: 52,
+    height: 52,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
+    marginRight: 16,
   },
   dateBadgeDay: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: PRIMARY_GREEN,
     textTransform: "uppercase",
-    fontFamily: "Inter",
+    fontFamily: "Inter-Bold",
   },
   dateBadgeNum: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
     color: PRIMARY_GREEN,
-    fontFamily: "Poppins",
+    fontFamily: "Poppins-Bold",
   },
   upcomingInfo: {
     flex: 1,
   },
   upcomingTitle: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: DARK_TEXT,
-    marginBottom: 2,
+    marginBottom: 4,
+    fontFamily: "Inter-Bold",
   },
   upcomingTime: {
-    fontSize: 12,
-    color: GRAY_TEXT,
-  },
-  alertBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: RED_STATUS,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  // Shift Card
-  shiftCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  confirmBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: ACCENT_YELLOW,
-  },
-  confirmBannerText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: TEXT_YELLOW,
-  },
-  confirmBannerStatus: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: TEXT_YELLOW,
-  },
-  shiftCardContent: {
-    padding: 18,
-  },
-  shiftTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  serviceBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  serviceBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  shiftTime: {
     fontSize: 13,
-    fontWeight: "600",
-    color: GRAY_TEXT,
+    color: "#6B7280",
+    fontFamily: "Inter",
   },
-  clientRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  clientAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F3F4F6",
+  countBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: PRIMARY_GREEN,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
-  clientAvatarText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: GRAY_TEXT,
-  },
-  onlineDot: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#22C55E",
-    borderWidth: 2,
-    borderColor: "#FFF",
-  },
-  clientName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: DARK_TEXT,
-  },
-  routeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
-  },
-  routeStops: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  routeStopText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: DARK_TEXT,
-    maxWidth: 60,
-  },
-  routeDashed: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5E7EB",
-    borderStyle: "dashed",
-    borderWidth: 0.5,
-  },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
-  },
-  locationText: {
-    fontSize: 13,
-    color: GRAY_TEXT,
-    flex: 1,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  outlineBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: PRIMARY_GREEN,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  outlineBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: PRIMARY_GREEN,
-  },
-  outlineBtnTextGreen: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: PRIMARY_GREEN,
-  },
-  solidBtn: {
-    flex: 1,
-    backgroundColor: PRIMARY_GREEN,
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: "center",
-  },
-  solidBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
+  countBadgeText: {
     color: "#FFF",
-  },
-  detailsLink: {
     fontSize: 13,
-    fontWeight: "600",
-    color: PRIMARY_GREEN,
+    fontWeight: "800",
+    fontFamily: "Poppins-Bold",
   },
-  completedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  completedBadge: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: LIGHT_GREEN,
-    borderRadius: 12,
-    paddingVertical: 12,
-    justifyContent: "center",
-  },
-  completedText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: PRIMARY_GREEN,
-  },
+  // Shift Card
+  cardDateInline: { fontSize: 12, fontWeight: "600", color: GRAY_TEXT, fontFamily: "Inter-SemiBold" },
+  card: { backgroundColor: "#FFF", borderRadius: 20, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: GRAY_BORDER, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
+  serviceTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  serviceTagText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
+  statusBox: { flexDirection: "row", alignItems: "center", gap: 6 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
+  cardBody: { marginBottom: 15 },
+  timeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 15 },
+  timeText: { fontSize: 15, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  durationBadge: { backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginLeft: "auto" },
+  durationText: { fontSize: 12, fontWeight: "700", color: GRAY_TEXT, fontFamily: "Inter-Bold" },
+  clientRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 15 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: LIGHT_GREEN, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 14, fontWeight: "800", color: PRIMARY_GREEN },
+  clientInfo: { flex: 1 },
+  clientNameText: { fontSize: 16, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" },
+  clientIdText: { fontSize: 12, color: GRAY_TEXT, marginTop: 2, fontFamily: "Inter" },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: GRAY_BORDER },
+  locationText: { fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter", flex: 1 },
+  
+  clockInOutBox: { flexDirection: "row", backgroundColor: "#F9FAFB", borderRadius: 12, padding: 12, marginTop: 12, borderWidth: 1, borderColor: "#E5E7EB", justifyContent: "space-between" },
+  clockCol: { flex: 1 },
+  clockIconRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 },
+  clockLabel: { fontSize: 11, color: GRAY_TEXT, fontFamily: "Inter-SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  clockValue: { fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  clockDivider: { width: 1, backgroundColor: "#E5E7EB", marginHorizontal: 12 },
+
+  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
+  mainActionBtn: { backgroundColor: PRIMARY_GREEN, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, flex: 1, alignItems: "center" },
+  mainActionBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
+  secondaryActions: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 10 },
+  swapBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: GRAY_BORDER },
+  detailsLink: { paddingHorizontal: 10, height: 44, justifyContent: "center" },
+  detailsLinkText: { fontSize: 14, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
   },
   modalCard: {
     backgroundColor: "#FFF",
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: 32,
+    padding: 32,
     width: "100%",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
   },
   modalIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: LIGHT_GREEN,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#F0FDF4",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
     color: DARK_TEXT,
     textAlign: "center",
-    marginBottom: 12,
+    marginBottom: 16,
+    fontFamily: "Poppins-Bold",
   },
   modalSubtitle: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: DARK_TEXT,
-    marginBottom: 4,
+    marginBottom: 6,
+    fontFamily: "Inter-Bold",
   },
   modalMeta: {
-    fontSize: 12,
-    color: GRAY_TEXT,
-    marginBottom: 4,
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 6,
+    fontFamily: "Inter",
   },
   modalLocation: {
-    fontSize: 12,
-    color: GRAY_TEXT,
+    fontSize: 13,
+    color: "#6B7280",
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    fontFamily: "Inter",
   },
   gpsInfoBox: {
     width: "100%",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
   gpsInfoLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: DARK_TEXT,
-    marginBottom: 2,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: 4,
+    fontFamily: "Inter-Bold",
   },
   gpsInfoValue: {
-    fontSize: 12,
-    color: GRAY_TEXT,
+    fontSize: 13,
+    color: "#6B7280",
+    fontFamily: "Inter",
   },
   modalDisclaimer: {
     fontSize: 12,
-    color: GRAY_TEXT,
+    color: "#9CA3AF",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 24,
     lineHeight: 18,
+    fontFamily: "Inter",
   },
   modalPrimaryBtn: {
     width: "100%",
     backgroundColor: PRIMARY_GREEN,
-    height: 48,
-    borderRadius: 12,
+    height: 56,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   modalPrimaryBtnText: {
     color: "#FFF",
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: "Inter-Bold",
   },
   modalCancelBtn: {
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   modalCancelText: {
-    color: GRAY_TEXT,
-    fontSize: 14,
+    color: "#6B7280",
+    fontSize: 15,
     fontWeight: "600",
+    fontFamily: "Inter-SemiBold",
   },
 });

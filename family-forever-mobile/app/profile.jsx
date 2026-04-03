@@ -5,92 +5,103 @@ import {
   Image,
   ScrollView,
   Alert,
-  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { useEffect, useState, useMemo } from "react";
+import { doc, onSnapshot, updateDoc, collection, query, where } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import * as ImagePicker from "expo-image-picker";
 import { uploadProfilePhoto } from "../src/utils/uploadProfilePhoto";
 
-const PRIMARY = "#1F6F43";
-const SECONDARY = "#DCFCE7";
+// ── Color tokens ──────────────────────────────────────────────────────────────
+const PRIMARY_GREEN = "#1F6F43";
+const LIGHT_GREEN = "#DCFCE7";
+const TEXT_GREEN = "#166534";
+const DARK_TEXT = "#111827";
+const GRAY_TEXT = "#6B7280";
+const GRAY_BORDER = "#F3F4F6";
+const PAGE_BG = "#F9FAFB";
+const ERROR_RED = "#EF4444";
+const WARNING_AMBER = "#F59E0B";
 
 export default function Profile() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsub;
-    const load = async () => {
-      try {
-        const stored = await AsyncStorage.getItem("user");
-        if (!stored) {
-          setLoading(false);
-          return;
-        }
-        const parsed = JSON.parse(stored);
-        const ref = doc(db, "users", parsed.username || parsed.userId);
-        unsub = onSnapshot(ref, (snap) => {
-          if (snap.exists()) {
-            setUser({ username: parsed.username || parsed.userId, ...snap.data() });
-          }
-          setLoading(false);
-        }, () => setLoading(false));
-      } catch {
+    const loadUser = async () => {
+      const stored = await AsyncStorage.getItem("user");
+      if (!stored) {
         setLoading(false);
+        return;
       }
+      const parsed = JSON.parse(stored);
+      const userRef = doc(db, "users", parsed.username || parsed.userId);
+      unsub = onSnapshot(userRef, (snap) => {
+        if (snap.exists()) setUser({ id: snap.id, ...snap.data() });
+        setLoading(false);
+      });
     };
-    load();
+    loadUser();
     return () => unsub && unsub();
   }, []);
 
-  const handleChangePhoto = () => {
-    Alert.alert("Change Profile Photo", "Choose an option", [
-      { text: "Camera", onPress: openCamera },
-      { text: "Gallery", onPress: openGallery },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  };
-
-  const openCamera = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Camera access is needed.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.7 });
-    if (!result.canceled) await savePhoto(result.assets[0].uri);
-  };
-
-  const openGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Photo library access is needed.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.7 });
-    if (!result.canceled) await savePhoto(result.assets[0].uri);
-  };
-
-  const savePhoto = async (uri) => {
+  // Live shifts listener for stats
+  useEffect(() => {
     if (!user) return;
-    try {
-      const url = await uploadProfilePhoto(uri, user.username);
-      await updateDoc(doc(db, "users", user.username), { profilePhotoUrl: url });
-    } catch (e) {
-      Alert.alert("Error", "Could not upload photo.");
+    const q = query(collection(db, "shifts"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const mine = data.filter(s =>
+        s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase()
+      );
+      setShifts(mine);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // Computed live stats
+  const stats = useMemo(() => {
+    const total = shifts.length;
+    const completed = shifts.filter(s => !!s.clockOutTime).length;
+    let hours = 0;
+    shifts.forEach(s => {
+      try {
+        const parseTime = (t) => {
+          if (!t) return 0;
+          const [time, period] = t.split(" ");
+          let [h, m] = time.split(":").map(Number);
+          if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+          if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+          return h + (m || 0) / 60;
+        };
+        const diff = parseTime(s.endTime) - parseTime(s.startTime);
+        hours += diff > 0 ? diff : diff + 24;
+      } catch {}
+    });
+    // Tenure calc
+    let tenure = "—";
+    if (user?.startDate) {
+      const start = new Date(user.startDate);
+      if (!isNaN(start.getTime())) {
+        const diffMs = Date.now() - start.getTime();
+        const months = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.44));
+        tenure = months >= 12 ? `${Math.floor(months / 12)}${months % 12 ? `.${Math.floor((months % 12) / 1.2)}` : ""} yrs` : `${months} mo`;
+      }
     }
-  };
+    return { total, completed, hours: Math.round(hours * 10) / 10, tenure };
+  }, [shifts, user]);
 
   const handleLogout = () => {
-    Alert.alert("Confirm Logout", "Are you sure you want to sign out?", [
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Sign Out",
@@ -103,372 +114,257 @@ export default function Profile() {
     ]);
   };
 
-  const initials = user?.name
-    ? user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
-    : "?";
+  const handleChangePhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") return;
+    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.7 });
+    if (!result.canceled) {
+      try {
+        const url = await uploadProfilePhoto(result.assets[0].uri, user.id);
+        await updateDoc(doc(db, "users", user.id), { profilePhotoUrl: url });
+      } catch (e) {
+        Alert.alert("Error", "Failed to upload photo.");
+      }
+    }
+  };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" color={PRIMARY} />
-      </SafeAreaView>
-    );
-  }
+  if (loading) return <ActivityIndicator style={{ flex: 1 }} color={PRIMARY_GREEN} />;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F9FAFB" }} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <Pressable style={styles.settingsBtn}><Ionicons name="settings-outline" size={24} color={DARK_TEXT} /></Pressable>
+      </View>
 
-        {/* HEADER */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Profile</Text>
-          <Pressable onPress={handleLogout} style={styles.logoutBtn}>
-            <Ionicons name="log-out-outline" size={18} color="#EF4444" />
-            <Text style={styles.logoutText}>Logout</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Profile Card */}
+        <View style={styles.profileBox}>
+          <View style={styles.avatarWrapper}>
+            <Image 
+              source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
+              style={styles.avatar} 
+            />
+            <Pressable onPress={handleChangePhoto} style={styles.editAvatarBtn}>
+              <Ionicons name="camera" size={14} color="#FFF" />
+            </Pressable>
+          </View>
+          <Text style={styles.nameText}>{user?.name || "Sarah Johnson"}</Text>
+          <Text style={styles.roleText}>{user?.designation || "Staff - Intake Worker"}</Text>
+          <Text style={styles.orgText}>Family Forever Inc.</Text>
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}><Text style={styles.badgeText}>CYIM: {user?.cyimId || "1432569"}</Text></View>
+            <View style={[styles.badge, { backgroundColor: "#F0FDF4" }]}><Text style={[styles.badgeText, { color: "#10B981" }]}>Active</Text></View>
+          </View>
+
+          <View style={styles.statsRow}>
+            <StatItem value={String(stats.total)} label="Total Shifts" />
+            <StatItem value={`${stats.hours}`} label="Hours Logged" />
+            <StatItem value={user?.rating ? `${user.rating} ★` : "—"} label="Rating" />
+            <StatItem value={stats.tenure} label="Tenure" />
+          </View>
+        </View>
+
+        {/* Staff ID Card Preview */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Staff ID Card</Text>
+          <Pressable onPress={() => router.push("/staff-id-card")}>
+            <Text style={styles.linkText}>View Full Card &gt;</Text>
           </Pressable>
         </View>
-
-        {/* PROFILE HERO */}
-        <View style={styles.profileHero}>
-           <View style={styles.avatarContainer}>
-              {user?.profilePhotoUrl ? (
-                <Image source={{ uri: user.profilePhotoUrl }} style={styles.avatarImg} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                   <Text style={styles.avatarInitials}>{initials}</Text>
-                </View>
-              )}
-              <Pressable onPress={handleChangePhoto} style={styles.cameraBtn}>
-                 <Ionicons name="camera" size={16} color="#FFF" />
-              </Pressable>
-           </View>
-           <Text style={styles.profileName}>{user?.name || "Staff Member"}</Text>
-           <Text style={styles.profileRole}>{user?.designation || "Healthcare Staff"}</Text>
-           <View style={styles.idBadge}>
-              <Text style={styles.idBadgeText}>EMPLOYEE ID: {user?.userId || "—"}</Text>
-           </View>
+        <View style={styles.idCardPreview}>
+          <View style={styles.idCardHeader}>
+            <Text style={styles.idCardOrg}>Family Forever Inc.</Text>
+            <Text style={styles.idCardNum}>Employee ID {user?.employeeId || "27"}</Text>
+          </View>
+          <View style={styles.idCardBody}>
+            <Image source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} style={styles.idCardAvatar} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.idCardName}>{user?.name || "Sarah Johnson"}</Text>
+              <Text style={styles.idCardRole}>Child and Youth Care Worker</Text>
+            </View>
+            <Ionicons name="qr-code-outline" size={32} color={DARK_TEXT} style={{ opacity: 0.1 }} />
+          </View>
+          <Text style={styles.idCardHint}>Tap to show full card for parent verification</Text>
         </View>
 
-        {/* STATISTICS GRID */}
-        <View style={{ paddingHorizontal: 20, marginBottom: 30 }}>
-           <Text style={styles.sectionHeading}>PERFORMANCE STATS</Text>
-           <View style={styles.statsGrid}>
-              <View style={styles.statCell}>
-                 <Text style={styles.statValue}>124</Text>
-                 <Text style={styles.statLabel}>Shifts Done</Text>
-              </View>
-              <View style={styles.statCell}>
-                 <Text style={styles.statValue}>~482h</Text>
-                 <Text style={styles.statLabel}>Hours Total</Text>
-              </View>
-              <View style={styles.statCell}>
-                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3 }}>
-                    <Text style={styles.statValue}>4.9</Text>
-                    <Ionicons name="star" size={14} color="#F59E0B" />
-                 </View>
-                 <Text style={styles.statLabel}>Avg Rating</Text>
-              </View>
-              <View style={styles.statCell}>
-                 <Text style={styles.statValue}>98%</Text>
-                 <Text style={styles.statLabel}>Attendance</Text>
-              </View>
-           </View>
+        {/* Personal Details */}
+        <View style={styles.detailsBox}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Personal Details</Text>
+            <Pressable><Text style={styles.linkText}>Edit &gt;</Text></Pressable>
+          </View>
+          <DetailItem label="Full Name" value={user?.name || "Sarah Catherine Johnson"} />
+          <DetailItem label="Email" value={user?.email || "sarah.johnson@email.com"} isEmail />
+          <DetailItem label="Phone" value={user?.phone || "(555) 987-6543"} isPhone />
+          <DetailItem label="Date of Birth" value={user?.dob || "June 15, 1994"} />
+          <DetailItem label="Gender" value={user?.gender || "Female"} />
+          <DetailItem label="Address" value={user?.address || "456 Birch Lane, Ontario"} />
+          <DetailItem label="Start Date" value={user?.startDate || "March 1, 2024"} isLast />
         </View>
 
-        {/* DOCUMENTS SECTION */}
-        <View style={{ paddingHorizontal: 20, marginBottom: 30 }}>
-           <Text style={styles.sectionHeading}>CERTIFICATIONS & DOCS</Text>
-           <View style={styles.docCard}>
-              <View style={styles.docRow}>
-                 <View style={[styles.docIconBox, { backgroundColor: "#F0FDF4" }]}>
-                    <Ionicons name="document-text" size={20} color={PRIMARY} />
-                 </View>
-                 <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.docName}>CPR & First Aid</Text>
-                    <Text style={styles.docExpiry}>Valid until Aug 2026</Text>
-                 </View>
-                 <Ionicons name="checkmark-circle" size={18} color={PRIMARY} />
-              </View>
-              <View style={styles.docDivider} />
-              <View style={styles.docRow}>
-                 <View style={[styles.docIconBox, { backgroundColor: "#FEFCE8" }]}>
-                    <Ionicons name="shield-checkmark" size={20} color="#854D0E" />
-                 </View>
-                 <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.docName}>Police Background Check</Text>
-                    <Text style={[styles.docExpiry, { color: "#854D0E" }]}>Renewal due in 12 days</Text>
-                 </View>
-                 <Ionicons name="alert-circle" size={18} color="#F59E0B" />
-              </View>
-           </View>
-           <Pressable style={styles.uploadBtn}>
-              <Ionicons name="cloud-upload-outline" size={18} color={PRIMARY} />
-              <Text style={styles.uploadBtnText}>Upload New Document</Text>
-           </Pressable>
+        {/* Employment */}
+        <View style={styles.detailsBox}>
+          <Text style={styles.sectionTitle}>Employment</Text>
+          <DetailItem label="Employee ID" value={user?.employeeId || "EMP-2024-0087"} />
+          <DetailItem label="CYIM ID" value={user?.cyimId || "1432569"} />
+          <DetailItem label="Role" value={user?.designation || "Intake Worker"} />
+          <DetailItem label="Department" value={user?.department || "Field Services"} />
+          <DetailItem label="Salary" value={user?.salary || "$24.50/hr"} isLast />
         </View>
 
-        {/* SETTINGS MENU */}
-        <View style={{ paddingHorizontal: 20 }}>
-           <Text style={styles.sectionHeading}>GENERAL SETTINGS</Text>
-           <MenuItem icon="badge-account-outline" title="Digital ID Card" sub="View security QR code" onPress={() => router.push("/staff-id-card")} />
-           <MenuItem icon="calendar-check-outline" title="My Availability" sub="Shift preferences & regions" onPress={() => router.push("/availability")} />
-           <MenuItem icon="business-outline" title="Agency Information" sub="View assigned agency support" onPress={() => router.push("/agency")} />
-           <MenuItem icon="help-circle-outline" title="Help & Support" sub="Contact administrator" onPress={() => Alert.alert("Support", "Contact support@familyforever.ca")} />
+        {/* Documents */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Documents & Certifications</Text>
+          <Pressable style={styles.uploadRow}>
+            <Ionicons name="cloud-upload-outline" size={14} color={PRIMARY_GREEN} />
+            <Text style={styles.linkText}>Upload</Text>
+          </Pressable>
+        </View>
+        <DocumentCard title="First Aid Certification" date="Expires: Apr 1, 2026" status="expiring" />
+        <DocumentCard title="CPR Certification" date="Expires: Feb 20, 2027" status="valid" />
+        <DocumentCard title="Driver's License" date="Expires: Dec 5, 2028" status="valid" />
+        <DocumentCard title="Child Safety Training" date="Annual review needed" status="valid" />
+        <DocumentCard title="Vulnerable Sector Check" date="Expired: Mar 1, 2024" status="expired" isLast />
+        
+        <View style={styles.docSummary}>
+          <Text style={styles.docSummaryText}>5 documents  ·  <Text style={{color: '#10B981'}}>3 valid</Text>  ·  <Text style={{color: WARNING_AMBER}}>1 expiring</Text>  ·  <Text style={{color: ERROR_RED}}>1 expired</Text></Text>
         </View>
 
-        <Text style={styles.versionText}>App Version 4.2.0 • Build 20260401</Text>
+        {/* Quick Actions */}
+        <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Quick Actions</Text>
+        <View style={styles.actionsBox}>
+          <ActionItem icon="lock-closed-outline" label="Change Password" />
+          <ActionItem icon="notifications-outline" label="Notification Preferences" />
+          <ActionItem icon="shield-checkmark-outline" label="Privacy & Security" />
+          <ActionItem icon="help-circle-outline" label="Help & Support" />
+          <ActionItem icon="document-text-outline" label="Terms & Policies" isLast />
+        </View>
 
+        {/* Sign Out */}
+        <Pressable onPress={handleLogout} style={styles.signOutBtn}>
+          <Ionicons name="log-out-outline" size={20} color={ERROR_RED} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </Pressable>
+        
+        <Text style={styles.versionText}>Version 1.0.2</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function MenuItem({ icon, title, sub, onPress }) {
+function StatItem({ value, label }) {
   return (
-    <Pressable onPress={onPress} style={styles.menuItem}>
-      <View style={styles.menuIconCircle}>
-        <MaterialCommunityIcons name={icon} size={22} color={PRIMARY} />
-      </View>
+    <View style={styles.statItem}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={[styles.statLabel, { marginTop: 4 }]}>{label}</Text>
+    </View>
+  );
+}
+
+function DetailItem({ label, value, isEmail, isPhone, isLast }) {
+  return (
+    <View style={[styles.detailItem, isLast && { borderBottomWidth: 0 }]}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[styles.detailValue, isEmail && { color: PRIMARY_GREEN }, isPhone && { color: PRIMARY_GREEN }]}>{value}</Text>
+    </View>
+  );
+}
+
+function DocumentCard({ title, date, status, isLast }) {
+  const config = {
+    valid: { icon: "checkmark-circle", color: "#10B981", bg: "#F0FDF4", border: "#D1FAE5" },
+    expiring: { icon: "alert-circle", color: WARNING_AMBER, bg: "#FFFBEB", border: "#FEF3C7" },
+    expired: { icon: "close-circle", color: ERROR_RED, bg: "#FEF2F2", border: "#FEE2E2" },
+  }[status];
+
+  return (
+    <View style={[styles.docCard, { borderLeftColor: config.color, borderLeftWidth: 4 }]}>
+      <View style={[styles.docIcon, { backgroundColor: config.bg }]}><Ionicons name={config.icon} size={18} color={config.color} /></View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.menuTitle}>{title}</Text>
-        <Text style={styles.menuSub}>{sub}</Text>
+        <Text style={styles.docTitle}>{title}</Text>
+        <Text style={styles.docDate}>{date}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+      {status === 'expiring' && (
+        <Pressable style={styles.docActionBtn}><Text style={styles.docActionText}>Update</Text></Pressable>
+      )}
+      {status === 'expired' && (
+        <Pressable style={[styles.docActionBtn, { backgroundColor: ERROR_RED, borderColor: ERROR_RED }]}><Text style={[styles.docActionText, { color: "#FFF" }]}>Upload</Text></Pressable>
+      )}
+      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+    </View>
+  );
+}
+
+function ActionItem({ icon, label, isLast }) {
+  return (
+    <Pressable style={[styles.actionItem, isLast && { borderBottomWidth: 0 }]}>
+      <Ionicons name={icon} size={20} color={GRAY_TEXT} />
+      <Text style={styles.actionLabel}>{label}</Text>
+      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
-    fontFamily: "Poppins",
-  },
-  logoutBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#FEF2F2",
-  },
-  logoutText: {
-    color: "#EF4444",
-    fontWeight: "700",
-    marginLeft: 6,
-    fontSize: 13,
-    fontFamily: "Inter",
-  },
-  profileHero: {
-    alignItems: "center",
-    paddingVertical: 35,
-  },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 16,
-  },
-  avatarImg: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: PRIMARY,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: SECONDARY,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: PRIMARY,
-  },
-  avatarInitials: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: PRIMARY,
-    fontFamily: "Poppins",
-  },
-  cameraBtn: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: PRIMARY,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#FFF",
-  },
-  profileName: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#111827",
-    fontFamily: "Poppins",
-    marginBottom: 4,
-  },
-  profileRole: {
-    fontSize: 14,
-    color: "#4B5563",
-    fontFamily: "Inter",
-    fontWeight: "500",
-    marginBottom: 14,
-  },
-  idBadge: {
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  idBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#6B7280",
-    fontFamily: "Inter",
-    letterSpacing: 0.5,
-  },
-  sectionHeading: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#9CA3AF",
-    letterSpacing: 1.2,
-    marginBottom: 16,
-    textTransform: "uppercase",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  statCell: {
-    flex: 1,
-    minWidth: "45%",
-    backgroundColor: "#FFF",
-    padding: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#111827",
-    fontFamily: "Poppins",
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#6B7280",
-    fontFamily: "Inter",
-    fontWeight: "600",
-  },
-  docCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-    marginBottom: 16,
-  },
-  docRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  docIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  docName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#111827",
-    fontFamily: "Poppins",
-  },
-  docExpiry: {
-    fontSize: 11,
-    color: PRIMARY,
-    fontWeight: "600",
-    marginTop: 2,
-    fontFamily: "Inter",
-  },
-  docDivider: {
-    height: 1,
-    backgroundColor: "#F9FAFB",
-    marginVertical: 15,
-  },
-  uploadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 15,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: "#D1FAE5",
-    borderStyle: "dashed",
-    backgroundColor: "#FAFFFE",
-  },
-  uploadBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: PRIMARY,
-    fontFamily: "Poppins",
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 15,
-    backgroundColor: "#FFF",
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-  },
-  menuIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-    fontFamily: "Poppins",
-  },
-  menuSub: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 2,
-    fontFamily: "Inter",
-  },
-  versionText: {
-    textAlign: "center",
-    fontSize: 11,
-    color: "#D1D5DB",
-    marginTop: 20,
-    fontFamily: "Inter",
-    fontWeight: "500",
-  },
+  container: { flex: 1, backgroundColor: "#FFF" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  settingsBtn: { padding: 4 },
+  
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  
+  profileBox: { alignItems: "center", paddingVertical: 20 },
+  avatarWrapper: { position: "relative", marginBottom: 15 },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: LIGHT_GREEN },
+  editAvatarBtn: { position: "absolute", bottom: 0, right: 0, backgroundColor: PRIMARY_GREEN, width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFF" },
+  nameText: { fontSize: 22, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  roleText: { fontSize: 14, color: GRAY_TEXT, marginTop: 4, fontFamily: "Inter" },
+  orgText: { fontSize: 13, color: "#9CA3AF", marginTop: 2, fontFamily: "Inter" },
+  badgeRow: { flexDirection: "row", gap: 10, marginTop: 15 },
+  badge: { backgroundColor: "#F3F4F6", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  badgeText: { fontSize: 11, fontWeight: "700", color: GRAY_TEXT, fontFamily: "Inter-Bold" },
+  
+  statsRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 30, paddingHorizontal: 10 },
+  statItem: { alignItems: "center" },
+  statValue: { fontSize: 18, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  statLabel: { fontSize: 11, color: "#9CA3AF", fontFamily: "Inter-Bold", textTransform: "uppercase" },
+  
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 30, marginBottom: 15 },
+  sectionTitle: { fontSize: 16, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
+  linkText: { fontSize: 13, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
+  
+  idCardPreview: { padding: 20, borderRadius: 20, borderWidth: 1, borderColor: GRAY_BORDER, backgroundColor: "#FFF" },
+  idCardHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 15 },
+  idCardOrg: { fontSize: 12, fontWeight: "800", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
+  idCardNum: { fontSize: 11, fontWeight: "700", color: GRAY_TEXT },
+  idCardBody: { flexDirection: "row", alignItems: "center", gap: 15 },
+  idCardAvatar: { width: 44, height: 44, borderRadius: 22 },
+  idCardName: { fontSize: 15, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" },
+  idCardRole: { fontSize: 12, color: GRAY_TEXT, marginTop: 2, fontFamily: "Inter" },
+  idCardHint: { fontSize: 11, color: "#9CA3AF", marginTop: 15, textAlign: "center", fontFamily: "Inter" },
+  
+  detailsBox: { padding: 20, borderRadius: 20, borderWidth: 1, borderColor: GRAY_BORDER, marginTop: 20 },
+  detailItem: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: GRAY_BORDER },
+  detailLabel: { fontSize: 13, color: "#9CA3AF", fontFamily: "Inter" },
+  detailValue: { fontSize: 14, fontWeight: "600", color: DARK_TEXT, fontFamily: "Inter-SemiBold" },
+  
+  uploadRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  docCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: GRAY_BORDER, backgroundColor: "#FFF", marginBottom: 10 },
+  docIcon: { width: 36, height: 36, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  docTitle: { fontSize: 14, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" },
+  docDate: { fontSize: 12, color: GRAY_TEXT, marginTop: 2, fontFamily: "Inter" },
+  docSummary: { marginTop: 5, alignItems: "center" },
+  docSummaryText: { fontSize: 11, fontWeight: "700", color: "#9CA3AF", fontFamily: "Inter-Bold" },
+  docActionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: PRIMARY_GREEN, marginRight: 5 },
+  docActionText: { fontSize: 11, fontWeight: "700", color: PRIMARY_GREEN },
+  
+  actionsBox: { padding: 10, borderRadius: 20, borderWidth: 1, borderColor: GRAY_BORDER, marginTop: 10 },
+  actionItem: { flexDirection: "row", alignItems: "center", gap: 15, paddingVertical: 16, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: GRAY_BORDER },
+  actionLabel: { flex: 1, fontSize: 15, fontWeight: "600", color: DARK_TEXT, fontFamily: "Inter-SemiBold" },
+  
+  signOutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 40, height: 56, borderRadius: 16, borderWidth: 2, borderColor: "#FEE2E2", backgroundColor: "#FEF2F2" },
+  signOutText: { fontSize: 16, fontWeight: "700", color: ERROR_RED, fontFamily: "Inter-Bold" },
+  versionText: { textAlign: "center", color: "#D1D5DB", marginTop: 20, fontSize: 12, fontFamily: "Inter" },
 });

@@ -1,172 +1,354 @@
-import { View, Text, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  Animated,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 
-const GREEN = "#1F6F43";
+// ── Color tokens ──────────────────────────────────────────────────────────────
+const PRIMARY = "#1F6F43";
+const PRIMARY_LIGHT = "#E8F5ED";
+const BG = "#F8FAFC";
+const CARD = "#FFFFFF";
+const TEXT_PRIMARY = "#0F172A";
+const TEXT_SECONDARY = "#64748B";
+const TEXT_MUTED = "#94A3B8";
+const BORDER = "#E2E8F0";
+const SUCCESS = "#10B981";
+const ACCENT = "#34D399";
 
 export default function CompleteShift() {
   const { shiftId } = useLocalSearchParams();
   const [shift, setShift] = useState(null);
-  const [shiftNotes, setShiftNotes] = useState("");
-  const [completing, setCompleting] = useState(false);
-  const [checklist, setChecklist] = useState({
-    checkedIn: false, intakeForm: false, medicationsLogged: false, clientSignature: false, shiftNotes: false,
-  });
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadShift(); }, []);
+  // Animations
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(40)).current;
+
+  useEffect(() => {
+    loadShift();
+    // Start animations after mount
+    setTimeout(() => {
+      Animated.sequence([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 5,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+        Animated.parallel([
+          Animated.timing(opacityAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }, 100);
+  }, []);
 
   const loadShift = async () => {
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };
-        setShift(data);
-        setChecklist(prev => ({
-          ...prev,
-          checkedIn: !!data.checkedIn,
-          intakeForm: !!data.intakeFormSubmitted,
-          medicationsLogged: !!data.medicationsLoggedAt,
-        }));
+      if (shiftId) {
+        const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        }
       }
     } catch {}
+    setLoading(false);
   };
 
-  const toggleItem = (key) => {
-    if (key === "checkedIn") return; // auto-set, not toggleable
-    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const requiredItems = ["checkedIn", "intakeForm"];
-  const allRequired = requiredItems.every(k => checklist[k]);
-
-  const CHECKLIST_ITEMS = [
-    { key: "checkedIn", label: "Checked In", desc: "GPS verified check-in", required: true },
-    { key: "intakeForm", label: "Intake Form", desc: "Client assessment completed", required: true },
-    { key: "medicationsLogged", label: "Medications Logged", desc: "All medications recorded", required: false },
-    { key: "clientSignature", label: "Client Signature", desc: "Client acknowledged service", required: false },
-    { key: "shiftNotes", label: "Shift Notes Added", desc: "Shift summary written", required: false },
-  ];
-
-  const handleComplete = async () => {
-    if (!allRequired) {
-      Alert.alert("Incomplete", "Please complete all required items before finishing the shift.");
-      return;
-    }
-    if (!shiftNotes.trim()) {
-      Alert.alert("Notes Required", "Please add shift notes before completing.");
-      return;
-    }
-    setCompleting(true);
-    try {
-      if (shift?.ref) {
-        await updateDoc(shift.ref, {
-          status: "Completed",
-          shiftNotes,
-          completionChecklist: checklist,
-          completedAt: new Date().toISOString(),
-        });
+  const getDuration = () => {
+    if (shift?.clockInTime && shift?.clockOutTime) {
+      const parseTime = (t) => {
+        if (!t) return 0;
+        const [time, period] = t.split(" ");
+        let [h, m] = time.split(":").map(Number);
+        if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+        if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+        return h * 60 + (m || 0);
+      };
+      const diff = parseTime(shift.clockOutTime) - parseTime(shift.clockInTime);
+      if (diff > 0) {
+        const h = Math.floor(diff / 60);
+        const m = diff % 60;
+        return m > 0 ? `${h}h ${m}m` : `${h} hours`;
       }
-      router.replace(`/geo-checkout?shiftId=${shiftId}`);
-    } catch {
-      Alert.alert("Error", "Failed to complete shift. Try again.");
-    } finally {
-      setCompleting(false);
     }
+    return "—";
   };
 
-  const completedCount = Object.values(checklist).filter(Boolean).length;
+  const summaryItems = shift ? [
+    { icon: "calendar-outline", label: "Date", value: shift.startDate || "Today" },
+    { icon: "person-outline", label: "Client", value: shift.clientName || shift.name || "Client" },
+    { icon: "time-outline", label: "Shift", value: `${shift.startTime || "—"} – ${shift.endTime || "—"}` },
+    { icon: "timer-outline", label: "Duration", value: getDuration() },
+    { icon: "location-outline", label: "Location", value: shift.location || "On-site" },
+    { icon: "car-outline", label: "KM Traveled", value: shift.kmTraveled ? `${shift.kmTraveled} km` : "—" },
+  ] : [];
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={PRIMARY} />
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        {/* Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
-          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Complete Shift</Text>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Success Animation */}
+        <View style={styles.successSection}>
+          <Animated.View style={[styles.checkCircleOuter, { transform: [{ scale: scaleAnim }] }]}>
+            <View style={styles.checkCircleInner}>
+              <Ionicons name="checkmark" size={52} color="#FFF" />
+            </View>
+          </Animated.View>
+
+          <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }], alignItems: "center" }}>
+            <Text style={styles.successTitle}>Shift Completed!</Text>
+            <Text style={styles.successSubtitle}>
+              Great work! Your shift has been logged and submitted successfully.
+            </Text>
+          </Animated.View>
         </View>
 
-        <View style={{ padding: 20 }}>
-          {/* Progress Ring */}
-          <View style={{ backgroundColor: GREEN, borderRadius: 20, padding: 24, alignItems: "center", marginBottom: 20 }}>
-            <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: "600", marginBottom: 4 }}>PRE-COMPLETION CHECKLIST</Text>
-            <Text style={{ color: "#fff", fontSize: 40, fontWeight: "800" }}>{completedCount}<Text style={{ fontSize: 20, color: "rgba(255,255,255,0.5)" }}>/{CHECKLIST_ITEMS.length}</Text></Text>
-            <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>items completed</Text>
-            <View style={{ width: "80%", height: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 3, marginTop: 16, overflow: "hidden" }}>
-              <View style={{ height: 6, backgroundColor: "#fff", borderRadius: 3, width: `${(completedCount / CHECKLIST_ITEMS.length) * 100}%` }} />
+        {/* Summary Card */}
+        {shift && (
+          <Animated.View style={[styles.card, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Shift Summary</Text>
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={SUCCESS} />
+                <Text style={styles.verifiedBadgeText}>Verified</Text>
+              </View>
             </View>
-          </View>
+            {summaryItems.map(({ icon, label, value }) => (
+              <View key={label} style={styles.summaryRow}>
+                <View style={styles.summaryIconBox}>
+                  <Ionicons name={icon} size={16} color={PRIMARY} />
+                </View>
+                <View style={styles.summaryInfo}>
+                  <Text style={styles.summaryLabel}>{label}</Text>
+                  <Text style={styles.summaryValue}>{value}</Text>
+                </View>
+              </View>
+            ))}
+          </Animated.View>
+        )}
 
-          {/* Shift Info */}
-          {shift && (
-            <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 }}>{shift.clientName || shift.name}</Text>
-              <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift.startDate} • {shift.startTime} – {shift.endTime}</Text>
+        {/* Completion Checklist */}
+        <Animated.View style={[styles.card, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
+          <Text style={styles.cardTitle}>Completion Checklist</Text>
+          {[
+            { label: "Clocked In", done: !!shift?.clockInTime },
+            { label: "Shift Report Filed", done: !!shift?.shiftReport },
+            { label: "Medications Logged", done: !!shift?.medicationsLoggedAt },
+            { label: "Transportation Logged", done: !!shift?.transportationLoggedAt },
+            { label: "Clocked Out", done: !!shift?.clockOutTime },
+          ].map(({ label, done }) => (
+            <View key={label} style={styles.checklistRow}>
+              <View style={[styles.checklistDot, done ? styles.checklistDotDone : styles.checklistDotPending]}>
+                <Ionicons name={done ? "checkmark" : "remove"} size={12} color={done ? "#FFF" : TEXT_MUTED} />
+              </View>
+              <Text style={[styles.checklistLabel, !done && styles.checklistLabelPending]}>{label}</Text>
+              {!done && <Text style={styles.checklistOptional}>Optional</Text>}
             </View>
-          )}
+          ))}
+        </Animated.View>
 
-          {/* Checklist */}
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", marginBottom: 16 }}>Checklist</Text>
-            {CHECKLIST_ITEMS.map(item => (
-              <Pressable key={item.key} onPress={() => toggleItem(item.key)} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" }}>
-                <View style={{ width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: checklist[item.key] ? GREEN : "#d1d5db", backgroundColor: checklist[item.key] ? GREEN : "#fff", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                  {checklist[item.key] && <Ionicons name="checkmark" size={14} color="#fff" />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Text style={{ fontSize: 14, fontWeight: "600", color: checklist[item.key] ? "#1a1a1a" : "#6b7280" }}>{item.label}</Text>
-                    {item.required && <View style={{ backgroundColor: "#fee2e2", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginLeft: 8 }}><Text style={{ fontSize: 10, fontWeight: "700", color: "#ef4444" }}>REQ</Text></View>}
-                  </View>
-                  <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{item.desc}</Text>
-                </View>
-                {item.key !== "checkedIn" && (
-                  <Ionicons name={checklist[item.key] ? "checkmark-circle" : "ellipse-outline"} size={20} color={checklist[item.key] ? GREEN : "#d1d5db"} />
-                )}
-              </Pressable>
-            ))}
+        {/* Congratulations */}
+        <Animated.View style={[styles.congratsCard, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
+          <Ionicons name="trophy-outline" size={28} color={ACCENT} />
+          <View style={styles.congratsInfo}>
+            <Text style={styles.congratsTitle}>Excellent work!</Text>
+            <Text style={styles.congratsSub}>Your dedication makes a difference every day.</Text>
           </View>
-
-          {/* Quick Actions */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-            {[
-              { label: "Intake Form", icon: "document-text", route: `/intake-form?shiftId=${shiftId}` },
-              { label: "Medications", icon: "medical", route: `/shift-medications?shiftId=${shiftId}` },
-            ].map(({ label, icon, route }) => (
-              <Pressable key={label} onPress={() => router.push(route)} style={{ flex: 1, backgroundColor: "#fff", borderRadius: 12, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "#e5e7eb", flexDirection: "row", justifyContent: "center" }}>
-                <Ionicons name={icon} size={18} color={GREEN} style={{ marginRight: 8 }} />
-                <Text style={{ fontSize: 13, fontWeight: "600", color: GREEN }}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Shift Notes */}
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", marginBottom: 4 }}>Shift Notes <Text style={{ color: "#ef4444" }}>*</Text></Text>
-            <Text style={{ fontSize: 12, color: "#9ca3af", marginBottom: 12 }}>Required before completing</Text>
-            <TextInput value={shiftNotes} onChangeText={setShiftNotes} placeholder="Summarize what happened during the shift..." placeholderTextColor="#9ca3af" multiline numberOfLines={5} style={{ borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 10, padding: 12, fontSize: 14, color: "#374151", textAlignVertical: "top", minHeight: 120 }} />
-          </View>
-        </View>
+        </Animated.View>
       </ScrollView>
 
-      {/* Complete Button */}
-      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e5e7eb" }}>
-        {!allRequired && (
-          <View style={{ backgroundColor: "#fef3c7", borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name="alert-circle" size={16} color="#d97706" style={{ marginRight: 8 }} />
-            <Text style={{ fontSize: 12, color: "#92400e", flex: 1 }}>Complete required checklist items before finishing.</Text>
-          </View>
-        )}
-        <Pressable onPress={handleComplete} disabled={completing} style={{ backgroundColor: completing ? "#9ca3af" : allRequired ? GREEN : "#9ca3af", paddingVertical: 16, borderRadius: 14, alignItems: "center" }}>
-          {completing ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Complete Shift & Check Out</Text>}
+      {/* Bottom button */}
+      <View style={styles.bottomBar}>
+        <Pressable style={styles.homeBtn} onPress={() => router.replace("/home")} activeOpacity={0.8}>
+          <Ionicons name="home-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+          <Text style={styles.homeBtnText}>Back to Home</Text>
+        </Pressable>
+        <Pressable style={styles.shiftsBtn} onPress={() => router.replace("/shifts")} activeOpacity={0.7}>
+          <Text style={styles.shiftsBtnText}>View All Shifts</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: BG },
+  loadingContainer: { flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 130 },
+  // Success
+  successSection: { alignItems: "center", marginBottom: 32 },
+  checkCircleOuter: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    backgroundColor: PRIMARY_LIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  checkCircleInner: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: TEXT_PRIMARY,
+    fontFamily: "Poppins-Bold",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  successSubtitle: {
+    fontSize: 15,
+    color: TEXT_SECONDARY,
+    textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 280,
+    fontFamily: "Inter",
+  },
+  // Card
+  card: {
+    backgroundColor: CARD,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: TEXT_PRIMARY, fontFamily: "Poppins-SemiBold" },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  verifiedBadgeText: { fontSize: 11, fontWeight: "700", color: SUCCESS, fontFamily: "Inter-SemiBold" },
+  // Summary rows
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    gap: 12,
+  },
+  summaryIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: PRIMARY_LIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryInfo: { flex: 1 },
+  summaryLabel: { fontSize: 11, color: TEXT_MUTED, fontFamily: "Inter" },
+  summaryValue: { fontSize: 14, fontWeight: "600", color: TEXT_PRIMARY, fontFamily: "Inter-SemiBold" },
+  // Checklist
+  checklistRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  checklistDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  checklistDotDone: { backgroundColor: SUCCESS },
+  checklistDotPending: { backgroundColor: "#F1F5F9" },
+  checklistLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: TEXT_PRIMARY, fontFamily: "Inter-SemiBold" },
+  checklistLabelPending: { color: TEXT_MUTED },
+  checklistOptional: { fontSize: 11, color: TEXT_MUTED, fontFamily: "Inter" },
+  // Congrats card
+  congratsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    backgroundColor: "#0F172A",
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 14,
+  },
+  congratsInfo: { flex: 1 },
+  congratsTitle: { fontSize: 15, fontWeight: "700", color: "#FFF", fontFamily: "Poppins-SemiBold", marginBottom: 2 },
+  congratsSub: { fontSize: 13, color: "rgba(255,255,255,0.6)", fontFamily: "Inter" },
+  // Bottom bar
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: CARD,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  homeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: PRIMARY,
+    height: 52,
+    borderRadius: 14,
+  },
+  homeBtnText: { fontSize: 16, fontWeight: "700", color: "#FFF", fontFamily: "Poppins-SemiBold" },
+  shiftsBtn: {
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shiftsBtnText: { fontSize: 14, fontWeight: "600", color: TEXT_SECONDARY, fontFamily: "Inter-SemiBold" },
+});
