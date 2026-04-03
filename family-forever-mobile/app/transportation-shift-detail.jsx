@@ -1,304 +1,622 @@
-import { View, Text, ScrollView, Pressable, Alert, Linking, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  Linking,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+} from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { safeString, parseDate, formatCanadaTime } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
+const DARK = "#111827";
+const GRAY = "#6B7280";
+const BORDER = "#E5E7EB";
+const PAGE_BG = "#F9FAFB";
 
-const CHECKLIST_ITEMS = [
-  { id: "c1", label: "Vehicle inspection completed" },
-  { id: "c2", label: "Passenger safely seated and belt fastened" },
-  { id: "c3", label: "Destination confirmed with passenger" },
-  { id: "c4", label: "Route planned and reviewed" },
-];
+// Format date: "Thu, 20 Mar · 2:00 – 6:00 PM"
+function formatHeaderDate(shift) {
+  if (!shift) return "";
+  const d = parseDate(shift.startDate);
+  let datePart = "";
+  if (d) {
+    const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
+    const day = d.getDate();
+    const month = d.toLocaleDateString("en-US", { month: "short" });
+    datePart = `${weekday}, ${day} ${month}`;
+  }
+  const timePart =
+    shift.startTime && shift.endTime
+      ? `${shift.startTime} – ${shift.endTime}`
+      : "";
+  return [datePart, timePart].filter(Boolean).join(" · ");
+}
+
+// Open address in Google Maps
+function openMaps(address) {
+  if (!address) return;
+  Linking.openURL(
+    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+  ).catch(() => Alert.alert("Error", "Could not open maps."));
+}
+
+// Format initials from name
+function initials(name) {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 export default function TransportationShiftDetail() {
-  const { shiftId, taskId } = useLocalSearchParams();
+  const { shiftId } = useLocalSearchParams();
   const [shift, setShift] = useState(null);
-  const [task, setTask] = useState(null);
+  const [intake, setIntake] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [checklist, setChecklist] = useState(CHECKLIST_ITEMS.map((i) => ({ ...i, checked: false })));
-  const [submitting, setSubmitting] = useState(false);
-  const [mileageStart, setMileageStart] = useState(null);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };
-        setShift(data);
-        if (taskId && data.transportTasks) {
-          const found = data.transportTasks.find((t) => t.id === taskId);
-          if (found) {
-            setTask(found);
-            setMileageStart(found.mileageStart || null);
-          }
-        }
-      }
-    } catch (e) {
-      console.log("Error loading transportation shift detail:", e);
-    } finally {
+  // Real-time shift listener
+  useEffect(() => {
+    if (!shiftId) return;
+    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+      if (snap.exists()) setShift({ id: snap.id, ...snap.data() });
       setLoading(false);
-    }
-  };
+    });
+    return () => unsub();
+  }, [shiftId]);
 
-  const toggleCheck = (id) => {
-    setChecklist((prev) => prev.map((c) => c.id === id ? { ...c, checked: !c.checked } : c));
-  };
+  // Fetch intake form for caseworker / intake worker contacts
+  useEffect(() => {
+    if (!shift) return;
+    const fetch = async () => {
+      try {
+        const clientName = shift.clientName || shift.name || "";
+        const clientId = shift.clientId;
+        const intakeId = shift.intakeId;
 
-  const allChecked = checklist.every((c) => c.checked);
+        let matched = null;
 
-  const handleBeginRoute = () => {
-    if (!allChecked) {
-      Alert.alert("Pre-Trip Checklist", "Please complete all pre-trip checks before starting the route.");
-      return;
-    }
-    const passenger = task?.passenger || shift?.clientName || "";
-    const pickup = task?.pickup || task?.pickupLocation || shift?.pickupLocation || shift?.location || "";
-    const destination = task?.destination || task?.dropLocation || shift?.dropLocation || shift?.destination || "";
-    router.push(
-      `/active-route?shiftId=${shiftId}&taskId=${taskId || ""}&pickup=${encodeURIComponent(pickup)}&destination=${encodeURIComponent(destination)}&passenger=${encodeURIComponent(passenger)}`
-    );
-  };
+        if (intakeId) {
+          const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
+          if (snap.exists()) matched = { ...snap.data(), id: snap.id };
+        }
 
-  const handleCompleteTrip = async () => {
-    Alert.alert("Complete Trip?", "Mark this transportation task as completed?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Complete",
-        onPress: async () => {
-          setSubmitting(true);
-          try {
-            if (shift?.ref && task) {
-              const updatedTasks = (shift.transportTasks || []).map((t) =>
-                t.id === task.id ? { ...t, status: "Completed", completedAt: new Date().toISOString() } : t
-              );
-              await updateDoc(shift.ref, { transportTasks: updatedTasks });
+        if (!matched) {
+          const snapshot = await getDocs(collection(db, "InTakeForms"));
+          const cleanName = clientName.trim().toLowerCase();
+          snapshot.docs.some((d) => {
+            const data = d.data();
+            if (clientId && (data.clientId === clientId || d.id === clientId)) {
+              matched = { ...data, id: d.id };
+              return true;
             }
-            Alert.alert("Trip Completed", "The transportation task has been marked as completed.", [
-              { text: "OK", onPress: () => router.back() },
-            ]);
-          } catch {
-            Alert.alert("Error", "Failed to complete trip.");
-          } finally {
-            setSubmitting(false);
-          }
-        },
-      },
-    ]);
-  };
+            const formName = (
+              data.childFirstName +
+              " " +
+              data.childLastName
+            )
+              .trim()
+              .toLowerCase();
+            if (cleanName && formName.includes(cleanName.split(" ")[0])) {
+              matched = { ...data, id: d.id };
+              return true;
+            }
+            return false;
+          });
+        }
 
-  const openNavigation = (location) => {
-    if (!location) return;
-    Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(location)}`).catch(() =>
-      Alert.alert("Error", "Could not open maps.")
-    );
-  };
+        if (matched) setIntake(matched);
+      } catch (e) {
+        console.warn("Intake fetch error:", e);
+      }
+    };
+    fetch();
+  }, [shift?.id]);
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6", alignItems: "center", justifyContent: "center" }}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: PAGE_BG, alignItems: "center", justifyContent: "center" }}
+      >
         <ActivityIndicator size="large" color={GREEN} />
       </SafeAreaView>
     );
   }
 
-  const displayClient = task?.passenger || shift?.clientName || shift?.name || "Client";
-  const displayPickup = task?.pickup || task?.pickupLocation || shift?.pickupLocation || shift?.location || "Pickup location";
-  const displayDrop = task?.destination || task?.dropLocation || shift?.dropLocation || shift?.destination || "Drop-off";
-  const displayTime = task?.time || (shift ? `${shift.startTime} – ${shift.endTime}` : "—");
-  const status = task?.status || "Pending";
+  const pt = Array.isArray(shift?.shiftPoints) && shift.shiftPoints[0];
+  const clientName =
+    safeString(shift?.clientName || shift?.name) || "Client";
+  const rawServiceType =
+    safeString(shift?.category || shift?.categoryName || shift?.serviceType) ||
+    "Transportation";
+  const seatType = safeString(pt?.seatType || shift?.seatType);
+
+  // Contacts
+  const caseworkerName =
+    safeString(shift?.caseworkerName || intake?.caseworkerName);
+  const caseworkerPhone =
+    safeString(shift?.caseworkerPhone || intake?.caseworkerPhone);
+  const intakeWorkerName = safeString(
+    shift?.intakeWorkerName || intake?.intakeWorkerName
+  );
+  const intakeWorkerPhone = safeString(
+    shift?.intakeWorkerPhone || intake?.intakeWorkerPhone
+  );
+  const weekendPhone1 = safeString(
+    shift?.weekendPhone || intake?.weekendPhone || intake?.emergencyPhone1
+  );
+  const weekendPhone2 = safeString(
+    shift?.weekendPhone2 || intake?.emergencyPhone2
+  );
+
+  // Route stops
+  const stops = [
+    {
+      label: "Pickup",
+      address: safeString(pt?.pickupLocation || shift?.pickupLocation),
+      time: safeString(pt?.pickupTime || shift?.startTime),
+      color: GREEN,
+    },
+    pt?.visitLocation || shift?.visitLocation
+      ? {
+          label: "Visit Location",
+          address: safeString(pt?.visitLocation || shift?.visitLocation),
+          time: safeString(pt?.visitTime || ""),
+          color: "#1E5FA6",
+        }
+      : null,
+    {
+      label: "Drop-off",
+      address: safeString(pt?.dropLocation || shift?.dropLocation),
+      time: safeString(pt?.dropTime || shift?.endTime),
+      color: "#DC2626",
+    },
+  ].filter(Boolean);
+
+  const hasContacts =
+    caseworkerName || caseworkerPhone || intakeWorkerName || weekendPhone1;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        {/* Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
-          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a" }}>Transportation</Text>
-            <Text style={{ fontSize: 12, color: "#9ca3af" }}>{displayTime}</Text>
-          </View>
-          {status === "Completed" ? (
-            <View style={{ backgroundColor: "#dcfce7", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: GREEN }}>Completed</Text>
-            </View>
-          ) : status === "In Progress" ? (
-            <View style={{ backgroundColor: "#dbeafe", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#1e40af" }}>In Progress</Text>
-            </View>
-          ) : (
-            <View style={{ backgroundColor: "#fef3c7", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#b45309" }}>Pending</Text>
-            </View>
-          )}
+    <SafeAreaView style={{ flex: 1, backgroundColor: PAGE_BG }}>
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 14,
+          backgroundColor: "#fff",
+          borderBottomWidth: 1,
+          borderBottomColor: BORDER,
+        }}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "#F3F4F6",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+          }}
+        >
+          <Ionicons name="arrow-back" size={20} color={DARK} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{ fontSize: 18, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold" }}
+          >
+            Transportation Shift
+          </Text>
+          <Text
+            style={{ fontSize: 12, color: GRAY, marginTop: 1, fontFamily: "Inter" }}
+          >
+            {formatHeaderDate(shift)}
+          </Text>
         </View>
+      </View>
 
-        <View style={{ padding: 20 }}>
-          {/* Passenger Card */}
-          <View style={{ backgroundColor: GREEN, borderRadius: 18, padding: 20, marginBottom: 20 }}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.7)", marginBottom: 10 }}>PASSENGER</Text>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginRight: 14 }}>
-                <Text style={{ fontSize: 16, fontWeight: "800", color: "#fff" }}>
-                  {displayClient.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800", color: "#fff" }}>{displayClient}</Text>
-                <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 2 }}>{shift?.startDate || "—"}</Text>
-              </View>
-              <Pressable
-                onPress={() => openNavigation(displayPickup)}
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 14 }}
+      >
+        {/* ── Client Card ─────────────────────────────────────────────────── */}
+        <View style={styles.card}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "800",
+                  color: DARK,
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 8,
+                }}
               >
-                <Ionicons name="navigate" size={22} color="#fff" />
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Route Card */}
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: "#e5e7eb" }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#9ca3af", marginBottom: 14 }}>ROUTE</Text>
-
-            <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 12 }}>
-              <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center", marginRight: 12, marginTop: 2 }}>
-                <Ionicons name="radio-button-on" size={16} color={GREEN} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>PICKUP</Text>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{displayPickup}</Text>
-              </View>
-              <Pressable onPress={() => openNavigation(displayPickup)} hitSlop={8}>
-                <Ionicons name="open-outline" size={16} color={GREEN} />
-              </Pressable>
-            </View>
-
-            <View style={{ width: 2, height: 20, backgroundColor: "#d1d5db", marginLeft: 15, marginBottom: 12 }} />
-
-            <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-              <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center", marginRight: 12, marginTop: 2 }}>
-                <Ionicons name="location" size={16} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>DROP-OFF</Text>
-                <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{displayDrop}</Text>
-              </View>
-              <Pressable onPress={() => openNavigation(displayDrop)} hitSlop={8}>
-                <Ionicons name="open-outline" size={16} color="#dc2626" />
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Pre-Trip Checklist */}
-          {status === "Pending" && (
-            <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: "#e5e7eb" }}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <Text style={{ fontSize: 14, fontWeight: "700", color: "#1a1a1a" }}>Pre-Trip Checklist</Text>
-                <Text style={{ fontSize: 12, color: allChecked ? GREEN : "#9ca3af", fontWeight: "600" }}>
-                  {checklist.filter((c) => c.checked).length}/{checklist.length}
-                </Text>
-              </View>
-              {checklist.map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => toggleCheck(item.id)}
-                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" }}
+                {clientName}
+              </Text>
+              {seatType ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    alignSelf: "flex-start",
+                    backgroundColor: "#F3F4F6",
+                    borderRadius: 20,
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                  }}
                 >
-                  <View style={{
-                    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-                    borderColor: item.checked ? GREEN : "#d1d5db",
-                    backgroundColor: item.checked ? GREEN : "#fff",
-                    alignItems: "center", justifyContent: "center", marginRight: 12,
-                  }}>
-                    {item.checked && <Ionicons name="checkmark" size={14} color="#fff" />}
-                  </View>
-                  <Text style={{ fontSize: 14, color: item.checked ? "#9ca3af" : "#374151", flex: 1, textDecorationLine: item.checked ? "line-through" : "none" }}>
-                    {item.label}
+                  <Ionicons name="car-sport-outline" size={14} color={GRAY} />
+                  <Text
+                    style={{ fontSize: 13, color: DARK, fontWeight: "600", fontFamily: "Inter-SemiBold" }}
+                  >
+                    {seatType}
                   </Text>
-                </Pressable>
-              ))}
+                </View>
+              ) : null}
             </View>
-          )}
-
-          {/* Quick Actions */}
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-            <Pressable
-              onPress={() => router.push(`/vehicle-check?shiftId=${shiftId}`)}
-              style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "#e5e7eb" }}
+            <View
+              style={{
+                backgroundColor: "#FEF9C3",
+                borderRadius: 20,
+                paddingHorizontal: 12,
+                paddingVertical: 5,
+              }}
             >
-              <Ionicons name="car-outline" size={22} color="#7c3aed" />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#374151", marginTop: 6, textAlign: "center" }}>Vehicle{"\n"}Check</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push(`/transportation-detail?shiftId=${shiftId}&taskId=${taskId || ""}`)}
-              style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "#e5e7eb" }}
-            >
-              <Ionicons name="map-outline" size={22} color="#0369a1" />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#374151", marginTop: 6, textAlign: "center" }}>Route{"\n"}Map</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push(`/shift-detail?shiftId=${shiftId}`)}
-              style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "#e5e7eb" }}
-            >
-              <Ionicons name="person-outline" size={22} color={GREEN} />
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#374151", marginTop: 6, textAlign: "center" }}>Client{"\n"}Info</Text>
-            </Pressable>
+              <Text
+                style={{ fontSize: 12, fontWeight: "700", color: "#854D0E", fontFamily: "Inter-Bold" }}
+              >
+                {rawServiceType}
+              </Text>
+            </View>
           </View>
-
-          {/* Info Banner */}
-          {!allChecked && status === "Pending" && (
-            <View style={{ backgroundColor: "#fffbeb", borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "flex-start" }}>
-              <Ionicons name="information-circle" size={18} color="#d97706" style={{ marginRight: 10, marginTop: 1 }} />
-              <Text style={{ fontSize: 13, color: "#92400e", flex: 1 }}>Complete the pre-trip checklist before beginning the route.</Text>
-            </View>
-          )}
         </View>
+
+        {/* ── Contacts Card ───────────────────────────────────────────────── */}
+        {hasContacts && (
+          <View style={styles.card}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: DARK,
+                fontFamily: "Poppins-SemiBold",
+                marginBottom: 14,
+              }}
+            >
+              Contacts
+            </Text>
+
+            {/* Caseworker */}
+            {caseworkerName ? (
+              <ContactRow
+                initials_text={initials(caseworkerName)}
+                name={caseworkerName}
+                role="Caseworker"
+                phone={caseworkerPhone}
+                avatarBg="#E0F2FE"
+                avatarText="#0369A1"
+              />
+            ) : null}
+
+            {/* Intake Worker */}
+            {intakeWorkerName ? (
+              <ContactRow
+                initials_text={initials(intakeWorkerName)}
+                name={intakeWorkerName}
+                role="Intake Worker"
+                phone={intakeWorkerPhone}
+                avatarBg="#EDE9FE"
+                avatarText="#5B21B6"
+              />
+            ) : null}
+
+            {/* Weekend & After-Hours */}
+            {weekendPhone1 ? (
+              <View
+                style={{
+                  backgroundColor: "#FFFBEB",
+                  borderRadius: 12,
+                  padding: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginTop: 4,
+                }}
+              >
+                <Ionicons
+                  name="call-outline"
+                  size={16}
+                  color="#D97706"
+                  style={{ marginRight: 10 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "700",
+                      color: "#D97706",
+                      fontFamily: "Inter-Bold",
+                    }}
+                  >
+                    Weekend & After-Hours
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end" }}>
+                  <Pressable onPress={() => Linking.openURL(`tel:${weekendPhone1}`)}>
+                    <Text
+                      style={{ fontSize: 13, fontWeight: "700", color: "#D97706", fontFamily: "Inter-Bold" }}
+                    >
+                      {weekendPhone1}
+                    </Text>
+                  </Pressable>
+                  {weekendPhone2 ? (
+                    <Pressable onPress={() => Linking.openURL(`tel:${weekendPhone2}`)}>
+                      <Text
+                        style={{ fontSize: 13, fontWeight: "700", color: "#D97706", fontFamily: "Inter-Bold", marginTop: 2 }}
+                      >
+                        {weekendPhone2}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Disclaimer */}
+            <View
+              style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 10, gap: 6 }}
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={14}
+                color={GRAY}
+                style={{ marginTop: 1 }}
+              />
+              <Text
+                style={{ fontSize: 12, color: GRAY, flex: 1, lineHeight: 17, fontFamily: "Inter" }}
+              >
+                Caseworker &amp; Intake Worker are unavailable on weekends. Use
+                the emergency line above.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Route Card ──────────────────────────────────────────────────── */}
+        {stops.length > 0 && (
+          <View style={styles.card}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: DARK,
+                fontFamily: "Poppins-SemiBold",
+                marginBottom: 16,
+              }}
+            >
+              Route
+            </Text>
+
+            {stops.map((stop, idx) => (
+              <View key={idx}>
+                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                  {/* Timeline dot + line */}
+                  <View style={{ alignItems: "center", width: 20, marginRight: 14 }}>
+                    <View
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 6,
+                        backgroundColor: stop.color,
+                        marginTop: 4,
+                      }}
+                    />
+                    {idx < stops.length - 1 && (
+                      <View
+                        style={{
+                          width: 2,
+                          flex: 1,
+                          backgroundColor: "#E5E7EB",
+                          marginTop: 4,
+                          minHeight: 48,
+                        }}
+                      />
+                    )}
+                  </View>
+
+                  {/* Stop info */}
+                  <View style={{ flex: 1, paddingBottom: idx < stops.length - 1 ? 16 : 0 }}>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: DARK,
+                        fontFamily: "Inter-Bold",
+                        marginBottom: 2,
+                      }}
+                    >
+                      {stop.label}
+                    </Text>
+                    {stop.address ? (
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: "#374151",
+                          fontFamily: "Inter",
+                          marginBottom: 2,
+                        }}
+                      >
+                        {stop.address}
+                      </Text>
+                    ) : null}
+                    {stop.time ? (
+                      <Text
+                        style={{ fontSize: 12, color: GRAY, fontFamily: "Inter", marginBottom: 6 }}
+                      >
+                        {stop.time}
+                      </Text>
+                    ) : null}
+                    {stop.address ? (
+                      <Pressable
+                        onPress={() => openMaps(stop.address)}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 5,
+                          backgroundColor: "#F0FDF4",
+                          borderRadius: 20,
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        <Ionicons name="location-outline" size={13} color={GREEN} />
+                        <Text
+                          style={{ fontSize: 12, fontWeight: "600", color: GREEN, fontFamily: "Inter-SemiBold" }}
+                        >
+                          View on Maps
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
-      {/* Bottom CTA */}
-      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e5e7eb" }}>
-        {status === "Completed" ? (
-          <View style={{ backgroundColor: "#dcfce7", paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center" }}>
-            <Ionicons name="checkmark-circle" size={20} color={GREEN} style={{ marginRight: 10 }} />
-            <Text style={{ color: GREEN, fontSize: 16, fontWeight: "700" }}>Trip Completed</Text>
-          </View>
-        ) : status === "In Progress" ? (
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            <Pressable
-              onPress={handleBeginRoute}
-              style={{ flex: 1, backgroundColor: GREEN, paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center" }}
-            >
-              <Ionicons name="navigate" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Continue Route</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleCompleteTrip}
-              disabled={submitting}
-              style={{ flex: 1, backgroundColor: submitting ? "#9ca3af" : "#0369a1", paddingVertical: 16, borderRadius: 14, alignItems: "center" }}
-            >
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Complete</Text>}
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={handleBeginRoute}
-            style={{ backgroundColor: allChecked ? GREEN : "#9ca3af", paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center" }}
+      {/* ── Bottom: Choose Vehicle ─────────────────────────────────────────── */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: "#fff",
+          borderTopWidth: 1,
+          borderTopColor: BORDER,
+          padding: 20,
+        }}
+      >
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/vehicle-check",
+              params: { shiftId: shiftId },
+            })
+          }
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? "#185A37" : GREEN,
+            borderRadius: 14,
+            paddingVertical: 17,
+            alignItems: "center",
+            justifyContent: "center",
+          })}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontSize: 16,
+              fontWeight: "700",
+              fontFamily: "Poppins-SemiBold",
+            }}
           >
-            <Ionicons name="navigate" size={20} color="#fff" style={{ marginRight: 10 }} />
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Begin Route</Text>
-          </Pressable>
-        )}
+            Choose Vehicle
+          </Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
 }
+
+function ContactRow({ initials_text, name, role, phone, avatarBg, avatarText }) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+      }}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: avatarBg,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 12,
+        }}
+      >
+        <Text style={{ fontSize: 13, fontWeight: "700", color: avatarText, fontFamily: "Inter-Bold" }}>
+          {initials_text}
+        </Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: "#1A1A1A", fontFamily: "Inter-SemiBold" }}>
+          {name}
+        </Text>
+        <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter" }}>{role}</Text>
+      </View>
+      {phone ? (
+        <Pressable
+          onPress={() => Linking.openURL(`tel:${phone}`)}
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: "#F0FDF4",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Ionicons name="call-outline" size={18} color={GREEN} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = {
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+};

@@ -124,6 +124,47 @@ const formatShiftDate = (dateStr) => {
 };
 
 // ── ShiftCard Component ───────────────────────────────────────────────────────
+// Extract short label from an address string
+function shortAddr(addr) {
+  if (!addr) return null;
+  const s = safeString(addr);
+  // Take first meaningful segment before comma
+  const part = s.split(",")[0].trim();
+  // Shorten to ~10 chars
+  return part.length > 12 ? part.slice(0, 11) + "…" : part;
+}
+
+// Mini route preview for transportation shifts
+function RoutePreview({ shift }) {
+  const pt = Array.isArray(shift.shiftPoints) && shift.shiftPoints[0];
+  const pickup = shortAddr(pt?.pickupLocation || shift.pickupLocation);
+  const visit = shortAddr(pt?.visitLocation || shift.visitLocation);
+  const drop = shortAddr(pt?.dropLocation || shift.dropLocation);
+  if (!pickup && !drop) return null;
+
+  const stops = [
+    pickup && { label: pickup, color: "#1F6F43", icon: "navigate" },
+    visit && { label: visit, color: "#1E5FA6", icon: "business" },
+    drop && { label: drop, color: "#DC2626", icon: "flag" },
+  ].filter(Boolean);
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, marginBottom: 2, flexWrap: "wrap", gap: 2 }}>
+      {stops.map((s, i) => (
+        <View key={i} style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            <Ionicons name={s.icon} size={13} color={s.color} />
+            <Text style={{ fontSize: 12, color: "#374151", fontFamily: "Inter" }}>{s.label}</Text>
+          </View>
+          {i < stops.length - 1 && (
+            <Text style={{ fontSize: 11, color: "#D1D5DB", marginHorizontal: 4 }}>· · ·</Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function ShiftCard({ shift, onAction, onDetails }) {
   const getStatus = () => {
     if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
@@ -139,6 +180,7 @@ function ShiftCard({ shift, onAction, onDetails }) {
   const location = safeString(shift.location || shift.address) || "Location not specified";
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
   const displayDate = formatShiftDate(shift.startDate);
+  const isTransport = rawServiceType === "Transportation" || rawServiceType === "Supervised Visitation + Transportation";
 
   const statusColors = {
     "Completed": { dot: "#10B981", text: "#10B981" },
@@ -182,6 +224,8 @@ function ShiftCard({ shift, onAction, onDetails }) {
             <Text style={styles.clientIdText}>ID: {safeString(shift.clientId) || "—"}</Text>
           </View>
         </View>
+
+        {isTransport && <RoutePreview shift={shift} />}
 
 
 
@@ -365,6 +409,14 @@ export default function Shifts() {
           iconColor: PRIMARY_GREEN,
           iconBg: "#F0FDF4",
         });
+        // For transportation shifts, navigate to transportation detail after clock-in
+        const cat = shift.category || shift.categoryName || shift.serviceType || "";
+        if (cat === "Transportation" || cat === "Supervised Visitation + Transportation") {
+          setIsProcessing(false);
+          setConfirmAction(null);
+          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+          return;
+        }
       } else if (type === "clockOut") {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
