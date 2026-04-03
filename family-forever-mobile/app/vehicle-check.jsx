@@ -82,9 +82,9 @@ export default function VehicleCheck() {
         submittedAt: serverTimestamp(),
       });
 
-      // Navigate to the active transportation flow
+      // Navigate to the active route execution screen
       router.push({
-        pathname: "/shift-transportations",
+        pathname: "/complete-shift",
         params: { shiftId },
       });
     } catch (e) {

@@ -1,354 +1,765 @@
+/**
+ * Complete Shift — Active Transportation Route Execution Screen
+ *
+ * Flow:
+ *   Pickup A → Pickup B → ... → Visit → Drop A → Drop B → Done
+ *
+ * Each stop has:
+ *   - Map placeholder + Open Full Navigation
+ *   - Client confirmation rows (Confirm / Cancel)
+ *   - Context-sensitive bottom CTA
+ */
+
 import {
   View,
   Text,
   ScrollView,
   Pressable,
+  Linking,
+  Alert,
   StyleSheet,
-  Animated,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { safeString, parseDate } from "../src/utils/date";
 
-// ── Color tokens ──────────────────────────────────────────────────────────────
-const PRIMARY = "#1F6F43";
-const PRIMARY_LIGHT = "#E8F5ED";
-const BG = "#F8FAFC";
-const CARD = "#FFFFFF";
-const TEXT_PRIMARY = "#0F172A";
-const TEXT_SECONDARY = "#64748B";
-const TEXT_MUTED = "#94A3B8";
-const BORDER = "#E2E8F0";
-const SUCCESS = "#10B981";
-const ACCENT = "#34D399";
+// ── Tokens ────────────────────────────────────────────────────────────────────
+const GREEN = "#1F6F43";
+const GREEN_LIGHT = "#F0FDF4";
+const BLUE = "#1E5FA6";
+const BLUE_LIGHT = "#EFF6FF";
+const DARK = "#111827";
+const GRAY = "#6B7280";
+const BORDER = "#E5E7EB";
+const PAGE = "#F9FAFB";
+const RED = "#DC2626";
 
+// ── Demo data (used when Firebase shiftPoints is empty / single-client) ───────
+const DEMO_CLIENTS = [
+  { id: "c1", name: "Michael Chen",   seatType: "Car Seat", pickupAddr: "1234 Oak Street, Suite 5",  pickupTime: "2:00 PM",  dropAddr: "789 Maple Avenue, Apt 3",  dropTime: "6:00 PM" },
+  { id: "c2", name: "Adriana Torres", seatType: "Booster",  pickupAddr: "1234 Oak Street, Suite 5",  pickupTime: "2:00 PM",  dropAddr: "789 Maple Avenue, Apt 3",  dropTime: "6:00 PM" },
+  { id: "c3", name: "Liam Kim",       seatType: null,        pickupAddr: "456 Elm Drive, Unit 2",      pickupTime: "2:20 PM",  dropAddr: "1200 Pine Street",          dropTime: "6:30 PM" },
+];
+const DEMO_VISIT_ADDR = "500 City Hall Plaza";
+const DEMO_VISIT_TIME = "3:00 PM";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function initials(name = "") {
+  return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function letterLabel(i) {
+  return String.fromCharCode(65 + i); // A, B, C …
+}
+
+function openMaps(address) {
+  if (!address) return;
+  Linking.openURL(
+    `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+  ).catch(() => Alert.alert("Error", "Could not open maps."));
+}
+
+function formatHeaderDate(shift) {
+  if (!shift) return "";
+  const d = parseDate(shift.startDate);
+  let part = "";
+  if (d) {
+    part = d.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
+  }
+  const t = shift.startTime && shift.endTime ? `${shift.startTime} – ${shift.endTime}` : "";
+  return [part, t].filter(Boolean).join(" · ");
+}
+
+/**
+ * Build the stops array from the shift's shiftPoints (or demo data).
+ * Returns: [ { type, label, address, time, clients: [{id,name,seatType}] } ]
+ */
+function buildStops(shiftPoints, shift) {
+  let clients = [];
+
+  if (Array.isArray(shiftPoints) && shiftPoints.length > 0) {
+    // Multi-client from shiftPoints
+    shiftPoints.forEach((sp, i) => {
+      if (sp.pickupLocation) {
+        clients.push({
+          id: sp.clientId || `sp_${i}`,
+          name: sp.clientName || safeString(shift?.clientName) || `Client ${i + 1}`,
+          seatType: sp.seatType || null,
+          pickupAddr: sp.pickupLocation,
+          pickupTime: sp.pickupTime || safeString(shift?.startTime) || "",
+          dropAddr: sp.dropLocation || "",
+          dropTime: sp.dropTime || safeString(shift?.endTime) || "",
+          visitAddr: sp.visitLocation || "",
+          visitTime: sp.visitTime || "",
+        });
+      }
+    });
+  }
+
+  // Fallback: single-client shift
+  if (clients.length === 0 && shift) {
+    const pt = Array.isArray(shift.shiftPoints) && shift.shiftPoints[0];
+    const pickupAddr = safeString(pt?.pickupLocation || shift.pickupLocation);
+    const dropAddr   = safeString(pt?.dropLocation   || shift.dropLocation);
+    if (pickupAddr) {
+      clients.push({
+        id: shift.clientId || "c0",
+        name: safeString(shift.clientName || shift.name) || "Client",
+        seatType: pt?.seatType || null,
+        pickupAddr,
+        pickupTime: safeString(pt?.pickupTime || shift.startTime) || "",
+        dropAddr,
+        dropTime: safeString(pt?.dropTime || shift.endTime) || "",
+        visitAddr: safeString(pt?.visitLocation || shift.visitLocation) || "",
+        visitTime: safeString(pt?.visitTime) || "",
+      });
+    }
+  }
+
+  // Last fallback: demo
+  if (clients.length === 0) clients = DEMO_CLIENTS;
+
+  const stops = [];
+  const pickupGroups = {};
+  const dropGroups   = {};
+
+  clients.forEach((c) => {
+    const pk = c.pickupAddr || "Unknown";
+    if (!pickupGroups[pk]) pickupGroups[pk] = { address: pk, time: c.pickupTime, clients: [] };
+    pickupGroups[pk].clients.push(c);
+
+    const dk = c.dropAddr || "Unknown";
+    if (!dropGroups[dk]) dropGroups[dk] = { address: dk, time: c.dropTime, clients: [] };
+    dropGroups[dk].clients.push(c);
+  });
+
+  // Pickup stops
+  Object.values(pickupGroups).forEach((g, i) => {
+    stops.push({ type: "pickup", label: `Pickup ${letterLabel(i)}`, address: g.address, time: g.time, clients: g.clients });
+  });
+
+  // Visit stop (use first client's visitAddr or demo)
+  const visitAddr = clients[0]?.visitAddr || DEMO_VISIT_ADDR;
+  const visitTime = clients[0]?.visitTime || DEMO_VISIT_TIME;
+  if (visitAddr) {
+    stops.push({ type: "visit", label: "Visit", address: visitAddr, time: visitTime, clients });
+  }
+
+  // Drop stops
+  Object.values(dropGroups).forEach((g, i) => {
+    stops.push({ type: "drop", label: `Drop ${letterLabel(i)}`, address: g.address, time: g.time, clients: g.clients });
+  });
+
+  return stops;
+}
+
+// ── Map Placeholder ───────────────────────────────────────────────────────────
+function MapPlaceholder({ address, color = GREEN }) {
+  return (
+    <View style={[mapStyles.container, { borderColor: color + "30" }]}>
+      {/* Grid lines */}
+      {Array.from({ length: 7 }).map((_, i) => (
+        <View key={`h${i}`} style={[mapStyles.hLine, { top: `${(i + 1) * 13}%` }]} />
+      ))}
+      {Array.from({ length: 9 }).map((_, i) => (
+        <View key={`v${i}`} style={[mapStyles.vLine, { left: `${(i + 1) * 10}%` }]} />
+      ))}
+      {/* Pin */}
+      <View style={mapStyles.pinWrap}>
+        <Ionicons name="location" size={32} color={color} />
+        {address ? (
+          <Text style={[mapStyles.pinLabel, { color }]} numberOfLines={1}>
+            {address.split(",")[0]}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const mapStyles = StyleSheet.create({
+  container: {
+    height: 150,
+    borderRadius: 14,
+    backgroundColor: "#E8F5E9",
+    borderWidth: 1,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 12,
+    position: "relative",
+  },
+  hLine: { position: "absolute", left: 0, right: 0, height: 1, backgroundColor: "#C8E6C9" },
+  vLine: { position: "absolute", top: 0, bottom: 0, width: 1, backgroundColor: "#C8E6C9" },
+  pinWrap: { alignItems: "center", zIndex: 1 },
+  pinLabel: { fontSize: 12, fontWeight: "700", marginTop: 2, fontFamily: "Inter-Bold" },
+});
+
+// ── Progress Bar ──────────────────────────────────────────────────────────────
+function ProgressBar({ stops, currentIdx, completedStops }) {
+  return (
+    <View style={pbStyles.row}>
+      {stops.map((stop, i) => {
+        const isCompleted = completedStops.includes(i);
+        const isCurrent   = i === currentIdx;
+        const circleColor = isCompleted || isCurrent ? GREEN : "#D1D5DB";
+        const lineColor   = isCompleted ? GREEN : "#E5E7EB";
+        return (
+          <View key={i} style={pbStyles.stepWrap}>
+            {i > 0 && (
+              <View style={[pbStyles.line, { backgroundColor: lineColor }]} />
+            )}
+            <View style={pbStyles.dotCol}>
+              <View style={[pbStyles.circle, { backgroundColor: isCompleted ? GREEN : isCurrent ? "#fff" : "#F3F4F6", borderColor: circleColor, borderWidth: isCurrent ? 2 : 0 }]}>
+                {isCompleted ? (
+                  <Ionicons name="checkmark" size={10} color="#fff" />
+                ) : (
+                  <Text style={[pbStyles.circleNum, { color: isCurrent ? GREEN : "#9CA3AF" }]}>
+                    {i + 1}
+                  </Text>
+                )}
+              </View>
+              <Text style={[pbStyles.label, { color: isCurrent ? GREEN : isCompleted ? GREEN : "#9CA3AF", fontWeight: isCurrent ? "700" : "500" }]} numberOfLines={1}>
+                {stop.label}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const pbStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: BORDER },
+  stepWrap: { flex: 1, flexDirection: "row", alignItems: "center" },
+  line: { flex: 1, height: 2, marginTop: -12 },
+  dotCol: { alignItems: "center", gap: 4 },
+  circle: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  circleNum: { fontSize: 10, fontWeight: "700" },
+  label: { fontSize: 9, textAlign: "center", maxWidth: 48, fontFamily: "Inter" },
+});
+
+// ── Client Row ────────────────────────────────────────────────────────────────
+function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, confirmedLabel }) {
+  const isConfirmed  = status === "confirmed";
+  const isCancelled  = status === "cancelled";
+  const avatarColors = [
+    { bg: "#E0F2FE", text: "#0369A1" },
+    { bg: "#EDE9FE", text: "#5B21B6" },
+    { bg: "#FEF3C7", text: "#92400E" },
+    { bg: "#FCE7F3", text: "#9D174D" },
+  ];
+  const ac = avatarColors[(client.name?.charCodeAt(0) || 0) % avatarColors.length];
+
+  return (
+    <View style={[crStyles.row, isConfirmed && crStyles.rowConfirmed, isCancelled && crStyles.rowCancelled]}>
+      {/* Avatar */}
+      <View style={[crStyles.avatar, { backgroundColor: ac.bg }]}>
+        <Text style={[crStyles.avatarText, { color: ac.text }]}>{initials(client.name)}</Text>
+      </View>
+      {/* Info */}
+      <View style={{ flex: 1 }}>
+        <Text style={[crStyles.name, isCancelled && { textDecorationLine: "line-through", color: GRAY }]}>{client.name}</Text>
+        {client.seatType ? (
+          <Text style={crStyles.seat}>{client.seatType}</Text>
+        ) : null}
+      </View>
+      {/* Action */}
+      {isConfirmed ? (
+        <View style={crStyles.confirmedBadge}>
+          <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+          <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+        </View>
+      ) : isCancelled ? (
+        <View style={crStyles.cancelledBadge}>
+          <Ionicons name="close-circle" size={14} color={RED} />
+          <Text style={crStyles.cancelledText}>Not available</Text>
+        </View>
+      ) : (
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <Pressable onPress={onConfirm} style={crStyles.confirmBtn}>
+            <Text style={crStyles.confirmBtnText}>{actionLabel}</Text>
+          </Pressable>
+          <Pressable onPress={onCancel} style={crStyles.cancelBtn}>
+            <Ionicons name="close" size={16} color={GRAY} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const crStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8, backgroundColor: "#fff" },
+  rowConfirmed: { backgroundColor: GREEN_LIGHT, borderColor: "#86EFAC" },
+  rowCancelled: { backgroundColor: "#FEF2F2", borderColor: "#FECACA", opacity: 0.7 },
+  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  avatarText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
+  name: { fontSize: 14, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" },
+  seat: { fontSize: 12, color: GRAY, fontFamily: "Inter" },
+  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  confirmedText: { fontSize: 12, color: GREEN, fontWeight: "600", fontFamily: "Inter-SemiBold" },
+  cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cancelledText: { fontSize: 12, color: RED, fontWeight: "600", fontFamily: "Inter-SemiBold" },
+  confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#86EFAC" },
+  confirmBtnText: { fontSize: 12, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" },
+  cancelBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+});
+
+// ── Completed Stop Row ────────────────────────────────────────────────────────
+function CompletedStop({ stop }) {
+  const clientNames = stop.clients.map((c) => c.name).join(", ");
+  return (
+    <View style={csStyles.row}>
+      <View style={csStyles.iconWrap}>
+        <Ionicons name="checkmark-circle" size={20} color={GREEN} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={csStyles.label}>{stop.label} — {stop.address?.split(",")[0]}</Text>
+        <Text style={csStyles.clients} numberOfLines={1}>{clientNames}</Text>
+      </View>
+    </View>
+  );
+}
+
+const csStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", backgroundColor: GREEN_LIGHT, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#BBF7D0", borderLeftWidth: 4, borderLeftColor: GREEN },
+  iconWrap: { marginRight: 10 },
+  label: { fontSize: 13, fontWeight: "700", color: DARK, fontFamily: "Inter-Bold" },
+  clients: { fontSize: 12, color: GRAY, marginTop: 1, fontFamily: "Inter" },
+});
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function CompleteShift() {
   const { shiftId } = useLocalSearchParams();
-  const [shift, setShift] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Animations
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const [shift, setShift]       = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [stops, setStops]       = useState([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [completedIdxs, setCompletedIdxs] = useState([]);
+  // stopClientStatus: { stopIndex_clientId → 'waiting'|'confirmed'|'cancelled' }
+  const [clientStatus, setClientStatus] = useState({});
+  const [visitArrived, setVisitArrived] = useState(false);
+  const [totalKm, setTotalKm]   = useState(0);
+  const kmRef = useRef(null);
+  const [done, setDone] = useState(false);
 
+  // Km counter simulation (increments while route is active)
   useEffect(() => {
-    loadShift();
-    // Start animations after mount
-    setTimeout(() => {
-      Animated.sequence([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 5,
-          tension: 80,
-          useNativeDriver: true,
-        }),
-        Animated.parallel([
-          Animated.timing(opacityAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }, 100);
+    kmRef.current = setInterval(() => {
+      setTotalKm((k) => Math.round((k + 0.05) * 100) / 100);
+    }, 3000);
+    return () => clearInterval(kmRef.current);
   }, []);
 
-  const loadShift = async () => {
-    try {
+  // Load shift
+  useEffect(() => {
+    if (!shiftId) { setLoading(false); return; }
+    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+      if (snap.exists()) {
+        const data = { id: snap.id, ...snap.data() };
+        setShift(data);
+        const builtStops = buildStops(data.shiftPoints, data);
+        setStops(builtStops);
+        // Init client statuses
+        const init = {};
+        builtStops.forEach((st, si) => {
+          st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
+        });
+        setClientStatus(init);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [shiftId]);
+
+  const setStatus = useCallback((stopIdx, clientId, status) => {
+    setClientStatus((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: status }));
+  }, []);
+
+  const currentStop = stops[currentIdx];
+  const isPickup = currentStop?.type === "pickup";
+  const isDrop   = currentStop?.type === "drop";
+  const isVisit  = currentStop?.type === "visit";
+
+  // Check if all clients in current stop are resolved (confirmed or cancelled)
+  const allResolved = currentStop?.clients.every(
+    (c) => clientStatus[`${currentIdx}_${c.id}`] !== "waiting"
+  );
+
+  const allConfirmed = currentStop?.clients.every(
+    (c) => clientStatus[`${currentIdx}_${c.id}`] === "confirmed"
+  );
+
+  // Global client status (for the top roster card)
+  // A client is "In vehicle" if they're confirmed at their pickup; "Waiting" otherwise
+  const getGlobalStatus = (client) => {
+    // Check if confirmed at any pickup
+    let pickedUp = false;
+    stops.forEach((st, si) => {
+      if (st.type === "pickup" && st.clients.find((c) => c.id === client.id)) {
+        if (clientStatus[`${si}_${client.id}`] === "confirmed") pickedUp = true;
+      }
+    });
+    return pickedUp ? "In vehicle" : "Waiting";
+  };
+
+  // All unique clients across all stops
+  const allClients = stops.length > 0
+    ? [...new Map(stops.flatMap((s) => s.clients).map((c) => [c.id, c])).values()]
+    : [];
+
+  const advanceStop = async () => {
+    if (currentIdx >= stops.length - 1) {
+      // All stops done
+      clearInterval(kmRef.current);
       if (shiftId) {
-        const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
-        }
+        try {
+          await updateDoc(doc(db, "shifts", shiftId), {
+            transportationCompleted: true,
+            transportationKm: totalKm,
+            transportationCompletedAt: serverTimestamp(),
+          });
+        } catch (e) { console.warn(e); }
       }
-    } catch {}
-    setLoading(false);
-  };
-
-  const getDuration = () => {
-    if (shift?.clockInTime && shift?.clockOutTime) {
-      const parseTime = (t) => {
-        if (!t) return 0;
-        const [time, period] = t.split(" ");
-        let [h, m] = time.split(":").map(Number);
-        if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
-        if (period?.toUpperCase() === "AM" && h === 12) h = 0;
-        return h * 60 + (m || 0);
-      };
-      const diff = parseTime(shift.clockOutTime) - parseTime(shift.clockInTime);
-      if (diff > 0) {
-        const h = Math.floor(diff / 60);
-        const m = diff % 60;
-        return m > 0 ? `${h}h ${m}m` : `${h} hours`;
-      }
+      setDone(true);
+      return;
     }
-    return "—";
+    setCompletedIdxs((prev) => [...prev, currentIdx]);
+    setCurrentIdx((prev) => prev + 1);
+    setVisitArrived(false);
   };
 
-  const summaryItems = shift ? [
-    { icon: "calendar-outline", label: "Date", value: shift.startDate || "Today" },
-    { icon: "person-outline", label: "Client", value: shift.clientName || shift.name || "Client" },
-    { icon: "time-outline", label: "Shift", value: `${shift.startTime || "—"} – ${shift.endTime || "—"}` },
-    { icon: "timer-outline", label: "Duration", value: getDuration() },
-    { icon: "location-outline", label: "Location", value: shift.location || "On-site" },
-    { icon: "car-outline", label: "KM Traveled", value: shift.kmTraveled ? `${shift.kmTraveled} km` : "—" },
-  ] : [];
+  // CTA config
+  const getCtaConfig = () => {
+    if (isPickup || isDrop) {
+      const label = isPickup ? "Confirm Pickup" : "Confirm Drop-off";
+      if (!allResolved) return { text: "Confirm all clients to continue", disabled: true, color: "#A7C4B5" };
+      const isLast  = currentIdx === stops.length - 1;
+      const nextStop = stops[currentIdx + 1];
+      let text = "Next →";
+      if (nextStop?.type === "pickup") text = `Next ${nextStop.label} →`;
+      else if (nextStop?.type === "visit") text = "Drive to Visit →";
+      else if (nextStop?.type === "drop") text = `Drive to ${nextStop.label} →`;
+      if (isLast) text = "Complete Shift ✓";
+      return { text, disabled: false, color: GREEN };
+    }
+    if (isVisit) {
+      if (!visitArrived) return { text: "Arrive at visit to continue", disabled: true, color: "#A7C4B5" };
+      return { text: "Visit Complete — Ready to Leave →", disabled: false, color: BLUE };
+    }
+    return { text: "Continue", disabled: false, color: GREEN };
+  };
+
+  const ctaConfig = getCtaConfig();
+
+  const confirmLabel = isPickup ? "Picked up" : "Dropped off";
+  const actionLabel  = isPickup ? "Confirm Pickup" : "Confirm Drop-off";
+
+  // Stop type color
+  const stopColor = isPickup ? GREEN : isVisit ? BLUE : RED;
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PRIMARY} />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: PAGE, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={GREEN} />
+      </SafeAreaView>
+    );
+  }
+
+  // ── Completion Screen ─────────────────────────────────────────────────────
+  if (done) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: PAGE }}>
+        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 120, alignItems: "center" }}>
+          <View style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", marginTop: 40, marginBottom: 20 }}>
+            <Ionicons name="checkmark-circle" size={60} color={GREEN} />
+          </View>
+          <Text style={{ fontSize: 26, fontWeight: "800", color: DARK, fontFamily: "Poppins-Bold", textAlign: "center" }}>Route Complete!</Text>
+          <Text style={{ fontSize: 15, color: GRAY, textAlign: "center", marginTop: 8, lineHeight: 22, fontFamily: "Inter" }}>
+            All {allClients.length} client{allClients.length !== 1 ? "s" : ""} have been transported successfully.
+          </Text>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, width: "100%", marginTop: 28, borderWidth: 1, borderColor: BORDER }}>
+            <Text style={{ fontSize: 14, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold", marginBottom: 14 }}>Route Summary</Text>
+            {stops.map((st, i) => (
+              <View key={i} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: i < stops.length - 1 ? 1 : 0, borderBottomColor: "#F3F4F6", gap: 12 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: st.type === "pickup" ? GREEN_LIGHT : st.type === "visit" ? BLUE_LIGHT : "#FEF2F2", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name={st.type === "pickup" ? "navigate" : st.type === "visit" ? "business" : "flag"} size={14} color={st.type === "pickup" ? GREEN : st.type === "visit" ? BLUE : RED} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" }}>{st.label} — {st.address?.split(",")[0]}</Text>
+                  <Text style={{ fontSize: 11, color: GRAY, fontFamily: "Inter" }}>{st.clients.map((c) => c.name).join(", ")}</Text>
+                </View>
+              </View>
+            ))}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "#F3F4F6" }}>
+              <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter" }}>Total Distance</Text>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" }}>{totalKm.toFixed(1)} km</Text>
+            </View>
+          </View>
+        </ScrollView>
+        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: BORDER, padding: 20, gap: 10 }}>
+          <Pressable
+            onPress={() => router.replace({ pathname: "/shift-detail", params: { shiftId } })}
+            style={{ backgroundColor: GREEN, borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Poppins-SemiBold" }}>Back to Shift</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.replace("/home")}
+            style={{ borderWidth: 1.5, borderColor: BORDER, borderRadius: 14, paddingVertical: 14, alignItems: "center" }}
+          >
+            <Text style={{ color: GRAY, fontSize: 14, fontWeight: "600", fontFamily: "Inter-SemiBold" }}>Back to Home</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Success Animation */}
-        <View style={styles.successSection}>
-          <Animated.View style={[styles.checkCircleOuter, { transform: [{ scale: scaleAnim }] }]}>
-            <View style={styles.checkCircleInner}>
-              <Ionicons name="checkmark" size={52} color="#FFF" />
-            </View>
-          </Animated.View>
-
-          <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }], alignItems: "center" }}>
-            <Text style={styles.successTitle}>Shift Completed!</Text>
-            <Text style={styles.successSubtitle}>
-              Great work! Your shift has been logged and submitted successfully.
-            </Text>
-          </Animated.View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: PAGE }}>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <View style={s.header}>
+        <Pressable onPress={() => router.back()} style={s.backBtn}>
+          <Ionicons name="arrow-back" size={20} color={DARK} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerTitle}>Complete Shift</Text>
+          <Text style={s.headerSub}>{formatHeaderDate(shift)}</Text>
         </View>
+        <View style={s.kmBadge}>
+          <Text style={s.kmText}>{totalKm.toFixed(1)} km</Text>
+        </View>
+      </View>
 
-        {/* Summary Card */}
-        {shift && (
-          <Animated.View style={[styles.card, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>Shift Summary</Text>
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={SUCCESS} />
-                <Text style={styles.verifiedBadgeText}>Verified</Text>
+      {/* ── Progress Bar ───────────────────────────────────────────────────── */}
+      {stops.length > 0 && (
+        <ProgressBar stops={stops} currentIdx={currentIdx} completedStops={completedIdxs} />
+      )}
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}>
+
+        {/* ── Clients on this route ─────────────────────────────────────────── */}
+        {allClients.length > 0 && (
+          <View style={s.card}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name="people-outline" size={18} color={GREEN} />
+                <Text style={s.cardTitle}>Clients on this route</Text>
               </View>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" }}>
+                {allClients.length} client{allClients.length !== 1 ? "s" : ""}
+              </Text>
             </View>
-            {summaryItems.map(({ icon, label, value }) => (
-              <View key={label} style={styles.summaryRow}>
-                <View style={styles.summaryIconBox}>
-                  <Ionicons name={icon} size={16} color={PRIMARY} />
+            {allClients.map((c) => {
+              const gs = getGlobalStatus(c);
+              return (
+                <View key={c.id} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
+                  <View style={[s.miniAvatar, { backgroundColor: gs === "In vehicle" ? GREEN_LIGHT : "#F3F4F6" }]}>
+                    <Text style={[s.miniAvatarText, { color: gs === "In vehicle" ? GREEN : GRAY }]}>{initials(c.name)}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" }}>{c.name}</Text>
+                    {c.seatType ? <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter" }}>{c.seatType}</Text> : null}
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <View style={[s.statusDot, { backgroundColor: gs === "In vehicle" ? GREEN : "#D1D5DB" }]} />
+                    <Text style={{ fontSize: 12, color: gs === "In vehicle" ? GREEN : GRAY, fontWeight: "600", fontFamily: "Inter-SemiBold" }}>{gs}</Text>
+                  </View>
                 </View>
-                <View style={styles.summaryInfo}>
-                  <Text style={styles.summaryLabel}>{label}</Text>
-                  <Text style={styles.summaryValue}>{value}</Text>
-                </View>
-              </View>
-            ))}
-          </Animated.View>
+              );
+            })}
+          </View>
         )}
 
-        {/* Completion Checklist */}
-        <Animated.View style={[styles.card, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Text style={styles.cardTitle}>Completion Checklist</Text>
-          {[
-            { label: "Clocked In", done: !!shift?.clockInTime },
-            { label: "Shift Report Filed", done: !!shift?.shiftReport },
-            { label: "Medications Logged", done: !!shift?.medicationsLoggedAt },
-            { label: "Transportation Logged", done: !!shift?.transportationLoggedAt },
-            { label: "Clocked Out", done: !!shift?.clockOutTime },
-          ].map(({ label, done }) => (
-            <View key={label} style={styles.checklistRow}>
-              <View style={[styles.checklistDot, done ? styles.checklistDotDone : styles.checklistDotPending]}>
-                <Ionicons name={done ? "checkmark" : "remove"} size={12} color={done ? "#FFF" : TEXT_MUTED} />
-              </View>
-              <Text style={[styles.checklistLabel, !done && styles.checklistLabelPending]}>{label}</Text>
-              {!done && <Text style={styles.checklistOptional}>Optional</Text>}
-            </View>
-          ))}
-        </Animated.View>
+        {/* ── Completed stops (collapsed) ──────────────────────────────────── */}
+        {completedIdxs.map((si) => (
+          <CompletedStop key={si} stop={stops[si]} />
+        ))}
 
-        {/* Congratulations */}
-        <Animated.View style={[styles.congratsCard, { opacity: opacityAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Ionicons name="trophy-outline" size={28} color={ACCENT} />
-          <View style={styles.congratsInfo}>
-            <Text style={styles.congratsTitle}>Excellent work!</Text>
-            <Text style={styles.congratsSub}>Your dedication makes a difference every day.</Text>
+        {/* ── Current Stop ─────────────────────────────────────────────────── */}
+        {currentStop && (
+          <View style={s.card}>
+            {/* Stop header */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={[s.stopIcon, { backgroundColor: stopColor + "18" }]}>
+                  <Ionicons
+                    name={isPickup ? "car-outline" : isVisit ? "business-outline" : "flag-outline"}
+                    size={18}
+                    color={stopColor}
+                  />
+                </View>
+                <View>
+                  <Text style={[s.stopLabel, { color: stopColor }]}>
+                    {currentStop.label} — {currentStop.address?.split(",")[0]}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter" }}>
+                    {currentStop.clients.length} client{currentStop.clients.length !== 1 ? "s" : ""} at this location
+                  </Text>
+                </View>
+              </View>
+              {currentStop.time ? (
+                <Text style={{ fontSize: 12, fontWeight: "600", color: GRAY, fontFamily: "Inter-SemiBold" }}>{currentStop.time}</Text>
+              ) : null}
+            </View>
+
+            {/* Map */}
+            <MapPlaceholder address={currentStop.address} color={stopColor} />
+
+            {/* Open Full Navigation */}
+            <Pressable
+              onPress={() => openMaps(currentStop.address)}
+              style={[s.navBtn, { backgroundColor: stopColor }]}
+            >
+              <Ionicons name="navigate" size={16} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={s.navBtnText}>Open Full Navigation</Text>
+            </Pressable>
+
+            {/* Arrived at visit button */}
+            {isVisit && !visitArrived && (
+              <Pressable
+                onPress={() => setVisitArrived(true)}
+                style={[s.navBtn, { backgroundColor: BLUE, marginTop: 8 }]}
+              >
+                <Ionicons name="checkmark" size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={s.navBtnText}>I've Arrived at Visit</Text>
+              </Pressable>
+            )}
+
+            {/* Client confirmation for pickups/drops */}
+            {(isPickup || isDrop) && currentStop.clients.length > 0 && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: DARK, marginBottom: 8, fontFamily: "Inter-SemiBold" }}>
+                  Confirm each client {isPickup ? "pickup" : "drop-off"}:
+                </Text>
+                {currentStop.clients.map((c) => (
+                  <ClientStatusRow
+                    key={c.id}
+                    client={c}
+                    status={clientStatus[`${currentIdx}_${c.id}`] || "waiting"}
+                    onConfirm={() => setStatus(currentIdx, c.id, "confirmed")}
+                    onCancel={() => {
+                      Alert.alert(
+                        "Mark as unavailable?",
+                        `${c.name} will be marked as not available at this stop.`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { text: "Confirm", style: "destructive", onPress: () => setStatus(currentIdx, c.id, "cancelled") },
+                        ]
+                      );
+                    }}
+                    actionLabel={actionLabel}
+                    confirmedLabel={confirmLabel}
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* Visit arrived confirmation */}
+            {isVisit && visitArrived && (
+              <View style={{ marginTop: 14, backgroundColor: BLUE_LIGHT, borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "#BFDBFE" }}>
+                <Ionicons name="checkmark-circle" size={20} color={BLUE} />
+                <Text style={{ fontSize: 14, fontWeight: "600", color: BLUE, fontFamily: "Inter-SemiBold", flex: 1 }}>
+                  Arrived at visit. When ready to leave, tap the button below.
+                </Text>
+              </View>
+            )}
           </View>
-        </Animated.View>
+        )}
       </ScrollView>
 
-      {/* Bottom button */}
-      <View style={styles.bottomBar}>
-        <Pressable style={styles.homeBtn} onPress={() => router.replace("/home")} activeOpacity={0.8}>
-          <Ionicons name="home-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-          <Text style={styles.homeBtnText}>Back to Home</Text>
-        </Pressable>
-        <Pressable style={styles.shiftsBtn} onPress={() => router.replace("/shifts")} activeOpacity={0.7}>
-          <Text style={styles.shiftsBtnText}>View All Shifts</Text>
+      {/* ── Bottom CTA ─────────────────────────────────────────────────────── */}
+      <View style={s.bottomBar}>
+        <Pressable
+          onPress={ctaConfig.disabled ? undefined : advanceStop}
+          style={[s.ctaBtn, { backgroundColor: ctaConfig.color }, ctaConfig.disabled && { opacity: 0.6 }]}
+          disabled={ctaConfig.disabled}
+        >
+          <Text style={s.ctaBtnText}>{ctaConfig.text}</Text>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: BG },
-  loadingContainer: { flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 130 },
-  // Success
-  successSection: { alignItems: "center", marginBottom: 32 },
-  checkCircleOuter: {
-    width: 128,
-    height: 128,
-    borderRadius: 64,
-    backgroundColor: PRIMARY_LIGHT,
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  header: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
   },
-  checkCircleInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: PRIMARY,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  successTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: TEXT_PRIMARY,
-    fontFamily: "Poppins-Bold",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  successSubtitle: {
-    fontSize: 15,
-    color: TEXT_SECONDARY,
-    textAlign: "center",
-    lineHeight: 22,
-    maxWidth: 280,
-    fontFamily: "Inter",
-  },
-  // Card
-  card: {
-    backgroundColor: CARD,
+  backBtn: {
+    width: 36,
+    height: 36,
     borderRadius: 18,
-    padding: 18,
-    marginBottom: 14,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold" },
+  headerSub: { fontSize: 12, color: GRAY, fontFamily: "Inter", marginTop: 1 },
+  kmBadge: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "#86EFAC" },
+  kmText: { fontSize: 13, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     elevation: 2,
   },
-  cardHeaderRow: {
+  cardTitle: { fontSize: 14, fontWeight: "700", color: DARK, fontFamily: "Inter-Bold" },
+
+  stopIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  stopLabel: { fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
+
+  navBtn: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: TEXT_PRIMARY, fontFamily: "Poppins-SemiBold" },
-  verifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#D1FAE5",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  verifiedBadgeText: { fontSize: 11, fontWeight: "700", color: SUCCESS, fontFamily: "Inter-SemiBold" },
-  // Summary rows
-  summaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    gap: 12,
-  },
-  summaryIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: PRIMARY_LIGHT,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 12,
+    paddingVertical: 13,
   },
-  summaryInfo: { flex: 1 },
-  summaryLabel: { fontSize: 11, color: TEXT_MUTED, fontFamily: "Inter" },
-  summaryValue: { fontSize: 14, fontWeight: "600", color: TEXT_PRIMARY, fontFamily: "Inter-SemiBold" },
-  // Checklist
-  checklistRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
-  checklistDot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  checklistDotDone: { backgroundColor: SUCCESS },
-  checklistDotPending: { backgroundColor: "#F1F5F9" },
-  checklistLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: TEXT_PRIMARY, fontFamily: "Inter-SemiBold" },
-  checklistLabelPending: { color: TEXT_MUTED },
-  checklistOptional: { fontSize: 11, color: TEXT_MUTED, fontFamily: "Inter" },
-  // Congrats card
-  congratsCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    backgroundColor: "#0F172A",
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 14,
-  },
-  congratsInfo: { flex: 1 },
-  congratsTitle: { fontSize: 15, fontWeight: "700", color: "#FFF", fontFamily: "Poppins-SemiBold", marginBottom: 2 },
-  congratsSub: { fontSize: 13, color: "rgba(255,255,255,0.6)", fontFamily: "Inter" },
-  // Bottom bar
+  navBtnText: { fontSize: 15, fontWeight: "700", color: "#fff", fontFamily: "Poppins-SemiBold" },
+
+  miniAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginRight: 10 },
+  miniAvatarText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+
   bottomBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: CARD,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 32,
+    backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: BORDER,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 8,
+    padding: 16,
   },
-  homeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: PRIMARY,
-    height: 52,
+  ctaBtn: {
     borderRadius: 14,
-  },
-  homeBtnText: { fontSize: 16, fontWeight: "700", color: "#FFF", fontFamily: "Poppins-SemiBold" },
-  shiftsBtn: {
-    height: 46,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: BORDER,
+    paddingVertical: 17,
     alignItems: "center",
     justifyContent: "center",
   },
-  shiftsBtnText: { fontSize: 14, fontWeight: "600", color: TEXT_SECONDARY, fontFamily: "Inter-SemiBold" },
+  ctaBtnText: { fontSize: 16, fontWeight: "700", color: "#fff", fontFamily: "Poppins-SemiBold" },
 });
