@@ -173,11 +173,19 @@ function ShiftCard({ shift, onAction, onDetails }) {
   };
 
   const status = getStatus();
-  const rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType) || "Transportation";
+  let rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory) || "Respite Care";
+  const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
+                           (shift.description && shift.description.toLowerCase().includes("pick up")) ||
+                           (shift.description && shift.description.toLowerCase().includes("drop to"));
+  if ((rawServiceType === "Respite Care" || !rawServiceType) && hasTransitMarkers) {
+    rawServiceType = "Transportation";
+  }
   const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
-  const clientName = safeString(shift.clientName || shift.name) || "Client";
+  const rawName = safeString(shift.familyName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name);
+  const isId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+  const clientName = isId(rawName) ? "Client" : (rawName || "Client");
+  const clientId = safeString(shift.clientId || shift.clientDetails?.id) || "\u2014";
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const location = safeString(shift.location || shift.address) || "Location not specified";
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
   const displayDate = formatShiftDate(shift.startDate);
   const isTransport = rawServiceType === "Transportation" || rawServiceType === "Supervised Visitation + Transportation";
@@ -221,7 +229,7 @@ function ShiftCard({ shift, onAction, onDetails }) {
           </View>
           <View style={styles.clientInfo}>
             <Text style={styles.clientNameText}>{clientName}</Text>
-            <Text style={styles.clientIdText}>ID: {safeString(shift.clientId) || "—"}</Text>
+            <Text style={styles.clientIdText}>ID: {clientId}</Text>
           </View>
         </View>
 
@@ -261,7 +269,17 @@ function ShiftCard({ shift, onAction, onDetails }) {
             <Text style={styles.mainActionBtnText}>Clock In</Text>
           </Pressable>
         )}
-        {status === "In Progress" && (
+        {status === "In Progress" && isTransport && (
+          // Transport "In Progress" → go back to transportation detail (Choose Vehicle / active route)
+          <Pressable
+            onPress={() => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })}
+            style={[styles.mainActionBtn, { backgroundColor: "#1E5FA6" }]}
+          >
+            <Ionicons name="navigate" size={15} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={styles.mainActionBtnText}>Continue Route</Text>
+          </Pressable>
+        )}
+        {status === "In Progress" && !isTransport && (
           <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
             <Text style={styles.mainActionBtnText}>Clock Out</Text>
           </Pressable>
@@ -279,7 +297,14 @@ function ShiftCard({ shift, onAction, onDetails }) {
           >
             <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
           </Pressable>
-          <Pressable onPress={onDetails} style={styles.detailsLink}>
+          {/* Transport shifts always open transportation-shift-detail for Details */}
+          <Pressable
+            onPress={isTransport
+              ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
+              : onDetails
+            }
+            style={styles.detailsLink}
+          >
             <Text style={styles.detailsLinkText}>Details &gt;</Text>
           </Pressable>
         </View>
@@ -410,8 +435,9 @@ export default function Shifts() {
           iconBg: "#F0FDF4",
         });
         // For transportation shifts, navigate to transportation detail after clock-in
-        const cat = shift.category || shift.categoryName || shift.serviceType || "";
-        if (cat === "Transportation" || cat === "Supervised Visitation + Transportation") {
+        const catRaw = shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory || "";
+        const catLower = safeString(catRaw).toLowerCase();
+        if (catLower.includes("transportation")) {
           setIsProcessing(false);
           setConfirmAction(null);
           router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
