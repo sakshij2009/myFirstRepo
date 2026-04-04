@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import {
@@ -97,6 +97,8 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
   // intakeDescription: auto-fetched from intake form
   const [intakeDescription, setIntakeDescription] = useState("");
+  // Track the client ID that was originally loaded from the saved shift (update mode)
+  const initialLoadedClientIdRef = useRef(null);
 
   // ---------------- VALIDATION SCHEMA ----------------
   const validationSchema = Yup.object().shape({
@@ -335,7 +337,11 @@ setShiftPoints(points);
 
 
         // ✅ Set selectedClient so the intake fetch useEffect can run
-        if (clientObj) setSelectedClient(clientObj);
+        if (clientObj) {
+          setSelectedClient(clientObj);
+          // Remember this client ID — used to detect when user later changes client
+          initialLoadedClientIdRef.current = clientObj.id;
+        }
         if (userObj) setSelectedUser(userObj);
 
         // ✅ Prefill all fields
@@ -390,14 +396,22 @@ setShiftPoints(points);
         return;
       }
 
-      // In update mode, only skip intake fetch if the saved shift points have real data
-      // (not just empty placeholder entries saved before the intake fix was applied)
+      // In update mode, only skip intake fetch if:
+      // 1. The saved shift points have real data, AND
+      // 2. The currently selected client is the same one that was originally loaded
+      //    (i.e. the user has NOT changed the client — if they did, always re-fetch)
       if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.length > 0) {
         const hasRealData = shiftPoints.some(
           (p) => p.name || p.pickupLocation || p.visitLocation || p.dropLocation
         );
-        if (hasRealData) return;
+        const isSameClientAsLoaded = initialLoadedClientIdRef.current &&
+          selectedClient?.id === initialLoadedClientIdRef.current;
+        if (hasRealData && isSameClientAsLoaded) return;
       }
+
+      // Always clear stale data from the previous client before loading new one
+      setShiftPoints([]);
+      setRemovedShiftPoints([]);
 
       let pointsFound = [];
       // ── 1. If client has shiftPoints (family client), use those first ──
