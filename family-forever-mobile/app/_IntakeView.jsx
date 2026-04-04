@@ -11,22 +11,52 @@ const IntakeView = ({ intakeData }) => {
 
   // Normalize clients data from various form versions
   const clients = (() => {
-    // 1. Newest structure: 'clients' object (keys like 0, 1)
+    // Helper to normalize name matching
+    const nameMatch = (n1, n2) => (n1 || "").trim().toLowerCase() === (n2 || "").trim().toLowerCase();
+
+    // 1. Newest structure: 'clients' object (keys like client1, client2)
     if (intakeData.clients && typeof intakeData.clients === "object" && !Array.isArray(intakeData.clients)) {
-      return Object.values(intakeData.clients).map(c => ({
-        ...c,
-        name: c.fullName || c.name || "Unnamed Client",
-        dob: c.birthDate || c.dob || "",
-        address: c.address || "",
-        criticalMedicalConcerns: c.medicalNotes || c.criticalMedicalConcerns || "",
-        anyDiagnosis: c.diagnosis || c.anyDiagnosis || "",
-        // parent mapping for newer forms
-        parentName: c.parentName || "",
-        relationship: c.relationship || "",
-        parentPhone: c.parentPhone || "",
-        parentEmail: c.parentEmail || "",
-        parentAddress: c.parentAddress || ""
-      }));
+      return Object.values(intakeData.clients).map((c, idx) => {
+        const fullName = c.fullName || c.name || `Client ${idx + 1}`;
+        
+        // Find corresponding transport and visit info if they exist in separate lists
+        const trans = Array.isArray(intakeData.transportationInfoList) 
+          ? intakeData.transportationInfoList.find(t => nameMatch(t.clientName, fullName)) 
+          : null;
+        const visit = Array.isArray(intakeData.supervisedVisitations)
+          ? intakeData.supervisedVisitations.find(v => nameMatch(v.clientName, fullName))
+          : null;
+        const med = Array.isArray(intakeData.medicalInfoList)
+          ? intakeData.medicalInfoList.find(m => nameMatch(m.clientName, fullName))
+          : null;
+        const parent = Array.isArray(intakeData.parentInfoList)
+          ? intakeData.parentInfoList.find(p => nameMatch(p.clientName, fullName))
+          : null;
+
+        return {
+          ...c,
+          name: fullName,
+          dob: c.birthDate || c.dob || "",
+          address: trans?.pickupAddress || c.address || "",
+          criticalMedicalConcerns: med?.medicalConcern || c.medicalNotes || c.criticalMedicalConcerns || "",
+          anyDiagnosis: med?.diagnosis || c.diagnosis || c.anyDiagnosis || "",
+          diagnosisType: med?.diagnosisType || c.diagnosisType || "",
+          healthCareNumber: med?.healthCareNo || c.healthCareNumber || "",
+          
+          // visit mapping
+          visitDuration: visit?.visitDuration || "",
+          purposeOfVisit: visit?.visitPurpose || "",
+          visitAddress: visit?.visitAddress || "",
+          visitOverView: visit?.visitOverview || "",
+          
+          // parent mapping for newer forms
+          parentName: parent?.parentName || c.parentName || "",
+          relationship: parent?.relationShip || c.relationship || "",
+          parentPhone: parent?.parentPhone || c.parentPhone || "",
+          parentEmail: parent?.parentEmail || c.parentEmail || "",
+          parentAddress: parent?.parentAddress || c.parentAddress || ""
+        };
+      });
     }
     // 2. Middle structure: 'inTakeClients' array or 'shiftPoints' array
     const arraySource = intakeData.inTakeClients || intakeData.shiftPoints;

@@ -445,7 +445,7 @@ function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateF
   };
 
   const status = getStatus();
-  let rawServiceType = safeString(shift.category || shift.serviceType) || "Respite Care";
+  let rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory) || "Respite Care";
   const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
                            (shift.description && shift.description.toLowerCase().includes("pick up")) ||
                            (shift.description && shift.description.toLowerCase().includes("drop to"));

@@ -3,7 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, updateDoc, doc, getDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 
 const GREEN = "#1F6F43";
@@ -28,16 +28,36 @@ export default function ShiftTransportations() {
 
   const loadData = async () => {
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };
+      const docRef = doc(db, "shifts", shiftId);
+      const snap = await getDoc(docRef);
+      
+      if (snap.exists()) {
+        const data = { id: snap.id, ...snap.data() };
         setShift(data);
-        setTasks(data.transportTasks?.length ? data.transportTasks : DEMO_TASKS);
+        
+        // Resolve tasks from shiftPoints (family members)
+        const points = Array.isArray(data.shiftPoints) ? data.shiftPoints : (Array.isArray(data.shiftedClients) ? data.shiftedClients : []);
+        
+        if (points.length > 0) {
+          const mappedTasks = points.map((p, idx) => ({
+            id: `p-${idx}`,
+            passenger: p.name || `Member ${idx + 1}`,
+            pickup: p.pickupLocation || "Address not provided",
+            destination: p.visitLocation || p.dropLocation || "Destination not provided",
+            time: p.pickupTime || p.visitStartTime || data.startTime || "—",
+            status: "Pending" // In real app, we'd pull status from task logs
+          }));
+          setTasks(mappedTasks);
+        } else {
+          setTasks(data.transportTasks?.length ? data.transportTasks : DEMO_TASKS);
+        }
       } else {
         setTasks(DEMO_TASKS);
       }
-    } catch { setTasks(DEMO_TASKS); }
+    } catch (err) {
+      console.error("Error loading transport data:", err);
+      setTasks(DEMO_TASKS);
+    }
   };
 
   const updateStatus = (id, newStatus) => {
