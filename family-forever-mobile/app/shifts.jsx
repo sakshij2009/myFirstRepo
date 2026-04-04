@@ -195,7 +195,9 @@ function ShiftCard({ shift, onAction, onDetails }) {
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
   const displayDate = formatShiftDate(shift.startDate);
-  const isTransport = rawServiceType === "Transportation" || rawServiceType === "Supervised Visitation + Transportation";
+  const isTransport = rawServiceType.toLowerCase().includes("transportation") ||
+    rawServiceType.toLowerCase().includes("supervised") ||
+    rawServiceType.toLowerCase().includes("visitation");
 
   const statusColors = {
     "Completed": { dot: "#10B981", text: "#10B981" },
@@ -443,13 +445,13 @@ export default function Shifts() {
           iconColor: PRIMARY_GREEN,
           iconBg: "#F0FDF4",
         });
-        // For transportation shifts, navigate to transportation detail after clock-in
+        // For transportation AND supervised visitation shifts, navigate to transportation detail after clock-in
         const catRaw = shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory || "";
         const catLower = safeString(catRaw).toLowerCase();
-        if (catLower.includes("transportation")) {
+        if (catLower.includes("transportation") || catLower.includes("supervised") || catLower.includes("visitation")) {
           setIsProcessing(false);
           setConfirmAction(null);
-          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.docId || shift.id } });
           return;
         }
       } else if (type === "clockOut") {

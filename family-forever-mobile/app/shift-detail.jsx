@@ -480,16 +480,19 @@ export default function ShiftDetails() {
     setIsProcessing(false);
     setConfirmAction(null);
 
-    // Navigate to specialized transportation screen if applicable
+    // Navigate to specialized transportation screen for transportation AND supervised visitation
     if (type === "clockIn") {
       const catRaw = shift.category || shift.serviceType || shift.categoryName || shift.shiftCategory || "";
       const catLower = catRaw.toLowerCase();
-      // Only route to transportation screen for pure transportation shifts (not supervised visitation)
-      const isTransport = catLower.includes("transportation") && !catLower.includes("supervised") && !catLower.includes("visitation");
-      const hasTransit = !catLower.includes("supervised") && !catLower.includes("visitation") &&
-        (shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up")));
+      const isTransportOrVisit =
+        catLower.includes("transportation") ||
+        catLower.includes("supervised") ||
+        catLower.includes("visitation");
+      const hasTransit =
+        shift.pickupLocation || shift.dropLocation ||
+        (shift.description && shift.description.toLowerCase().includes("pick up"));
 
-      if (isTransport || hasTransit) {
+      if (isTransportOrVisit || hasTransit) {
         router.push({ pathname: "/transportation-shift-detail", params: { shiftId } });
       }
     }
