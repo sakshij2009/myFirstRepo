@@ -64,20 +64,9 @@ const IntakeFormPage = ({ user, onBack, id: propId, isViewOnly }) => {
   }
 
   return (
-    <div className="flex flex-col p-4 gap-6 px-8 w-full">
-      {/* ✅ Back button */}
-      <div className="flex items-center gap-3 py-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-dark-green hover:text-green-800 transition-colors"
-        >
-          <IoArrowBackCircleOutline size={28} />
-          <span className="text-[16px] font-medium">Back</span>
-        </button>
-      </div>
-
+    <div className="flex flex-col p-4 w-full">
       {/* ✅ Intake Form (with editable flag) */}
-      <div className="flex w-full rounded py-4 justify-center">
+      <div className="flex w-full rounded">
         <IntakeForm
           user={user}
           isCaseWorker={isCaseWorker}

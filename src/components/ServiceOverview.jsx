@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { ArrowRight, Heart, Shield, Eye, Car, Star, Activity } from "lucide-react";
@@ -47,6 +48,7 @@ const parseShiftDate = (s) => {
 };
 
 export default function ServiceOverview({ filter = "Weekly" }) {
+  const navigate = useNavigate();
   const [tiles, setTiles] = useState([]);
 
   useEffect(() => {
@@ -126,7 +128,9 @@ export default function ServiceOverview({ filter = "Weekly" }) {
                 <span className="text-sm font-bold" style={{ color: "#111827" }}>{svc.cases}</span>
               </div>
             </div>
-            <button className="w-full flex items-center justify-center gap-1 font-semibold transition-colors"
+            <button 
+              onClick={() => navigate(`/admin-dashboard/shifts?service=${svc.label}`)}
+              className="w-full flex items-center justify-center gap-1 font-semibold transition-colors"
               style={{ fontSize: 12, color: "#6b7280" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#1f7a3c")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6b7280")}

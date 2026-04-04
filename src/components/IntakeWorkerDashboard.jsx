@@ -97,8 +97,6 @@ function Sidebar({ activePage, onNavigate, onLogout }) {
   const navItems = [
     { icon: <LayoutGrid className="size-4" strokeWidth={1.7} />, label: "Dashboard", key: "dashboard" },
     { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Intake Form", key: "new" },
-    { icon: <FileText className="size-4" strokeWidth={1.7} />, label: "Submitted Intakes", key: "submitted" },
-    { icon: <FileText className="size-4" strokeWidth={1.7} />, label: "Draft Forms", key: "drafts" },
   ];
 
   const width = isCollapsed ? 64 : 240;

@@ -92,6 +92,12 @@ const AddIntakeWorker = ({ mode = "add" }) => {
 
   // Handle Add or Update
   const handleSubmit = async (values, { resetForm }) => {
+    if (mode === "add") {
+      const confirmSend = window.confirm(
+        `Are you sure you want to send an invitation email to ${values.email}? \n\nPlease double check the email address before proceeding.`
+      );
+      if (!confirmSend) return;
+    }
     try {
       if (mode === "update") {
         const q = query(collection(db, "intakeUsers"), where("email", "==", id));
@@ -304,7 +310,7 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     type="submit"
                     className="bg-dark-green text-white px-6 py-2  mt-10 rounded cursor-pointer"
                   >
-                    {mode === "update" ? "Update Intake Worker" : "Add Intake Worker"}
+                    {mode === "update" ? "Update Intake Worker" : "Send Invitation"}
                   </button>
                 </div>
               </div>

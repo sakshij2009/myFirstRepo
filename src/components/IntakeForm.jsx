@@ -573,8 +573,18 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         ...base,
         intakeworkerName: user.name || "",
         agencyName: user.agency || "",
+        caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
+        billingInfo: {
+          ...base.billingInfo,
+          invoiceEmail: user.invoiceEmail || "",
+        },
+        workerInfo: {
+          ...base.workerInfo,
+          workerName: user.name || "",
+          date: new Date().toISOString().split("T")[0],
+        },
       };
     }
     return base;
@@ -587,8 +597,18 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         ...prev,
         intakeworkerName: user.name || "",
         agencyName: user.agency || "",
+        caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
+        billingInfo: {
+          ...prev.billingInfo,
+          invoiceEmail: user.invoiceEmail || "",
+        },
+        workerInfo: {
+          ...prev.workerInfo,
+          workerName: user.name || "",
+          date: new Date().toISOString().split("T")[0],
+        },
       }));
     }
   }, [user, mode, initialValues.intakeworkerName]);
@@ -1162,7 +1182,7 @@ const handleSubmit = async (values, { resetForm }) => {
   }
 
   return (
-    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="w-full" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
 
       {/* ─── Top Header ─── */}
       <div className="flex items-center justify-between mb-8">
@@ -1265,7 +1285,7 @@ const handleSubmit = async (values, { resetForm }) => {
                 {/* ── Family Name Card ── */}
                 <div className="bg-white rounded-xl border p-8" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <SectionTitle title="Family Name" />
-                  <div className="max-w-sm">
+                  <div className="w-full">
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Family Name <span className="text-red-500">*</span></label>
                     <Field name="familyName" type="text" placeholder="Enter family / client name"
                       className="w-full px-3 py-2.5 rounded-lg border text-sm border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />

@@ -66,6 +66,11 @@ const ManageIntakeWorkers = () => {
       return;
     }
 
+    const confirmSend = window.confirm(
+      `Are you sure you want to send an invitation email to ${inviteEmail.trim().toLowerCase()}? \n\nPlease verify the email address before proceeding.`
+    );
+    if (!confirmSend) return;
+
     setInviting(true);
 
     const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
