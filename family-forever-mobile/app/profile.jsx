@@ -214,23 +214,7 @@ export default function Profile() {
           <DetailItem label="Salary" value={user?.salary || "$24.50/hr"} isLast />
         </View>
 
-        {/* Documents */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Documents & Certifications</Text>
-          <Pressable style={styles.uploadRow}>
-            <Ionicons name="cloud-upload-outline" size={14} color={PRIMARY_GREEN} />
-            <Text style={styles.linkText}>Upload</Text>
-          </Pressable>
-        </View>
-        <DocumentCard title="First Aid Certification" date="Expires: Apr 1, 2026" status="expiring" />
-        <DocumentCard title="CPR Certification" date="Expires: Feb 20, 2027" status="valid" />
-        <DocumentCard title="Driver's License" date="Expires: Dec 5, 2028" status="valid" />
-        <DocumentCard title="Child Safety Training" date="Annual review needed" status="valid" />
-        <DocumentCard title="Vulnerable Sector Check" date="Expired: Mar 1, 2024" status="expired" isLast />
-        
-        <View style={styles.docSummary}>
-          <Text style={styles.docSummaryText}>5 documents  ·  <Text style={{color: '#10B981'}}>3 valid</Text>  ·  <Text style={{color: WARNING_AMBER}}>1 expiring</Text>  ·  <Text style={{color: ERROR_RED}}>1 expired</Text></Text>
-        </View>
+
 
         {/* Quick Actions */}
         <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Quick Actions</Text>
@@ -272,30 +256,7 @@ function DetailItem({ label, value, isEmail, isPhone, isLast }) {
   );
 }
 
-function DocumentCard({ title, date, status, isLast }) {
-  const config = {
-    valid: { icon: "checkmark-circle", color: "#10B981", bg: "#F0FDF4", border: "#D1FAE5" },
-    expiring: { icon: "alert-circle", color: WARNING_AMBER, bg: "#FFFBEB", border: "#FEF3C7" },
-    expired: { icon: "close-circle", color: ERROR_RED, bg: "#FEF2F2", border: "#FEE2E2" },
-  }[status];
 
-  return (
-    <View style={[styles.docCard, { borderLeftColor: config.color, borderLeftWidth: 4 }]}>
-      <View style={[styles.docIcon, { backgroundColor: config.bg }]}><Ionicons name={config.icon} size={18} color={config.color} /></View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.docTitle}>{title}</Text>
-        <Text style={styles.docDate}>{date}</Text>
-      </View>
-      {status === 'expiring' && (
-        <Pressable style={styles.docActionBtn}><Text style={styles.docActionText}>Update</Text></Pressable>
-      )}
-      {status === 'expired' && (
-        <Pressable style={[styles.docActionBtn, { backgroundColor: ERROR_RED, borderColor: ERROR_RED }]}><Text style={[styles.docActionText, { color: "#FFF" }]}>Upload</Text></Pressable>
-      )}
-      <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-    </View>
-  );
-}
 
 function ActionItem({ icon, label, isLast }) {
   return (
