@@ -334,6 +334,10 @@ if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
 setShiftPoints(points);
 
 
+        // ✅ Set selectedClient so the intake fetch useEffect can run
+        if (clientObj) setSelectedClient(clientObj);
+        if (userObj) setSelectedUser(userObj);
+
         // ✅ Prefill all fields
         setInitialValues((prev) => ({
           ...prev,
@@ -386,9 +390,13 @@ setShiftPoints(points);
         return;
       }
 
-      // In update mode, shift points are already loaded from the saved shift — don't override
+      // In update mode, only skip intake fetch if the saved shift points have real data
+      // (not just empty placeholder entries saved before the intake fix was applied)
       if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.length > 0) {
-        return;
+        const hasRealData = shiftPoints.some(
+          (p) => p.name || p.pickupLocation || p.visitLocation || p.dropLocation
+        );
+        if (hasRealData) return;
       }
 
       let pointsFound = [];
