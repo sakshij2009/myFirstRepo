@@ -424,7 +424,7 @@ export default function ShiftDetails() {
         const adminId = user?.agencyId || user?.adminId || "admin";
         await sendNotification(adminId, {
           title: "Shift Confirmed",
-          message: `${user?.name || "Staff"} confirmed their shift on ${shift.startDate}`,
+          message: `${user?.name || "Staff"} confirmed their shift on ${safeString(shift.startDate)}`,
           type: "schedule",
           category: "Schedule",
           icon: "checkmark-circle",
@@ -997,7 +997,7 @@ export default function ShiftDetails() {
                   
                   <View style={styles.modalSummaryBox}>
                     <Text style={styles.summaryPrimary}>{rawServiceType} · {clientName}</Text>
-                    <Text style={styles.summarySecondary}>{shift.startDate} · {shift.startTime} – {shift.endTime}</Text>
+                    <Text style={styles.summarySecondary}>{displayDate} · {safeString(shift.startTime) || "—"} – {safeString(shift.endTime) || "—"}</Text>
                     <Text style={styles.summarySecondary}>{shift.location || "Location TBD"}</Text>
                   </View>
 
