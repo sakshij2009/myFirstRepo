@@ -232,8 +232,8 @@ const [showCritical, setShowCritical] = useState(false);
 const fetchIntakeForm = async () => {
   try {
     const clientId = shift?.clientId || shift?.clientDetails?.id;
-    const intakeId = shift?.intakeId;
-    const clientName = shift?.clientName || shift?.clientDetails?.name;
+    const intakeId = shift?.id || shift?.intakeId || shift?.InTakeFormId;
+    const clientName = shift?.clientName || shift?.name || shift?.clientDetails?.name || shift?.familyName || shift?.childName;
 
     if (!clientId && !intakeId && !clientName) {
       alert("Insufficient client information in shift to find intake form.");
@@ -241,51 +241,62 @@ const fetchIntakeForm = async () => {
     }
 
     let matchedIntake = null;
+    const cleanClientName = clientName ? clientName.trim().toLowerCase() : null;
 
     // 1. Quick check: Direct string match on Document ID if intakeId is present
     if (intakeId) {
       const docRef = doc(db, "InTakeForms", String(intakeId));
       const snap = await getDoc(docRef);
       if (snap.exists()) {
-        matchedIntake = snap.data();
+        matchedIntake = { ...snap.data(), id: snap.id };
       }
     }
 
-    // 2. Comprehensive Search: Loop through all intakes for alternate IDs and Names
+    // 2. Comprehensive Search across all intake forms and clients
     if (!matchedIntake) {
-      const snapshot = await getDocs(collection(db, "InTakeForms"));
+      const collections = ["InTakeForms", "clients"];
       
-      // Pass 1: Check all possible ID matchups
-      snapshot.forEach((docSnap) => {
-        if (matchedIntake) return;
-        const data = docSnap.data();
-        const docId = docSnap.id;
+      for (const collName of collections) {
+        if (matchedIntake) break;
+        const snapshot = await getDocs(collection(db, collName));
         
-        if (
-          (clientId && (data?.clientId === clientId || data?.id === clientId || docId === clientId)) ||
-          (intakeId && (data?.formId === intakeId || data?.id === intakeId || data?.inTakeFormId === intakeId))
-        ) {
-          matchedIntake = data;
-        }
-      });
-
-      // Pass 2: Fallback to exact or partial Name Matching 
-      if (!matchedIntake && clientName) {
-        const cleanedName = clientName.trim().toLowerCase();
-        snapshot.forEach((docSnap) => {
-          if (matchedIntake) return;
+        snapshot.docs.some((docSnap) => {
           const data = docSnap.data();
-          const namesToTest = [
-            data?.clientName, data?.name, data?.familyName, 
-            data?.nameOfPerson, data?.nameInClientTable
-          ];
-          
-          for (let name of namesToTest) {
-            if (name && name.toLowerCase().includes(cleanedName)) {
-              matchedIntake = data;
-              break;
+          const docId = docSnap.id;
+
+          // ID Match
+          const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
+          const targetIds = [clientId, intakeId].filter(Boolean).map(id => String(id));
+
+          if (targetIds.some(tid => possibleIds.has(tid))) {
+            matchedIntake = { ...data, id: docId };
+            return true;
+          }
+
+          // Name Match
+          if (cleanClientName) {
+            const possibleNames = new Set();
+            [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson, data.childName]
+              .forEach(n => n && possibleNames.add(n?.toString().toLowerCase().trim()));
+
+            if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+              Object.values(data.clients).forEach(c => {
+                if (c.fullName) possibleNames.add(c.fullName.toLowerCase().trim());
+                if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+              });
+            }
+            if (Array.isArray(data.inTakeClients)) {
+              data.inTakeClients.forEach(c => {
+                if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+              });
+            }
+
+            if (Array.from(possibleNames).some(fn => fn && (fn.includes(cleanClientName) || cleanClientName.includes(fn)))) {
+              matchedIntake = { ...data, id: docId };
+              return true;
             }
           }
+          return false;
         });
       }
     }

@@ -9,28 +9,74 @@ const CARD_BG = "#FFFFFF";
 const IntakeView = ({ intakeData }) => {
   if (!intakeData) return null;
 
-  const clients = intakeData.inTakeClients || [];
+  // Normalize clients data from various form versions
+  const clients = (() => {
+    // 1. Newest structure: 'clients' object (keys like 0, 1)
+    if (intakeData.clients && typeof intakeData.clients === "object" && !Array.isArray(intakeData.clients)) {
+      return Object.values(intakeData.clients).map(c => ({
+        ...c,
+        name: c.fullName || c.name || "Unnamed Client",
+        dob: c.birthDate || c.dob || "",
+        address: c.address || "",
+        criticalMedicalConcerns: c.medicalNotes || c.criticalMedicalConcerns || "",
+        anyDiagnosis: c.diagnosis || c.anyDiagnosis || "",
+        // parent mapping for newer forms
+        parentName: c.parentName || "",
+        relationship: c.relationship || "",
+        parentPhone: c.parentPhone || "",
+        parentEmail: c.parentEmail || "",
+        parentAddress: c.parentAddress || ""
+      }));
+    }
+    // 2. Middle structure: 'inTakeClients' array or 'shiftPoints' array
+    const arraySource = intakeData.inTakeClients || intakeData.shiftPoints;
+    if (Array.isArray(arraySource)) {
+      return arraySource.map(c => ({
+        ...c,
+        name: c.name || c.fullName || "Unnamed Client",
+        dob: c.dob || c.birthDate || "",
+        healthCareNumber: c.healthCareNumber || c.UID || c.healthCareNo || ""
+      }));
+    }
+    // 3. Fallback: Check for top-level name
+    const topLevelName = intakeData.clientName || intakeData.name || intakeData.nameInClientTable || intakeData.childName;
+    if (topLevelName) {
+      return [{
+        name: topLevelName,
+        dob: intakeData.dateOfBirth || intakeData.dob || "",
+        address: intakeData.address || intakeData.location || "",
+        criticalMedicalConcerns: intakeData.medicalConcerns || intakeData.criticalMedicalConcerns || "",
+        parentName: intakeData.parentName || "",
+      }];
+    }
+    return [];
+  })();
 
   return (
     <View style={styles.container}>
       {/* ================= INFO ================= */}
       <Section title="Info">
-        <Field label="Name" value={intakeData.nameInClientTable} />
-        <Field label="Date of Intake" value={intakeData.dateOfInTake} />
+        <Field label="Name" value={intakeData.nameInClientTable || intakeData.name} />
+        <Field label="Client Code" value={intakeData.clientCode} />
+        <Field label="Client Status" value={intakeData.clientStatus} />
+        <Field label="Date of Intake" value={intakeData.dateOfInTake || intakeData.date} />
       </Section>
 
       {/* ================= SERVICES ================= */}
-      <Section title="Services">
+      <Section title="Services / Support">
         <Field
           label="Type of Services"
           value={(intakeData.serviceRequired || []).join(", ")}
         />
         <Field label="Service Start Date" value={intakeData.serviceStartDate} />
-        <Field label="Phone No" value={intakeData.inTakeWorkerPhone} />
-        <Field label="E-Mail" value={intakeData.inTakeWorkerEmail} />
+        <Field label="Agency" value={intakeData.agencyName} />
+        <Field label="Agency Address" value={intakeData.agencyAddress} />
+        <Field label="In-Take Worker" value={intakeData.inTakeWorkerInfo} />
+        <Field label="Case Worker Info" value={intakeData.caseWorkerInfo} />
         <Field
-          label="Safety Plan / Risk Management"
-          value={intakeData.servicePlanAndRisk}
+          label="Support Description"
+          value={intakeData.description || intakeData.servicePlanAndRisk}
+          multiline
         />
       </Section>
 

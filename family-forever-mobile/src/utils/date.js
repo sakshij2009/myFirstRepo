@@ -95,3 +95,36 @@ export const formatCanadaTime = (timeVal) => {
     return "—";
   }
 };
+
+/**
+ * Format UTC HH:mm into America/Edmonton HH:mm AM/PM
+ */
+export const formatShiftTimeUTCtoCanada = (dateStr, timeStr) => {
+  if (!dateStr || !timeStr) return timeStr || "—";
+  try {
+    const tStr = String(timeStr);
+    if (tStr.includes("AM") || tStr.includes("PM")) return tStr;
+    
+    const d = parseDate(dateStr);
+    if (!d) return tStr;
+    
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    
+    const [h, min] = tStr.trim().split(":");
+    const iso = `${y}-${m}-${day}T${h.padStart(2, '0')}:${(min || "00").padStart(2, '0')}:00Z`;
+    const date = new Date(iso);
+    
+    if (isNaN(date.getTime())) return tStr;
+    
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/Edmonton",
+    });
+  } catch (e) {
+    return timeStr;
+  }
+};

@@ -24,7 +24,7 @@ import {
 import { db } from "../src/firebase/config";
 import { router } from "expo-router";
 import * as Location from "expo-location";
-import { safeString, toDate, formatCanadaTime, parseDate } from "../src/utils/date";
+import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY_GREEN = "#1F6F43";
@@ -73,7 +73,12 @@ const calcDuration = (start, end) => {
 const getRoundedTime = () => {
   const coeff = 1000 * 60 * 15;
   const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return rounded.toLocaleTimeString("en-US", { 
+    hour: "2-digit", 
+    minute: "2-digit", 
+    hour12: true,
+    timeZone: "America/Edmonton" 
+  });
 };
 
 const getLocationString = async () => {
@@ -134,6 +139,8 @@ function shortAddr(addr) {
   return part.length > 12 ? part.slice(0, 11) + "…" : part;
 }
 
+const isNumericId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+
 // Mini route preview for transportation shifts
 function RoutePreview({ shift }) {
   const pt = Array.isArray(shift.shiftPoints) && shift.shiftPoints[0];
@@ -181,9 +188,9 @@ function ShiftCard({ shift, onAction, onDetails }) {
     rawServiceType = "Transportation";
   }
   const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
-  const rawName = safeString(shift.familyName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name);
+  const rawName = safeString(shift.familyName || shift.childName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name);
   const isId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
-  const clientName = isId(rawName) ? "Client" : (rawName || "Client");
+  const clientName = isId(rawName) ? (shift.familyName || shift.childName || "Client") : (rawName || "Client");
   const clientId = safeString(shift.clientId || shift.clientDetails?.id) || "\u2014";
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
@@ -217,7 +224,9 @@ function ShiftCard({ shift, onAction, onDetails }) {
 
         <View style={styles.timeRow}>
           <Ionicons name="time-outline" size={16} color={GRAY_TEXT} />
-          <Text style={styles.timeText}>{safeString(shift.startTime) || "—"} – {safeString(shift.endTime) || "—"}</Text>
+          <Text style={styles.timeText}>
+            {formatShiftTimeUTCtoCanada(shift.startDate, shift.startTime)} – {formatShiftTimeUTCtoCanada(shift.startDate, shift.endTime)}
+          </Text>
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{duration}</Text>
           </View>
@@ -587,7 +596,7 @@ export default function Shifts() {
                   : "Clock Out?"}
               </Text>
               <Text style={styles.modalClient}>
-                {safeString(confirmAction.shift?.clientName || confirmAction.shift?.name) || "Client"} ·{" "}
+                {safeString(confirmAction.shift?.childName || confirmAction.shift?.clientName || confirmAction.shift?.name || confirmAction.shift?.familyName) || "Client"} ·{" "}
                 {safeString(confirmAction.shift?.category) || "Shift"}
               </Text>
               <Text style={styles.modalDesc}>

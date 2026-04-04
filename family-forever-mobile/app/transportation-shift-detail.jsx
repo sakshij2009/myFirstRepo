@@ -6,6 +6,8 @@ import {
   Linking,
   ActivityIndicator,
   Alert,
+  Modal,
+  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
@@ -19,8 +21,10 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { db } from "../src/firebase/config";
-import { safeString, parseDate, formatCanadaTime } from "../src/utils/date";
+import { safeString, parseDate, formatCanadaTime, formatShiftTimeUTCtoCanada } from "../src/utils/date";
+import IntakeView from "./_IntakeView";
 
+const PRIMARY_GREEN = "#1F6F43";
 const GREEN = "#1F6F43";
 const DARK = "#111827";
 const GRAY = "#6B7280";
@@ -40,7 +44,7 @@ function formatHeaderDate(shift) {
   }
   const timePart =
     shift.startTime && shift.endTime
-      ? `${shift.startTime} – ${shift.endTime}`
+      ? `${formatShiftTimeUTCtoCanada(shift.startDate, shift.startTime)} – ${formatShiftTimeUTCtoCanada(shift.startDate, shift.endTime)}`
       : "";
   return [datePart, timePart].filter(Boolean).join(" · ");
 }
@@ -69,6 +73,7 @@ export default function TransportationShiftDetail() {
   const [shift, setShift] = useState(null);
   const [intake, setIntake] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showIntake, setShowIntake] = useState(false);
 
   // Real-time shift listener
   useEffect(() => {
@@ -80,52 +85,80 @@ export default function TransportationShiftDetail() {
     return () => unsub();
   }, [shiftId]);
 
-  // Fetch intake form for caseworker / intake worker contacts
+  // Fetch intake data for shift description fallback
   useEffect(() => {
     if (!shift) return;
-    const fetch = async () => {
+    const fetchIntake = async () => {
       try {
-        const clientName = shift.clientName || shift.name || "";
-        const clientId = shift.clientId;
+        const clientId = shift.clientId || shift.clientDetails?.id;
         const intakeId = shift.intakeId;
+        const clientName = shift.clientName || shift.name || shift.clientDetails?.name || shift.client;
 
         let matched = null;
 
+        // 1. Direct ID Resolve
         if (intakeId) {
           const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
           if (snap.exists()) matched = { ...snap.data(), id: snap.id };
         }
 
+        // 2. Comprehensive search across InTakeForms and clients
         if (!matched) {
-          const snapshot = await getDocs(collection(db, "InTakeForms"));
-          const cleanName = clientName.trim().toLowerCase();
-          snapshot.docs.some((d) => {
-            const data = d.data();
-            if (clientId && (data.clientId === clientId || d.id === clientId)) {
-              matched = { ...data, id: d.id };
-              return true;
-            }
-            const formName = (
-              data.childFirstName +
-              " " +
-              data.childLastName
-            )
-              .trim()
-              .toLowerCase();
-            if (cleanName && formName.includes(cleanName.split(" ")[0])) {
-              matched = { ...data, id: d.id };
-              return true;
-            }
-            return false;
-          });
+          const collections = ["InTakeForms", "clients"];
+          const cleanName = clientName ? clientName.toString().trim().toLowerCase() : null;
+
+          for (const collName of collections) {
+            if (matched) break;
+            const snapshot = await getDocs(collection(db, collName));
+            
+            snapshot.docs.some((docSnap) => {
+              const data = docSnap.data();
+              const docId = docSnap.id;
+
+              // ID Match
+              // Check various ID fields: clientId, formId, id, InTakeFormId, etc.
+              const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
+              const targetIds = [clientId, intakeId].filter(Boolean).map(id => String(id));
+
+              if (targetIds.some(tid => possibleIds.has(tid))) {
+                matched = { ...data, id: docId };
+                return true;
+              }
+
+              // Name Match
+              if (cleanName) {
+                const possibleNames = new Set();
+                [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson, data.childName]
+                  .forEach(n => n && possibleNames.add(n.toString().toLowerCase().trim()));
+
+                if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+                  Object.values(data.clients).forEach(c => {
+                    if (c.fullName) possibleNames.add(c.fullName.toLowerCase().trim());
+                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                  });
+                }
+                if (Array.isArray(data.inTakeClients)) {
+                  data.inTakeClients.forEach(c => {
+                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                  });
+                }
+
+                if (Array.from(possibleNames).some(fn => fn && (fn.includes(cleanName) || cleanName.includes(fn)))) {
+                  matched = { ...data, id: docId };
+                  return true;
+                }
+              }
+              return false;
+            });
+          }
         }
 
         if (matched) setIntake(matched);
       } catch (e) {
-        console.warn("Intake fetch error:", e);
+        console.error("Auto intake fetch error:", e);
       }
     };
-    fetch();
+    fetchIntake();
   }, [shift?.id]);
 
   if (loading) {
@@ -139,12 +172,33 @@ export default function TransportationShiftDetail() {
   }
 
   const pt = Array.isArray(shift?.shiftPoints) && shift.shiftPoints[0];
-  const clientName =
-    safeString(shift?.clientName || shift?.name) || "Client";
+  
+  const rawName = safeString(shift?.familyName || shift?.childName || shift?.clientName || shift?.name || shift?.client || shift?.clientDetails?.name);
+  const intakeName = (() => {
+    if (!intake) return "";
+    if (intake.clients && typeof intake.clients === "object" && !Array.isArray(intake.clients)) {
+      const names = Object.values(intake.clients).map(c => c.fullName || c.name || "").filter(Boolean);
+      if (names.length) return names.join(", ");
+    }
+    const arraySource = intake.inTakeClients || intake.shiftPoints;
+    if (Array.isArray(arraySource)) {
+      const names = arraySource.map(c => c.name || c.fullName || "").filter(Boolean);
+      if (names.length) return names.join(", ");
+    }
+    return safeString(intake.clientName || intake.name || intake.familyName || intake.nameInClientTable || intake.childName);
+  })();
+
+  const isId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+  const clientName = isId(rawName) 
+    ? (intakeName || shift?.familyName || shift?.childName || "Client") 
+    : (rawName || intakeName || "Client");
+  const clientId = safeString(shift?.clientId || intake?.clientId || intake?.formId) || "\u2014";
+
   const rawServiceType =
     safeString(shift?.category || shift?.categoryName || shift?.serviceType) ||
     "Transportation";
   const seatType = safeString(pt?.seatType || shift?.seatType);
+  const shiftDescription = safeString(shift?.description || shift?.notes);
 
   // Contacts
   const caseworkerName =
@@ -247,17 +301,20 @@ export default function TransportationShiftDetail() {
             }}
           >
             <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, color: GRAY, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 2 }}>CLIENT</Text>
               <Text
                 style={{
-                  fontSize: 20,
+                  fontSize: 22,
                   fontWeight: "800",
                   color: DARK,
                   fontFamily: "Poppins-Bold",
-                  marginBottom: 8,
+                  marginBottom: 4,
                 }}
               >
                 {clientName}
               </Text>
+              <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter-Medium", marginBottom: 8 }}>ID: {clientId}</Text>
+              
               {seatType ? (
                 <View
                   style={{
@@ -295,6 +352,24 @@ export default function TransportationShiftDetail() {
               </Text>
             </View>
           </View>
+        </View>
+
+        {/* ── Shift Description ──────────────────────────────────────────── */}
+        <View style={styles.card}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Ionicons name="information-circle-outline" size={18} color={GREEN} />
+              <Text style={{ fontSize: 15, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold" }}>Shift Description</Text>
+            </View>
+            {intake && (
+              <Pressable onPress={() => setShowIntake(true)}>
+                <Text style={{ color: "#2563EB", fontWeight: "700", fontSize: 13 }}>View Intake Form</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={{ fontSize: 14, color: "#374151", lineHeight: 22, fontFamily: "Inter", marginTop: 4 }}>
+            {shiftDescription || "No specific description provided for this shift."}
+          </Text>
         </View>
 
         {/* ── Contacts Card ───────────────────────────────────────────────── */}
@@ -551,6 +626,35 @@ export default function TransportationShiftDetail() {
           </Text>
         </Pressable>
       </View>
+
+      <Modal visible={showIntake} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowIntake(false)}>
+        <View style={{ flex: 1, backgroundColor: "#FFF" }}>
+          {/* Modal Header */}
+          <View style={{ 
+            flexDirection: "row", 
+            alignItems: "center", 
+            paddingHorizontal: 20, 
+            paddingTop: 60, 
+            paddingBottom: 15,
+            borderBottomWidth: 1, 
+            borderBottomColor: "#E5E7EB"
+          }}>
+            <Pressable onPress={() => setShowIntake(false)} style={{ padding: 5 }}>
+              <Ionicons name="close" size={28} color="#000" />
+            </Pressable>
+            <Text style={{ 
+              fontSize: 18, 
+              fontWeight: "800", 
+              marginLeft: 15, 
+              fontFamily: "Poppins-Bold",
+              color: "#111827" 
+            }}>Client Intake Form</Text>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+            <IntakeView intakeData={intake} />
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
