@@ -101,7 +101,7 @@ export default function StaffIdCard() {
             <View style={styles.cardHeader}>
               <View style={styles.logoRow}>
                 <View style={styles.logoCircle}>
-                  <Ionicons name="heart-pulse" size={18} color={PRIMARY_GREEN} />
+                  <Ionicons name="pulse" size={18} color={PRIMARY_GREEN} />
                 </View>
                 <Text style={styles.cardOrgName}>Family Forever Inc.</Text>
               </View>

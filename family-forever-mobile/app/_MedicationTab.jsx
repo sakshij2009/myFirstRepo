@@ -68,67 +68,80 @@ export default function MedicationTab({ shift }) {
   /* ---------------- FETCH HEALTHCARE NUMBER (ACH) ---------------- */
   useEffect(() => {
     const fetchHealthcareNumber = async () => {
-      if (!clientName) return;
-
-      const targetName = clientName?.trim().toLowerCase();
+      const targetName = (clientName || shift?.childName || shift?.familyName || shift?.name || "")?.trim().toLowerCase();
       if (!targetName) return;
 
       try {
-        const snapshot = await getDocs(collection(db, "InTakeForms"));
+        const collections = ["InTakeForms", "clients"];
         let found = null;
 
-        snapshot.forEach((docSnap) => {
-          if (found) return;
-          const data = docSnap.data();
+        for (const collName of collections) {
+          if (found) break;
+          const snapshot = await getDocs(collection(db, collName));
+          
+          snapshot.docs.some((docSnap) => {
+            const data = docSnap.data();
+            const docId = docSnap.id;
 
-          // 1️⃣ medicalInfoList
-          if (Array.isArray(data.medicalInfoList)) {
-            const match = data.medicalInfoList.find(
-              (m) =>
-                m.clientName?.trim().toLowerCase() === targetName &&
-                m.healthCareNo
-            );
-            if (match?.healthCareNo) {
-              found = match.healthCareNo;
-              return;
+            // 1. ID Match (if possible)
+            const clientId = shift?.clientId || shift?.clientDetails?.id;
+            const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
+            
+            if (clientId && possibleIds.has(String(clientId))) {
+              // Find healthCareNo in this doc
+              if (data.healthCareNumber) { found = data.healthCareNumber; return true; }
+              if (data.hcNo) { found = data.hcNo; return true; }
+              if (data.healthCareNo) { found = data.healthCareNo; return true; }
             }
-          }
 
-          // 2️⃣ clients MAP
-          if (data.clients && typeof data.clients === "object") {
-            Object.values(data.clients).forEach((c) => {
-              if (found) return;
-              const name = c.fullName || c.name || "";
-              if (
-                name.trim().toLowerCase() === targetName &&
-                c.healthCareNo
-              ) {
-                found = c.healthCareNo;
-              }
-            });
-          }
-
-          // 3️⃣ inTakeClients ARRAY
-          if (Array.isArray(data.inTakeClients)) {
-            const match = data.inTakeClients.find(
-              (c) =>
-                c.name?.trim().toLowerCase() === targetName &&
-                c.healthCareNumber
-            );
-            if (match?.healthCareNumber) {
-              found = match.healthCareNumber;
-              return;
+            // 2. Name Match and Extract HC
+            const possibleHC = [];
+            
+            // medicalInfoList
+            if (Array.isArray(data.medicalInfoList)) {
+              data.medicalInfoList.forEach(m => {
+                const n = (m.clientName || m.name || "").trim().toLowerCase();
+                if (n && (n.includes(targetName) || targetName.includes(n)) && (m.healthCareNo || m.healthCareNumber || m.hcNo)) {
+                  possibleHC.push(m.healthCareNo || m.healthCareNumber || m.hcNo);
+                }
+              });
             }
-          }
 
-          // 4️⃣ fallback
-          if (
-            data.clientName?.trim().toLowerCase() === targetName &&
-            data.healthCareNumber
-          ) {
-            found = data.healthCareNumber;
-          }
-        });
+            // clients MAP
+            if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+              Object.values(data.clients).forEach(c => {
+                const n = (c.fullName || c.name || "").trim().toLowerCase();
+                if (n && (n.includes(targetName) || targetName.includes(n)) && (c.healthCareNo || c.healthcareNumber || c.healthCareNumber || c.hcNo)) {
+                  possibleHC.push(c.healthCareNo || c.healthcareNumber || c.hcNo);
+                }
+              });
+            }
+
+            // inTakeClients ARRAY
+            if (Array.isArray(data.inTakeClients)) {
+              data.inTakeClients.forEach(c => {
+                const n = (c.name || "").trim().toLowerCase();
+                if (n && (n.includes(targetName) || targetName.includes(n)) && (c.healthCareNumber || c.healthCareNo || c.hcNo)) {
+                  possibleHC.push(c.healthCareNumber || c.healthCareNo || c.hcNo);
+                }
+              });
+            }
+
+            // top-level
+            const topNames = [data.clientName, data.name, data.childName, data.familyName].map(n => n?.toString().toLowerCase().trim());
+            if (topNames.some(fn => fn && (fn.includes(targetName) || targetName.includes(fn)))) {
+              if (data.healthCareNumber) possibleHC.push(data.healthCareNumber);
+              if (data.hcNo) possibleHC.push(data.hcNo);
+              if (data.healthCareNo) possibleHC.push(data.healthCareNo);
+            }
+
+            if (possibleHC.length > 0) {
+              found = possibleHC[0];
+              return true;
+            }
+            return false;
+          });
+        }
 
         setHealthcareNumber(found || "Not Available");
       } catch (err) {

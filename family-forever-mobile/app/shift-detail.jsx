@@ -29,7 +29,7 @@ import {
 import { db } from "../src/firebase/config";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
-import { safeString, toDate, formatCanadaTime, parseDate } from "../src/utils/date";
+import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 import IntakeView from "./_IntakeView";
 
 import CriticalIncidentModel from "../src/components/CriticalIncidentModel";
@@ -62,7 +62,12 @@ const serviceTypeStyles = {
 const getRoundedTime = () => {
   const coeff = 1000 * 60 * 15;
   const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return rounded.toLocaleTimeString("en-US", { 
+    hour: "2-digit", 
+    minute: "2-digit", 
+    hour12: true,
+    timeZone: "America/Edmonton" 
+  });
 };
 
 // ── Helper: Get current location string ──────────────────────────────────────
@@ -133,6 +138,8 @@ const calcDuration = (start, end) => {
   return m > 0 ? `${h}h ${m}m` : `${h} hrs`;
 };
 
+const isNumericId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+
 export default function ShiftDetails() {
   const { shiftId } = useLocalSearchParams();
   const [user, setUser] = useState(null);
@@ -149,12 +156,12 @@ export default function ShiftDetails() {
   const [savingReport, setSavingReport] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
 
-  // ── Fetch Intake Form (same logic as Reports) ───────────────────────────
+  // ── Fetch Intake Form ───────────────────────────────────────────
   const fetchIntakeForm = async () => {
     try {
       const clientId = shift?.clientId || shift?.clientDetails?.id;
-      const intakeId = shift?.intakeId;
-      const clientName = shift?.clientName || shift?.name || shift?.clientDetails?.name;
+      const intakeId = shift?.id || shift?.intakeId || shift?.InTakeFormId;
+      const clientName = shift?.clientName || shift?.name || shift?.clientDetails?.name || shift?.familyName || shift?.childName;
 
       if (!clientId && !intakeId && !clientName) {
         Alert.alert("Missing Info", "Insufficient client information to find intake form.");
@@ -167,43 +174,60 @@ export default function ShiftDetails() {
       if (intakeId) {
         const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
         if (snap.exists()) matchedIntake = { ...snap.data(), id: snap.id };
+        if (!matchedIntake) {
+          const snap2 = await getDoc(doc(db, "clients", String(intakeId)));
+          if (snap2.exists()) matchedIntake = { ...snap2.data(), id: snap2.id };
+        }
       }
 
-      // 2. Comprehensive Search across all intake forms
+      // 2. Comprehensive Search across all intake forms and clients
       if (!matchedIntake) {
-        const snapshot = await getDocs(collection(db, "InTakeForms"));
+        const collections = ["InTakeForms", "clients"];
         const cleanClientName = clientName ? clientName.trim().toLowerCase() : null;
 
-        snapshot.docs.some((docSnap) => {
-          const data = docSnap.data();
-          const docId = docSnap.id;
+        for (const collName of collections) {
+          if (matchedIntake) break;
+          const snapshot = await getDocs(collection(db, collName));
           
-          // Match by IDs (clientId or formId)
-          const matchesId = (clientId && (data?.clientId === clientId || docId === clientId)) ||
-                            (intakeId && (data?.formId === intakeId || docId === intakeId));
-          
-          if (matchesId) {
-            matchedIntake = { ...data, id: docId };
-            return true;
-          }
+          snapshot.docs.some((docSnap) => {
+            const data = docSnap.data();
+            const docId = docSnap.id;
 
-          // Match by Names (new/old forms might use different fields)
-          if (cleanClientName) {
-            const formNames = [
-              data?.clientName, 
-              data?.name, 
-              data?.nameInClientTable, 
-              data?.familyName,
-              data?.nameOfPerson
-            ].map(n => n?.toString().toLowerCase().trim());
+            // ID Match
+            const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
+            const targetIds = [clientId, intakeId].filter(Boolean).map(id => String(id));
 
-            if (formNames.some(fn => fn && (fn.includes(cleanClientName) || cleanClientName.includes(fn)))) {
+            if (targetIds.some(tid => possibleIds.has(tid))) {
               matchedIntake = { ...data, id: docId };
               return true;
             }
-          }
-          return false;
-        });
+
+            // Name Match
+            if (cleanClientName) {
+              const possibleNames = new Set();
+              [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson, data.childName]
+                .forEach(n => n && possibleNames.add(n?.toString().toLowerCase().trim()));
+
+              if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+                Object.values(data.clients).forEach(c => {
+                  if (c.fullName) possibleNames.add(c.fullName.toLowerCase().trim());
+                  if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                });
+              }
+              if (Array.isArray(data.inTakeClients)) {
+                data.inTakeClients.forEach(c => {
+                  if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                });
+              }
+
+              if (Array.from(possibleNames).some(fn => fn && (fn.includes(cleanClientName) || cleanClientName.includes(fn)))) {
+                matchedIntake = { ...data, id: docId };
+                return true;
+              }
+            }
+            return false;
+          });
+        }
       }
 
       if (matchedIntake) {
@@ -290,8 +314,8 @@ export default function ShiftDetails() {
     const fetchIntake = async () => {
       try {
         const clientId = shift.clientId || shift.clientDetails?.id;
-        const intakeId = shift.intakeId;
-        const clientName = shift.clientName || shift.name || shift.clientDetails?.name;
+        const intakeId = shift.id || shift.intakeId || shift.InTakeFormId;
+        const clientName = shift.clientName || shift.name || shift.clientDetails?.name || shift.familyName || shift.childName;
 
         let matched = null;
 
@@ -299,35 +323,60 @@ export default function ShiftDetails() {
         if (intakeId) {
           const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
           if (snap.exists()) matched = { ...snap.data(), id: snap.id };
+          if (!matched) {
+            const snap2 = await getDoc(doc(db, "clients", String(intakeId)));
+            if (snap2.exists()) matched = { ...snap2.data(), id: snap2.id };
+          }
         }
 
-        // 2. Comprehensive search
+        // 2. Comprehensive search across InTakeForms and clients
         if (!matched) {
-          const snapshot = await getDocs(collection(db, "InTakeForms"));
-          const cleanName = clientName ? clientName.trim().toLowerCase() : null;
+          const collections = ["InTakeForms", "clients"];
+          const cleanName = clientName ? clientName.toString().trim().toLowerCase() : null;
 
-          snapshot.docs.some((docSnap) => {
-            const data = docSnap.data();
-            const docId = docSnap.id;
+          for (const collName of collections) {
+            if (matched) break;
+            const snapshot = await getDocs(collection(db, collName));
+            
+            snapshot.docs.some((docSnap) => {
+              const data = docSnap.data();
+              const docId = docSnap.id;
 
-            // ID Match
-            if ((clientId && (data.clientId === clientId || docId === clientId)) ||
-                (intakeId && (data.formId === intakeId || docId === intakeId))) {
-              matched = { ...data, id: docId };
-              return true;
-            }
+              // ID Match
+              const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
+              const targetIds = [clientId, intakeId].filter(Boolean).map(id => String(id));
 
-            // Name Match
-            if (cleanName) {
-              const names = [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson]
-                .map(n => n?.toString().toLowerCase().trim());
-              if (names.some(fn => fn && (fn.includes(cleanName) || cleanName.includes(fn)))) {
+              if (targetIds.some(tid => possibleIds.has(tid))) {
                 matched = { ...data, id: docId };
                 return true;
               }
-            }
-            return false;
-          });
+
+              // Name Match
+              if (cleanName) {
+                const possibleNames = new Set();
+                [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson, data.childName]
+                  .forEach(n => n && possibleNames.add(n?.toString().toLowerCase().trim()));
+
+                if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+                  Object.values(data.clients).forEach(c => {
+                    if (c.fullName) possibleNames.add(c.fullName.toLowerCase().trim());
+                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                  });
+                }
+                if (Array.isArray(data.inTakeClients)) {
+                  data.inTakeClients.forEach(c => {
+                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
+                  });
+                }
+
+                if (Array.from(possibleNames).some(fn => fn && (fn.includes(cleanName) || cleanName.includes(fn)))) {
+                  matched = { ...data, id: docId };
+                  return true;
+                }
+              }
+              return false;
+            });
+          }
         }
 
         if (matched) setIntakeData(matched);
@@ -357,10 +406,10 @@ export default function ShiftDetails() {
   // ── Core action handler with location + notifications ─────────────────────
   const handleAction = async () => {
     if (!confirmAction || !shift || shiftLocked) return;
+    const { type } = confirmAction;
     setIsProcessing(true);
 
     try {
-      const { type } = confirmAction;
       // Find exact Firestore doc reference
       let ref;
       if (shift.id) {
@@ -436,6 +485,17 @@ export default function ShiftDetails() {
 
     setIsProcessing(false);
     setConfirmAction(null);
+
+    // Navigate to specialized transportation screen if applicable
+    if (type === "clockIn") {
+      const cat = shift.category || shift.serviceType || "";
+      const isTransport = cat === "Transportation" || cat === "Supervised Visitation + Transportation";
+      const hasTransit = shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up"));
+
+      if (isTransport || hasTransit) {
+        router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+      }
+    }
   };
 
   // ── Report handler ──────────────────────────────────────────────────────
@@ -483,11 +543,35 @@ export default function ShiftDetails() {
     </SafeAreaView>
   );
 
-  const clientName = shift.clientName || shift.name || "Client";
+  // Resolve true name (favor Intake records if shift name is a numeric ID)
+  const rawName = safeString(shift?.familyName || shift?.childName || shift?.clientName || shift?.name || shift?.client || shift?.clientDetails?.name);
+  const intakeName = (() => {
+    if (!intakeData) return "";
+    if (intakeData.clients && typeof intakeData.clients === "object" && !Array.isArray(intakeData.clients)) {
+      const names = Object.values(intakeData.clients).map(c => c.fullName || c.name || "").filter(Boolean);
+      if (names.length) return names.join(", ");
+    }
+    // Try inTakeClients array
+    if (Array.isArray(intakeData.inTakeClients)) {
+      const names = intakeData.inTakeClients.map(c => c.name || "").filter(Boolean);
+      if (names.length) return names.join(", ");
+    }
+    return safeString(intakeData.clientName || intakeData.name || intakeData.familyName || intakeData.nameInClientTable || intakeData.childName);
+  })();
+  
+  const clientName = (isNumericId(rawName) && intakeName) ? intakeName : (rawName || intakeName || "Client");
+  const clientId = safeString(shift.clientId || shift.clientDetails?.id || intakeData?.clientId || intakeData?.formId) || "\u2014";
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const staffName = user?.name || "Staff Member";
   const staffInitials = staffName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const rawServiceType = shift.category || shift.serviceType || "Respite Care";
+  let rawServiceType = shift.category || shift.serviceType || "Respite Care";
+  // Auto-detect Transportation if miscategorized but has transit markers
+  const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
+                           (shift.description && shift.description.toLowerCase().includes("pick up")) ||
+                           (shift.description && shift.description.toLowerCase().includes("drop to"));
+  if ((rawServiceType === "Respite Care" || !rawServiceType) && hasTransitMarkers) {
+    rawServiceType = "Transportation";
+  }
   const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
   const duration = calcDuration(shift.startTime, shift.endTime);
   const displayDate = formatDisplayDate(shift.startDate);
@@ -543,7 +627,7 @@ export default function ShiftDetails() {
                 <Text style={[styles.avatarText, { color: TEXT_GREEN }]}>{clientInitials}</Text>
               </View>
               <Text style={styles.nameLabel}>{clientName}</Text>
-              <Text style={styles.idLabel}>ID: {shift.clientId || "—"}</Text>
+              <Text style={styles.idLabel}>ID: {clientId}</Text>
             </View>
             <Ionicons name="arrow-forward" size={16} color="#D1D5DB" />
             <View style={styles.avatarGroup}>
@@ -568,7 +652,7 @@ export default function ShiftDetails() {
         <View style={styles.infoGrid}>
           <GridRow label="SHIFT TYPE" value={rawServiceType} />
           <GridRow label="DATE" value={displayDate} />
-          <GridRow label="TIME" value={`${shift.startTime || "—"} – ${shift.endTime || "—"}`} />
+          <GridRow label="TIME" value={`${formatShiftTimeUTCtoCanada(shift.startDate, shift.startTime)} – ${formatShiftTimeUTCtoCanada(shift.startDate, shift.endTime)}`} />
           <GridRow label="DURATION" value={duration} isLast />
         </View>
 

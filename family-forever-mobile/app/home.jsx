@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { collection, query, onSnapshot, getDocs, where, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { registerForPushNotifications } from "../src/utils/registerForPushNotifications";
-import { safeString, toDate, formatCanadaTime, parseDate } from "../src/utils/date";
+import { safeString, formatCanadaTime, parseDate as parseDateFn, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 import { router } from "expo-router";
 import * as Location from "expo-location";
 
@@ -41,6 +41,10 @@ const serviceTypeStyles = {
   default: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
+function isNumericId(val) {
+  return val && /^\d+$/.test(String(val)) && String(val).length >= 8;
+}
+
 const calcDuration = (start, end) => {
   if (!start || !end) return "\u2014";
   const parseTime = (t) => {
@@ -59,7 +63,7 @@ const calcDuration = (start, end) => {
 };
 
 const formatShiftDate = (dateStr) => {
-  const d = parseDate(dateStr);
+  const d = parseDateFn(dateStr);
   if (!d) return safeString(dateStr) || "\u2014";
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const t = new Date(d); t.setHours(0, 0, 0, 0);
@@ -112,20 +116,20 @@ export default function Home() {
   today.setHours(0, 0, 0, 0);
 
   const todayShifts = shifts.filter((s) => {
-    const d = parseDate(s.startDate);
+    const d = parseDateFn(s.startDate);
     if (!d) return false;
     d.setHours(0, 0, 0, 0);
     return d.getTime() === today.getTime();
   });
 
   const upcomingShifts = shifts.filter((s) => {
-    const d = parseDate(s.startDate);
+    const d = parseDateFn(s.startDate);
     if (!d) return false;
     d.setHours(0, 0, 0, 0);
     return d.getTime() > today.getTime();
   }).sort((a, b) => {
-    const da = parseDate(a.startDate);
-    const db = parseDate(b.startDate);
+    const da = parseDateFn(a.startDate);
+    const db = parseDateFn(b.startDate);
     return (da || 0) - (db || 0);
   }).slice(0, 3);
 
@@ -149,18 +153,26 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const confirmed = shifts.filter((s) => s.shiftConfirmed || s.clockInTime || s.clockOutTime).length;
+    const now = new Date();
+    const currentMonthShifts = shifts.filter((s) => {
+      const d = parseDateFn(s.startDate);
+      if (!d) return false;
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    
+    const countCompleted = currentMonthShifts.filter((s) => s.clockOutTime || s.clockOut || s.status === "completed").length;
+    
     setStats({
-      total: shifts.length,
-      hours: calcTotalHours(shifts),
-      completed: confirmed,
+      total: currentMonthShifts.length,
+      hours: calcTotalHours(currentMonthShifts),
+      completed: countCompleted,
     });
   }, [shifts]);
 
   const handleConfirmAction = async () => {
     if (!confirmAction) return;
-    setIsProcessing(true);
     const { type, shift } = confirmAction;
+    setIsProcessing(true);
     try {
       if (type === "confirm") {
         const q = query(collection(db, "shifts"), where("id", "==", shift.id));
@@ -169,7 +181,12 @@ export default function Home() {
       } else {
         const coeff = 1000 * 60 * 15;
         const roundedDate = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-        const roundedTime = roundedDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const roundedTime = roundedDate.toLocaleTimeString("en-US", { 
+          hour: "2-digit", 
+          minute: "2-digit", 
+          hour12: true,
+          timeZone: "America/Edmonton" 
+        });
 
         let locStr = "Location unavailable";
         let { status } = await Location.requestForegroundPermissionsAsync();
@@ -198,6 +215,17 @@ export default function Home() {
     }
     setIsProcessing(false);
     setConfirmAction(null);
+
+    // Navigate to transportation detail if applicable
+    if (type === "clockIn") {
+      const cat = shift.category || shift.serviceType || "";
+      const isTransport = cat === "Transportation" || cat === "Supervised Visitation + Transportation";
+      const hasTransit = shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up"));
+      
+      if (isTransport || hasTransit) {
+        router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+      }
+    }
   };
 
   const getInitials = (name) => {
@@ -249,15 +277,18 @@ export default function Home() {
             </View>
           ) : (
             todayShifts.map((shift) => {
+              const rawName = safeString(shift.familyName || shift.childName || shift.clientName || shift.name || shift.client);
+              const clientName = isNumericId(rawName) ? (shift.familyName || shift.childName || "Client") : (rawName || "Client");
+              
               return (
-                <Pressable key={shift.id} onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}>
-                  <ShiftCard
-                    shift={shift}
-                    onAction={(type, s) => setConfirmAction({ type, shift: s })}
-                    onDetails={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
-                    parseDateFn={parseDate}
-                  />
-                </Pressable>
+                <ShiftCard
+                  key={shift.id}
+                  shift={shift}
+                  clientName={clientName}
+                  onAction={(type, s) => setConfirmAction({ type, shift: s })}
+                  onDetails={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
+                  parseDateFn={parseDateFn}
+                />
               );
             })
           )}
@@ -266,7 +297,7 @@ export default function Home() {
         {/* STATS STRIP */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>This week</Text>
+            <Text style={styles.statLabel}>This month</Text>
             <Text style={styles.statValue}>{stats.total} shifts</Text>
           </View>
           <View style={styles.statDivider} />
@@ -300,7 +331,7 @@ export default function Home() {
             </View>
           ) : (
             upcomingShifts.map((shift, idx) => {
-              const date = parseDate(shift.startDate);
+              const date = parseDateFn(shift.startDate);
               const dayName = date ? date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase() : "DAY";
               const dayNum = date ? date.getDate() : "00";
               const serviceColor = getServiceColor(shift.serviceType || shift.category);
@@ -317,7 +348,7 @@ export default function Home() {
                   </View>
                   <View style={styles.upcomingInfo}>
                     <Text style={styles.upcomingTitle} numberOfLines={1}>
-                      {safeString(shift.serviceType || shift.category) || "Shift"} · {safeString(shift.clientName || shift.name) || "Client"}
+                      {safeString(shift.serviceType || shift.category) || "Shift"} · {safeString(shift.childName || shift.clientName || shift.name || shift.familyName) || "Client"}
                     </Text>
                     <Text style={styles.upcomingTime}>
                       {safeString(shift.startTime)} – {safeString(shift.endTime)}
@@ -406,7 +437,7 @@ export default function Home() {
   );
 }
 
-function ShiftCard({ shift, onAction, onDetails, parseDateFn }) {
+function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateFn }) {
   const getStatus = () => {
     if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
     if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
@@ -414,10 +445,17 @@ function ShiftCard({ shift, onAction, onDetails, parseDateFn }) {
   };
 
   const status = getStatus();
-  const rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType) || "Transportation";
+  let rawServiceType = safeString(shift.category || shift.serviceType) || "Respite Care";
+  const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
+                           (shift.description && shift.description.toLowerCase().includes("pick up")) ||
+                           (shift.description && shift.description.toLowerCase().includes("drop to"));
+  if ((rawServiceType === "Respite Care" || !rawServiceType) && hasTransitMarkers) {
+    rawServiceType = "Transportation";
+  }
   const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
-  const clientName = safeString(shift.clientName || shift.name) || "Client";
-  const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const finalClientName = clientName || safeString(shift.childName || shift.familyName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name) || "Client";
+  const clientId = safeString(shift.clientId || shift.clientDetails?.id) || "\u2014";
+  const clientInitials = finalClientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const location = safeString(shift.location || shift.address) || "Location not specified";
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
   const displayDate = formatShiftDate(shift.startDate, parseDateFn);
@@ -448,7 +486,9 @@ function ShiftCard({ shift, onAction, onDetails, parseDateFn }) {
       <View style={styles.cardBody}>
         <View style={styles.timeRow}>
           <Ionicons name="time-outline" size={16} color={GRAY_TEXT} />
-          <Text style={styles.timeText}>{safeString(shift.startTime) || "—"} – {safeString(shift.endTime) || "—"}</Text>
+          <Text style={styles.timeText}>
+            {formatShiftTimeUTCtoCanada(shift.startDate, shift.startTime)} – {formatShiftTimeUTCtoCanada(shift.startDate, shift.endTime)}
+          </Text>
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{duration}</Text>
           </View>
@@ -459,8 +499,8 @@ function ShiftCard({ shift, onAction, onDetails, parseDateFn }) {
             <Text style={styles.avatarText}>{clientInitials}</Text>
           </View>
           <View style={styles.clientInfo}>
-            <Text style={styles.clientNameText}>{clientName}</Text>
-            <Text style={styles.clientIdText}>ID: {safeString(shift.clientId) || "—"}</Text>
+            <Text style={styles.clientNameText}>{finalClientName}</Text>
+            <Text style={styles.clientIdText}>ID: {clientId}</Text>
           </View>
         </View>
 
