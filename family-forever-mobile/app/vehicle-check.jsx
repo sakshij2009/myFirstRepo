@@ -31,9 +31,8 @@ export default function VehicleCheck() {
   const { shiftId } = useLocalSearchParams();
 
   const [vehicleType, setVehicleType] = useState(null); // "office" | "personal"
-  const [photo, setPhoto] = useState(null); // { uri, base64 }
+  const [photo, setPhoto] = useState(null);
   const [meterStart, setMeterStart] = useState("");
-  const [staffName, setStaffName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const takePhoto = async () => {
@@ -76,16 +75,15 @@ export default function VehicleCheck() {
       await addDoc(collection(db, "vehicleChecks"), {
         shiftId: shiftId || null,
         vehicleType,
-        staffName: staffName.trim() || null,
         meterStart: meterStart ? Number(meterStart) : null,
         photoUrl,
         submittedAt: serverTimestamp(),
       });
 
-      // Navigate to the active route execution screen
+      // Navigate to the active route execution screen, pass vehicleType
       router.push({
         pathname: "/complete-shift",
-        params: { shiftId },
+        params: { shiftId, vehicleType },
       });
     } catch (e) {
       console.error("VehicleCheck submit error:", e);
@@ -226,85 +224,67 @@ export default function VehicleCheck() {
           </View>
         )}
 
-        {/* ── Damage Report ────────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 4,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={styles.cardIconWrap}>
-                <Ionicons name="camera-outline" size={18} color={GREEN} />
-              </View>
-              <Text style={styles.cardTitle}>Damage Report</Text>
-            </View>
-            <View style={styles.optionalBadge}>
-              <Text style={styles.optionalBadgeText}>OPTIONAL</Text>
-            </View>
-          </View>
-
-          {/* Photo area */}
-          {photo ? (
-            <View style={{ marginTop: 12 }}>
-              <Image
-                source={{ uri: photo.uri }}
-                style={{
-                  width: "100%",
-                  height: 180,
-                  borderRadius: 12,
-                  marginBottom: 10,
-                }}
-                resizeMode="cover"
-              />
-              <Pressable
-                onPress={() => setPhoto(null)}
-                style={styles.retakeBtn}
-              >
-                <Ionicons
-                  name="refresh-outline"
-                  size={16}
-                  color={GREEN}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.retakeBtnText}>Retake Photo</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable onPress={takePhoto} style={styles.photoBox}>
-              <View style={styles.photoIconWrap}>
-                <Ionicons name="camera-outline" size={28} color="#9CA3AF" />
-              </View>
-              <Text style={styles.photoBoxLabel}>Take live photo</Text>
-              <Text style={styles.photoBoxHint}>
-                Gallery not permitted — live camera only
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* ── Staff Name (shared car scenario) ─────────────────────────────── */}
-        {isPersonal && (
+        {/* ── Damage Report (office vehicle only) ─────────────────────────── */}
+        {isOffice && (
           <View style={styles.card}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
-              <View style={styles.cardIconWrap}>
-                <Ionicons name="person-outline" size={18} color={GREEN} />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={styles.cardIconWrap}>
+                  <Ionicons name="camera-outline" size={18} color={GREEN} />
+                </View>
+                <Text style={styles.cardTitle}>Damage Report</Text>
               </View>
-              <Text style={styles.cardTitle}>Car Owner</Text>
+              <View style={styles.optionalBadge}>
+                <Text style={styles.optionalBadgeText}>OPTIONAL</Text>
+              </View>
             </View>
-            <Text style={styles.inputLabel}>Enter Staff Name or ID</Text>
-            <TextInput
-              style={styles.input}
-              value={staffName}
-              onChangeText={setStaffName}
-              placeholder="e.g. Sarah Johnson or SJ-4521"
-              placeholderTextColor="#C4C8CE"
-            />
-            <Text style={styles.inputHint}>
-              Only the registered owner receives mileage compensation.
+
+            {/* Photo area */}
+            {photo ? (
+              <View style={{ marginTop: 12 }}>
+                <Image
+                  source={{ uri: photo.uri }}
+                  style={{
+                    width: "100%",
+                    height: 180,
+                    borderRadius: 12,
+                    marginBottom: 10,
+                  }}
+                  resizeMode="cover"
+                />
+                <Pressable onPress={() => setPhoto(null)} style={styles.retakeBtn}>
+                  <Ionicons name="refresh-outline" size={16} color={GREEN} style={{ marginRight: 6 }} />
+                  <Text style={styles.retakeBtnText}>Retake Photo</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={takePhoto} style={styles.photoBox}>
+                <View style={styles.photoIconWrap}>
+                  <Ionicons name="camera-outline" size={28} color="#9CA3AF" />
+                </View>
+                <Text style={styles.photoBoxLabel}>Take live photo</Text>
+                <Text style={styles.photoBoxHint}>
+                  Gallery not permitted — live camera only
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* ── Personal vehicle info note ────────────────────────────────────── */}
+        {isPersonal && (
+          <View style={[styles.infoBanner, { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+            <Ionicons name="car-outline" size={18} color={GREEN} style={{ marginTop: 1, marginRight: 10 }} />
+            <Text style={[styles.infoBannerText, { color: "#166534" }]}>
+              <Text style={{ fontWeight: "700" }}>Personal vehicle selected.</Text>{" "}
+              Your mileage will include office-to-route and route-to-office segments. These are tracked in the shift report.
             </Text>
           </View>
         )}

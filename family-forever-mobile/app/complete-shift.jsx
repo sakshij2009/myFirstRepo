@@ -19,14 +19,40 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
+import * as Location from "expo-location";
 import { db } from "../src/firebase/config";
 import { safeString, parseDate } from "../src/utils/date";
+
+// ── Office address (for personal vehicle KM) ─────────────────────────────────
+const OFFICE_ADDRESS = "#206, 10110 124 Street, Edmonton, AB T5N 1P6";
+
+// ── GPS distance helper ───────────────────────────────────────────────────────
+function haversineKm(c1, c2) {
+  const R = 6371;
+  const dLat = (c2.latitude - c1.latitude) * (Math.PI / 180);
+  const dLon = (c2.longitude - c1.longitude) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(c1.latitude * (Math.PI / 180)) *
+      Math.cos(c2.latitude * (Math.PI / 180)) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function fmtMinutes(mins) {
+  if (!mins && mins !== 0) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
 const GREEN = "#1F6F43";
@@ -337,7 +363,7 @@ const csStyles = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function CompleteShift() {
-  const { shiftId } = useLocalSearchParams();
+  const { shiftId, vehicleType } = useLocalSearchParams();
 
   const [shift, setShift]       = useState(null);
   const [loading, setLoading]   = useState(true);
@@ -346,17 +372,47 @@ export default function CompleteShift() {
   const [completedIdxs, setCompletedIdxs] = useState([]);
   // stopClientStatus: { stopIndex_clientId → 'waiting'|'confirmed'|'cancelled' }
   const [clientStatus, setClientStatus] = useState({});
-  const [visitArrived, setVisitArrived] = useState(false);
+  const [visitArrived, setVisitArrived]  = useState(false);
+  const [visitNotes, setVisitNotes]      = useState("");
   const [totalKm, setTotalKm]   = useState(0);
-  const kmRef = useRef(null);
-  const [done, setDone] = useState(false);
+  const locationSubRef = useRef(null);
+  const lastCoordsRef  = useRef(null);
+  const startTimeRef   = useRef(Date.now());
+  const kmRef          = useRef(null); // fallback simulation
 
-  // Km counter simulation (increments while route is active)
+  // GPS distance tracking
   useEffect(() => {
-    kmRef.current = setInterval(() => {
-      setTotalKm((k) => Math.round((k + 0.05) * 100) / 100);
-    }, 3000);
-    return () => clearInterval(kmRef.current);
+    let active = true;
+    const startTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (!active) return;
+      if (status === "granted") {
+        locationSubRef.current = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 15 },
+          (pos) => {
+            if (!active) return;
+            if (lastCoordsRef.current) {
+              const d = haversineKm(lastCoordsRef.current, pos.coords);
+              if (d < 0.5) { // ignore GPS jumps > 500m
+                setTotalKm((k) => Math.round((k + d) * 100) / 100);
+              }
+            }
+            lastCoordsRef.current = pos.coords;
+          }
+        );
+      } else {
+        // Fallback simulation when location denied
+        kmRef.current = setInterval(() => {
+          setTotalKm((k) => Math.round((k + 0.04) * 100) / 100);
+        }, 4000);
+      }
+    };
+    startTracking();
+    return () => {
+      active = false;
+      locationSubRef.current?.remove();
+      clearInterval(kmRef.current);
+    };
   }, []);
 
   // Load shift
@@ -418,18 +474,33 @@ export default function CompleteShift() {
 
   const advanceStop = async () => {
     if (currentIdx >= stops.length - 1) {
-      // All stops done
+      // All stops done — stop tracking
+      locationSubRef.current?.remove();
       clearInterval(kmRef.current);
+      const totalTimeMinutes = Math.round((Date.now() - startTimeRef.current) / 60000);
+      const isPersonalVehicle = vehicleType === "personal";
+      const firstPickup = stops.find((s) => s.type === "pickup")?.address || "";
+      const lastDrop = [...stops].reverse().find((s) => s.type === "drop")?.address || "";
+
       if (shiftId) {
         try {
           await updateDoc(doc(db, "shifts", shiftId), {
             transportationCompleted: true,
             transportationKm: totalKm,
             transportationCompletedAt: serverTimestamp(),
+            visitNotes: visitNotes.trim() || null,
+            totalTimeMinutes,
+            vehicleType: vehicleType || null,
+            ...(isPersonalVehicle && {
+              personalVehicleFirstPickup: firstPickup,
+              personalVehicleLastDrop: lastDrop,
+              personalVehicleOfficeAddress: OFFICE_ADDRESS,
+            }),
           });
-        } catch (e) { console.warn(e); }
+        } catch (e) { console.warn("advanceStop save error:", e); }
       }
-      setDone(true);
+      // Navigate to shift report
+      router.replace({ pathname: "/shift-completion", params: { shiftId } });
       return;
     }
     setCompletedIdxs((prev) => [...prev, currentIdx]);
@@ -470,55 +541,6 @@ export default function CompleteShift() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: PAGE, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator size="large" color={GREEN} />
-      </SafeAreaView>
-    );
-  }
-
-  // ── Completion Screen ─────────────────────────────────────────────────────
-  if (done) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: PAGE }}>
-        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 120, alignItems: "center" }}>
-          <View style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", marginTop: 40, marginBottom: 20 }}>
-            <Ionicons name="checkmark-circle" size={60} color={GREEN} />
-          </View>
-          <Text style={{ fontSize: 26, fontWeight: "800", color: DARK, fontFamily: "Poppins-Bold", textAlign: "center" }}>Route Complete!</Text>
-          <Text style={{ fontSize: 15, color: GRAY, textAlign: "center", marginTop: 8, lineHeight: 22, fontFamily: "Inter" }}>
-            All {allClients.length} client{allClients.length !== 1 ? "s" : ""} have been transported successfully.
-          </Text>
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, width: "100%", marginTop: 28, borderWidth: 1, borderColor: BORDER }}>
-            <Text style={{ fontSize: 14, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold", marginBottom: 14 }}>Route Summary</Text>
-            {stops.map((st, i) => (
-              <View key={i} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: i < stops.length - 1 ? 1 : 0, borderBottomColor: "#F3F4F6", gap: 12 }}>
-                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: st.type === "pickup" ? GREEN_LIGHT : st.type === "visit" ? BLUE_LIGHT : "#FEF2F2", alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name={st.type === "pickup" ? "navigate" : st.type === "visit" ? "business" : "flag"} size={14} color={st.type === "pickup" ? GREEN : st.type === "visit" ? BLUE : RED} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" }}>{st.label} — {st.address?.split(",")[0]}</Text>
-                  <Text style={{ fontSize: 11, color: GRAY, fontFamily: "Inter" }}>{st.clients.map((c) => c.name).join(", ")}</Text>
-                </View>
-              </View>
-            ))}
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "#F3F4F6" }}>
-              <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter" }}>Total Distance</Text>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" }}>{totalKm.toFixed(1)} km</Text>
-            </View>
-          </View>
-        </ScrollView>
-        <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: BORDER, padding: 20, gap: 10 }}>
-          <Pressable
-            onPress={() => router.replace({ pathname: "/shift-detail", params: { shiftId } })}
-            style={{ backgroundColor: GREEN, borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
-          >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: "Poppins-SemiBold" }}>Back to Shift</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.replace("/home")}
-            style={{ borderWidth: 1.5, borderColor: BORDER, borderRadius: 14, paddingVertical: 14, alignItems: "center" }}
-          >
-            <Text style={{ color: GRAY, fontSize: 14, fontWeight: "600", fontFamily: "Inter-SemiBold" }}>Back to Home</Text>
-          </Pressable>
-        </View>
       </SafeAreaView>
     );
   }
@@ -663,13 +685,51 @@ export default function CompleteShift() {
               </View>
             )}
 
-            {/* Visit arrived confirmation */}
+            {/* Visit arrived confirmation + notes */}
             {isVisit && visitArrived && (
-              <View style={{ marginTop: 14, backgroundColor: BLUE_LIGHT, borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "#BFDBFE" }}>
-                <Ionicons name="checkmark-circle" size={20} color={BLUE} />
-                <Text style={{ fontSize: 14, fontWeight: "600", color: BLUE, fontFamily: "Inter-SemiBold", flex: 1 }}>
-                  Arrived at visit. When ready to leave, tap the button below.
-                </Text>
+              <View style={{ marginTop: 14, gap: 12 }}>
+                <View style={{ backgroundColor: BLUE_LIGHT, borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: "#BFDBFE" }}>
+                  <Ionicons name="checkmark-circle" size={20} color={BLUE} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: BLUE, fontFamily: "Inter-SemiBold", flex: 1 }}>
+                    Arrived at visit. Add notes below, then tap Ready to Leave.
+                  </Text>
+                </View>
+                {/* Visit Notes */}
+                <View style={{ backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: BORDER, padding: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <Ionicons name="document-text-outline" size={16} color={BLUE} />
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: DARK, fontFamily: "Inter-Bold" }}>
+                      Visit Notes
+                    </Text>
+                    <View style={{ backgroundColor: "#EFF6FF", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 9, fontWeight: "700", color: BLUE, letterSpacing: 0.5 }}>OPTIONAL</Text>
+                    </View>
+                  </View>
+                  <TextInput
+                    value={visitNotes}
+                    onChangeText={setVisitNotes}
+                    placeholder="Record observations, client behaviour, any incidents during this visit..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    style={{
+                      borderWidth: 1.5,
+                      borderColor: "#DBEAFE",
+                      borderRadius: 10,
+                      padding: 12,
+                      fontSize: 14,
+                      color: DARK,
+                      minHeight: 100,
+                      backgroundColor: "#F8FAFF",
+                      fontFamily: "Inter",
+                      lineHeight: 20,
+                    }}
+                  />
+                  <Text style={{ fontSize: 11, color: GRAY, marginTop: 6, fontFamily: "Inter" }}>
+                    These notes will be included in the shift report.
+                  </Text>
+                </View>
               </View>
             )}
           </View>
