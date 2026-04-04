@@ -381,18 +381,20 @@ setShiftPoints(points);
         if (mode !== "update") {
           setShiftPoints([]);
           setRemovedShiftPoints([]);
+          setIntakeDescription("");
         }
         return;
       }
 
       // In update mode, shift points are already loaded from the saved shift — don't override
-      if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.some(p => p.totalKilometers !== undefined)) {
+      if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.length > 0) {
         return;
       }
 
-      // ── 1. If client has shiftPoints (family client), use those ──
+      let pointsFound = [];
+      // ── 1. If client has shiftPoints (family client), use those first ──
       if (Array.isArray(selectedClient.shiftPoints) && selectedClient.shiftPoints.length > 0) {
-        const points = selectedClient.shiftPoints.map((sp) => ({
+        pointsFound = selectedClient.shiftPoints.map((sp) => ({
           name: sp.name || "",
           pickupLocation: sp.pickupLocation || "",
           pickupTime: sp.pickupTime || "",
@@ -405,49 +407,110 @@ setShiftPoints(points);
           transportationMode: sp.transportationMode || "",
           totalKilometers: 0,
         }));
-        setShiftPoints(points);
-        setRemovedShiftPoints([]);
-      } else {
-        // Not a family client — no shift points
-        setShiftPoints([]);
-        setRemovedShiftPoints([]);
       }
 
-      // ── 2. Fetch description from intake form ──
+      // ── 2. Fetch from intake form (Description AND potentially Shift Points if still empty) ──
       try {
         const clientNameCandidate = (selectedClient.name || "").trim();
         if (!clientNameCandidate) return;
 
         const snap = await getDocs(collection(db, "InTakeForms"));
         let foundDesc = "";
+        let intakePoints = [];
 
         snap.forEach((d) => {
-          if (foundDesc) return;
           const data = d.data();
           const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
 
-          if (nameMatch(data.clientName) || nameMatch(data.name)) {
-            foundDesc = data.jobDescription || data.description || data.notes || "";
+          let isMatch = false;
+          if (nameMatch(data.clientName) || nameMatch(data.name) || nameMatch(data.nameOfPerson)) {
+            isMatch = true;
           }
-          if (!foundDesc && Array.isArray(data.inTakeClients)) {
-            data.inTakeClients.forEach((cl) => {
-              if (!foundDesc && nameMatch(cl.name)) {
-                foundDesc = cl.jobDescription || cl.description || cl.notes || data.jobDescription || data.description || "";
-              }
-            });
+          if (!isMatch && Array.isArray(data.inTakeClients)) {
+            if (data.inTakeClients.some(cl => nameMatch(cl.name))) isMatch = true;
           }
-          if (!foundDesc && data.clients && typeof data.clients === "object") {
-            Object.values(data.clients).forEach((c) => {
-              if (!foundDesc && nameMatch(c.fullName || c.name)) {
-                foundDesc = c.jobDescription || c.description || data.jobDescription || data.description || "";
+          if (!isMatch && data.clients && typeof data.clients === "object") {
+            const clientObjects = Object.values(data.clients);
+            if (clientObjects.some(c => nameMatch(c.fullName || c.name))) isMatch = true;
+          }
+          // Also check parentInfoList if it exists (for matching parent names)
+          if (!isMatch && Array.isArray(data.parentInfoList)) {
+            if (data.parentInfoList.some(p => nameMatch(p.parentName))) isMatch = true;
+          }
+          if (!isMatch && data.parentName && nameMatch(data.parentName)) isMatch = true;
+
+          if (isMatch) {
+            // Find Description — check nested services.serviceDesc too
+            const possibleDesc = data.jobDescription || data.description || data.notes
+              || data.services?.serviceDesc || data.serviceDesc || "";
+            if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
+
+            // Find Siblings/Members for Shift Points if we don't have them yet
+            if (pointsFound.length === 0 && intakePoints.length === 0) {
+              
+              // A. Support new Map structure (clients: { client1: {...}, client2: {...} })
+              if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
+                intakePoints = Object.values(data.clients).map((c) => {
+                  const fullName = c.fullName || c.name || "";
+                  // Match by THIS child's name, not the family/intake form name
+                  const memberNameLower = fullName.trim().toLowerCase();
+                  const memberMatch = (n) => (n || "").trim().toLowerCase() === memberNameLower;
+
+                  // Lookup extra info from related lists by individual child name
+                  const trans = Array.isArray(data.transportationInfoList)
+                    ? data.transportationInfoList.find(t => memberMatch(t.clientName))
+                    : null;
+                  const visit = Array.isArray(data.supervisedVisitations)
+                    ? data.supervisedVisitations.find(v => memberMatch(v.clientName))
+                    : null;
+
+                  return {
+                    name: fullName,
+                    pickupLocation: trans?.pickupAddress || c.address || "",
+                    pickupTime: trans?.pickupTime || "",
+                    visitLocation: visit?.visitAddress || "",
+                    visitStartTime: visit?.visitStartTime || "",
+                    visitEndTime: visit?.visitEndTime || "",
+                    dropLocation: trans?.dropoffAddress || c.address || "",
+                    dropTime: trans?.dropOffTime || "",
+                    seatType: trans?.carSeatType || "",
+                    transportationMode: "",
+                    totalKilometers: 0,
+                  };
+                });
+              } 
+              // B. Support old array structure (siblings: [...])
+              else if (Array.isArray(data.siblings) && data.siblings.length > 0) {
+                intakePoints = data.siblings.map((sib) => ({
+                  name: sib.name || "",
+                  pickupLocation: sib.pickupLocation || "",
+                  pickupTime: sib.pickupTime || "",
+                  visitLocation: sib.visitLocation || "",
+                  visitStartTime: sib.visitStartTime || "",
+                  visitEndTime: sib.visitEndTime || "",
+                  dropLocation: sib.dropLocation || "",
+                  dropTime: sib.dropTime || "",
+                  seatType: sib.seatType || "",
+                  transportationMode: sib.transportationMode || "",
+                  totalKilometers: 0,
+                }));
               }
-            });
+            }
           }
         });
 
         if (foundDesc) setIntakeDescription(foundDesc);
+        
+        // If we found points in intake but not in client db, use them
+        if (pointsFound.length === 0 && intakePoints.length > 0) {
+          setShiftPoints(intakePoints);
+        } else {
+          setShiftPoints(pointsFound);
+        }
+        setRemovedShiftPoints([]);
+
       } catch (err) {
-        console.error("Error loading intake description:", err);
+        console.error("Error loading data from intake:", err);
       }
     };
 
