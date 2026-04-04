@@ -561,7 +561,7 @@ export default function ShiftDetails() {
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const staffName = user?.name || "Staff Member";
   const staffInitials = staffName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  let rawServiceType = shift.category || shift.serviceType || "Respite Care";
+  let rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory) || "Respite Care";
   // Auto-detect Transportation if miscategorized but has transit markers
   const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
                            (shift.description && shift.description.toLowerCase().includes("pick up")) ||
@@ -652,6 +652,53 @@ export default function ShiftDetails() {
           <GridRow label="TIME" value={`${formatShiftTimeUTCtoCanada(shift.startDate, shift.startTime)} – ${formatShiftTimeUTCtoCanada(shift.startDate, shift.endTime)}`} />
           <GridRow label="DURATION" value={duration} isLast />
         </View>
+
+        {/* ── Family Members / Children (Shift Points) ── */}
+        {( (Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0) || (Array.isArray(clientInfo?.shiftPoints) && clientInfo.shiftPoints.length > 0) ) && (
+          <View style={[styles.sectionCard, { marginTop: 15 }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
+              <Ionicons name="people-outline" size={18} color={PRIMARY_GREEN} />
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Family Members / Children</Text>
+            </View>
+            {(shift?.shiftPoints || clientInfo?.shiftPoints).map((member, mIdx) => (
+              <View key={`member-${mIdx}`} style={{ 
+                padding: 12, 
+                backgroundColor: "#F9FAFB", 
+                borderRadius: 12, 
+                marginBottom: 8,
+                borderWidth: 1,
+                borderColor: "#F3F4F6"
+              }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" }}>
+                    {member.name || `Member ${mIdx + 1}`}
+                  </Text>
+                  {member.seatType && (
+                    <View style={{ backgroundColor: "#FEF9C3", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "700", color: "#854D0E" }}>{member.seatType}</Text>
+                    </View>
+                  )}
+                </View>
+                {(member.pickupLocation || member.dropLocation) && (
+                  <View style={{ marginTop: 8, gap: 4 }}>
+                    {member.pickupLocation && (
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#9CA3AF", width: 50 }}>PICKUP:</Text>
+                        <Text style={{ fontSize: 11, color: "#4B5563", flex: 1 }}>{member.pickupLocation}</Text>
+                      </View>
+                    )}
+                    {member.visitLocation && (
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#9CA3AF", width: 50 }}>VISIT:</Text>
+                        <Text style={{ fontSize: 11, color: "#4B5563", flex: 1 }}>{member.visitLocation}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── Shift Description ──────────────────────────────────────────── */}
         <View style={[styles.sectionCard, { marginTop: 15 }]}>
