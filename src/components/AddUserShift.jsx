@@ -27,56 +27,21 @@ import { useNavigate } from "react-router-dom";
 // ---------------- OFFICE ADDRESS ----------------
 const OFFICE_ADDRESS = "10110 124 Street, Edmonton, AB T5N 1P6";
 
-// ---------------- GOOGLE MAPS DISTANCE CALCULATOR ----------------
+import { calculateRouteDistance } from "../utils/mapboxHelper";
+
+// ---------------- MAPBOX DISTANCE CALCULATOR ----------------
 const calculateTotalDistance = async (shiftPoint) => {
-  if (!window.google || !window.google.maps) {
-    console.error("Google Maps API not loaded yet.");
-    return 0;
-  }
-
-  const service = new window.google.maps.DistanceMatrixService();
-
-  // Build the route sequence dynamically
   const locations = [OFFICE_ADDRESS, shiftPoint.pickupLocation];
   if (shiftPoint.visitLocation) locations.push(shiftPoint.visitLocation);
   locations.push(shiftPoint.dropLocation, OFFICE_ADDRESS);
 
-  // Helper to calculate distance between two points
-  const getDistance = (origin, destination) =>
-    new Promise((resolve, reject) => {
-      service.getDistanceMatrix(
-        {
-          origins: [origin],
-          destinations: [destination],
-          travelMode: window.google.maps.TravelMode.DRIVING,
-          unitSystem: window.google.maps.UnitSystem.METRIC,
-        },
-        (response, status) => {
-          if (status === "OK" && response.rows[0].elements[0].status === "OK") {
-            const meters = response.rows[0].elements[0].distance.value;
-            resolve(meters);
-          } else {
-            console.error("DistanceMatrix failed:", status, response);
-            resolve(0);
-          }
-        }
-      );
-    });
-
-  let totalMeters = 0;
-
-  // Loop through consecutive route segments
-  for (let i = 0; i < locations.length - 1; i++) {
-    const origin = locations[i];
-    const destination = locations[i + 1];
-    if (!origin || !destination) continue;
-
-    const segmentDistance = await getDistance(origin, destination);
-    totalMeters += segmentDistance;
+  try {
+    const result = await calculateRouteDistance(locations);
+    return result ? result.km.toFixed(2) : "0.00";
+  } catch (err) {
+    console.error("Mapbox Routing Error:", err);
+    return "0.00";
   }
-
-  const totalKilometers = totalMeters / 1000;
-  return totalKilometers.toFixed(2);
 };
 
 

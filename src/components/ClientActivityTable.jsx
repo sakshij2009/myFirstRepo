@@ -41,10 +41,10 @@ const svcBg = (s) => {
 
 const normService = (raw) => {
   const l = (raw || "").toLowerCase();
-  if (l.includes("emergent"))   return "Emergency Care";
+  if (l.includes("emergent"))   return "Emergent Care";
   if (l.includes("respite"))    return "Respite Care";
-  if (l.includes("supervised")) return "Supervised Visits";
-  if (l.includes("transport"))  return "Transportations";
+  if (l.includes("supervised")) return "Supervised Visitation";
+  if (l.includes("transport"))  return "Transportation";
   return raw || "—";
 };
 
@@ -105,12 +105,8 @@ function matchesSelectedDates(shift, selectedDates) {
 export default function ClientActivityTable({ onNavigateToReport }) {
   const navigate = useNavigate();
 
-  const handleTabClick = (tabId, svc) => {
-    if (svc) {
-      navigate(`/admin-dashboard/shifts?service=${encodeURIComponent(svc)}`);
-    } else {
-      navigate("/admin-dashboard/shifts");
-    }
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId);
   };
   const [rows, setRows]             = useState([]);
   const [activeTab, setActiveTab]   = useState("all");
@@ -120,7 +116,6 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   const [processing, setProcessing] = useState(false);
   const [selectedDates, setSelectedDates] = useState([new Date()]);
   const [calendarOpen, setCalendarOpen]   = useState(false);
-  const [showFullClientNames, setShowFullClientNames] = useState(false);
   const [rowsToShow, setRowsToShow] = useState(5);
 
   // Fetch shifts + enrich
@@ -290,21 +285,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
             <span>View All</span><ArrowRight size={12} strokeWidth={2.5} />
           </button>
 
-          {/* Toggle for client names */}
-          <div
-            onClick={() => setShowFullClientNames(!showFullClientNames)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer transition-all"
-            style={{
-              borderColor: showFullClientNames ? "#145228" : "#e5e7eb",
-              background: showFullClientNames ? "#f0fdf4" : "#fff",
-              color: showFullClientNames ? "#145228" : "#374151",
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            <Eye size={12} strokeWidth={2} />
-            <span>{showFullClientNames ? "Full Names" : "Short Names"}</span>
-          </div>
+
         </div>
       </div>
 
@@ -340,7 +321,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           <thead>
             <tr style={{ backgroundColor: "#f9fafb" }}>
               {["Client", "Staff", "Service", "Shift", "Status", "Billing", "Agency", "Lock", "Actions"].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 uppercase tracking-wider" style={{ fontSize: 10.5, fontWeight: 700, color: "#9ca3af" }}>{h}</th>
+                <th key={h} className="text-left px-4 py-2.5 uppercase tracking-wider" style={{ fontSize: 10.5, fontWeight: 700, color: "#9ca3af", whiteSpace: "nowrap" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -352,31 +333,63 @@ export default function ClientActivityTable({ onNavigateToReport }) {
               const isInvoiced = row.billingStatus === "Invoiced";
               return (
                 <tr key={row.id} className="border-t transition-colors" style={{ borderColor: "#f3f4f6", backgroundColor: row.locked ? "#fafbfc" : undefined }}>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div
                       style={{
                         fontSize: 12.5,
                         fontWeight: 600,
                         color: "#1f2937",
                         cursor: "help",
-                        maxWidth: 200,
+                        maxWidth: 180,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                       }}
-                      title={showFullClientNames ? "" : row.clientName}
+                      title={row.clientName}
                     >
-                      {showFullClientNames ? row.clientName : truncateName(row.clientName, 20)}
+                      {row.clientName}
                     </div>
-                    <div style={{ fontSize: 10.5, color: "#9ca3af" }}>{row.clientId}</div>
+                    <div style={{ fontSize: 10.5, color: "#9ca3af", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.clientId}</div>
                   </td>
-                  <td className="px-4 py-3"><div style={{ fontSize: 12, fontWeight: 500, color: "#4b5563" }}>{row.staff}</div></td>
-                  <td className="px-4 py-3"><div style={{ fontSize: 12, fontWeight: 500, color: svcColor(row.service) }}>{row.service}</div></td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 500, backgroundColor: "#f3f4f6", color: "#6b7280" }}>{row.shiftType}</span>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: "#4b5563",
+                        maxWidth: 120,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        cursor: "help",
+                      }}
+                      title={row.staff}
+                    >
+                      {row.staff}
+                    </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border" style={
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: svcColor(row.service),
+                        maxWidth: 140,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        cursor: "help",
+                      }}
+                      title={row.service}
+                    >
+                      {row.service}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="px-2 py-1 rounded-full whitespace-nowrap" style={{ fontSize: 11, fontWeight: 500, backgroundColor: "#f3f4f6", color: "#6b7280" }}>{row.shiftType}</span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap" style={
                       row.status === "Completed"
                         ? { backgroundColor: "#dcfce7", color: "#16a34a", borderColor: "#bbf7d0" }
                         : row.status === "Ongoing"
@@ -386,12 +399,12 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                       {row.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ fontSize: 10, fontWeight: 600, backgroundColor: bCfg.bg, color: bCfg.color, border: `1px solid ${bCfg.border}` }}>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap" style={{ fontSize: 10, fontWeight: 600, backgroundColor: bCfg.bg, color: bCfg.color, border: `1px solid ${bCfg.border}` }}>
                       {bCfg.icon}{row.billingStatus}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div
                       style={{
                         fontSize: 12,
@@ -402,12 +415,12 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                       }}
-                      title={showFullClientNames ? "" : row.agency}
+                      title={row.agency}
                     >
-                      {showFullClientNames ? row.agency : truncateName(row.agency, 14)}
+                      {row.agency}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center justify-center">
                       {row.locked ? (
                         <button onClick={() => handleToggle(row)} className="inline-flex items-center gap-1 px-2 py-1 rounded-md transition-all"

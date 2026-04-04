@@ -472,7 +472,7 @@ const AddUserForm = ({ mode = "add", user }) => {
                   </div>
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
-                    <Field name="password" type="password" placeholder="Please enter a specific password" className={inputCls(touched.password && errors.password)} />
+                    <Field name="password" type="text" placeholder="Please enter a specific password" className={inputCls(touched.password && errors.password)} />
                     <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
                   <div>

@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutGrid, Users, UserPlus, Calendar, CheckCircle, Car, FileText, Building,
   BarChart3, Settings, ChevronLeft, ChevronRight, Inbox, UserCheck, ClipboardCheck,
-  Receipt, Wallet, Landmark, LogOut, ArrowLeftRight,
+  Receipt, Wallet, Landmark, LogOut,
 } from "lucide-react";
 import { collection, getCountFromServer } from "firebase/firestore";
 import { db } from "../firebase";
@@ -161,25 +161,6 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
 
       {/* Bottom */}
       <div className="p-3 shrink-0 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-        {/* Back to Role Select */}
-        {!collapsed ? (
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
-            style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.55)" }}
-          >
-            <ArrowLeftRight size={14} strokeWidth={1.8} />
-            Back to Role Select
-          </button>
-        ) : (
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center justify-center p-2 mb-1 rounded-lg transition-colors hover:bg-white/10"
-            title="Back to Role Select"
-          >
-            <ArrowLeftRight size={14} strokeWidth={1.8} style={{ color: "rgba(255,255,255,0.45)" }} />
-          </button>
-        )}
 
         {/* Logout */}
         {!collapsed ? (

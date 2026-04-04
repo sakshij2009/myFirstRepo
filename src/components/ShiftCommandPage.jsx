@@ -12,9 +12,9 @@ import {
 
 // ─── Service Config ────────────────────────────────────────────────────────────
 const SERVICE_CFG = {
-  emergency:      { label: "Emergency Care",    color: "#dc2626", bg: "#fee2e2", light: "#fef2f2", border: "#fecaca" },
+  emergency:      { label: "Emergent Care",      color: "#dc2626", bg: "#fee2e2", light: "#fef2f2", border: "#fecaca" },
   respite:        { label: "Respite Care",       color: "#2563eb", bg: "#dbeafe", light: "#eff6ff", border: "#bfdbfe" },
-  supervised:     { label: "Supervised Visit",   color: "#7c3aed", bg: "#ede9fe", light: "#f5f3ff", border: "#ddd6fe" },
+  supervised:     { label: "Supervised Visitation", color: "#7c3aed", bg: "#ede9fe", light: "#f5f3ff", border: "#ddd6fe" },
   transportation: { label: "Transportation",     color: "#ea580c", bg: "#fed7aa", light: "#fff7ed", border: "#fdba74" },
   other:          { label: "Other",              color: "#6b7280", bg: "#f3f4f6", light: "#f9fafb", border: "#e5e7eb" },
 };
@@ -156,10 +156,11 @@ function StatusBadge({ status }) {
   );
 }
 
-function ShiftChip({ shift }) {
+function ShiftChip({ shift, navigate }) {
   const s = SERVICE_CFG[shift.serviceKey] || SERVICE_CFG.other;
   return (
     <div
+      onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
       className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity"
       style={{ background: s.bg, border: `1px solid ${s.border}` }}
       title={`${shift.timeStart}–${shift.timeEnd} · ${shift.client} · ${shift.staff || "Unassigned"}`}
@@ -287,10 +288,11 @@ function ShiftGridRow({ shift, showDate, navigate }) {
   );
 }
 
-function ShiftCompactRow({ shift }) {
+function ShiftCompactRow({ shift, navigate }) {
   const svc = SERVICE_CFG[shift.serviceKey] || SERVICE_CFG.other;
   return (
     <div
+      onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
       className="rounded-lg p-3 cursor-pointer hover:bg-white transition-colors mb-1.5"
       style={{ background: "#fafafa", border: `1px solid #f0f0f0`, borderLeftWidth: 3, borderLeftColor: svc.color, borderLeftStyle: "solid" }}
     >
@@ -358,9 +360,10 @@ function ShiftKPIStrip({ shifts }) {
 // ─── Month Calendar ───────────────────────────────────────────────────────────
 const ROW_H = 115;
 
-function MonthCalendar({ year, month, shifts }) {
+function MonthCalendar({ year, month, shifts, navigate }) {
   const TODAY = todayStr();
   const weeks = getMonthGrid(year, month);
+  const [expandedDate, setExpandedDate] = useState(null);
 
   const shiftMap = useMemo(() => {
     const m = {};
@@ -385,9 +388,11 @@ function MonthCalendar({ year, month, shifts }) {
             const dayShifts = shiftMap[dateStr] || [];
             const visible = dayShifts.slice(0, 3);
             const overflow = dayShifts.length - visible.length;
+            const isExpanded = expandedDate === dateStr;
+
             return (
               <div key={di}
-                className="border-r border-b p-1.5 flex flex-col gap-0.5 overflow-hidden"
+                className="border-r border-b p-1.5 flex flex-col gap-0.5 relative"
                 style={{
                   borderColor: "#f3f4f6",
                   background: isToday ? "#f0fdf4" : "transparent",
@@ -405,14 +410,41 @@ function MonthCalendar({ year, month, shifts }) {
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
-                  {visible.map((s) => <ShiftChip key={s.id} shift={s} />)}
+                  {visible.map((s) => <ShiftChip key={s.id} shift={s} navigate={navigate} />)}
                   {overflow > 0 && (
-                    <span className="px-1 rounded cursor-pointer"
+                    <span 
+                      onClick={() => setExpandedDate(dateStr)}
+                      className="px-1 rounded cursor-pointer hover:bg-gray-100 transition-colors max-w-max"
                       style={{ fontSize: 10, color: "#6b7280", fontWeight: 600 }}>
                       +{overflow} more
                     </span>
                   )}
                 </div>
+
+                {isExpanded && (
+                  <div 
+                    className="absolute z-50 bg-white rounded-xl shadow-2xl border p-2 flex flex-col gap-1.5"
+                    style={{ 
+                      top: -4, 
+                      left: -4, 
+                      width: "calc(100% + 8px)",
+                      minWidth: 160,
+                      borderColor: "#e5e7eb" 
+                    }}
+                  >
+                    <div className="flex justify-between items-center pb-1 border-b" style={{ borderColor: "#f3f4f6" }}>
+                        <span className="font-bold ml-1" style={{ fontSize: 12, color: "#111827" }}>
+                          {parseInt(dateStr.slice(8))} {new Date(dateStr + "T00:00:00").toLocaleString('default', { month: 'short' })}
+                        </span>
+                        <button onClick={() => setExpandedDate(null)} className="text-gray-400 hover:text-red-500 rounded p-0.5 transition-colors">
+                          <XCircle size={14} />
+                        </button>
+                    </div>
+                    <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+                      {dayShifts.map((s) => <ShiftChip key={s.id} shift={s} navigate={navigate} />)}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -423,7 +455,7 @@ function MonthCalendar({ year, month, shifts }) {
 }
 
 // ─── Week View ────────────────────────────────────────────────────────────────
-function WeekView({ anchorDate, shifts }) {
+function WeekView({ anchorDate, shifts, navigate }) {
   const TODAY = todayStr();
   const weekDates = getWeekDates(anchorDate);
 
@@ -466,6 +498,7 @@ function WeekView({ anchorDate, shifts }) {
                 const svc = SERVICE_CFG[s.serviceKey] || SERVICE_CFG.other;
                 return (
                   <div key={s.id}
+                    onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${s.id}`)}
                     className="rounded-lg p-2 cursor-pointer hover:opacity-80 transition-opacity"
                     style={{ background: svc.light, border: `1px solid ${svc.border}`, borderLeftWidth: 3, borderLeftColor: svc.color, borderLeftStyle: "solid" }}>
                     <p className="font-bold" style={{ fontSize: 11, color: svc.color }}>{s.timeStart}–{s.timeEnd}</p>
@@ -483,7 +516,7 @@ function WeekView({ anchorDate, shifts }) {
 }
 
 // ─── Today View ───────────────────────────────────────────────────────────────
-function TodayView({ shifts }) {
+function TodayView({ shifts, navigate }) {
   const TODAY = todayStr();
   const today = shifts.filter((s) => s.date === TODAY).sort((a, b) => (a.timeStart || "").localeCompare(b.timeStart || ""));
   return (
@@ -496,6 +529,7 @@ function TodayView({ shifts }) {
         const svc = SERVICE_CFG[s.serviceKey] || SERVICE_CFG.other;
         return (
           <div key={s.id}
+            onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${s.id}`)}
             className="bg-white rounded-xl border flex items-start gap-4 p-4 cursor-pointer hover:shadow-md transition-shadow"
             style={{ borderColor: "#e5e7eb", borderLeft: `4px solid ${svc.color}`, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
             <div className="rounded-xl flex items-center justify-center flex-shrink-0 text-center"
@@ -578,7 +612,7 @@ function TimelineView({ shifts, navigate }) {
 }
 
 // ─── Upcoming Panel ───────────────────────────────────────────────────────────
-function UpcomingPanel({ shifts }) {
+function UpcomingPanel({ shifts, navigate }) {
   const TODAY = todayStr();
   const tomorrow = addDays(TODAY, 1);
   const weekEnd = addDays(TODAY, 7);
@@ -620,7 +654,7 @@ function UpcomingPanel({ shifts }) {
               <p className="font-bold" style={{ fontSize: 11, color: "#374151" }}>{group.label}</p>
               <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>({group.items.length})</span>
             </div>
-            {group.items.map((s) => <ShiftCompactRow key={s.id} shift={s} />)}
+            {group.items.map((s) => <ShiftCompactRow key={s.id} shift={s} navigate={navigate} />)}
           </div>
         ))}
         {total === 0 && (
@@ -642,6 +676,38 @@ function PastShiftsFullView({ shifts, navigate }) {
   const cancelled = past.filter((s) => s.status === "cancelled").length;
   const missed    = past.filter((s) => s.status === "missed").length;
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const totalPages = Math.ceil(past.length / itemsPerPage);
+  const paginatedShifts = past.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    return (
+      <div className="flex items-center justify-between border-t space-x-2 px-6 py-3" style={{ borderColor: "#f3f4f6" }}>
+        <button
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 font-semibold transition-colors hover:bg-gray-50 bg-white"
+          style={{ borderColor: "#e5e7eb", color: "#374151" }}
+        >
+          Previous
+        </button>
+        <div className="flex gap-1" style={{ fontSize: 13, color: "#6b7280" }}>
+           Page <span className="font-bold" style={{ color: "#111827" }}>{currentPage}</span> of <span className="font-bold" style={{ color: "#111827" }}>{totalPages}</span>
+        </div>
+        <button
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 font-semibold transition-colors hover:bg-gray-50 bg-white"
+          style={{ borderColor: "#e5e7eb", color: "#374151" }}
+        >
+          Next
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white rounded-xl border overflow-hidden"
       style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -660,14 +726,15 @@ function PastShiftsFullView({ shifts, navigate }) {
           <AlertTriangle size={10} /> {missed} Missed
         </span>
       </div>
-      <div className="px-4 py-4">
+      <div className="px-4 py-4 min-h-[400px]">
         <ShiftGridHeader showDate />
         {past.length === 0 ? (
           <p className="text-center py-10" style={{ fontSize: 13, color: "#9ca3af" }}>No past shifts found</p>
         ) : (
-          past.map((s) => <ShiftGridRow key={s.id} shift={s} showDate navigate={navigate} />)
+          paginatedShifts.map((s) => <ShiftGridRow key={s.id} shift={s} showDate navigate={navigate} />)
         )}
       </div>
+      {renderPagination()}
     </div>
   );
 }
@@ -889,9 +956,9 @@ export default function ShiftCommandPage() {
             className="px-3 py-1.5 rounded-lg border focus:outline-none"
             style={{ borderColor: "#e5e7eb", fontSize: 12, color: "#374151", fontFamily: "inherit", fontWeight: 600 }}>
             <option value="all">All Services</option>
-            <option value="emergency">Emergency Care</option>
+            <option value="emergency">Emergent Care</option>
             <option value="respite">Respite Care</option>
-            <option value="supervised">Supervised Visit</option>
+            <option value="supervised">Supervised Visitation</option>
             <option value="transportation">Transportation</option>
           </select>
         </div>
@@ -935,9 +1002,9 @@ export default function ShiftCommandPage() {
               </div>
             ) : (
               <>
-                {view === "month"    && <MonthCalendar year={calYear} month={calMonth} shifts={filteredShifts} />}
-                {view === "week"     && <WeekView anchorDate={anchorDate} shifts={filteredShifts} />}
-                {view === "today"    && <TodayView shifts={filteredShifts} />}
+                {view === "month"    && <MonthCalendar year={calYear} month={calMonth} shifts={filteredShifts} navigate={navigate} />}
+                {view === "week"     && <WeekView anchorDate={anchorDate} shifts={filteredShifts} navigate={navigate} />}
+                {view === "today"    && <TodayView shifts={filteredShifts} navigate={navigate} />}
                 {view === "timeline" && <TimelineView shifts={filteredShifts} navigate={navigate} />}
               </>
             )}
@@ -946,7 +1013,7 @@ export default function ShiftCommandPage() {
           {/* Right upcoming panel — hidden in timeline */}
           {!isTimeline && (
             <div style={{ width: 296, flexShrink: 0 }}>
-              <UpcomingPanel shifts={filteredShifts} />
+              <UpcomingPanel shifts={filteredShifts} navigate={navigate} />
             </div>
           )}
         </div>

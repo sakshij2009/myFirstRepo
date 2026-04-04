@@ -507,26 +507,21 @@ const SEAT_OPTIONS   = ["All", "Rear-Facing", "Forward-Facing", "Booster Seat", 
 const SEAT_MAP = { "All": "All", "Rear-Facing": "rear-facing", "Forward-Facing": "forward-facing", "Booster Seat": "booster", "Regular Seat": "regular" };
 const OFFICE_ADDRESS = "10110 124 Street, Edmonton, AB T5N 1P6";
 
-// Calculate route distance + duration: office → pickup → (visit?) → drop → office
+import { calculateRouteDistance } from "../utils/mapboxHelper";
+
+// ... other imports ...
+
+// ─── Real Mapbox Routing Panel ───────────────────────────────────────────────
 async function calcRoute(stops) {
-  if (!window.google?.maps) return null;
-  const service = new window.google.maps.DistanceMatrixService();
   const addrs = [OFFICE_ADDRESS, ...stops.map((s) => s.address).filter((a) => a && a !== "—"), OFFICE_ADDRESS];
   if (addrs.length < 3) return null;
-  let totalMeters = 0, totalSeconds = 0;
-  for (let i = 0; i < addrs.length - 1; i++) {
-    const result = await new Promise((res) =>
-      service.getDistanceMatrix(
-        { origins: [addrs[i]], destinations: [addrs[i + 1]], travelMode: "DRIVING" },
-        (r, s) => res(s === "OK" ? r : null)
-      )
-    );
-    const elem = result?.rows?.[0]?.elements?.[0];
-    if (!elem?.distance?.value) return null;
-    totalMeters  += elem.distance.value;
-    totalSeconds += elem.duration?.value || 0;
+  
+  try {
+    return await calculateRouteDistance(addrs);
+  } catch (e) {
+    console.error("Mapbox Route Error:", e);
+    return null;
   }
-  return { km: Math.round(totalMeters / 1000), durationMin: Math.round(totalSeconds / 60) };
 }
 
 export default function Transportation() {

@@ -380,7 +380,7 @@ const ManageUser = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                {["Employee Name", "CYIM ID", "Username", "Gender", "Phone No", "Salary/Hour", "ID Card", "Suspension", "Actions"].map((h) => (
+                {["Employee Name", "CYIM ID", "Username", "Gender", "Phone No", "Salary/Hour", "Mileage Rate", "ID Card", "Suspension", "Actions"].map((h) => (
                   <th
                     key={h}
                     className="text-left px-4 py-3 font-semibold whitespace-nowrap"
@@ -448,6 +448,21 @@ const ManageUser = () => {
                       ) : (
                         <span style={{ color: "#9ca3af", fontSize: 13 }}>—</span>
                       )}
+                    </td>
+
+                    {/* Mileage Rate */}
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const total = Number(user.totalKMs || 0);
+                        const rate = total > 5000 ? user.rateAfter5000km : user.rateBefore5000km;
+                        return rate != null && rate !== "" ? (
+                          <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>
+                            ${rate} <span className="text-[10px] text-gray-400 font-normal">/km</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: "#9ca3af", fontSize: 13 }}>—</span>
+                        );
+                      })()}
                     </td>
 
                     {/* ID Card */}

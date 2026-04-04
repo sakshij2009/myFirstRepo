@@ -14,8 +14,18 @@ const IntakeLogin = () => {
 
   // Sign Up
   const [name, setName] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState("Intake Worker");
   const [email, setEmail] = useState("");
+  const [agency, setAgency] = useState("");
+  const [phone, setPhone] = useState("");
+  const [invoiceEmail, setInvoiceEmail] = useState("");
+
+  const UPCS_EMAIL_OPTIONS = [
+    "invoicewest@upcs.org",
+    "invoiceparkland@upcs.org",
+  ];
+
+  const isUPCSAgency = agency.trim().toLowerCase().startsWith("upcs");
 
   // UI state
   const [error, setError] = useState("");
@@ -70,8 +80,12 @@ const IntakeLogin = () => {
   // ── Sign Up — add new user to Firestore ────────────────────────────────
   const handleSignUp = async () => {
     setError("");
-    if (!name || !role || !email) {
-      setError("Please fill in all fields.");
+    if (!name || !role || !email || !phone || !invoiceEmail) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    if (role === "Intake Worker" && !agency) {
+      setError("Agency Name is required for Intake Workers.");
       return;
     }
 
@@ -93,7 +107,10 @@ const IntakeLogin = () => {
       const newUser = {
         name,
         role,
+        agency: role === "Intake Worker" ? agency : "",
+        phone,
         email: email.trim().toLowerCase(),
+        invoiceEmail: invoiceEmail.trim().toLowerCase(),
         createdAt: new Date(),
       };
 
@@ -262,15 +279,40 @@ const IntakeLogin = () => {
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
                     Role
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={role}
-                    onChange={(e) => { setRole(e.target.value); setError(""); }}
-                    style={{ ...inputStyle(), cursor: "pointer" }}
-                  >
-                    <option value="">Select Role</option>
-                    <option value="Intake Worker">Intake Worker</option>
-                    <option value="Parent">Parent</option>
-                  </select>
+                    readOnly
+                    style={{ ...inputStyle(), paddingLeft: 14, background: "#F3F4F6", color: "#6B7280", cursor: "not-allowed" }}
+                  />
+                </div>
+
+                {role === "Intake Worker" && (
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                      Name of Agency / Organisation
+                    </label>
+                    <input
+                      type="text"
+                      value={agency}
+                      placeholder="Enter agency name"
+                      onChange={(e) => { setAgency(e.target.value); setError(""); }}
+                      style={inputStyle()}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    placeholder="Enter phone number"
+                    onChange={(e) => { setPhone(e.target.value); setError(""); }}
+                    style={inputStyle()}
+                  />
                 </div>
 
                 <div>
@@ -288,9 +330,35 @@ const IntakeLogin = () => {
                       placeholder="you@example.com"
                       onChange={(e) => { setEmail(e.target.value); setError(""); }}
                       style={{ ...inputStyle(), paddingLeft: 42 }}
-                      onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                    Invoice E-mail
+                  </label>
+                  {isUPCSAgency ? (
+                    <select
+                      value={invoiceEmail}
+                      onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
+                      style={{ ...inputStyle(), cursor: "pointer" }}
+                    >
+                      <option value="">Select Invoice Email</option>
+                      {UPCS_EMAIL_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="email"
+                      value={invoiceEmail}
+                      placeholder="Enter invoice email"
+                      onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
+                      style={inputStyle()}
+                      onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                    />
+                  )}
                 </div>
               </div>
 
