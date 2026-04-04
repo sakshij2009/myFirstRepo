@@ -440,11 +440,25 @@ setShiftPoints(points);
         let foundDesc = "";
         let intakePoints = [];
 
+        // Build surname/keyword list from the selected client name
+        // e.g. "Kaskamin Family" → ["kaskamin"], "Justice Kaskamin" → ["justice","kaskamin"]
+        const clientKeywords = clientNameCandidate
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && w !== "family" && w !== "the");
+
         snap.forEach((d) => {
           const data = d.data();
           const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
+          // Partial match: any keyword from client name appears in the given string
+          const partialMatch = (n) => {
+            if (!n) return false;
+            const nl = (n || "").toLowerCase();
+            return clientKeywords.some((kw) => nl.includes(kw));
+          };
 
           let isMatch = false;
+          // ── Exact matches first ──
           if (nameMatch(data.clientName) || nameMatch(data.name) || nameMatch(data.nameOfPerson)) {
             isMatch = true;
           }
@@ -455,11 +469,27 @@ setShiftPoints(points);
             const clientObjects = Object.values(data.clients);
             if (clientObjects.some(c => nameMatch(c.fullName || c.name))) isMatch = true;
           }
-          // Also check parentInfoList if it exists (for matching parent names)
           if (!isMatch && Array.isArray(data.parentInfoList)) {
             if (data.parentInfoList.some(p => nameMatch(p.parentName))) isMatch = true;
           }
           if (!isMatch && data.parentName && nameMatch(data.parentName)) isMatch = true;
+
+          // ── Surname/partial fallback (e.g. "Kaskamin Family" → matches "Alice Kaskamin") ──
+          if (!isMatch && clientKeywords.length > 0) {
+            if (partialMatch(data.clientName) || partialMatch(data.name) || partialMatch(data.nameOfPerson)) {
+              isMatch = true;
+            }
+            if (!isMatch && data.clients && typeof data.clients === "object") {
+              if (Object.values(data.clients).some(c => partialMatch(c.fullName || c.name))) isMatch = true;
+            }
+            if (!isMatch && Array.isArray(data.parentInfoList)) {
+              if (data.parentInfoList.some(p => partialMatch(p.parentName))) isMatch = true;
+            }
+            if (!isMatch && data.parentName && partialMatch(data.parentName)) isMatch = true;
+            if (!isMatch && Array.isArray(data.inTakeClients)) {
+              if (data.inTakeClients.some(cl => partialMatch(cl.name))) isMatch = true;
+            }
+          }
 
           if (isMatch) {
             // Find Description — check nested services.serviceDesc too
