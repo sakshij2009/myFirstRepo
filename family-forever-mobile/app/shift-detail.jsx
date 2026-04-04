@@ -396,8 +396,8 @@ export default function ShiftDetails() {
   const displayDescription = shift?.jobdescription || shift?.description || shift?.shiftDescription || shift?.notes || clientInfo?.serviceDesc || clientInfo?.jobDescription || intakeDescription;
 
   const getStatus = () => {
-    if (shift?.clockOutTime) return "completed";
-    if (shift?.clockInTime) return "in-progress";
+    if (shift?.clockOutTime || shift?.clockOut || shift?.clockout || shift?.status === "completed") return "completed";
+    if (shift?.clockInTime || shift?.clockIn || shift?.clockin || shift?.status === "active") return "in-progress";
     return shift?.shiftConfirmed ? "upcoming" : "assigned";
   };
 
@@ -410,13 +410,8 @@ export default function ShiftDetails() {
     setIsProcessing(true);
 
     try {
-      // Find exact Firestore doc reference
-      let ref;
-      if (shift.id) {
-        // Try direct doc reference first
-        const directRef = doc(db, "shifts", shift.id);
-        ref = directRef;
-      }
+      // Always use the URL param shiftId as the Firestore document ID
+      const ref = doc(db, "shifts", shiftId);
 
       if (type === "confirm") {
         await updateDoc(ref, {
@@ -426,17 +421,16 @@ export default function ShiftDetails() {
         });
 
         // Notify admin
-        if (user?.agencyId || user?.adminId) {
-          await sendNotification(user.agencyId || "admin", {
-            title: "Shift Confirmed",
-            message: `${user.name || "Staff"} confirmed their shift on ${shift.startDate}`,
-            type: "schedule",
-            category: "Schedule",
-            icon: "checkmark-circle",
-            iconColor: PRIMARY_GREEN,
-            iconBg: "#F0FDF4",
-          });
-        }
+        const adminId = user?.agencyId || user?.adminId || "admin";
+        await sendNotification(adminId, {
+          title: "Shift Confirmed",
+          message: `${user?.name || "Staff"} confirmed their shift on ${shift.startDate}`,
+          type: "schedule",
+          category: "Schedule",
+          icon: "checkmark-circle",
+          iconColor: PRIMARY_GREEN,
+          iconBg: "#F0FDF4",
+        });
       } else if (type === "clockIn") {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
@@ -488,12 +482,15 @@ export default function ShiftDetails() {
 
     // Navigate to specialized transportation screen if applicable
     if (type === "clockIn") {
-      const cat = shift.category || shift.serviceType || "";
-      const isTransport = cat === "Transportation" || cat === "Supervised Visitation + Transportation";
-      const hasTransit = shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up"));
+      const catRaw = shift.category || shift.serviceType || shift.categoryName || shift.shiftCategory || "";
+      const catLower = catRaw.toLowerCase();
+      // Only route to transportation screen for pure transportation shifts (not supervised visitation)
+      const isTransport = catLower.includes("transportation") && !catLower.includes("supervised") && !catLower.includes("visitation");
+      const hasTransit = !catLower.includes("supervised") && !catLower.includes("visitation") &&
+        (shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up")));
 
       if (isTransport || hasTransit) {
-        router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+        router.push({ pathname: "/transportation-shift-detail", params: { shiftId } });
       }
     }
   };
@@ -503,7 +500,7 @@ export default function ShiftDetails() {
     if (!reportText.trim()) return;
     setSavingReport(true);
     try {
-      const ref = doc(db, "shifts", shift.id);
+      const ref = doc(db, "shifts", shiftId);
       await updateDoc(ref, {
         shiftReport: reportText,
         reportLastSaved: serverTimestamp(),
@@ -527,7 +524,7 @@ export default function ShiftDetails() {
   const handleLockToggle = async (val) => {
     setShiftLocked(val);
     try {
-      await updateDoc(doc(db, "shifts", shift.id), { shiftLocked: val });
+      await updateDoc(doc(db, "shifts", shiftId), { shiftLocked: val });
     } catch (e) {
       setShiftLocked(!val);
     }

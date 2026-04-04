@@ -97,34 +97,47 @@ export const formatCanadaTime = (timeVal) => {
 };
 
 /**
- * Format UTC HH:mm into America/Edmonton HH:mm AM/PM
+ * Display a shift time string correctly.
+ *
+ * Admin panels store times in LOCAL Edmonton time (e.g. "14:00" means 2:00 PM Edmonton).
+ * We must NOT treat these as UTC — doing so shifts the display by 6–7 hours.
+ *
+ * Rules:
+ *  - Already has AM/PM  → return as-is (uppercase)
+ *  - Plain "HH:MM"      → convert to 12-hour display directly (no UTC math)
+ *  - Anything else      → return raw string
  */
 export const formatShiftTimeUTCtoCanada = (dateStr, timeStr) => {
-  if (!dateStr || !timeStr) return timeStr || "—";
+  if (!timeStr) return "—";
   try {
-    const tStr = String(timeStr);
-    if (tStr.includes("AM") || tStr.includes("PM")) return tStr;
-    
-    const d = parseDate(dateStr);
-    if (!d) return tStr;
-    
-    const y = d.getFullYear();
-    const m = (d.getMonth() + 1).toString().padStart(2, '0');
-    const day = d.getDate().toString().padStart(2, '0');
-    
-    const [h, min] = tStr.trim().split(":");
-    const iso = `${y}-${m}-${day}T${h.padStart(2, '0')}:${(min || "00").padStart(2, '0')}:00Z`;
-    const date = new Date(iso);
-    
-    if (isNaN(date.getTime())) return tStr;
-    
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-      timeZone: "America/Edmonton",
-    });
+    const tStr = String(timeStr).trim();
+
+    // Already formatted with AM/PM marker
+    if (/AM|PM/i.test(tStr)) return tStr.toUpperCase();
+
+    // Plain 24-hour "HH:MM" or "H:MM" — stored as local Edmonton time
+    if (/^\d{1,2}:\d{2}$/.test(tStr)) {
+      const [h, m] = tStr.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+    }
+
+    // Full ISO timestamp (has 'T') — convert with timezone
+    if (tStr.includes("T") || tStr.includes("Z")) {
+      const date = new Date(tStr);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "America/Edmonton",
+        });
+      }
+    }
+
+    return tStr;
   } catch (e) {
-    return timeStr;
+    return String(timeStr);
   }
 };
