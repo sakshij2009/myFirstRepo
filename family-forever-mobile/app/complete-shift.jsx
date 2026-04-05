@@ -499,8 +499,13 @@ export default function CompleteShift() {
           });
         } catch (e) { console.warn("advanceStop save error:", e); }
       }
-      // Navigate to shift report
-      router.replace({ pathname: "/shift-completion", params: { shiftId } });
+      // Show success then navigate to shift detail for the report
+      Alert.alert(
+        "Shift Complete!",
+        "Great work! Your transportation has been logged. You can now fill in the shift report.",
+        [{ text: "View Report", onPress: () => router.replace({ pathname: "/shift-detail", params: { shiftId } }) }],
+        { cancelable: false }
+      );
       return;
     }
     setCompletedIdxs((prev) => [...prev, currentIdx]);
