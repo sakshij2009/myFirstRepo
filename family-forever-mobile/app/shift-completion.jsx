@@ -18,6 +18,22 @@ import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../src/firebase/config";
 
+// ── Safe date formatter (handles Firestore Timestamps, ISO strings, plain strings) ──
+const safeDate = (val) => {
+  if (!val) return "";
+  if (val?.toDate) {
+    return val.toDate().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  }
+  if (typeof val === "string") {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    }
+    return val;
+  }
+  return String(val);
+};
+
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY    = "#1F6F43";
 const PRIMARY_LT = "#E8F5ED";
@@ -203,7 +219,7 @@ export default function ShiftCompletion() {
 
   const summaryItems = shift ? [
     { icon: "person-outline",   label: "Client",    value: shift.clientName || shift.name || "Client" },
-    { icon: "calendar-outline", label: "Date",      value: shift.startDate || shift.date || "Today" },
+    { icon: "calendar-outline", label: "Date",      value: safeDate(shift.startDate || shift.date) || "Today" },
     { icon: "time-outline",     label: "Schedule",  value: `${shift.startTime || "—"} – ${shift.endTime || "—"}` },
     { icon: "timer-outline",    label: "Duration",  value: getDuration(shift) },
     { icon: "location-outline", label: "Location",  value: shift.location || shift.address || "On-site" },
