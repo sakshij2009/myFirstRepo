@@ -26,7 +26,9 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../src/firebase/config";
+import { db, storage } from "../src/firebase/config";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
@@ -156,6 +158,15 @@ export default function ShiftDetails() {
   const [savingReport, setSavingReport] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
 
+  // ── Transport report fields (shown after transportationCompleted) ──
+  const [approvedBy, setApprovedBy] = useState("");
+  const [transComments, setTransComments] = useState("");
+  const [receiptImage, setReceiptImage] = useState(null);
+  const [receiptUrl, setReceiptUrl] = useState("");
+  const [savingTransReport, setSavingTransReport] = useState(false);
+  const [officeToPickup, setOfficeToPickup] = useState("");
+  const [dropToOffice, setDropToOffice] = useState("");
+
   // ── Fetch Intake Form ───────────────────────────────────────────
   const fetchIntakeForm = async () => {
     try {
@@ -278,10 +289,13 @@ export default function ShiftDetails() {
         const data = snap.data();
         setShift({ id: snap.id, ...data });
         setShiftLocked(data.shiftLocked || false);
-        // Load existing shiftReport if it's there
-        if (data.shiftReport && !reportText) {
-          setReportText(data.shiftReport);
-        }
+        if (data.shiftReport && !reportText) setReportText(data.shiftReport);
+        // Pre-fill transport report fields if already saved
+        if (data.approvedBy) setApprovedBy(data.approvedBy);
+        if (data.transComments) setTransComments(data.transComments);
+        if (data.receiptUrl) setReceiptUrl(data.receiptUrl);
+        if (data.officeToPickupKm) setOfficeToPickup(String(data.officeToPickupKm));
+        if (data.dropToOfficeKm) setDropToOffice(String(data.dropToOfficeKm));
       }
       setLoading(false);
     });
@@ -496,6 +510,54 @@ export default function ShiftDetails() {
         router.push({ pathname: "/transportation-shift-detail", params: { shiftId } });
       }
     }
+  };
+
+  // ── Transport report: pick receipt image ────────────────────────────────
+  const pickReceipt = async () => {
+    Alert.alert("Upload Receipt", "Choose source", [
+      { text: "Camera", onPress: async () => {
+        const res = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: false });
+        if (!res.canceled) setReceiptImage(res.assets[0]);
+      }},
+      { text: "Gallery", onPress: async () => {
+        const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+        if (!res.canceled) setReceiptImage(res.assets[0]);
+      }},
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  // ── Transport report: save to Firestore ────────────────────────────────
+  const handleSaveTransReport = async () => {
+    setSavingTransReport(true);
+    try {
+      let uploadedUrl = receiptUrl;
+      if (receiptImage?.uri) {
+        const blob = await (await fetch(receiptImage.uri)).blob();
+        const fileRef = storageRef(storage, `receipts/${shiftId}_${Date.now()}`);
+        await uploadBytes(fileRef, blob);
+        uploadedUrl = await getDownloadURL(fileRef);
+        setReceiptUrl(uploadedUrl);
+      }
+      const officePickupNum = parseFloat(officeToPickup) || 0;
+      const dropOfficeNum = parseFloat(dropToOffice) || 0;
+      const routeKm = shift?.transportationKm || 0;
+      const totalKm = routeKm + officePickupNum + dropOfficeNum;
+      await updateDoc(doc(db, "shifts", shiftId), {
+        approvedBy: approvedBy.trim() || null,
+        transComments: transComments.trim() || null,
+        receiptUrl: uploadedUrl || null,
+        officeToPickupKm: officePickupNum,
+        dropToOfficeKm: dropOfficeNum,
+        totalKmWithOffice: totalKm,
+        transReportSavedAt: serverTimestamp(),
+      });
+      Alert.alert("Saved", "Transportation report saved successfully.");
+    } catch (e) {
+      console.error("Trans report save error:", e);
+      Alert.alert("Error", "Failed to save. Please try again.");
+    }
+    setSavingTransReport(false);
   };
 
   // ── Report handler ──────────────────────────────────────────────────────
@@ -820,6 +882,123 @@ export default function ShiftDetails() {
             </View>
           )}
         </View>
+
+        {/* ── Transportation Report (shown after transport flow completed) ── */}
+        {shift?.transportationCompleted && (() => {
+          const isPersonalVehicle = shift?.vehicleType === "personal";
+          const routeKm = shift?.transportationKm || 0;
+          const officePickupNum = parseFloat(officeToPickup) || 0;
+          const dropOfficeNum = parseFloat(dropToOffice) || 0;
+          const totalKm = isPersonalVehicle ? (routeKm + officePickupNum + dropOfficeNum) : routeKm;
+          const totalMins = shift?.totalTimeMinutes || 0;
+          const fmtMins = (m) => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+          return (
+            <View style={[styles.sectionCard, { marginTop: 15 }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <Ionicons name="car-outline" size={18} color={PRIMARY_GREEN} />
+                <Text style={styles.sectionTitle}>Transportation Report</Text>
+              </View>
+
+              {/* Route stats */}
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 10, padding: 12, alignItems: "center" }}>
+                  <Text style={{ fontSize: 11, color: "#6B7280", fontFamily: "Inter", marginBottom: 4 }}>ROUTE DISTANCE</Text>
+                  <Text style={{ fontSize: 20, fontWeight: "700", color: "#1E40AF" }}>{routeKm.toFixed ? routeKm.toFixed(1) : routeKm} km</Text>
+                </View>
+                <View style={{ flex: 1, backgroundColor: "#F0FDF4", borderRadius: 10, padding: 12, alignItems: "center" }}>
+                  <Text style={{ fontSize: 11, color: "#6B7280", fontFamily: "Inter", marginBottom: 4 }}>TOTAL TIME</Text>
+                  <Text style={{ fontSize: 20, fontWeight: "700", color: PRIMARY_GREEN }}>{fmtMins(totalMins)}</Text>
+                </View>
+              </View>
+
+              {/* Visit Notes (read-only) */}
+              {shift?.visitNotes ? (
+                <View style={{ backgroundColor: "#FFFBEB", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, color: "#92400E", fontWeight: "700", marginBottom: 4 }}>VISIT NOTES</Text>
+                  <Text style={{ fontSize: 13, color: "#374151", lineHeight: 20 }}>{shift.visitNotes}</Text>
+                </View>
+              ) : null}
+
+              {/* Personal vehicle office KMs */}
+              {isPersonalVehicle && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, color: "#6B7280", marginBottom: 6, fontWeight: "600" }}>OFFICE SEGMENTS (Personal Vehicle)</Text>
+                  <Text style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>Office: #206, 10110 124 Street, Edmonton, AB T5N 1P6</Text>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>Office → Pickup (km)</Text>
+                      <TextInput
+                        value={officeToPickup}
+                        onChangeText={setOfficeToPickup}
+                        keyboardType="decimal-pad"
+                        placeholder="0.0"
+                        style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, padding: 10, fontSize: 14 }}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>Drop → Office (km)</Text>
+                      <TextInput
+                        value={dropToOffice}
+                        onChangeText={setDropToOffice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.0"
+                        style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, padding: 10, fontSize: 14 }}
+                      />
+                    </View>
+                  </View>
+                  <View style={{ backgroundColor: "#EFF6FF", borderRadius: 8, padding: 10, marginTop: 8, flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ fontSize: 13, color: "#1E40AF", fontWeight: "600" }}>Total KM (Route + Office)</Text>
+                    <Text style={{ fontSize: 13, color: "#1E40AF", fontWeight: "700" }}>{totalKm.toFixed(1)} km</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Approved By */}
+              <Text style={{ fontSize: 13, fontWeight: "600", color: DARK_TEXT, marginBottom: 6 }}>Approved By</Text>
+              <TextInput
+                value={approvedBy}
+                onChangeText={setApprovedBy}
+                placeholder="Supervisor name or employee ID"
+                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 14 }}
+              />
+
+              {/* Receipt Upload */}
+              <Text style={{ fontSize: 13, fontWeight: "600", color: DARK_TEXT, marginBottom: 8 }}>Upload Receipt / Authorization</Text>
+              <Pressable onPress={pickReceipt} style={{
+                borderWidth: 1.5, borderColor: "#D1D5DB", borderStyle: "dashed",
+                borderRadius: 10, padding: 20, alignItems: "center", marginBottom: 14,
+                backgroundColor: receiptImage || receiptUrl ? "#F0FDF4" : "#FAFAFA",
+              }}>
+                <Ionicons name={receiptImage || receiptUrl ? "checkmark-circle" : "cloud-upload-outline"} size={28} color={receiptImage || receiptUrl ? PRIMARY_GREEN : "#9CA3AF"} />
+                <Text style={{ fontSize: 13, color: receiptImage || receiptUrl ? PRIMARY_GREEN : "#6B7280", marginTop: 6 }}>
+                  {receiptImage ? "Receipt selected — tap to change" : receiptUrl ? "Receipt uploaded — tap to replace" : "Tap to upload receipt\nCamera or gallery"}
+                </Text>
+              </Pressable>
+
+              {/* Additional Comments */}
+              <Text style={{ fontSize: 13, fontWeight: "600", color: DARK_TEXT, marginBottom: 6 }}>Additional Comments</Text>
+              <TextInput
+                value={transComments}
+                onChangeText={setTransComments}
+                placeholder="Any additional notes for this transportation shift..."
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, minHeight: 80, marginBottom: 16 }}
+              />
+
+              <Pressable
+                onPress={handleSaveTransReport}
+                disabled={savingTransReport}
+                style={{ backgroundColor: PRIMARY_GREEN, borderRadius: 12, padding: 14, alignItems: "center" }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 15 }}>
+                  {savingTransReport ? "Saving..." : "Save Transportation Report"}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })()}
 
         {/* ── Shift Actions ──────────────────────────────────────────────── */}
         <Text style={[styles.sectionTitle, { marginTop: 20, marginBottom: 15 }]}>Shift Actions</Text>
