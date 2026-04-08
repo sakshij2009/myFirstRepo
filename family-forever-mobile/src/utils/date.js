@@ -45,26 +45,54 @@ export const toDate = (val) => {
  */
 export const parseDate = (dateStr) => {
   if (!dateStr) return null;
-  // Firestore Timestamp
+  
+  // Firestore Timestamp handling
   if (dateStr?.seconds !== undefined) return new Date(dateStr.seconds * 1000);
   if (dateStr?.toDate && typeof dateStr.toDate === "function") return dateStr.toDate();
-  // Already a Date
   if (dateStr instanceof Date) return dateStr;
+  
   if (typeof dateStr !== "string") return null;
 
-  // Try native parse first (handles ISO, YYYY-MM-DD etc.)
-  const native = new Date(dateStr);
-  if (!isNaN(native.getTime()) && dateStr.length > 6) return native;
+  const clean = dateStr.trim();
+  if (!clean) return null;
 
-  // Custom formats check: "DD-Mon-YYYY" or "DD Mon YYYY"
+  // 1. Try ISO-like YYYY-MM-DD (e.g., "2026-04-06")
+  // We avoid new Date("YYYY-MM-DD") because it often defaults to UTC midnight.
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(clean)) {
+    const [y, m, d] = clean.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  // 2. Try DD-MMM-YYYY (e.g., "06-Apr-2026" or "06 Apr 2026")
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const sep = dateStr.includes("-") ? "-" : " ";
-  const parts = dateStr.split(sep);
-  if (parts.length < 3) return null;
+  const parts = clean.split(/[- ]/);
+  if (parts.length >= 3) {
+    // Check if middle or first part is a month name
+    let d = NaN, m = -1, y = NaN;
+    
+    // Pattern: DD MMM YYYY
+    if (isNaN(Number(parts[1]))) {
+      m = months.findIndex(name => name.toLowerCase() === parts[1].slice(0, 3).toLowerCase());
+      d = Number(parts[0]);
+      y = Number(parts[2]);
+    } 
+    // Pattern: MMM DD YYYY
+    else if (isNaN(Number(parts[0]))) {
+      m = months.findIndex(name => name.toLowerCase() === parts[0].slice(0, 3).toLowerCase());
+      d = Number(parts[1]);
+      y = Number(parts[2]);
+    }
 
-  const [dd, mmm, yyyy] = parts;
-  const monthIdx = months.findIndex(m => mmm?.toLowerCase().slice(0, 3) === m.toLowerCase());
-  if (monthIdx >= 0) return new Date(Number(yyyy), monthIdx, Number(dd));
+    if (m >= 0 && !isNaN(d) && !isNaN(y)) {
+      // Correct for 2-digit years if any
+      const fullY = y < 100 ? 2000 + y : y;
+      return new Date(fullY, m, d);
+    }
+  }
+
+  // Fallback to native but verify
+  const native = new Date(clean);
+  if (!isNaN(native.getTime())) return native;
 
   return null;
 };

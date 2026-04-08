@@ -31,13 +31,25 @@ const IntakeLogin = () => {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Pre-fill email from magic link URL param (e.g. ?email=worker@example.com)
+  // Pre-fill email/role from magic link URL param (e.g. ?email=worker@example.com&role=parent)
   React.useEffect(() => {
     const emailParam = searchParams.get("email");
+    const roleParam = searchParams.get("role");
+
     if (emailParam) {
       const decoded = decodeURIComponent(emailParam);
       setLoginEmail(decoded);
       setEmail(decoded);
+      setIsSignUp(true);
+    }
+
+    if (roleParam) {
+      if (roleParam.toLowerCase() === "parent") {
+        setRole("Parent");
+      } else {
+        setRole("Intake Worker");
+      }
+      setIsSignUp(true);
     }
   }, [searchParams]);
 
@@ -69,7 +81,11 @@ const IntakeLogin = () => {
       localStorage.setItem("intakeUser", JSON.stringify(userData));
       localStorage.setItem("user", JSON.stringify(userData));
 
-      navigate("/intake-form/dashboard");
+      if ((userData.role || "").toLowerCase() === "parent") {
+        navigate("/intake-form/private-form");
+      } else {
+        navigate("/intake-form/dashboard");
+      }
     } catch (err) {
       setError("Sign in failed: " + err.message);
     } finally {
@@ -120,7 +136,11 @@ const IntakeLogin = () => {
       localStorage.setItem("intakeUser", JSON.stringify(userData));
       localStorage.setItem("user", JSON.stringify(userData));
 
-      navigate("/intake-form/dashboard");
+      if ((newUser.role || "").toLowerCase() === "parent") {
+        navigate("/intake-form/private-form");
+      } else {
+        navigate("/intake-form/dashboard");
+      }
     } catch (err) {
       setError("Sign up failed: " + err.message);
     } finally {
