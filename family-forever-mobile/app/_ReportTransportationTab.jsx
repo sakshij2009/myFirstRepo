@@ -15,6 +15,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { db, storage } from "../src/firebase/config";
 import { Ionicons } from "@expo/vector-icons";
+import { calculateRouteDistance, reverseGeocode } from "../src/utils/mapboxHelper";
 
 /* ---------------- HELPERS ---------------- */
 const getDistanceKm = (lat1, lon1, lat2, lon2) => {
@@ -29,11 +30,9 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const reverseGeocode = async (coords) => {
-  const res = await Location.reverseGeocodeAsync(coords);
-  if (!res?.[0]) return "";
-  const a = res[0];
-  return `${a.name || ""} ${a.street || ""}, ${a.city || ""}`;
+const reverseGeocodeMapbox = async (coords) => {
+  const { latitude, longitude } = coords;
+  return await reverseGeocode(longitude, latitude);
 };
 
 const nowISO = () => new Date().toISOString();
@@ -59,6 +58,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
 
   /* POINTS */
   const [startPoint, setStartPoint] = useState("");
+  const [estimatedKm, setEstimatedKm] = useState(null);
   const [stopPoint, setStopPoint] = useState("");
   const [endPoint, setEndPoint] = useState("");
 
@@ -107,20 +107,34 @@ export default function ReportTransportationTab({ shift, shiftId }) {
   const startDrive = async () => {
     openRouteInMaps();
 
+    // Pre-calculate estimated route distance if it's a planned shift
+    if (isTransportation && planned.pickupLocation && planned.dropLocation) {
+      (async () => {
+        const points = [planned.pickupLocation];
+        if (stopPoint) points.push(stopPoint);
+        points.push(planned.dropLocation);
+        const route = await calculateRouteDistance(points);
+        if (route) setEstimatedKm(route.km.toFixed(2));
+      })();
+    }
+
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission required", "Location permission denied");
       return;
     }
 
-    const loc = await Location.getCurrentPositionAsync({});
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
     setStartCoords(loc.coords);
     setPrevCoords(loc.coords);
     setDistance(0);
     setIsDriving(true);
 
-    const addr = await reverseGeocode(loc.coords);
-    setStartPoint(addr);
+    // Initial reverse geocode for start point via Mapbox
+    (async () => {
+      const addr = await reverseGeocode(loc.coords.longitude, loc.coords.latitude);
+      if (addr) setStartPoint(addr);
+    })();
 
     const sub = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, distanceInterval: 10 },
@@ -155,8 +169,10 @@ export default function ReportTransportationTab({ shift, shiftId }) {
     const loc = await Location.getCurrentPositionAsync({});
     setEndCoords(loc.coords);
 
-    const addr = await reverseGeocode(loc.coords);
-    setEndPoint(addr);
+    (async () => {
+      const addr = await reverseGeocode(loc.coords.longitude, loc.coords.latitude);
+      if (addr) setEndPoint(addr);
+    })();
   };
 
   /* ---------------- PICK RECEIPT ---------------- */
@@ -228,7 +244,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
       accuracy: Location.Accuracy.High,
     });
 
-    const addr = await reverseGeocode(loc.coords);
+    const addr = await reverseGeocode(loc.coords.longitude, loc.coords.latitude);
 
     return {
       addr,
@@ -350,31 +366,14 @@ export default function ReportTransportationTab({ shift, shiftId }) {
       const shiftRef = doc(db, "shifts", String(shiftId));
       const payload = {};
 
-      if (startCoords && endCoords) {
-        let totalKm = 0;
-
-        if (stopCoords) {
-          totalKm =
-            getDistanceKm(
-              startCoords.latitude,
-              startCoords.longitude,
-              stopCoords.latitude,
-              stopCoords.longitude
-            ) +
-            getDistanceKm(
-              stopCoords.latitude,
-              stopCoords.longitude,
-              endCoords.latitude,
-              endCoords.longitude
-            );
-        } else {
-          totalKm = getDistanceKm(
-            startCoords.latitude,
-            startCoords.longitude,
-            endCoords.latitude,
-            endCoords.longitude
-          );
-        }
+      if (startPoint && endPoint) {
+        // Mapbox optimized route calculation
+        const points = [startPoint];
+        if (stopPoint) points.push(stopPoint);
+        points.push(endPoint);
+        
+        const route = await calculateRouteDistance(points);
+        const totalKm = route ? route.km : 0;
 
         payload.extraShiftPoints = arrayUnion({
           startLocation: startPoint,
@@ -567,8 +566,8 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         </>
       )}
 
-      <Text style={styles.label}>Total Kilometers</Text>
-      <TextInput style={styles.input} value={`${totalKm} km`} editable={false} />
+      <Text style={styles.label}>Total Kilometers {estimatedKm && !endCoords ? "(Estimated)" : ""}</Text>
+      <TextInput style={styles.input} value={`${totalKm !== "0.00" ? totalKm : (estimatedKm || "0.00")} km`} editable={false} />
 
       <Text style={styles.label}>Kilometers Traveled by Staff</Text>
       <TextInput
