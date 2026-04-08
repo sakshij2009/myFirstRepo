@@ -4,6 +4,7 @@ import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { storage, db } from "../firebase";
 import { FaUpload } from "react-icons/fa";
 import PlacesAutocomplete from "./PlacesAutocomplete";
+import { reverseGeocode, calculateRouteDistance } from "../utils/mapboxHelper";
 
 const AddTransportation = ({ shiftId, shiftData }) => {
   const [uploadedReceipts, setUploadedReceipts] = useState([]);
@@ -81,18 +82,11 @@ const handleStartDrive = () => {
     setLiveDistance(0);
     setIsDriving(true);
 
-    // Reverse geocode start location
-    if (window.google) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode(
-        { location: { lat: latitude, lng: longitude } },
-        (res, status) => {
-          if (status === "OK" && res[0]) {
-            setStartPoint(res[0].formatted_address);
-          }
-        }
-      );
-    }
+    // Reverse geocode start location via Mapbox
+    (async () => {
+      const addr = await reverseGeocode(longitude, latitude);
+      if (addr) setStartPoint(addr);
+    })();
 
     const id = navigator.geolocation.watchPosition((p) => {
       const { latitude: lat, longitude: lng } = p.coords;
@@ -117,20 +111,25 @@ const handleEndDrive = () => {
     const { latitude, longitude } = pos.coords;
     setIsDriving(false);
 
-    // Reverse geocode end location
-    if (window.google) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode(
-        { location: { lat: latitude, lng: longitude } },
-        (res, status) => {
-          if (status === "OK" && res[0]) {
-            setEndPoint(res[0].formatted_address);
-            setStaffKilometer(liveDistance.toFixed(2));
+    // Reverse geocode end location and calculate route via Mapbox
+    (async () => {
+      const addr = await reverseGeocode(longitude, latitude);
+      if (addr) {
+        setEndPoint(addr);
+        setStaffKilometer(liveDistance.toFixed(2));
+        
+        if (startPoint) {
+          const route = await calculateRouteDistance([startPoint, addr]);
+          if (route) {
+            setTotalKilometer(route.km.toFixed(2));
+          } else {
             setTotalKilometer(liveDistance.toFixed(2));
           }
+        } else {
+          setTotalKilometer(liveDistance.toFixed(2));
         }
-      );
-    }
+      }
+    })();
   });
 };
 

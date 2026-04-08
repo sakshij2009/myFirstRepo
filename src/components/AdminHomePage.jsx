@@ -14,7 +14,7 @@ import CriticalIncidentForm from "./CriticalIncidentForm";
 import ManageIntakeWorkers from "./ManageIntakeWorkers";
 import ManageIntakeForms from "./ManageIntakeForms";
 import Payroll from "./Payroll";
-import IntakeRequestsPage from "./IntakeRequestsPage";
+import ManagePrivateFamilies from "./ManagePrivateFamilies";
 import StaffEvaluationPage from "./StaffEvaluationPage";
 import BillingPage from "./BillingPage";
 import GSTReportingPage from "./GSTReportingPage";
@@ -26,7 +26,7 @@ import AddUserShift from "./AddUserShift";
 import AddAgency from "./AddAgency";
 import AddClient from "./AddClient";
 import IntakeForm from "./IntakeForm";
-import AddIntakeWorker from "./AddIntakeWorker";
+import AddIntakeUser from "./AddIntakeUser";
 
 // Add New modal — quick-access shortcuts
 import AddNewModal from "./AddNewModal";
@@ -102,13 +102,13 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="users"            element={<ManageUser />} />
             <Route path="agency"           element={<ManageAgency />} />
             <Route path="intake-workers"   element={<ManageIntakeWorkers />} />
+            <Route path="private-families" element={<ManagePrivateFamilies />} />
             <Route path="intake-forms"     element={<ManageIntakeForms />} />
             <Route path="payroll"          element={<Payroll />} />
             <Route path="shift-report/:id" element={<ShiftReport user={user} />} />
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
 
             {/* Built pages */}
-            <Route path="intake-requests"  element={<IntakeRequestsPage />} />
             <Route path="staff-evaluation" element={<StaffEvaluationPage />} />
             <Route path="billing"          element={<BillingPage />} />
             <Route path="gst-reporting"    element={<GSTReportingPage />} />
@@ -130,8 +130,8 @@ const AdminHomePage = ({ user, setUser }) => {
               <Route path="update-client/:id"     element={<AddClient mode="update" user={user} />} />
               <Route path="add-intake-form"       element={<IntakeForm mode="add" user={user} />} />
               <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user} />} />
-              <Route path="add-intakeworker"      element={<AddIntakeWorker mode="add" user={user} />} />
-              <Route path="update-intakeworker/:id" element={<AddIntakeWorker mode="update" user={user} />} />
+              <Route path="add-intakeworker"      element={<AddIntakeUser mode="add" user={user} />} />
+              <Route path="update-intakeworker/:id" element={<AddIntakeUser mode="update" user={user} />} />
             </Route>
 
             {/* View intake form (read-only) */}

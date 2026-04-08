@@ -10,7 +10,7 @@ import { db } from "../firebase";
 
 const SideBar = ({ user, onLogout, onWidthChange }) => {
   const [collapsed, setCollapsed] = useState(true); // Default to collapsed
-  const [badges, setBadges] = useState({ clients: null, shifts: null, intakeRequests: null, intakeWorkers: null });
+  const [badges, setBadges] = useState({ clients: null, shifts: null, intakeWorkers: null, privateFamilies: null });
   const navigate = useNavigate();
 
   const handleMouseEnter = () => {
@@ -34,15 +34,19 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [clients, shifts, intakeWorkers] = await Promise.all([
+        const [clients, shifts, intakeUsersSnap] = await Promise.all([
           getCountFromServer(collection(db, "clients")),
           getCountFromServer(collection(db, "shifts")),
-          getCountFromServer(collection(db, "intakeUsers")),
+          getDocs(collection(db, "intakeUsers")),
         ]);
+        
+        const intakeUsers = intakeUsersSnap.docs.map(doc => doc.data());
+        
         setBadges({
           clients: clients.data().count || null,
           shifts: shifts.data().count || null,
-          intakeWorkers: intakeWorkers.data().count || null,
+          intakeWorkers: intakeUsers.filter(u => u.role?.toLowerCase() === "intake worker").length || null,
+          privateFamilies: intakeUsers.filter(u => u.role?.toLowerCase() === "parent").length || null,
         });
       } catch (e) { /* silently ignore */ }
     };
@@ -64,9 +68,9 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
       items: [
         { label: "Services",        path: "/admin-dashboard/services",        icon: <CheckCircle size={16} strokeWidth={1.7} /> },
         { label: "Transportations", path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
-        { label: "Intake Requests", path: "/admin-dashboard/intake-requests", icon: <Inbox size={16} strokeWidth={1.7} /> },
-        { label: "Intake Forms",    path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
         { label: "Intake Workers",  path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
+        { label: "Private Families", path: "/admin-dashboard/private-families", icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.privateFamilies },
+        { label: "Intake Forms",    path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
       ],
     },
     {
