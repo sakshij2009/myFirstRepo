@@ -112,21 +112,23 @@ export default function Home() {
     return () => unsub();
   }, [user]);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayKey = formatDateKey(new Date());
 
   const todayShifts = shifts.filter((s) => {
     const d = parseDateFn(s.startDate);
     if (!d) return false;
-    d.setHours(0, 0, 0, 0);
-    return d.getTime() === today.getTime();
+    return formatDateKey(d) === todayKey;
   });
 
   const upcomingShifts = shifts.filter((s) => {
     const d = parseDateFn(s.startDate);
     if (!d) return false;
-    d.setHours(0, 0, 0, 0);
-    return d.getTime() > today.getTime();
+    // Compare dates properly
+    const shiftDate = new Date(d);
+    shiftDate.setHours(0, 0, 0, 0);
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    return shiftDate.getTime() > todayDate.getTime();
   }).sort((a, b) => {
     const da = parseDateFn(a.startDate);
     const db = parseDateFn(b.startDate);

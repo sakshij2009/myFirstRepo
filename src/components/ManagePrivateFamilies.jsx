@@ -4,31 +4,13 @@ import { sendSignInLinkToEmail } from "firebase/auth";
 import { db, auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X,
+  Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X, Users,
 } from "lucide-react";
 
-const ROLE_TABS = ["All", "Parent", "Intake Worker"];
-
-function roleBadge(role) {
-  const isWorker = role?.toLowerCase().includes("intake");
-  return (
-    <span
-      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border"
-      style={{
-        backgroundColor: isWorker ? "#f0fdf4" : "#eff6ff",
-        color: isWorker ? "#16a34a" : "#3b82f6",
-        borderColor: isWorker ? "#bbf7d0" : "#bfdbfe",
-      }}
-    >
-      {role || "—"}
-    </span>
-  );
-}
-
-const ManageIntakeWorkers = () => {
-  const [activeTab, setActiveTab] = useState("Workers"); // "Workers" or "Requests"
+const ManagePrivateFamilies = () => {
+  const [activeTab, setActiveTab] = useState("Families"); // "Families" or "Requests"
   const [search, setSearch] = useState("");
-  const [intakeWorkers, setIntakeWorkers] = useState([]);
+  const [families, setFamilies] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,17 +31,17 @@ const ManageIntakeWorkers = () => {
           getDocs(collection(db, "InTakeForms")),
         ]);
         
-        // Filter users by role
-        const workers = usersSnap.docs
+        // Filter users by role "parent"
+        const fams = usersSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.role?.toLowerCase() === "intake worker");
-        setIntakeWorkers(workers);
+          .filter(u => u.role?.toLowerCase() === "parent");
+        setFamilies(fams);
 
-        // Filter requests by source
-        const workerReqs = formsSnap.docs
+        // Filter requests by source "private-family"
+        const privateReqs = formsSnap.docs
           .map(d => {
             const data = d.data();
-            const isIntakeWorker = data.formType === "intake-worker" || data.isCaseWorker === true || !!data.intakeworkerName;
+            const isPrivate = data.formType === "private" || (!data.intakeworkerName && !data.isCaseWorker);
             
             // Map client names
             let cNames = "—";
@@ -77,16 +59,16 @@ const ManageIntakeWorkers = () => {
               id: d.id, 
               firestoreId: d.id, 
               ...data, 
-              isIntakeWorker,
+              isPrivate,
               displayClientNames: cNames,
               displayFamilyName: data.familyName || "—"
             };
           })
-          .filter(r => r.isIntakeWorker);
-        setRequests(workerReqs);
+          .filter(r => r.isPrivate);
+        setRequests(privateReqs);
 
       } catch (e) {
-        console.error("Error fetching intake data:", e);
+        console.error("Error fetching private families data:", e);
       } finally {
         setLoading(false);
       }
@@ -94,13 +76,13 @@ const ManageIntakeWorkers = () => {
     fetchData();
   }, []);
 
-  const handleDeleteIntakeWorker = async (worker) => {
-    if (!window.confirm(`Are you sure you want to delete "${worker.name}"?`)) return;
+  const handleDeleteFamily = async (fam) => {
+    if (!window.confirm(`Are you sure you want to delete "${fam.name}"?`)) return;
     try {
-      await deleteDoc(doc(db, "intakeUsers", worker.id));
-      setIntakeWorkers((prev) => prev.filter((w) => w.id !== worker.id));
+      await deleteDoc(doc(db, "intakeUsers", fam.id));
+      setFamilies((prev) => prev.filter((f) => f.id !== fam.id));
     } catch (e) {
-      console.error("Error deleting intake worker:", e);
+      console.error("Error deleting family:", e);
     }
   };
 
@@ -120,7 +102,7 @@ const ManageIntakeWorkers = () => {
     const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
     const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
     const actionCodeSettings = {
-      url: `${continueBase}/intake-form/login?email=${encodedEmail}`,
+      url: `${continueBase}/intake-form/login?email=${encodedEmail}&role=parent`,
       handleCodeInApp: true,
     };
 
@@ -138,9 +120,9 @@ const ManageIntakeWorkers = () => {
     }
   };
 
-  const filtered = activeTab === "Workers" 
-    ? intakeWorkers.filter(w => !search || w.name?.toLowerCase().includes(search.toLowerCase()) || w.email?.toLowerCase().includes(search.toLowerCase()))
-    : requests.filter(r => !search || r.displayClientNames?.toLowerCase().includes(search.toLowerCase()) || r.displayFamilyName?.toLowerCase().includes(search.toLowerCase()) || r.intakeworkerName?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = activeTab === "Families" 
+    ? families.filter(f => !search || f.name?.toLowerCase().includes(search.toLowerCase()) || f.email?.toLowerCase().includes(search.toLowerCase()))
+    : requests.filter(r => !search || r.displayClientNames?.toLowerCase().includes(search.toLowerCase()) || r.displayFamilyName?.toLowerCase().includes(search.toLowerCase()) || (r.submitterName || "").toLowerCase().includes(search.toLowerCase()));
 
   const ITEMS_PER_PAGE = 10;
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
@@ -159,11 +141,11 @@ const ManageIntakeWorkers = () => {
            <button onClick={() => setSelectedRequest(null)} className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 font-semibold text-sm">
              ← Back
            </button>
-           <h2 className="text-xl font-bold">Request from {selectedRequest.intakeworkerName || "Intake Worker"}</h2>
+           <h2 className="text-xl font-bold">Request from {selectedRequest.submitterName || "Private Family"}</h2>
         </div>
         <div className="flex-1 overflow-auto bg-gray-50 p-6 rounded-lg border">
            <pre className="text-xs">{JSON.stringify(selectedRequest, null, 2)}</pre>
-           <p className="mt-4 text-gray-500 font-medium italic">Full request review logic from IntakeRequestsPage can be integrated here.</p>
+           <p className="mt-4 text-gray-500 font-medium italic">Full request review logic can be integrated here.</p>
         </div>
       </div>
     );
@@ -180,9 +162,9 @@ const ManageIntakeWorkers = () => {
         style={{ borderColor: "#e5e7eb" }}
       >
         <div>
-          <h1 className="font-bold uppercase tracking-tight" style={{ fontSize: 18, color: "#111827" }}>Intake Workers</h1>
+          <h1 className="font-bold uppercase tracking-tight" style={{ fontSize: 18, color: "#111827" }}>Private Families</h1>
           <p style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-            Manage staff accounts and incoming worker requests
+            Manage parent accounts and incoming family service requests
           </p>
         </div>
         <div
@@ -194,7 +176,7 @@ const ManageIntakeWorkers = () => {
           }}
         >
           <Plus size={15} strokeWidth={2.5} />
-          Add Intake Worker
+          Add Private Family
         </div>
       </div>
 
@@ -204,13 +186,13 @@ const ManageIntakeWorkers = () => {
         style={{ borderColor: "#e5e7eb" }}
       >
         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
-           {["Workers", "Requests"].map(tab => (
+           {["Families", "Requests"].map(tab => (
              <button
                key={tab}
                onClick={() => { setActiveTab(tab); setCurrentPage(1); setSearch(""); }}
                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
              >
-               {tab} {tab === "Workers" ? `(${intakeWorkers.length})` : `(${requests.length})`}
+               {tab} {tab === "Families" ? `(${families.length})` : `(${requests.length})`}
              </button>
            ))}
         </div>
@@ -240,12 +222,12 @@ const ManageIntakeWorkers = () => {
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                {activeTab === "Workers" ? (
+                {activeTab === "Families" ? (
                   ["Name", "Email", "Phone", "Actions"].map((h) => (
                     <th key={h} className="text-left px-4 py-4 font-bold text-[10px] uppercase tracking-wider text-gray-500">{h}</th>
                   ))
                 ) : (
-                  ["Family Name", "Client Name / Names", "Filer", "Agency", "Service", "Submitted On", "Status", "Actions"].map((h) => (
+                  ["Family Name", "Client Name / Names", "Filer", "Service", "Submitted On", "Status", "Actions"].map((h) => (
                     <th key={h} className="text-left px-4 py-4 font-bold text-[10px] uppercase tracking-wider text-gray-500">{h}</th>
                   ))
                 )}
@@ -268,7 +250,7 @@ const ManageIntakeWorkers = () => {
               ) : (
                 currentItems.map((item) => (
                   <tr key={item.id} className="transition-colors hover:bg-gray-50/50 border-b last:border-0" style={{ borderColor: "#f3f4f6" }}>
-                    {activeTab === "Workers" ? (
+                    {activeTab === "Families" ? (
                       <>
                         <td className="px-4 py-4">
                           <span className="font-bold text-sm text-gray-900 block">{item.name || "—"}</span>
@@ -291,7 +273,7 @@ const ManageIntakeWorkers = () => {
                               <Edit2 size={13} />
                             </button>
                             <button
-                              onClick={() => handleDeleteIntakeWorker(item)}
+                              onClick={() => handleDeleteFamily(item)}
                               className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-100 transition-all text-gray-400 hover:text-red-500"
                               title="Delete Account"
                             >
@@ -309,10 +291,9 @@ const ManageIntakeWorkers = () => {
                            <span className="text-sm text-gray-700 block">{item.displayClientNames}</span>
                         </td>
                         <td className="px-4 py-4">
-                           <span className="text-sm text-gray-700 block">{item.intakeworkerName || "—"}</span>
-                           <span className="text-[10px] text-gray-400 block">{item.caseworkerName && `CW: ${item.caseworkerName}`}</span>
+                           <span className="text-sm text-gray-700 block">{item.submitterName || "—"}</span>
+                           <span className="text-[10px] text-gray-400 block">{item.parentInfoList?.[0]?.relationShip && `Rel: ${item.parentInfoList[0].relationShip}`}</span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">{item.agencyName || "—"}</td>
                         <td className="px-4 py-4">
                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[10px] uppercase">
                              {item.serviceType || "—"}
@@ -395,21 +376,10 @@ const ManageIntakeWorkers = () => {
           >
             <ChevronRight size={15} style={{ color: "#374151" }} />
           </button>
-          <div className="flex items-center gap-1.5 ml-2">
-            <span style={{ fontSize: 12, color: "#6b7280" }}>Go to</span>
-            <input
-              type="number" min={1} max={totalPages} value={goToPage}
-              onChange={(e) => setGoToPage(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") changePage(Number(goToPage)); }}
-              className="w-12 rounded-lg border text-center focus:outline-none"
-              style={{ fontSize: 12, borderColor: "#e5e7eb", padding: "4px 6px" }}
-              placeholder="…"
-            />
-          </div>
         </div>
       </div>
 
-      {/* ADD INTAKE WORKER MODAL */}
+      {/* ADD PRIVATE FAMILY MODAL */}
       {showModal && (
         <>
           <div
@@ -422,7 +392,7 @@ const ManageIntakeWorkers = () => {
               {/* Header */}
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h3 className="font-bold text-lg text-gray-900">Add Intake Worker</h3>
+                  <h3 className="font-bold text-lg text-gray-900">Add Private Family</h3>
                   <p className="text-sm text-gray-500 mt-1">Enter email to generate registration link</p>
                 </div>
                 <button
@@ -441,7 +411,7 @@ const ManageIntakeWorkers = () => {
                     type="email"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="worker@example.com"
+                    placeholder="family@example.com"
                     className="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
                     style={{ fontSize: 13 }}
                   />
@@ -455,7 +425,7 @@ const ManageIntakeWorkers = () => {
                     color: "#166534",
                   }}
                 >
-                  A unique registration link will be generated. The link will expire in 7 days.
+                  A unique registration link will be sent to the family. They will be registered with the 'Parent' role.
                 </div>
               </div>
 
@@ -468,10 +438,10 @@ const ManageIntakeWorkers = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={handleInvite}
-                  disabled={inviting}
-                  className="px-4 py-2 text-white rounded-lg hover:opacity-90 font-medium transition-all text-sm disabled:opacity-70"
-                  style={{ backgroundColor: "#1f7a3c" }}
+                   onClick={handleInvite}
+                   disabled={inviting}
+                   className="px-4 py-2 text-white rounded-lg hover:opacity-90 font-medium transition-all text-sm disabled:opacity-70"
+                   style={{ backgroundColor: "#1f7a3c" }}
                 >
                   {inviting ? "Sending..." : "Send Invitation"}
                 </button>
@@ -484,4 +454,4 @@ const ManageIntakeWorkers = () => {
   );
 };
 
-export default ManageIntakeWorkers;
+export default ManagePrivateFamilies;

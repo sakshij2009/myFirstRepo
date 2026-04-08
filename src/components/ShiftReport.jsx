@@ -17,6 +17,7 @@ import {
   PenLine, Stamp, Pill, Truck, Upload, Receipt,
   AlertTriangle, Stethoscope, CheckCircle2,
 } from "lucide-react";
+import { calculateRouteDistance, reverseGeocode } from "../utils/mapboxHelper";
 
 const PILL_COLORS = [
   { label: "Yellow", bg: "#fffae3", border: "#f1e19e" },
@@ -536,13 +537,11 @@ const ShiftReport = ({ user }) => {
         setLiveDistance(0);
         setIsDriving(true);
 
-        // Reverse geocode → fill Starting Point automatically
-        if (window.google?.maps?.Geocoder) {
-          new window.google.maps.Geocoder().geocode(
-            { location: { lat, lng } },
-            (res, st) => { if (st === "OK" && res[0]) setStartPoint(res[0].formatted_address); }
-          );
-        }
+        // Reverse geocode → fill Starting Point automatically via Mapbox
+        (async () => {
+          const addr = await reverseGeocode(lng, lat);
+          if (addr) setStartPoint(addr);
+        })();
 
         // Start watching position for staff KM tracking
         const id = navigator.geolocation.watchPosition(
@@ -572,34 +571,29 @@ const ShiftReport = ({ user }) => {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude: lat, longitude: lng } = pos.coords;
-        if (window.google?.maps?.Geocoder) {
-          new window.google.maps.Geocoder().geocode(
-            { location: { lat, lng } },
-            (res, st) => {
-              if (st === "OK" && res[0]) {
-                const endAddr = res[0].formatted_address;
-                setEndPoint(endAddr);
-                // Total KM = Google Maps route distance (road distance, not straight-line)
-                if (startPoint && window.google?.maps?.DirectionsService) {
-                  new window.google.maps.DirectionsService().route(
-                    { origin: startPoint, destination: endAddr, travelMode: window.google.maps.TravelMode.DRIVING },
-                    (result, status) => {
-                      if (status === "OK") {
-                        setTotalKm((result.routes[0].legs[0].distance.value / 1000).toFixed(2));
-                      } else {
-                        setTotalKm(liveDistance.toFixed(2));
-                      }
-                    }
-                  );
-                } else {
-                  setTotalKm(liveDistance.toFixed(2));
-                }
-              }
+        setWatchId(null);
+        
+        // Use Mapbox for all distance and location resolution
+        (async () => {
+          const endAddr = await reverseGeocode(lng, lat);
+          if (endAddr) {
+            setEndPoint(endAddr);
+            setStaffKm(liveDistance.toFixed(2));
+            
+            const points = [startPoint];
+            stops.forEach(s => { if (s) points.push(s); });
+            points.push(endAddr);
+
+            const route = await calculateRouteDistance(points);
+            if (route) {
+              setTotalKm(route.km.toFixed(2));
+            } else {
+              setTotalKm(liveDistance.toFixed(2));
             }
-          );
-        } else {
-          setTotalKm(liveDistance.toFixed(2));
-        }
+          } else {
+            setTotalKm(liveDistance.toFixed(2));
+          }
+        })();
       },
       err => { console.error(err); setTotalKm(liveDistance.toFixed(2)); },
       { enableHighAccuracy: true }
@@ -1303,9 +1297,15 @@ const ShiftReport = ({ user }) => {
                   })()}
 
                   {/* KM by Staff */}
-                  <div style={{ maxWidth: 300 }}>
-                    <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>KM Traveled by Staff</label>
-                    <input className={inp} placeholder="0.00" value={staffKilometer} onChange={e => setStaffKm(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>Total Route Kilometers (Mapbox)</label>
+                      <input className={inp} placeholder="0.00" value={totalKilometer} readOnly />
+                    </div>
+                    <div>
+                      <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>KM Traveled by Staff (Live)</label>
+                      <input className={inp} placeholder="0.00" value={staffKilometer} onChange={e => setStaffKm(e.target.value)} />
+                    </div>
                   </div>
 
                   {/* Approved KM + By */}

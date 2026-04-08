@@ -15,9 +15,9 @@ import SuccessSlider from "../components/SuccessSlider";
 import { FaChevronDown } from "react-icons/fa6";
 import { useNavigate, useParams } from "react-router-dom";
 
-const AddIntakeWorker = ({ mode = "add" }) => {
+const AddIntakeUser = ({ mode = "add" }) => {
   const navigate = useNavigate();
-  const { id } = useParams(); // userId or unique identifier from ManageIntakeWorkers
+  const { id } = useParams();
 
   const [slider, setSlider] = useState({
     show: false,
@@ -55,9 +55,9 @@ const AddIntakeWorker = ({ mode = "add" }) => {
       .required("Invoice email is required"),
   });
 
-  // Fetch intake worker in update mode
+  // Fetch intake user in update mode
   useEffect(() => {
-    const fetchIntakeWorker = async () => {
+    const fetchIntakeUser = async () => {
       if (mode === "update" && id) {
         try {
           const q = query(collection(db, "intakeUsers"), where("email", "==", id));
@@ -79,15 +79,15 @@ const AddIntakeWorker = ({ mode = "add" }) => {
               invoiceEmail: docData.invoiceEmail || "",
             });
           } else {
-            console.warn("⚠ No intake worker found with id:", id);
+            console.warn("⚠ No intake user found with id:", id);
           }
         } catch (err) {
-          console.error("Error fetching intake worker:", err);
+          console.error("Error fetching intake user:", err);
         }
       }
     };
 
-    fetchIntakeWorker();
+    fetchIntakeUser();
   }, [mode, id]);
 
   // Handle Add or Update
@@ -112,12 +112,12 @@ const AddIntakeWorker = ({ mode = "add" }) => {
 
           setSlider({
             show: true,
-            title: "Intake Worker Updated Successfully!",
+            title: "Intake User Updated Successfully!",
             subtitle: `${values.name} (${values.role})`,
-            viewText: "View Intake Worker",
+            viewText: "View Users",
           });
         } else {
-          alert("No matching intake worker found to update!");
+          alert("No matching intake user found to update!");
         }
       } else {
         const q = query(collection(db, "intakeUsers"), where("email", "==", values.email));
@@ -134,9 +134,9 @@ const AddIntakeWorker = ({ mode = "add" }) => {
 
         setSlider({
           show: true,
-          title: "Intake Worker Added Successfully!",
+          title: "Intake User Added Successfully!",
           subtitle: `${values.name} (${values.role})`,
-          viewText: "View Intake Worker",
+          viewText: "View Users",
         });
 
         resetForm();
@@ -145,7 +145,7 @@ const AddIntakeWorker = ({ mode = "add" }) => {
       console.error(error);
       setSlider({
         show: true,
-        title: "Error Saving Intake Worker!",
+        title: "Error Saving Intake User!",
         subtitle: "Please try again.",
         viewText: "",
       });
@@ -157,7 +157,7 @@ const AddIntakeWorker = ({ mode = "add" }) => {
       {/* Header */}
       <div>
         <p className="font-bold text-2xl leading-7 text-light-black">
-          {mode === "update" ? "Update Intake Worker" : "Add Intake Worker"}
+          {mode === "update" ? `Update ${initialValues.role || 'User'}` : "Add User"}
         </p>
       </div>
       <hr className="border-t border-gray" />
@@ -310,7 +310,7 @@ const AddIntakeWorker = ({ mode = "add" }) => {
                     type="submit"
                     className="bg-dark-green text-white px-6 py-2  mt-10 rounded cursor-pointer"
                   >
-                    {mode === "update" ? "Update Intake Worker" : "Send Invitation"}
+                    {mode === "update" ? `Update ${values.role || 'User'}` : "Send Invitation"}
                   </button>
                 </div>
               </div>
@@ -331,4 +331,4 @@ const AddIntakeWorker = ({ mode = "add" }) => {
   );
 };
 
-export default AddIntakeWorker;
+export default AddIntakeUser;
