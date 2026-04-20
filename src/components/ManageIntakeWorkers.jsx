@@ -120,7 +120,7 @@ const ManageIntakeWorkers = () => {
     const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
     const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
     const actionCodeSettings = {
-      url: `${continueBase}/intake-form/login?email=${encodedEmail}`,
+      url: `${continueBase}/intake-form/login?email=${encodedEmail}&role=worker`,
       handleCodeInApp: true,
     };
 

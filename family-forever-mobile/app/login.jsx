@@ -180,13 +180,16 @@ export default function Login() {
             <View style={styles.logoWrapper}>
               <Animated.View style={[styles.pulseRing, { opacity: pulseAnim }]} />
               <View style={styles.logoCircle}>
-                <Ionicons name="people" size={38} color="rgba(255,255,255,0.85)" />
+                <Image
+                  source={require("../assets/logo.png")}
+                  style={{ width: 68, height: 68, resizeMode: "contain" }}
+                />
               </View>
             </View>
 
             <Text style={styles.brandName}>Family Forever</Text>
             <Text style={styles.tagline}>
-              Caring for every family, every step of the way.
+              From Humanity To Community.
             </Text>
           </Animated.View>
 

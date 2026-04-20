@@ -24,6 +24,7 @@ import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { EditableProvider } from "./EditableContext";
+import { getEdmontonToday, formatEdmontonISO } from "../utils/dateHelpers";
 
 //
 // ---------- helpers ----------
@@ -57,15 +58,9 @@ const convertToISO = (d) => {
 };
 
 
-// format JS Date → YYYY-MM-DD in local time (no timezone shift)
+// format JS Date → YYYY-MM-DD in Edmonton local time
 const formatDateLocal = (date) => {
-  if (!date) return "";
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return "";
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return formatEdmontonISO(date);
 };
 
 // age in years from YYYY-MM-DD
@@ -73,7 +68,7 @@ const calculateAgeYears = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return null;
-  const today = new Date();
+  const today = getEdmontonToday();
   let age = today.getFullYear() - d.getFullYear();
   const m = today.getMonth() - d.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
@@ -87,7 +82,7 @@ const calculateAgeDisplay = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return null;
-  const today = new Date();
+  const today = getEdmontonToday();
   let years = today.getFullYear() - d.getFullYear();
   let months = today.getMonth() - d.getMonth();
   if (today.getDate() < d.getDate()) months--;
@@ -583,7 +578,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         workerInfo: {
           ...base.workerInfo,
           workerName: user.name || "",
-          date: new Date().toISOString().split("T")[0],
+          date: formatDateLocal(new Date()),
         },
       };
     }
@@ -607,7 +602,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         workerInfo: {
           ...prev.workerInfo,
           workerName: user.name || "",
-          date: new Date().toISOString().split("T")[0],
+          date: formatDateLocal(new Date()),
         },
       }));
     }

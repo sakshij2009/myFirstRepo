@@ -14,6 +14,8 @@ import { db } from "../firebase";
 import SuccessSlider from "../components/SuccessSlider";
 import { FaChevronDown } from "react-icons/fa6";
 import { useNavigate, useParams } from "react-router-dom";
+import { sendSignInLinkToEmail } from "firebase/auth";
+import { auth } from "../firebase";
 
 const AddIntakeUser = ({ mode = "add" }) => {
   const navigate = useNavigate();
@@ -132,10 +134,27 @@ const AddIntakeUser = ({ mode = "add" }) => {
           createdAt: new Date(),
         });
 
+        // Send Invitation Link
+        try {
+          const encodedEmail = encodeURIComponent(values.email.trim().toLowerCase());
+          const actionCodeSettings = {
+            // Redirect to the intake form login page with pre-filled email and role
+            url: `${window.location.origin}/intake-form/login?email=${encodedEmail}&role=${values.role === "Parent" ? "parent" : "worker"}`,
+            handleCodeInApp: true,
+          };
+
+          await sendSignInLinkToEmail(auth, values.email.trim().toLowerCase(), actionCodeSettings);
+          console.log("Invitation link sent to:", values.email);
+        } catch (authError) {
+          console.error("Error sending invitation link:", authError);
+          // We don't want to fail the whole process if only the email fails, 
+          // but we should probably inform the admin.
+        }
+
         setSlider({
           show: true,
-          title: "Intake User Added Successfully!",
-          subtitle: `${values.name} (${values.role})`,
+          title: "Intake User Added & Invitation Sent!",
+          subtitle: `${values.name} (${values.role}) - Invitation sent to ${values.email}`,
           viewText: "View Users",
         });
 

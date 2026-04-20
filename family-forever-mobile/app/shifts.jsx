@@ -24,7 +24,7 @@ import {
 import { db } from "../src/firebase/config";
 import { router } from "expo-router";
 import * as Location from "expo-location";
-import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
+import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada, getEdmontonToday } from "../src/utils/date";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY_GREEN = "#1F6F43";
@@ -156,15 +156,17 @@ function RoutePreview({ shift }) {
   ].filter(Boolean);
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, marginBottom: 2, flexWrap: "wrap", gap: 2 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 2, gap: 6 }}>
       {stops.map((s, i) => (
-        <View key={i} style={{ flexDirection: "row", alignItems: "center" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+        <View key={i} style={{ flexDirection: "row", alignItems: "center", maxWidth: "33%" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1 }}>
             <Ionicons name={s.icon} size={13} color={s.color} />
-            <Text style={{ fontSize: 12, color: "#374151", fontFamily: "Inter" }}>{s.label}</Text>
+            <Text style={{ fontSize: 11, color: "#4B5563", fontFamily: "Inter" }} numberOfLines={1}>
+              {s.label}
+            </Text>
           </View>
           {i < stops.length - 1 && (
-            <Text style={{ fontSize: 11, color: "#D1D5DB", marginHorizontal: 4 }}>· · ·</Text>
+            <Text style={{ fontSize: 10, color: "#D1D5DB", marginHorizontal: 4 }}>·</Text>
           )}
         </View>
       ))}
@@ -270,55 +272,55 @@ function ShiftCard({ shift, onAction, onDetails }) {
       </View>
 
       <View style={styles.cardActions}>
-        {status === "Assigned" && (
-          <Pressable onPress={() => onAction("confirm", shift)} style={styles.mainActionBtn}>
-            <Text style={styles.mainActionBtnText}>Confirm</Text>
-          </Pressable>
-        )}
-        {status === "Confirmed" && (
-          <Pressable onPress={() => onAction("clockIn", shift)} style={styles.mainActionBtn}>
-            <Text style={styles.mainActionBtnText}>Clock In</Text>
-          </Pressable>
-        )}
-        {status === "In Progress" && isTransport && (
-          // Transport "In Progress" → go back to transportation detail (Choose Vehicle / active route)
-          <Pressable
-            onPress={() => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })}
-            style={[styles.mainActionBtn, { backgroundColor: "#1E5FA6" }]}
-          >
-            <Ionicons name="navigate" size={15} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.mainActionBtnText}>Continue Route</Text>
-          </Pressable>
-        )}
-        {status === "In Progress" && !isTransport && (
-          <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
-            <Text style={styles.mainActionBtnText}>Clock Out</Text>
-          </Pressable>
-        )}
-        {status === "Completed" && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
-          </View>
-        )}
-        <View style={styles.secondaryActions}>
-          <Pressable
-            style={styles.swapBtn}
-            onPress={() => router.push({ pathname: "/transfer-shift", params: { shiftId: shift.id } })}
-          >
-            <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
-          </Pressable>
-          {/* Transport shifts always open transportation-shift-detail for Details */}
-          <Pressable
-            onPress={isTransport
-              ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
-              : onDetails
-            }
-            style={styles.detailsLink}
-          >
-            <Text style={styles.detailsLinkText}>Details &gt;</Text>
-          </Pressable>
+        <View style={{ flex: 1 }}>
+          {status === "Assigned" && (
+            <Pressable onPress={() => onAction("confirm", shift)} style={styles.mainActionBtn}>
+              <Text style={styles.mainActionBtnText}>Confirm</Text>
+            </Pressable>
+          )}
+          {status === "Confirmed" && (
+            <Pressable onPress={() => onAction("clockIn", shift)} style={styles.mainActionBtn}>
+              <Text style={styles.mainActionBtnText}>Clock In</Text>
+            </Pressable>
+          )}
+          {status === "In Progress" && isTransport && (
+            <Pressable
+              onPress={() => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })}
+              style={[styles.mainActionBtn, { backgroundColor: "#1E5FA6" }]}
+            >
+              <Ionicons name="navigate" size={15} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.mainActionBtnText}>Continue Route</Text>
+            </Pressable>
+          )}
+          {status === "In Progress" && !isTransport && (
+            <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
+              <Text style={styles.mainActionBtnText}>Clock Out</Text>
+            </Pressable>
+          )}
+          {status === "Completed" && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
+            </View>
+          )}
         </View>
+
+        <Pressable
+          style={[styles.swapBtn, { marginHorizontal: 10 }]}
+          onPress={() => router.push({ pathname: "/transfer-shift", params: { shiftId: shift.id } })}
+        >
+          <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
+        </Pressable>
+
+        <Pressable
+          onPress={isTransport
+            ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
+            : onDetails
+          }
+          style={styles.detailsLink}
+        >
+          <Text style={styles.detailsLinkText}>Details &gt;</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -358,7 +360,7 @@ export default function Shifts() {
   }, [user]);
 
   // Live tab filtering
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = getEdmontonToday();
 
   const isShiftCompleted = (s) => !!(s.clockOutTime || s.clockOut || s.clockout || s.status === "completed");
   const isShiftInProgress = (s) => !!(s.clockInTime || s.clockIn || s.clockin || s.status === "active") && !isShiftCompleted(s);
@@ -507,9 +509,7 @@ export default function Shifts() {
           <Text style={styles.headerTitle}>My Shifts</Text>
           <Text style={styles.headerSubtitle}>{user?.name || "Staff Member"}</Text>
         </View>
-        <Pressable style={styles.filterBtn}>
-          <Ionicons name="options-outline" size={22} color={DARK_TEXT} />
-        </Pressable>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Tabs */}
@@ -641,7 +641,6 @@ const styles = StyleSheet.create({
   headerTitleBox: { alignItems: "center" },
   headerTitle: { fontSize: 18, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   headerSubtitle: { fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter", marginTop: 2 },
-  filterBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#FFF", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: GRAY_BORDER },
 
   tabScroll: { paddingHorizontal: 20, gap: 10, paddingVertical: 5, paddingBottom: 15 },
   tab: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "#E5E7EB", gap: 6 },
@@ -659,12 +658,12 @@ const styles = StyleSheet.create({
   cardDateInline: { fontSize: 12, fontWeight: "600", color: GRAY_TEXT, fontFamily: "Inter-SemiBold" },
 
   card: { backgroundColor: "#FFF", borderRadius: 20, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: GRAY_BORDER, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  serviceTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  serviceTagText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
-  statusBox: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 15, gap: 10 },
+  serviceTag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  serviceTagText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
+  statusBox: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#F9FAF8", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#F0F0EE" },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
+  statusText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter-Bold" },
   cardBody: { marginBottom: 15 },
   dateRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   dateText: { fontSize: 12, color: GRAY_TEXT, fontFamily: "Inter" },
@@ -688,13 +687,13 @@ const styles = StyleSheet.create({
   clockValue: { fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   clockDivider: { width: 1, backgroundColor: "#E5E7EB", marginHorizontal: 12 },
 
-  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
-  mainActionBtn: { backgroundColor: PRIMARY_GREEN, paddingHorizontal: 25, paddingVertical: 13, borderRadius: 12, minWidth: 120, alignItems: "center" },
+  cardActions: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  mainActionBtn: { backgroundColor: PRIMARY_GREEN, paddingVertical: 13, borderRadius: 12, flex: 1, alignItems: "center" },
   mainActionBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
-  secondaryActions: { flexDirection: "row", alignItems: "center", gap: 15 },
-  swapBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  detailsLink: { paddingVertical: 10 },
-  detailsLinkText: { fontSize: 13, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
+  secondaryActions: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 10 },
+  swapBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: GRAY_BORDER },
+  detailsLink: { paddingHorizontal: 10, height: 44, justifyContent: "center" },
+  detailsLinkText: { fontSize: 14, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
 
   emptyBox: { alignItems: "center", paddingVertical: 60 },
   emptyTitle: { fontSize: 18, fontWeight: "700", color: DARK_TEXT, marginTop: 15, fontFamily: "Poppins-Bold" },

@@ -21,7 +21,7 @@ import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-
+import { formatLocalISO } from "../utils/dateHelpers";
 
 
 // ---------------- OFFICE ADDRESS ----------------
@@ -87,7 +87,7 @@ const AddUserShift = ({ mode = "add", user }) => {
     show: false,
     title: "",
     subtitle: "",
-    redirectTo:"",
+    redirectTo: "",
   });
   const [createdShift, setCreatedShift] = useState(null);
 
@@ -159,28 +159,28 @@ const AddUserShift = ({ mode = "add", user }) => {
 
   // ---------------- DATE HELPERS ----------------
   const formatDateFromFirestore = (dateValue) => {
-  if (!dateValue) return "";
+    if (!dateValue) return "";
 
-  if (dateValue.toDate) {
-    const d = dateValue.toDate();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  if (typeof dateValue === "string") {
-    const parsed = new Date(dateValue);
-    if (!isNaN(parsed)) {
-      const year = parsed.getFullYear();
-      const month = String(parsed.getMonth() + 1).padStart(2, "0");
-      const day = String(parsed.getDate()).padStart(2, "0");
+    if (dateValue.toDate) {
+      const d = dateValue.toDate();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
-  }
 
-  return "";
-};
+    if (typeof dateValue === "string") {
+      const parsed = new Date(dateValue);
+      if (!isNaN(parsed)) {
+        const year = parsed.getFullYear();
+        const month = String(parsed.getMonth() + 1).padStart(2, "0");
+        const day = String(parsed.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    return "";
+  };
 
 
   const normalizeDate = (input) => {
@@ -217,171 +217,171 @@ const AddUserShift = ({ mode = "add", user }) => {
   };
 
   // ---------------- UPDATE MODE: FETCH EXISTING SHIFT ----------------
- useEffect(() => {
-  const fetchShiftData = async () => {
-    if (mode === "update" && id) {
-      try {
-        const docRef = doc(db, "shifts", id);
-        const docSnap = await getDoc(docRef);
+  useEffect(() => {
+    const fetchShiftData = async () => {
+      if (mode === "update" && id) {
+        try {
+          const docRef = doc(db, "shifts", id);
+          const docSnap = await getDoc(docRef);
 
-        if (!docSnap.exists()) return;
-        const data = docSnap.data();
+          if (!docSnap.exists()) return;
+          const data = docSnap.data();
 
-        // ✅ Normalize field names across old/new schemas
-        const shiftTypeName =
-          data.shiftType ||
-          data.typeName ||
-          data.shiftTypeName ||
-          "";
-        const shiftCategoryName =
-          data.shiftCategory ||
-          data.categoryName ||
-          data.shiftCategoryName ||
-          "";
+          // ✅ Normalize field names across old/new schemas
+          const shiftTypeName =
+            data.shiftType ||
+            data.typeName ||
+            data.shiftTypeName ||
+            "";
+          const shiftCategoryName =
+            data.shiftCategory ||
+            data.categoryName ||
+            data.shiftCategoryName ||
+            "";
 
-        const clientName =
-          data.clientName ||
-          data.clientDetails?.name ||
-          data.clientDetails?.fullName ||
-          "";
+          const clientName =
+            data.clientName ||
+            data.clientDetails?.name ||
+            data.clientDetails?.fullName ||
+            "";
 
-        const userName =
-          data.name ||
-          data.userName ||
-          data.userDetails?.name ||
-          "";
+          const userName =
+            data.name ||
+            data.userName ||
+            data.userDetails?.name ||
+            "";
 
-        // ✅ Match type & category safely (case-insensitive)
-        const shiftTypeObj = shiftTypes.find(
-          (s) =>
-            s.name?.toLowerCase() === shiftTypeName.toLowerCase() ||
-            s.id === shiftTypeName
-        );
+          // ✅ Match type & category safely (case-insensitive)
+          const shiftTypeObj = shiftTypes.find(
+            (s) =>
+              s.name?.toLowerCase() === shiftTypeName.toLowerCase() ||
+              s.id === shiftTypeName
+          );
 
-        const shiftCategoryObj = shiftCategories.find(
-          (c) =>
-            c.name?.toLowerCase() === shiftCategoryName.toLowerCase() ||
-            c.id === shiftCategoryName
-        );
+          const shiftCategoryObj = shiftCategories.find(
+            (c) =>
+              c.name?.toLowerCase() === shiftCategoryName.toLowerCase() ||
+              c.id === shiftCategoryName
+          );
 
-        // ✅ Match client & user safely
-        const clientObj = clients.find(
-          (c) =>
-            c.name?.toLowerCase() === clientName.toLowerCase() ||
-            c.id === data.client ||
-            c.id === data.clientId
-        );
+          // ✅ Match client & user safely
+          const clientObj = clients.find(
+            (c) =>
+              c.name?.toLowerCase() === clientName.toLowerCase() ||
+              c.id === data.client ||
+              c.id === data.clientId
+          );
 
-        const userObj = users.find(
-          (u) =>
-            u.name?.toLowerCase() === userName.toLowerCase() ||
-            u.id === data.user ||
-            u.id === data.userId
-        );
+          const userObj = users.find(
+            (u) =>
+              u.name?.toLowerCase() === userName.toLowerCase() ||
+              u.id === data.user ||
+              u.id === data.userId
+          );
 
-        // ✅ Normalize dates
-        const startISO = formatDateFromFirestore(data.startDate);
-        const endISO = formatDateFromFirestore(data.endDate);
+          // ✅ Normalize dates
+          const startISO = formatDateFromFirestore(data.startDate);
+          const endISO = formatDateFromFirestore(data.endDate);
 
-        const calendarDates = [];
-        if (startISO) calendarDates.push(new Date(startISO));
+          const calendarDates = [];
+          if (startISO) calendarDates.push(new Date(startISO));
 
-        // ✅ Handle all shift point schema versions (old + new)
-        let points = [];
+          // ✅ Handle all shift point schema versions (old + new)
+          let points = [];
 
-if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
-  points = data.shiftPoints.map((p) => ({
-    pickupLocation: p.pickupLocation || "",
-    pickupTime: p.pickupTime || "",
-    pickupLatitude: p.pickupLatitude || 0,
-    pickupLongitude: p.pickupLongitude || 0,
+          if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
+            points = data.shiftPoints.map((p) => ({
+              pickupLocation: p.pickupLocation || "",
+              pickupTime: p.pickupTime || "",
+              pickupLatitude: p.pickupLatitude || 0,
+              pickupLongitude: p.pickupLongitude || 0,
 
-    visitLocation: p.visitLocation || "",
-    visitStartTime: p.visitStartTime || "",
-    visitEndTime: p.visitEndTime || "",
-    visitLatitude: p.visitLatitude || 0,
-    visitLongitude: p.visitLongitude || 0,
+              visitLocation: p.visitLocation || "",
+              visitStartTime: p.visitStartTime || "",
+              visitEndTime: p.visitEndTime || "",
+              visitLatitude: p.visitLatitude || 0,
+              visitLongitude: p.visitLongitude || 0,
 
-    dropLocation: p.dropLocation || "",
-    dropTime: p.dropTime || "",
-    dropLatitude: p.dropLatitude || 0,
-    dropLongitude: p.dropLongitude || 0,
+              dropLocation: p.dropLocation || "",
+              dropTime: p.dropTime || "",
+              dropLatitude: p.dropLatitude || 0,
+              dropLongitude: p.dropLongitude || 0,
 
-    seatType: p.seatType || "",
-    transportationMode: p.transportationMode || "",
+              seatType: p.seatType || "",
+              transportationMode: p.transportationMode || "",
 
-    // ✅ THIS IS THE KEY FIX
-    totalKilometers:
-      p.totalKilometers !== undefined && p.totalKilometers !== null
-        ? Number(p.totalKilometers)
-        : 0,
-  }));
-} else {
-  points = [
-    {
-      pickupLocation: "",
-      pickupTime: "",
-      visitLocation: "",
-      visitStartTime: "",
-      visitEndTime: "",
-      dropLocation: "",
-      dropTime: "",
-      seatType: "",
-      transportationMode: "",
-      totalKilometers: 0,
-    },
-  ];
-}
+              // ✅ THIS IS THE KEY FIX
+              totalKilometers:
+                p.totalKilometers !== undefined && p.totalKilometers !== null
+                  ? Number(p.totalKilometers)
+                  : 0,
+            }));
+          } else {
+            points = [
+              {
+                pickupLocation: "",
+                pickupTime: "",
+                visitLocation: "",
+                visitStartTime: "",
+                visitEndTime: "",
+                dropLocation: "",
+                dropTime: "",
+                seatType: "",
+                transportationMode: "",
+                totalKilometers: 0,
+              },
+            ];
+          }
 
-setShiftPoints(points);
+          setShiftPoints(points);
 
 
-        // ✅ Set selectedClient so the intake fetch useEffect can run
-        if (clientObj) {
-          setSelectedClient(clientObj);
-          // Remember this client ID — used to detect when user later changes client
-          initialLoadedClientIdRef.current = clientObj.id;
+          // ✅ Set selectedClient so the intake fetch useEffect can run
+          if (clientObj) {
+            setSelectedClient(clientObj);
+            // Remember this client ID — used to detect when user later changes client
+            initialLoadedClientIdRef.current = clientObj.id;
+          }
+          if (userObj) setSelectedUser(userObj);
+
+          // ✅ Prefill all fields
+          setInitialValues((prev) => ({
+            ...prev,
+            shiftType: shiftTypeObj ? shiftTypeObj.name : shiftTypeName,
+            shiftCategory: shiftCategoryObj ? shiftCategoryObj.name : shiftCategoryName,
+            client: clientObj ? clientObj.id : "",
+            user: userObj ? userObj.id : "",
+            startDate: startISO,
+            endDate: endISO,
+            startTime: data.startTime || "",
+            endTime: data.endTime || "",
+            description: data.jobdescription || data.description || "",
+            accessToShiftReport: data.accessToShiftReport || false,
+            shiftDates: calendarDates,
+          }));
+
+          console.log("✅ Prefilled Shift Data:", {
+            shiftTypeName,
+            shiftCategoryName,
+            clientName,
+            userName,
+            shiftPoints: points,
+          });
+        } catch (error) {
+          console.error("Error fetching shift for update:", error);
         }
-        if (userObj) setSelectedUser(userObj);
-
-        // ✅ Prefill all fields
-        setInitialValues((prev) => ({
-          ...prev,
-           shiftType: shiftTypeObj ? shiftTypeObj.name : shiftTypeName,
-  shiftCategory: shiftCategoryObj ? shiftCategoryObj.name : shiftCategoryName,
-          client: clientObj ? clientObj.id : "",
-          user: userObj ? userObj.id : "",
-          startDate: startISO,
-          endDate: endISO,
-          startTime: data.startTime || "",
-          endTime: data.endTime || "",
-          description: data.jobdescription || data.description || "",
-          accessToShiftReport: data.accessToShiftReport || false,
-          shiftDates: calendarDates,
-        }));
-
-        console.log("✅ Prefilled Shift Data:", {
-          shiftTypeName,
-          shiftCategoryName,
-          clientName,
-          userName,
-          shiftPoints: points,
-        });
-      } catch (error) {
-        console.error("Error fetching shift for update:", error);
       }
-    }
-  };
+    };
 
-  if (
-    shiftTypes.length &&
-    shiftCategories.length &&
-    clients.length &&
-    users.length
-  ) {
-    fetchShiftData();
-  }
-}, [mode, id, shiftTypes, shiftCategories, clients, users]);
+    if (
+      shiftTypes.length &&
+      shiftCategories.length &&
+      clients.length &&
+      users.length
+    ) {
+      fetchShiftData();
+    }
+  }, [mode, id, shiftTypes, shiftCategories, clients, users]);
 
 
   // ---------------- FETCH SHIFT POINTS & DESCRIPTION FROM CLIENT / INTAKE ----------------
@@ -431,12 +431,26 @@ setShiftPoints(points);
         }));
       }
 
-      // ── 2. Fetch from intake form (Description AND potentially Shift Points if still empty) ──
+      // ── 2. Fetch from intake form (Description AND Shift Points) ──
       try {
         const clientNameCandidate = (selectedClient.name || "").trim();
         if (!clientNameCandidate) return;
 
         const snap = await getDocs(collection(db, "InTakeForms"));
+
+        // Sort intake forms by createdAt (newest first) to prioritize most recent updates
+        const sortedDocs = snap.docs.sort((a, b) => {
+          const aData = a.data();
+          const bData = b.data();
+          const aTime = aData.createdAt?.toDate
+            ? aData.createdAt.toDate().getTime()
+            : (typeof aData.createdAt === "number" ? aData.createdAt : 0);
+          const bTime = bData.createdAt?.toDate
+            ? bData.createdAt.toDate().getTime()
+            : (typeof bData.createdAt === "number" ? bData.createdAt : 0);
+          return bTime - aTime;
+        });
+
         let foundDesc = "";
         let intakePoints = [];
 
@@ -447,8 +461,8 @@ setShiftPoints(points);
           .split(/\s+/)
           .filter((w) => w.length > 2 && w !== "family" && w !== "the");
 
-        snap.forEach((d) => {
-          const data = d.data();
+        sortedDocs.forEach((d) => {
+          const data = d.id ? { id: d.id, ...d.data() } : d.data();
           const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
           // Partial match: any keyword from client name appears in the given string
           const partialMatch = (n) => {
@@ -459,7 +473,7 @@ setShiftPoints(points);
 
           let isMatch = false;
           // ── Exact matches first ──
-          if (nameMatch(data.clientName) || nameMatch(data.name) || nameMatch(data.nameOfPerson)) {
+          if (nameMatch(data.clientName) || nameMatch(data.name) || nameMatch(data.nameOfPerson) || nameMatch(data.familyName)) {
             isMatch = true;
           }
           if (!isMatch && Array.isArray(data.inTakeClients)) {
@@ -476,7 +490,7 @@ setShiftPoints(points);
 
           // ── Surname/partial fallback (e.g. "Kaskamin Family" → matches "Alice Kaskamin") ──
           if (!isMatch && clientKeywords.length > 0) {
-            if (partialMatch(data.clientName) || partialMatch(data.name) || partialMatch(data.nameOfPerson)) {
+            if (partialMatch(data.clientName) || partialMatch(data.name) || partialMatch(data.nameOfPerson) || partialMatch(data.familyName)) {
               isMatch = true;
             }
             if (!isMatch && data.clients && typeof data.clients === "object") {
@@ -498,8 +512,8 @@ setShiftPoints(points);
             if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
 
             // Find Siblings/Members for Shift Points if we don't have them yet
-            if (pointsFound.length === 0 && intakePoints.length === 0) {
-              
+            if (intakePoints.length === 0) {
+
               // A. Support new Map structure (clients: { client1: {...}, client2: {...} })
               if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
                 intakePoints = Object.values(data.clients).map((c) => {
@@ -525,12 +539,12 @@ setShiftPoints(points);
                     visitEndTime: visit?.visitEndTime || "",
                     dropLocation: trans?.dropoffAddress || c.address || "",
                     dropTime: trans?.dropOffTime || "",
-                    seatType: trans?.carSeatType || "",
+                    seatType: trans?.carSeatType || c.carSeatType || "",
                     transportationMode: "",
                     totalKilometers: 0,
                   };
                 });
-              } 
+              }
               // B. Support old array structure (siblings: [...])
               else if (Array.isArray(data.siblings) && data.siblings.length > 0) {
                 intakePoints = data.siblings.map((sib) => ({
@@ -552,12 +566,14 @@ setShiftPoints(points);
         });
 
         if (foundDesc) setIntakeDescription(foundDesc);
-        
-        // If we found points in intake but not in client db, use them
-        if (pointsFound.length === 0 && intakePoints.length > 0) {
+
+        // PRIORITIZE Intake points if we found any, otherwise fallback to local client db points
+        if (intakePoints.length > 0) {
           setShiftPoints(intakePoints);
-        } else {
+        } else if (pointsFound.length > 0) {
           setShiftPoints(pointsFound);
+        } else {
+          setShiftPoints([]);
         }
         setRemovedShiftPoints([]);
 
@@ -571,128 +587,178 @@ setShiftPoints(points);
   }, [selectedClient, mode]);
 
   // ---------------- SUBMIT HANDLER ----------------
-const handleSubmit = async (values, { resetForm }) => {
-  try {
-    const { shiftDates, ...restValues } = values;
-    const selectedDates = shiftDates || [];
+  const handleSubmit = async (values, { resetForm }) => {
+    try {
+      const { shiftDates, ...restValues } = values;
+      const selectedDates = shiftDates || [];
 
-    if (!selectedDates.length) {
-      alert("Please select at least one shift date.");
-      return;
-    }
+      if (!selectedDates.length) {
+        alert("Please select at least one shift date.");
+        return;
+      }
 
-    // Build final shiftPoints array from all active points (strip _edit flags)
-    const finalPoints = shiftPoints.map((fp) => ({
-      name: fp.name || "",
-      pickupLocation: fp.pickupLocation || "",
-      pickupTime: fp.pickupTime || "",
-      pickupLatitude: fp.pickupLatitude || 0,
-      pickupLongitude: fp.pickupLongitude || 0,
-      visitLocation: fp.visitLocation || "",
-      visitStartTime: fp.visitStartTime || "",
-      visitEndTime: fp.visitEndTime || "",
-      visitLatitude: fp.visitLatitude || 0,
-      visitLongitude: fp.visitLongitude || 0,
-      dropLocation: fp.dropLocation || "",
-      dropTime: fp.dropTime || "",
-      dropLatitude: fp.dropLatitude || 0,
-      dropLongitude: fp.dropLongitude || 0,
-      seatType: fp.seatType || "",
-      transportationMode: fp.transportationMode || "",
-      totalKilometers: Number(fp.totalKilometers) || 0,
-    }));
+      // Build final shiftPoints array from all active points (strip _edit flags)
+      const finalPoints = shiftPoints.map((fp) => ({
+        name: fp.name || "",
+        pickupLocation: fp.pickupLocation || "",
+        pickupTime: fp.pickupTime || "",
+        pickupLatitude: fp.pickupLatitude || 0,
+        pickupLongitude: fp.pickupLongitude || 0,
+        visitLocation: fp.visitLocation || "",
+        visitStartTime: fp.visitStartTime || "",
+        visitEndTime: fp.visitEndTime || "",
+        visitLatitude: fp.visitLatitude || 0,
+        visitLongitude: fp.visitLongitude || 0,
+        dropLocation: fp.dropLocation || "",
+        dropTime: fp.dropTime || "",
+        dropLatitude: fp.dropLatitude || 0,
+        dropLongitude: fp.dropLongitude || 0,
+        seatType: fp.seatType || "",
+        transportationMode: fp.transportationMode || "",
+        totalKilometers: Number(fp.totalKilometers) || 0,
+      }));
 
-    // ---------- UPDATE MODE ----------
-    if (mode === "update" && id) {
-      const shiftsRef = collection(db, "shifts");
-      const qShift = query(shiftsRef, where("id", "==", id));
-      const snap = await getDocs(qShift);
+      // ---------- UPDATE MODE ----------
+      if (mode === "update" && id) {
+        const shiftsRef = collection(db, "shifts");
+        const qShift = query(shiftsRef, where("id", "==", id));
+        const snap = await getDocs(qShift);
 
-      if (!snap.empty) {
-        const docRef = snap.docs[0].ref;
+        if (!snap.empty) {
+          const docRef = snap.docs[0].ref;
 
-        const primaryDate = normalizeDate(selectedDates[0]);
+          const primaryDate = normalizeDate(selectedDates[0]);
+          const isOvernight = values.endTime < values.startTime;
+          let endDateObj = new Date(primaryDate);
+          if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
+
+          await updateDoc(docRef, {
+            ...restValues,
+            startDate: Timestamp.fromDate(primaryDate),
+            endDate: Timestamp.fromDate(endDateObj),
+            clientDetails: selectedClient,
+            // Sync redundant fields to ensure manual changes stick across all app views
+            clientId: selectedClient?.id || values.client || "",
+            clientName: selectedClient?.name || "",
+            userId: selectedUser?.id || selectedUser?.userId || values.user || "",
+            userName: selectedUser?.name || "",
+            name: selectedUser?.name || "", // Legacy field support
+            updatedAt: new Date(),
+            // Ensure legacy top-level visit fields are cleared
+            visitLocation: "",
+            visitStartTime: "",
+            visitEndTime: "",
+            visitLatitude: 0,
+            visitLongitude: 0,
+            shiftPoints: finalPoints.map(p => {
+              const day = primaryDate.getDay();
+              const isWeekend = day === 0 || day === 6;
+              const cat = (values.shiftCategory || "").toLowerCase();
+              const desc = (values.description || "").toLowerCase();
+              const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
+
+              // Respect manual clear/removal
+              const vLoc = needsVisit ? (p.visitLocation || "").trim() : "";
+
+              return {
+                ...p,
+                visitLocation: vLoc,
+                visitStartTime: vLoc ? (p.visitStartTime || "") : "",
+                visitEndTime: vLoc ? (p.visitEndTime || "") : "",
+                visitLatitude: vLoc ? (p.visitLatitude || 0) : 0,
+                visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
+              };
+            }),
+            clockIn: "",
+            clockOut: "",
+            isRatified: false,
+            isCancelled: false,
+            dateKey: formatLocalISO(primaryDate),
+          });
+
+
+          setSlider({
+            show: true,
+            title: "Shift Updated Successfully!",
+            subtitle: `${selectedClient?.name || ""} on ${primaryDate.toDateString()} at ${values.startTime}`,
+            redirectTo: "/admin-dashboard/dashboard",
+          });
+        }
+        return;
+      }
+
+      // ---------- ADD MODE ----------
+      for (const date of selectedDates) {
+        const startDateObj = normalizeDate(date);
+        const newShiftId = Date.now().toString();
+
         const isOvernight = values.endTime < values.startTime;
-        let endDateObj = new Date(primaryDate);
+        let endDateObj = new Date(startDateObj);
         if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-await updateDoc(docRef, {
-  ...restValues,
-  startDate: Timestamp.fromDate(primaryDate),
-  endDate: Timestamp.fromDate(endDateObj),
-  clientDetails: selectedClient,
-  updatedAt: new Date(),
-  shiftPoints: finalPoints,
-  clockIn: "",
-  clockOut: "",
-  isRatified: false,
-  isCancelled: false,
-  dateKey: primaryDate.toISOString().split("T")[0],
-});
+        const day = startDateObj.getDay();
+        const isWeekend = day === 0 || day === 6;
+        const cat = (values.shiftCategory || "").toLowerCase();
+        const desc = (values.description || "").toLowerCase();
+        const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
 
+        const filteredPoints = finalPoints.map(p => ({
+          ...p,
+          visitLocation: needsVisit ? (p.visitLocation || "") : "",
+          visitStartTime: needsVisit ? (p.visitStartTime || "") : "",
+          visitEndTime: needsVisit ? (p.visitEndTime || "") : "",
+          visitLatitude: needsVisit ? (p.visitLatitude || 0) : 0,
+          visitLongitude: needsVisit ? (p.visitLongitude || 0) : 0,
+        }));
 
-        setSlider({
-          show: true,
-          title: "Shift Updated Successfully!",
-          subtitle: `${selectedClient?.name || ""} on ${primaryDate.toDateString()} at ${values.startTime}`,
-          redirectTo: "/admin-dashboard/dashboard",
+        await setDoc(doc(db, "shifts", newShiftId), {
+          ...values,
+          startDate: startDateObj,
+          endDate: endDateObj,
+          clientDetails: selectedClient,
+          // Sync redundant fields for visibility across multiple dashboard views
+          clientId: selectedClient?.id || values.client || "",
+          clientName: selectedClient?.name || "",
+          userId: selectedUser?.id || selectedUser?.userId || values.user || "",
+          userName: selectedUser?.name || "",
+          name: selectedUser?.name || "", 
+          createdAt: new Date(),
+          shiftReport: "",
+          shiftConfirmed: false,
+          id: newShiftId,
+          // Explicitly clear top-level visit fields
+          visitLocation: "",
+          visitStartTime: "",
+          visitEndTime: "",
+          visitLatitude: 0,
+          visitLongitude: 0,
+          shiftPoints: filteredPoints.map(p => {
+            const vLoc = needsVisit ? (p.visitLocation || "").trim() : "";
+            return {
+              ...p,
+              visitLocation: vLoc,
+              visitStartTime: vLoc ? (p.visitStartTime || "") : "",
+              visitEndTime: vLoc ? (p.visitEndTime || "") : "",
+              visitLatitude: vLoc ? (p.visitLatitude || 0) : 0,
+              visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
+            };
+          }),
+          clockIn: "",
+          clockOut: "",
+          isRatify: false,
+          isCancelled: false,
+          dateKey: formatLocalISO(startDateObj), // Added for consistency with update mode
         });
-      }
-      return;
-    }
-
-    // ---------- ADD MODE ----------
-    for (const date of selectedDates) {
-      const startDateObj = normalizeDate(date);
-      const newShiftId = Date.now().toString();
-
-      const isOvernight = values.endTime < values.startTime;
-      let endDateObj = new Date(startDateObj);
-      if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
-
-await setDoc(doc(db, "shifts", newShiftId), {
-  ...values,
-  userId: selectedUser?.userId,
-  userName: selectedUser?.name || "",
-  startDate: startDateObj,
-  endDate: endDateObj,
-  clientDetails: selectedClient,
-  createdAt: new Date(),
-  shiftReport: "",
-  shiftConfirmed: false,
-  id: newShiftId,
-  shiftPoints: finalPoints,
-  clockIn: "",
-  clockOut: "",
-  isRatify: false,
-  isCancelled: false,
-});
 
 
-      // ✅ SEND ADMIN NOTIFICATION
-      const adminQuery = query(collection(db, "users"), where("role", "==", "admin"));
-      const adminsSnapshot = await getDocs(adminQuery);
-      for (const admin of adminsSnapshot.docs) {
-        await sendNotification(admin.id, {
-          type: "info",
-          title: "New Shift Created",
-          message: `A new shift has been added for ${selectedClient?.name || ""} on ${startDateObj.toDateString()}`,
-          senderId: user.name,
-          meta: {
-            shiftId: newShiftId,
-            entity: "Shift",
-            date: startDateObj.toDateString(),
-          },
-        });
-      }
-
-      // ✅ SEND STAFF NOTIFICATION
-      if (values.user) {
-        try {
-          await sendNotification(values.user, {
+        // ✅ SEND ADMIN NOTIFICATION
+        const adminQuery = query(collection(db, "users"), where("role", "==", "admin"));
+        const adminsSnapshot = await getDocs(adminQuery);
+        for (const admin of adminsSnapshot.docs) {
+          await sendNotification(admin.id, {
             type: "info",
-            title: "New Shift Assigned",
-            message: `You have been assigned a new shift for ${selectedClient?.name || ""} on ${startDateObj.toDateString()}`,
+            title: "New Shift Created",
+            message: `A new shift has been added for ${selectedClient?.name || ""} on ${startDateObj.toDateString()}`,
             senderId: user.name,
             meta: {
               shiftId: newShiftId,
@@ -700,46 +766,62 @@ await setDoc(doc(db, "shifts", newShiftId), {
               date: startDateObj.toDateString(),
             },
           });
-        } catch (err) {
-          console.error("Error sending staff notification:", err);
+        }
+
+        // ✅ SEND STAFF NOTIFICATION
+        if (values.user) {
+          try {
+            await sendNotification(values.user, {
+              type: "info",
+              title: "New Shift Assigned",
+              message: `You have been assigned a new shift for ${selectedClient?.name || ""} on ${startDateObj.toDateString()}`,
+              senderId: user.name,
+              meta: {
+                shiftId: newShiftId,
+                entity: "Shift",
+                date: startDateObj.toDateString(),
+              },
+            });
+          } catch (err) {
+            console.error("Error sending staff notification:", err);
+          }
         }
       }
+
+      // ✅ SUCCESS SLIDER
+      const firstDate = normalizeDate(selectedDates[0]);
+      setSlider({
+        show: true,
+        title: "Shifts Created Successfully!",
+        subtitle: `${selectedClient?.name || ""} – ${selectedDates.length} day(s) starting ${firstDate.toDateString()} at ${values.startTime}`,
+        redirectTo: "/admin-dashboard/dashboard",
+      });
+
+      setCreatedShift(values);
+      resetForm();
+      setShiftPoints([]);
+      setRemovedShiftPoints([]);
+      setIntakeDescription("");
+    } catch (error) {
+      console.error("Error saving shift:", error);
+    }
+  };
+
+
+  const handleCalculateKilometers = async (shiftPoint, index) => {
+    if (!shiftPoint.pickupLocation || !shiftPoint.dropLocation) {
+      alert("Please enter both pickup and drop locations first.");
+      return;
     }
 
-    // ✅ SUCCESS SLIDER
-    const firstDate = normalizeDate(selectedDates[0]);
-    setSlider({
-      show: true,
-      title: "Shifts Created Successfully!",
-      subtitle: `${selectedClient?.name || ""} – ${selectedDates.length} day(s) starting ${firstDate.toDateString()} at ${values.startTime}`,
-      redirectTo: "/admin-dashboard/dashboard",
-    });
-
-    setCreatedShift(values);
-    resetForm();
-    setShiftPoints([]);
-    setRemovedShiftPoints([]);
-    setIntakeDescription("");
-  } catch (error) {
-    console.error("Error saving shift:", error);
-  }
-};
-
-
-const handleCalculateKilometers = async (shiftPoint, index) => {
-  if (!shiftPoint.pickupLocation || !shiftPoint.dropLocation) {
-    alert("Please enter both pickup and drop locations first.");
-    return;
-  }
-
-  try {
-    const km = await calculateTotalDistance(shiftPoint);
-    setShiftPoints((prev) => prev.map((p, i) => i === index ? { ...p, totalKilometers: km } : p));
-  } catch (err) {
-    console.error("Error calculating total distance:", err);
-    alert("Failed to calculate total kilometers.");
-  }
-};
+    try {
+      const km = await calculateTotalDistance(shiftPoint);
+      setShiftPoints((prev) => prev.map((p, i) => i === index ? { ...p, totalKilometers: km } : p));
+    } catch (err) {
+      console.error("Error calculating total distance:", err);
+      alert("Failed to calculate total kilometers.");
+    }
+  };
 
   // ---------------- FETCH ALL SHIFTS FOR CALENDAR DISPLAY ----------------
   useEffect(() => {
@@ -801,13 +883,11 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
   };
 
   const inputCls = (hasError) =>
-    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${
-      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm text-gray-700 placeholder-gray-400 ${hasError ? "border-red-400" : "border-[#e5e7eb]"
     }`;
 
   const selectCls = (hasError, empty) =>
-    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${
-      hasError ? "border-red-400" : "border-[#e5e7eb]"
+    `w-full px-3 py-2.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/20 text-sm appearance-none pr-9 ${hasError ? "border-red-400" : "border-[#e5e7eb]"
     } ${empty ? "text-gray-400" : "text-gray-700"}`;
 
   // ---------------- RENDER ----------------
@@ -889,9 +969,8 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
               setFieldValue("shiftDates", selected);
               if (selected.length > 0) {
                 const sorted = [...selected].sort((a, b) => a - b);
-                const toISO = (d) => d.toISOString().split("T")[0];
-                setFieldValue("startDate", toISO(sorted[0]));
-                setFieldValue("endDate", toISO(sorted[sorted.length - 1]));
+                setFieldValue("startDate", formatLocalISO(sorted[0]));
+                setFieldValue("endDate", formatLocalISO(sorted[sorted.length - 1]));
               } else {
                 setFieldValue("startDate", "");
                 setFieldValue("endDate", "");
@@ -907,7 +986,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
               } else if (!repeatEnabled) {
                 handleDatesChange([]);
               }
-            // eslint-disable-next-line react-hooks/exhaustive-deps
+              // eslint-disable-next-line react-hooks/exhaustive-deps
             }, [repeatEnabled, repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate]);
 
             return (
@@ -937,7 +1016,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                       <div className="flex flex-col items-center gap-0.5">
                         <div className="flex items-center gap-1.5 text-gray-300">
                           <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 12 19 12"/><polyline points="13 6 19 12 13 18"/></svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 12 19 12" /><polyline points="13 6 19 12 13 18" /></svg>
                           <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
                         </div>
                         <span style={{ fontSize: 10, color: "#9ca3af" }}>Assigns to</span>
@@ -1093,7 +1172,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                           onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1))}
                           className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-gray-50 transition-colors"
                           style={{ borderColor: "#e5e7eb" }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
                         </button>
                         <div className="flex items-center gap-3">
                           <span className="font-bold text-gray-900" style={{ fontSize: 16 }}>
@@ -1109,13 +1188,13 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                           onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1))}
                           className="w-8 h-8 rounded-lg border flex items-center justify-center hover:bg-gray-50 transition-colors"
                           style={{ borderColor: "#e5e7eb" }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
                         </button>
                       </div>
 
                       {/* Day headers */}
                       <div className="grid grid-cols-7 mb-1">
-                        {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
                           <div key={d} className="text-center font-semibold uppercase py-2" style={{ fontSize: 11, color: "#9ca3af" }}>{d}</div>
                         ))}
                       </div>
@@ -1123,12 +1202,12 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                       {/* Day cells */}
                       <div className="grid grid-cols-7 border-l border-t" style={{ borderColor: "#f3f4f6" }}>
                         {getCalendarDays(calendarMonth).map((cell, i) => {
-                          const dateKey = cell.date.toISOString().split("T")[0];
+                          const dateKey = formatLocalISO(cell.date);
                           const isSelected = (values.shiftDates || []).some(d => {
                             const sd = d instanceof Date ? d : new Date(d);
-                            return sd.toISOString().split("T")[0] === dateKey;
+                            return formatLocalISO(sd) === dateKey;
                           });
-                          const isToday = new Date().toISOString().split("T")[0] === dateKey;
+                          const isToday = formatLocalISO(new Date()) === dateKey;
                           const shiftPillColors = [
                             { bg: "#fef9c3", text: "#854d0e" },
                             { bg: "#dbeafe", text: "#1e40af" },
@@ -1139,7 +1218,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                           const cellShifts = monthShifts.filter(s => {
                             try {
                               const sd = s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate);
-                              return sd.toISOString().split("T")[0] === dateKey;
+                              return formatLocalISO(sd) === dateKey;
                             } catch { return false; }
                           }).slice(0, 3);
 
@@ -1220,9 +1299,9 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                         ) : (
                           <div className="flex flex-col items-center justify-center py-8 text-center">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" strokeWidth="1.5" className="mb-2">
-                              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                              <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                             </svg>
-                            <p style={{ fontSize: 11, color: "#9ca3af" }}>Click dates on the<br/>calendar to select them</p>
+                            <p style={{ fontSize: 11, color: "#9ca3af" }}>Click dates on the<br />calendar to select them</p>
                           </div>
                         )}
                       </div>
@@ -1322,40 +1401,60 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                               />
                             </div>
 
-                            {/* Visit Location */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Location</label>
-                              <div className="flex items-center gap-2">
-                                <input type="text"
-                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                  value={pt.visitLocation || ""}
-                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitLocation: e.target.value } : p))}
-                                  placeholder="N/A"
-                                />
-                                <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
-                                  onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.visitLocation || "")}`, "_blank")} />
-                              </div>
-                            </div>
+                            {/* Conditionally show Visit fields */}
+                            {(() => {
+                              const cat = (values.shiftCategory || "").toLowerCase();
+                              const desc = (values.description || "").toLowerCase();
+                              const dates = values.shiftDates || [];
+                              const isSupervised = cat.includes("supervised") || desc.includes("supervised");
+                              const hasWeekend = dates.some((d) => {
+                                const dateObj = d instanceof Date ? d : new Date(d);
+                                const day = dateObj.getDay();
+                                return day === 0 || day === 6;
+                              });
+                              const showVisit = isSupervised || hasWeekend;
 
-                            {/* Visit Time */}
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Time</label>
-                              <div className="flex items-center gap-2">
-                                <input type="text"
-                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                  value={pt.visitStartTime || ""}
-                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitStartTime: e.target.value } : p))}
-                                  placeholder="Start"
-                                />
-                                <span className="text-gray-400 text-sm">–</span>
-                                <input type="text"
-                                  className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
-                                  value={pt.visitEndTime || ""}
-                                  onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitEndTime: e.target.value } : p))}
-                                  placeholder="End"
-                                />
-                              </div>
-                            </div>
+                              if (!showVisit) return null;
+
+                              return (
+                                <>
+                                  {/* Visit Location */}
+                                  <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Location</label>
+                                    <div className="flex items-center gap-2">
+                                      <input type="text"
+                                        className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                        value={pt.visitLocation || ""}
+                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitLocation: e.target.value } : p))}
+                                        placeholder="N/A"
+                                      />
+                                      <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
+                                        onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.visitLocation || "")}`, "_blank")} />
+                                    </div>
+                                  </div>
+
+                                  {/* Visit Time */}
+                                  <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Time</label>
+                                    <div className="flex items-center gap-2">
+                                      <input type="text"
+                                        className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                        value={pt.visitStartTime || ""}
+                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitStartTime: e.target.value } : p))}
+                                        placeholder="Start"
+                                      />
+                                      <span className="text-gray-400 text-sm">–</span>
+                                      <input type="text"
+                                        className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                        value={pt.visitEndTime || ""}
+                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitEndTime: e.target.value } : p))}
+                                        placeholder="End"
+                                      />
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
 
                             {/* Total KM + Calculate — hidden */}
                           </div>
@@ -1394,7 +1493,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                   <div className="flex items-center justify-between px-6 py-4" style={{ background: repeatEnabled ? "#f0fdf4" : "#fafafa", borderBottom: repeatEnabled ? "1px solid #dcfce7" : "1px solid #f3f4f6" }}>
                     <div className="flex items-center gap-3">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={repeatEnabled ? "#145228" : "#9ca3af"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                        <polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
                       </svg>
                       <div>
                         <p className="font-bold text-gray-900" style={{ fontSize: 14 }}>Repeat / Recurrence</p>
@@ -1422,7 +1521,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                       <div>
                         <p className="font-semibold text-gray-700 mb-3" style={{ fontSize: 13 }}>Repeat on weekdays</p>
                         <div className="flex items-center gap-2">
-                          {["M","T","W","T","F","S","S"].map((label, i) => (
+                          {["M", "T", "W", "T", "F", "S", "S"].map((label, i) => (
                             <button key={i} type="button"
                               onClick={() => setRepeatDays(prev => prev.includes(i) ? prev.filter(d => d !== i) : [...prev, i])}
                               className="flex items-center justify-center rounded-full font-bold transition-all"
@@ -1505,7 +1604,7 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
                     <button type="submit"
                       className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
                       style={{ backgroundColor: "#145228" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                       {mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`}
                     </button>
                   </div>
@@ -1522,9 +1621,9 @@ const handleCalculateKilometers = async (shiftPoint, index) => {
           subtitle={slider.subtitle}
           viewText="View Shift"
           onView={() => {
-              navigate("/admin-dashboard/dashboard", {
-                state: { shiftCategory: selectedShiftCategory?.name }
-              });
+            navigate("/admin-dashboard/dashboard", {
+              state: { shiftCategory: selectedShiftCategory?.name }
+            });
             setSlider({ ...slider, show: false });
 
           }}

@@ -11,10 +11,29 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, onSnapshot, getDocs, where, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  onSnapshot,
+  getDocs,
+  where,
+  updateDoc,
+  doc,
+  addDoc,
+  serverTimestamp
+} from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { registerForPushNotifications } from "../src/utils/registerForPushNotifications";
-import { safeString, formatCanadaTime, parseDate as parseDateFn, formatShiftTimeUTCtoCanada } from "../src/utils/date";
+import {
+  safeString,
+  formatCanadaTime,
+  parseDate as parseDateFn,
+  formatShiftTimeUTCtoCanada,
+  formatDateKey,
+  getEdmontonToday,
+  formatEdmontonISO,
+  parseDate
+} from "../src/utils/date";
 import { router } from "expo-router";
 import * as Location from "expo-location";
 
@@ -30,7 +49,13 @@ const BADGE_BLUE = "#EFF6FF";
 const TEXT_BLUE = "#1D4ED8";
 const ERROR_RED = "#EF4444";
 
-const ALLOWED_CATEGORIES = ["Respite Care", "Emergent Care", "Supervised Visitation", "Transportation"];
+const ALLOWED_CATEGORIES = [
+  "Respite Care",
+  "Emergent Care",
+  "Emergency Care",
+  "Supervised Visitation",
+  "Transportation",
+];
 
 const serviceTypeStyles = {
   "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
@@ -41,12 +66,51 @@ const serviceTypeStyles = {
   default: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
-function isNumericId(val) {
-  return val && /^\d+$/.test(String(val)) && String(val).length >= 8;
-}
+const getRoundedTime = () => {
+  const coeff = 1000 * 60 * 15;
+  const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
+  return rounded.toLocaleTimeString("en-US", { 
+    hour: "2-digit", 
+    minute: "2-digit", 
+    hour12: true,
+    timeZone: "America/Edmonton" 
+  });
+};
+
+const getLocationString = async () => {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return "Location unavailable";
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const geocode = await Location.reverseGeocodeAsync({
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    });
+    if (geocode.length > 0) {
+      const g = geocode[0];
+      return `${g.streetNumber || ""} ${g.street || g.name || ""}, ${g.city || ""}`.trim();
+    }
+    return `Lat: ${loc.coords.latitude.toFixed(4)}, Lon: ${loc.coords.longitude.toFixed(4)}`;
+  } catch {
+    return "Location unavailable";
+  }
+};
+
+const sendNotification = async (receiverId, payload) => {
+  try {
+    await addDoc(collection(db, "notifications", receiverId, "userNotifications"), {
+      ...payload,
+      read: false,
+      status: "pending",
+      createdAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.warn("Notification failed:", e);
+  }
+};
 
 const calcDuration = (start, end) => {
-  if (!start || !end) return "\u2014";
+  if (!start || !end) return "—";
   const parseTime = (t) => {
     if (!t) return 0;
     const [time, period] = t.split(" ");
@@ -63,7 +127,7 @@ const calcDuration = (start, end) => {
 };
 
 const formatShiftDate = (dateStr) => {
-  const d = parseDateFn(dateStr);
+  const d = parseDate(dateStr);
   if (!d) return safeString(dateStr) || "\u2014";
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const t = new Date(d); t.setHours(0, 0, 0, 0);
@@ -76,6 +140,47 @@ const formatShiftDate = (dateStr) => {
   if (diff === -1) return `Yesterday, ${month} ${day}`;
   return `${weekday}, ${month} ${day}`;
 };
+
+const isNumericId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+
+function shortAddr(addr) {
+  if (!addr) return null;
+  const s = safeString(addr);
+  const part = s.split(",")[0].trim();
+  return part.length > 12 ? part.slice(0, 11) + "…" : part;
+}
+
+function RoutePreview({ shift }) {
+  const pt = Array.isArray(shift.shiftPoints) && shift.shiftPoints[0];
+  const pickup = shortAddr(pt?.pickupLocation || shift.pickupLocation);
+  const visit = shortAddr(pt?.visitLocation || shift.visitLocation);
+  const drop = shortAddr(pt?.dropLocation || shift.dropLocation);
+  if (!pickup && !drop) return null;
+
+  const stops = [
+    pickup && { label: pickup, color: "#1F6F43", icon: "navigate" },
+    visit && { label: visit, color: "#1E5FA6", icon: "business" },
+    drop && { label: drop, color: "#DC2626", icon: "flag" },
+  ].filter(Boolean);
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 2, gap: 6 }}>
+      {stops.map((s, i) => (
+        <View key={i} style={{ flexDirection: "row", alignItems: "center", maxWidth: "33%" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1 }}>
+            <Ionicons name={s.icon} size={13} color={s.color} />
+            <Text style={{ fontSize: 11, color: "#4B5563", fontFamily: "Inter" }} numberOfLines={1}>
+              {s.label}
+            </Text>
+          </View>
+          {i < stops.length - 1 && (
+            <Text style={{ fontSize: 10, color: "#D1D5DB", marginHorizontal: 4 }}>·</Text>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -112,7 +217,7 @@ export default function Home() {
     return () => unsub();
   }, [user]);
 
-  const todayKey = formatDateKey(new Date());
+  const todayKey = formatEdmontonISO(new Date());
 
   const todayShifts = shifts.filter((s) => {
     const d = parseDateFn(s.startDate);
@@ -172,62 +277,78 @@ export default function Home() {
   }, [shifts]);
 
   const handleConfirmAction = async () => {
-    if (!confirmAction) return;
-    const { type, shift } = confirmAction;
+    if (!confirmAction || !confirmAction.shift) return;
     setIsProcessing(true);
+    const { type, shift } = confirmAction;
+
     try {
+      const ref = doc(db, "shifts", shift.id);
+
       if (type === "confirm") {
-        const q = query(collection(db, "shifts"), where("id", "==", shift.id));
-        const snap = await getDocs(q);
-        if (!snap.empty) await updateDoc(snap.docs[0].ref, { shiftConfirmed: true });
-      } else {
-        const coeff = 1000 * 60 * 15;
-        const roundedDate = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-        const roundedTime = roundedDate.toLocaleTimeString("en-US", { 
-          hour: "2-digit", 
-          minute: "2-digit", 
-          hour12: true,
-          timeZone: "America/Edmonton" 
+        await updateDoc(ref, {
+          shiftConfirmed: true,
+          confirmedAt: new Date().toISOString(),
+          confirmedBy: user?.name || user?.username,
         });
-
-        let locStr = "Location unavailable";
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === "granted") {
-          let loc = await Location.getCurrentPositionAsync({});
-          let geocode = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-          if (geocode.length > 0) {
-            locStr = `${geocode[0].streetNumber || ""} ${geocode[0].street || geocode[0].name || ""}, ${geocode[0].city || ""}`.trim();
-          } else {
-            locStr = `Lat: ${loc.coords.latitude.toFixed(4)}, Lon: ${loc.coords.longitude.toFixed(4)}`;
-          }
+        await sendNotification(user?.username || user?.userId, {
+          title: "Shift Confirmed",
+          message: `You confirmed your ${shift.category || "shift"} on ${formatShiftDate(shift.startDate)}.`,
+          type: "schedule",
+          category: "Schedule",
+          icon: "checkmark-circle",
+          iconColor: PRIMARY_GREEN,
+          iconBg: "#F0FDF4",
+        });
+      } else if (type === "clockIn") {
+        const roundedTime = getRoundedTime();
+        const locationStr = await getLocationString();
+        await updateDoc(ref, {
+          clockInTime: roundedTime,
+          clockInDate: new Date().toISOString(),
+          clockInLocation: locationStr,
+        });
+        await sendNotification(user?.username || user?.userId, {
+          title: "Clocked In ✓",
+          message: `Clocked in at ${roundedTime} for ${shift.category || "shift"}. Location: ${locationStr}`,
+          type: "shift",
+          category: "Shifts",
+          icon: "time-outline",
+          iconColor: PRIMARY_GREEN,
+          iconBg: "#F0FDF4",
+        });
+        
+        const catRaw = shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory || "";
+        const catLower = safeString(catRaw).toLowerCase();
+        if (catLower.includes("transportation") || catLower.includes("supervised") || catLower.includes("visitation")) {
+          setIsProcessing(false);
+          setConfirmAction(null);
+          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
+          return;
         }
-
-        const q = query(collection(db, "shifts"), where("id", "==", shift.id));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          if (type === "clockIn") {
-            await updateDoc(snap.docs[0].ref, { clockInTime: roundedTime, clockInLocation: locStr });
-          } else {
-            await updateDoc(snap.docs[0].ref, { clockOutTime: roundedTime, clockOutLocation: locStr });
-          }
-        }
+      } else if (type === "clockOut") {
+        const roundedTime = getRoundedTime();
+        const locationStr = await getLocationString();
+        await updateDoc(ref, {
+          clockOutTime: roundedTime,
+          clockOutDate: new Date().toISOString(),
+          clockOutLocation: locationStr,
+        });
+        await sendNotification(user?.username || user?.userId, {
+          title: "Shift Completed ✓",
+          message: `Clocked out at ${roundedTime}. Great work on your ${shift.category || "shift"}!`,
+          type: "shift",
+          category: "Shifts",
+          icon: "checkmark-circle",
+          iconColor: "#10B981",
+          iconBg: "#F0FDF4",
+        });
       }
     } catch (e) {
-      console.log("Error performing action", e);
+      console.error("Action error:", e);
     }
+
     setIsProcessing(false);
     setConfirmAction(null);
-
-    // Navigate to transportation detail if applicable
-    if (type === "clockIn") {
-      const cat = shift.category || shift.serviceType || "";
-      const isTransport = cat === "Transportation" || cat === "Supervised Visitation + Transportation";
-      const hasTransit = shift.pickupLocation || shift.dropLocation || (shift.description && shift.description.toLowerCase().includes("pick up"));
-      
-      if (isTransport || hasTransit) {
-        router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } });
-      }
-    }
   };
 
   const getInitials = (name) => {
@@ -369,66 +490,58 @@ export default function Home() {
         </View>
       </ScrollView>
 
-      {/* CONFIRM MODAL */}
       {confirmAction && (
-        <Modal transparent visible animationType="fade">
+        <Modal transparent visible animationType="slide">
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalIconBox}>
-                <Ionicons name="checkmark" size={24} color={PRIMARY_GREEN} />
+            <View style={styles.modalContent}>
+              <View style={[
+                styles.modalIcon,
+                confirmAction.type === "clockOut" && { backgroundColor: "#FEF2F2" },
+                confirmAction.type === "clockIn" && { backgroundColor: "#F0FDF4" },
+              ]}>
+                <Ionicons
+                  name={
+                    confirmAction.type === "clockOut" ? "log-out-outline"
+                    : confirmAction.type === "clockIn" ? "log-in-outline"
+                    : "checkmark-circle-outline"
+                  }
+                  size={32}
+                  color={confirmAction.type === "clockOut" ? ERROR_RED : PRIMARY_GREEN}
+                />
               </View>
               <Text style={styles.modalTitle}>
-                {confirmAction.type === "confirm" ? "Confirm this shift?" :
-                  confirmAction.type === "clockIn" ? "Clock in to this shift?" : "Clock out of this shift?"}
+                {confirmAction.type === "confirm" ? "Confirm Shift?"
+                  : confirmAction.type === "clockIn" ? "Clock In Now?"
+                  : "Clock Out?"}
               </Text>
-
-              <Text style={styles.modalSubtitle}>
-                {safeString(confirmAction.shift.category || confirmAction.shift.serviceType)} · {safeString(confirmAction.shift.clientName || confirmAction.shift.name)}
+              <Text style={styles.modalClient}>
+                {safeString(confirmAction.shift?.childName || confirmAction.shift?.clientName || confirmAction.shift?.name || confirmAction.shift?.familyName) || "Client"} ·{" "}
+                {safeString(confirmAction.shift?.category) || "Shift"}
               </Text>
-              <Text style={styles.modalMeta}>
-                {safeString(confirmAction.shift.startDate)} · {safeString(confirmAction.shift.startTime)} – {safeString(confirmAction.shift.endTime)}
+              <Text style={styles.modalDesc}>
+                {confirmAction.type === "confirm"
+                  ? "You'll be committing to attend this shift. The owner will be notified."
+                  : confirmAction.type === "clockIn"
+                  ? "Your GPS location will be captured and time rounded to the nearest 15 min for payroll accuracy."
+                  : "This will finalize your shift hours. Your location will be logged for payroll."}
               </Text>
-              <Text style={styles.modalLocation}>
-                {confirmAction.shift.location || "Location not specified"}
-              </Text>
-
-              {confirmAction.type !== "confirm" && (
-                <View style={styles.gpsInfoBox}>
-                  <Text style={styles.gpsInfoLabel}>
-                    <Ionicons name="time-outline" size={12} color={PRIMARY_GREEN} /> Time logged (Rounded 15m):
-                  </Text>
-                  <Text style={styles.gpsInfoValue}>
-                    {new Date(Math.round(new Date().getTime() / (1000 * 60 * 15)) * (1000 * 60 * 15)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </Text>
-                  <Text style={[styles.gpsInfoLabel, { marginTop: 8 }]}>
-                    <Ionicons name="location-outline" size={12} color={PRIMARY_GREEN} /> GPS Location
-                  </Text>
-                  <Text style={styles.gpsInfoValue}>Your exact location will be attached.</Text>
-                </View>
-              )}
-
-              <Text style={styles.modalDisclaimer}>
-                {confirmAction.type === "confirm" ? "By confirming, you acknowledge this shift assignment." :
-                  confirmAction.type === "clockIn" ? "Your time & location will be logged for payroll." :
-                    "Your shift will be marked as complete."}
-              </Text>
-
               <Pressable
                 onPress={handleConfirmAction}
-                disabled={isProcessing}
-                style={[styles.modalPrimaryBtn, isProcessing && { opacity: 0.7 }]}
+                style={[
+                  styles.modalActionBtn,
+                  confirmAction.type === "clockOut" && { backgroundColor: ERROR_RED },
+                ]}
               >
-                {isProcessing ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.modalPrimaryBtnText}>
-                    {confirmAction.type === "confirm" ? "Yes, Confirm Shift" :
-                      confirmAction.type === "clockIn" ? "Yes, Clock In" : "Yes, Clock Out"}
-                  </Text>
-                )}
+                {isProcessing
+                  ? <ActivityIndicator color="#FFF" />
+                  : <Text style={styles.modalActionBtnText}>
+                      {confirmAction.type === "confirm" ? "Yes, Confirm"
+                        : confirmAction.type === "clockIn" ? "Yes, Clock In"
+                        : "Yes, Clock Out"}
+                    </Text>
+                }
               </Pressable>
-
-              <Pressable onPress={() => setConfirmAction(null)} disabled={isProcessing} style={styles.modalCancelBtn}>
+              <Pressable onPress={() => setConfirmAction(null)} style={styles.modalCancelBtn}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
             </View>
@@ -439,7 +552,7 @@ export default function Home() {
   );
 }
 
-function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateFn }) {
+function ShiftCard({ shift, onAction, onDetails }) {
   const getStatus = () => {
     if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
     if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
@@ -455,12 +568,16 @@ function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateF
     rawServiceType = "Transportation";
   }
   const serviceStyle = serviceTypeStyles[rawServiceType] || serviceTypeStyles.default;
-  const finalClientName = clientName || safeString(shift.childName || shift.familyName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name) || "Client";
+  const rawName = safeString(shift.familyName || shift.childName || shift.clientName || shift.name || shift.client || shift.clientDetails?.name);
+  const isId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
+  const clientName = isId(rawName) ? (shift.familyName || shift.childName || "Client") : (rawName || "Client");
   const clientId = safeString(shift.clientId || shift.clientDetails?.id) || "\u2014";
-  const clientInitials = finalClientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const location = safeString(shift.location || shift.address) || "Location not specified";
+  const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const duration = calcDuration(safeString(shift.startTime), safeString(shift.endTime));
-  const displayDate = formatShiftDate(shift.startDate, parseDateFn);
+  const displayDate = formatShiftDate(shift.startDate);
+  const isTransport = rawServiceType.toLowerCase().includes("transportation") ||
+    rawServiceType.toLowerCase().includes("supervised") ||
+    rawServiceType.toLowerCase().includes("visitation");
 
   const statusColors = {
     "Completed": { dot: "#10B981", text: "#10B981" },
@@ -501,12 +618,12 @@ function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateF
             <Text style={styles.avatarText}>{clientInitials}</Text>
           </View>
           <View style={styles.clientInfo}>
-            <Text style={styles.clientNameText}>{finalClientName}</Text>
+            <Text style={styles.clientNameText}>{clientName}</Text>
             <Text style={styles.clientIdText}>ID: {clientId}</Text>
           </View>
         </View>
 
-
+        {isTransport && <RoutePreview shift={shift} />}
 
         {status === "Completed" && (
           <View style={styles.clockInOutBox}>
@@ -530,38 +647,55 @@ function ShiftCard({ shift, clientName, onAction, onPress, onDetails, parseDateF
       </View>
 
       <View style={styles.cardActions}>
-        {status === "Assigned" && (
-          <Pressable onPress={() => onAction("confirm", shift)} style={styles.mainActionBtn}>
-            <Text style={styles.mainActionBtnText}>Confirm</Text>
-          </Pressable>
-        )}
-        {status === "Confirmed" && (
-          <Pressable onPress={() => onAction("clockIn", shift)} style={styles.mainActionBtn}>
-            <Text style={styles.mainActionBtnText}>Clock In</Text>
-          </Pressable>
-        )}
-        {status === "In Progress" && (
-          <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
-            <Text style={styles.mainActionBtnText}>Clock Out</Text>
-          </Pressable>
-        )}
-        {status === "Completed" && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
-          </View>
-        )}
-        <View style={styles.secondaryActions}>
-          <Pressable
-            style={styles.swapBtn}
-            onPress={() => router.push({ pathname: "/transfer-shift", params: { shiftId: shift.id } })}
-          >
-            <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
-          </Pressable>
-          <Pressable onPress={onDetails} style={styles.detailsLink}>
-            <Text style={styles.detailsLinkText}>Details &gt;</Text>
-          </Pressable>
+        <View style={{ flex: 1 }}>
+          {status === "Assigned" && (
+            <Pressable onPress={() => onAction("confirm", shift)} style={styles.mainActionBtn}>
+              <Text style={styles.mainActionBtnText}>Confirm</Text>
+            </Pressable>
+          )}
+          {status === "Confirmed" && (
+            <Pressable onPress={() => onAction("clockIn", shift)} style={styles.mainActionBtn}>
+              <Text style={styles.mainActionBtnText}>Clock In</Text>
+            </Pressable>
+          )}
+          {status === "In Progress" && isTransport && (
+            <Pressable
+              onPress={() => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })}
+              style={[styles.mainActionBtn, { backgroundColor: "#1E5FA6" }]}
+            >
+              <Ionicons name="navigate" size={15} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.mainActionBtnText}>Continue Route</Text>
+            </Pressable>
+          )}
+          {status === "In Progress" && !isTransport && (
+            <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
+              <Text style={styles.mainActionBtnText}>Clock Out</Text>
+            </Pressable>
+          )}
+          {status === "Completed" && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
+            </View>
+          )}
         </View>
+
+        <Pressable
+          style={[styles.swapBtn, { marginHorizontal: 10 }]}
+          onPress={() => router.push({ pathname: "/transfer-shift", params: { shiftId: shift.id } })}
+        >
+          <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
+        </Pressable>
+
+        <Pressable
+          onPress={isTransport
+            ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
+            : () => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })
+          }
+          style={styles.detailsLink}
+        >
+          <Text style={styles.detailsLinkText}>Details &gt;</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -766,12 +900,12 @@ const styles = StyleSheet.create({
   // Shift Card
   cardDateInline: { fontSize: 12, fontWeight: "600", color: GRAY_TEXT, fontFamily: "Inter-SemiBold" },
   card: { backgroundColor: "#FFF", borderRadius: 20, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: GRAY_BORDER, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 15 },
-  serviceTag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  serviceTagText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
-  statusBox: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 15, gap: 10 },
+  serviceTag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  serviceTagText: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
+  statusBox: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#F9FAF8", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#F0F0EE" },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
+  statusText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter-Bold" },
   cardBody: { marginBottom: 15 },
   timeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 15 },
   timeText: { fontSize: 15, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
@@ -793,121 +927,22 @@ const styles = StyleSheet.create({
   clockValue: { fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   clockDivider: { width: 1, backgroundColor: "#E5E7EB", marginHorizontal: 12 },
 
-  cardActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 5 },
-  mainActionBtn: { backgroundColor: PRIMARY_GREEN, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12, flex: 1, alignItems: "center" },
+  cardActions: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  mainActionBtn: { backgroundColor: PRIMARY_GREEN, paddingVertical: 13, borderRadius: 12, flex: 1, alignItems: "center" },
   mainActionBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
   secondaryActions: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 10 },
   swapBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: GRAY_BORDER },
   detailsLink: { paddingHorizontal: 10, height: 44, justifyContent: "center" },
   detailsLinkText: { fontSize: 14, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
   // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 32,
-    padding: 32,
-    width: "100%",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 5,
-  },
-  modalIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#F0FDF4",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: DARK_TEXT,
-    textAlign: "center",
-    marginBottom: 16,
-    fontFamily: "Poppins-Bold",
-  },
-  modalSubtitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: DARK_TEXT,
-    marginBottom: 6,
-    fontFamily: "Inter-Bold",
-  },
-  modalMeta: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 6,
-    fontFamily: "Inter",
-  },
-  modalLocation: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginBottom: 20,
-    fontFamily: "Inter",
-  },
-  gpsInfoBox: {
-    width: "100%",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#F3F4F6",
-  },
-  gpsInfoLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 4,
-    fontFamily: "Inter-Bold",
-  },
-  gpsInfoValue: {
-    fontSize: 13,
-    color: "#6B7280",
-    fontFamily: "Inter",
-  },
-  modalDisclaimer: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 18,
-    fontFamily: "Inter",
-  },
-  modalPrimaryBtn: {
-    width: "100%",
-    backgroundColor: PRIMARY_GREEN,
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  modalPrimaryBtnText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "700",
-    fontFamily: "Inter-Bold",
-  },
-  modalCancelBtn: {
-    paddingVertical: 10,
-  },
-  modalCancelText: {
-    color: "#6B7280",
-    fontSize: 15,
-    fontWeight: "600",
-    fontFamily: "Inter-SemiBold",
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: "#FFF", borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 30, alignItems: "center" },
+  modalIcon: { width: 68, height: 68, borderRadius: 34, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  modalTitle: { fontSize: 22, fontWeight: "800", color: DARK_TEXT, marginBottom: 8, fontFamily: "Poppins-Bold" },
+  modalClient: { fontSize: 14, fontWeight: "600", color: PRIMARY_GREEN, marginBottom: 12, fontFamily: "Inter-SemiBold" },
+  modalDesc: { fontSize: 14, color: GRAY_TEXT, textAlign: "center", lineHeight: 22, marginBottom: 30, fontFamily: "Inter" },
+  modalActionBtn: { backgroundColor: PRIMARY_GREEN, paddingVertical: 16, width: "100%", borderRadius: 16, alignItems: "center", marginBottom: 12 },
+  modalActionBtnText: { color: "#FFF", fontSize: 16, fontWeight: "700", fontFamily: "Inter-Bold" },
+  modalCancelBtn: { paddingVertical: 12 },
+  modalCancelText: { fontSize: 15, fontWeight: "700", color: GRAY_TEXT, fontFamily: "Inter-Bold" },
 });

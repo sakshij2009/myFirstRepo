@@ -15,6 +15,7 @@ import ManageIntakeWorkers from "./ManageIntakeWorkers";
 import ManageIntakeForms from "./ManageIntakeForms";
 import Payroll from "./Payroll";
 import ManagePrivateFamilies from "./ManagePrivateFamilies";
+import PrivateFamilyIntakeForm from "./PrivateFamilyIntakeForm";
 import StaffEvaluationPage from "./StaffEvaluationPage";
 import BillingPage from "./BillingPage";
 import GSTReportingPage from "./GSTReportingPage";
@@ -129,6 +130,7 @@ const AdminHomePage = ({ user, setUser }) => {
               <Route path="add-client"            element={<AddClient mode="add" user={user} />} />
               <Route path="update-client/:id"     element={<AddClient mode="update" user={user} />} />
               <Route path="add-intake-form"       element={<IntakeForm mode="add" user={user} />} />
+              <Route path="private-family-form"   element={<PrivateFamilyIntakeForm user={user} onSubmitSuccess={() => navigate("/admin-dashboard/intake-forms")} />} />
               <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user} />} />
               <Route path="add-intakeworker"      element={<AddIntakeUser mode="add" user={user} />} />
               <Route path="update-intakeworker/:id" element={<AddIntakeUser mode="update" user={user} />} />

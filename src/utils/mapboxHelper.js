@@ -4,7 +4,7 @@
  * Mapbox offers a generous free tier of up to 100,000 free requests per month.
  */
 
-const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 /**
  * Geocode an address string to [lng, lat] coordinates using Mapbox.

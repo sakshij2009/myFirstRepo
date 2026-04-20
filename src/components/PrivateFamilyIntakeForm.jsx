@@ -1,11 +1,14 @@
 import React, { useState, useRef } from "react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLeft } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { formatLocalISO } from "../utils/dateHelpers";
+import SignatureCanvas from "react-signature-canvas";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 
 const GREEN = "#1f6f43";
 
@@ -24,7 +27,8 @@ const STEPS = [
   { id: 11, label: "Additional" },
   { id: 12, label: "Rates & Fees" },
   { id: 13, label: "Payment" },
-  { id: 14, label: "Protocols" },
+  { id: 14, label: "Signature" },
+  { id: 15, label: "Protocols" },
 ];
 
 const PROVINCES = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Northwest Territories","Nova Scotia","Nunavut","Ontario","Prince Edward Island","Quebec","Saskatchewan","Yukon"];
@@ -33,12 +37,12 @@ const RELATIONSHIPS = ["Mother","Father","Grandmother","Grandfather","Aunt","Unc
 const GENDERS = ["Male","Female","Non-binary","Prefer not to say"];
 const CUSTODY_OPTIONS = ["Sole Custody","Shared Custody","Court-Ordered Visitation","Informal Arrangement","Other"];
 const FREQUENCIES = ["Once a week","Twice a week","Three times a week","Bi-weekly","Monthly"];
-const DURATIONS = ["1 hour","2 hours","3 hours","4 hours","Half day","Full day"];
-const LOCATIONS = ["Community (parent chooses)","Family Forever Office","Neutral Location","Child's Home","Other"];
+const DURATIONS = ["1 hour","2 hours","3 hours","4 hours","Half day","Full day","Other"];
+const LOCATIONS = ["Community (parent chooses)","Family Forever Office","Neutral Location","Child's Home","School","Library","Community Centre","Other"];
 const PAYMENT_RESP = ["Applicant (self-pay)","CFS / Government","Legal Aid","Insurance","Other"];
 const PAYMENT_METHODS = ["E-transfer","Cheque","Cash","Credit Card","Pre-authorized debit"];
 
-const emptyChild = () => ({ fullName: "", dob: "", gender: "", custody: "", photo: null, photoPreview: "" });
+const emptyChild = () => ({ fullName: "", dob: "", gender: "", custody: "", custodyWith: "", photo: null, photoPreview: "" });
 const emptyEmergency = () => ({ fullName: "", relationship: "", phone: "" });
 
 // ── Reusable field components ──────────────────────────────────────────────
@@ -118,9 +122,37 @@ const SectionCard = ({ num, title, subtitle, children }) => (
   </div>
 );
 
+// ── File Upload Field ──────────────────────────────────────────────────────
+const FileUpload = ({ label, hint, fileRef, file, onChange }) => (
+  <div className="mb-4">
+    {label && <Label>{label}</Label>}
+    {hint && <p className="text-xs text-gray-500 mb-2">{hint}</p>}
+    <div
+      className="border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center cursor-pointer hover:border-green-600 transition"
+      onClick={() => fileRef?.current?.click()}
+    >
+      <Upload size={22} className="text-gray-400 mb-2" />
+      <p className="text-xs text-gray-500">
+        {file ? (
+          <span className="text-green-700 font-semibold">{file.name}</span>
+        ) : (
+          "Click to upload — PDF, JPG, or PNG accepted"
+        )}
+      </p>
+      <input
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png"
+        className="hidden"
+        ref={fileRef}
+        onChange={e => onChange(e.target.files[0])}
+      />
+    </div>
+  </div>
+);
+
 // ── Stepper ────────────────────────────────────────────────────────────────
-const Stepper = ({ current, total }) => {
-  const visible = 7;
+const Stepper = ({ current, total, onStepClick, completedSteps }) => {
+  const visible = 8;
   const half = Math.floor(visible / 2);
   let start = Math.max(0, current - 1 - half);
   let end = Math.min(total, start + visible);
@@ -131,21 +163,26 @@ const Stepper = ({ current, total }) => {
     <div className="flex items-center gap-0 overflow-x-auto pb-1">
       {shown.map((s, i) => {
         const isActive = s.id === current;
-        const isDone = s.id < current;
+        const isDone = completedSteps.includes(s.id);
         const isLast = i === shown.length - 1;
+        const isClickable = isDone || s.id <= current;
         return (
           <div key={s.id} className="flex items-center">
-            <div className={`flex flex-col items-center ${isActive ? "opacity-100" : isDone ? "opacity-80" : "opacity-40"}`}>
+            <div
+              className={`flex flex-col items-center ${isActive ? "opacity-100" : isDone ? "opacity-80" : "opacity-40"} ${isClickable ? "cursor-pointer" : "cursor-default"}`}
+              onClick={() => isClickable && onStepClick(s.id)}
+              title={s.label}
+            >
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all"
                 style={{ background: isDone || isActive ? GREEN : "#E5E7EB", color: isDone || isActive ? "#fff" : "#6B7280" }}
               >
-                {isDone ? <Check size={14} /> : s.id}
+                {isDone && !isActive ? <Check size={14} /> : s.id}
               </div>
               <span className="text-[9px] text-gray-500 mt-1 text-center w-16 leading-tight hidden sm:block">{s.label}</span>
             </div>
             {!isLast && (
-              <div className="w-8 h-0.5 mx-1 flex-shrink-0" style={{ background: s.id < current ? GREEN : "#E5E7EB" }} />
+              <div className="w-8 h-0.5 mx-1 flex-shrink-0" style={{ background: isDone ? GREEN : "#E5E7EB" }} />
             )}
           </div>
         );
@@ -172,15 +209,20 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [errors, setErrors] = useState({});
+  const [completedSteps, setCompletedSteps] = useState([]);
   const fileInputRefs = useRef({});
+  const courtOrderFileRef = useRef(null);
+  const safetyFileRef = useRef(null);
+  const sigCanvasRef = useRef(null);
 
   // ── Form state ──────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     // Step 1
-    applicationDate: new Date().toISOString().split("T")[0],
+    applicationDate: formatLocalISO(new Date()),
     referralSource: "",
+    referralSourceOther: "",
 
     // Step 2 — Applicant
     applicantFullName: "",
@@ -192,6 +234,7 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     applicantPhone: "",
     applicantEmail: user?.email || "",
     applicantRelationship: "",
+    applicantRelationshipOther: "",
 
     // Step 3 — Other Parent/Guardian
     otherGuardianName: "",
@@ -199,6 +242,7 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     otherGuardianEmail: "",
     otherGuardianAddress: "",
     otherGuardianRelationship: "",
+    otherGuardianRelationshipOther: "",
 
     // Step 4 — Children
     children: [emptyChild()],
@@ -209,12 +253,15 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     // Step 6 — Schedule
     visitFrequency: "",
     visitDuration: "",
+    visitDurationOther: "",
     visitLocation: "",
+    visitLocationOther: "",
     preferredTimes: "",
     preferredDates: [],
 
     // Step 7 — Court & Welfare
     courtOrder: "",
+    courtOrderFile: null,
     childWelfareInvolvement: "",
 
     // Step 8 — Special Needs
@@ -224,6 +271,7 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
     // Step 9 — Safety
     domesticViolence: "",
+    safetyFile: null,
     additionalSafetyConcerns: "",
 
     // Step 10 — Emergency Contacts
@@ -234,15 +282,21 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
     // Step 13 — Payment
     paymentResponsibility: "",
+    paymentResponsibilityOther: "",
     paymentMethod: "",
     paymentNotes: "",
     paymentAck1: false,
     paymentAck2: false,
     paymentAck3: false,
 
-    // Step 14 — Protocols
+    // Step 14 — Signature
+    signatureDataUrl: "",
+    signerName: "",
+    signerDate: formatLocalISO(new Date()),
+
+    // Step 15 — Protocols
     protocolAckName: "",
-    protocolAckDate: new Date().toISOString().split("T")[0],
+    protocolAckDate: formatLocalISO(new Date()),
     protocolAcknowledged: false,
   });
 
@@ -277,6 +331,10 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       if (!form.emergencyContacts[0].phone.trim()) e.ec1_phone = "Phone is required";
     }
     if (step === 14) {
+      if (!form.signatureDataUrl) e.signature = "Signature is required";
+      if (!form.signerName.trim()) e.signerName = "Name is required";
+    }
+    if (step === 15) {
       if (!form.protocolAcknowledged) e.protocolAcknowledged = "You must acknowledge the protocols";
       if (!form.protocolAckName.trim()) e.protocolAckName = "Name is required";
     }
@@ -284,8 +342,31 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     return Object.keys(e).length === 0;
   };
 
-  const next = () => { if (validate()) setStep(s => Math.min(STEPS.length, s + 1)); };
+  const next = () => {
+    if (validate()) {
+      setCompletedSteps(prev => prev.includes(step) ? prev : [...prev, step]);
+      setStep(s => Math.min(STEPS.length, s + 1));
+    }
+  };
   const back = () => { setErrors({}); setStep(s => Math.max(1, s - 1)); };
+
+  const handleStepClick = (targetStep) => {
+    if (completedSteps.includes(step) || targetStep < step) {
+      setErrors({});
+      setStep(targetStep);
+    }
+  };
+
+  // ── Signature ───────────────────────────────────────────────────────────
+  const clearSignature = () => {
+    sigCanvasRef.current?.clear();
+    set("signatureDataUrl", "");
+  };
+  const saveSignature = () => {
+    if (sigCanvasRef.current && !sigCanvasRef.current.isEmpty()) {
+      set("signatureDataUrl", sigCanvasRef.current.toDataURL("image/png"));
+    }
+  };
 
   // ── Child photo upload ──────────────────────────────────────────────────
   const handleChildPhoto = (idx, file) => {
@@ -320,9 +401,153 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   };
 
   const toggleDate = (date) => {
-    const str = date.toISOString().split("T")[0];
+    const str = formatLocalISO(date);
     const curr = form.preferredDates;
     set("preferredDates", curr.includes(str) ? curr.filter(d => d !== str) : [...curr, str]);
+  };
+
+  // ── Build payload (shared between submit & draft) ─────────────────────
+  const buildPayload = async (status) => {
+    // Upload child photos
+    const childrenData = await Promise.all(form.children.map(async (c) => {
+      let photoUrl = "";
+      if (c.photo) {
+        const fileRef = ref(storage, `private_family_forms/${Date.now()}_${c.photo.name}`);
+        await uploadBytes(fileRef, c.photo);
+        photoUrl = await getDownloadURL(fileRef);
+      }
+      return {
+        fullName: c.fullName, dob: c.dob, age: calcAge(c.dob),
+        gender: c.gender, custody: c.custody, custodyWith: c.custodyWith, photoUrl
+      };
+    }));
+
+    // Upload court order doc
+    let courtOrderDocUrl = "";
+    if (form.courtOrderFile) {
+      const coRef = ref(storage, `private_family_forms/court_orders/${Date.now()}_${form.courtOrderFile.name}`);
+      await uploadBytes(coRef, form.courtOrderFile);
+      courtOrderDocUrl = await getDownloadURL(coRef);
+    }
+
+    // Upload safety doc
+    let safetyDocUrl = "";
+    if (form.safetyFile) {
+      const sfRef = ref(storage, `private_family_forms/safety_docs/${Date.now()}_${form.safetyFile.name}`);
+      await uploadBytes(sfRef, form.safetyFile);
+      safetyDocUrl = await getDownloadURL(sfRef);
+    }
+
+    return {
+      formType: "private",
+      status,
+      submittedAt: serverTimestamp(),
+      submittedBy: user?.id || "",
+      applicantEmail: form.applicantEmail,
+
+      // Link to assessment if exists
+      assessmentId: user?.assessmentId || null,
+
+      applicationDate: form.applicationDate,
+      referralSource: form.referralSource,
+      referralSourceOther: form.referralSource === "Other" ? form.referralSourceOther : "",
+
+      applicant: {
+        fullName: form.applicantFullName,
+        street: form.applicantStreet,
+        street2: form.applicantStreet2,
+        city: form.applicantCity,
+        province: form.applicantProvince,
+        postalCode: form.applicantPostal,
+        phone: form.applicantPhone,
+        email: form.applicantEmail,
+        relationship: form.applicantRelationship,
+        relationshipOther: form.applicantRelationship === "Other" ? form.applicantRelationshipOther : "",
+      },
+
+      otherGuardian: {
+        fullName: form.otherGuardianName,
+        phone: form.otherGuardianPhone,
+        email: form.otherGuardianEmail,
+        address: form.otherGuardianAddress,
+        relationship: form.otherGuardianRelationship,
+        relationshipOther: form.otherGuardianRelationship === "Other" ? form.otherGuardianRelationshipOther : "",
+      },
+
+      children: childrenData,
+      familyName: form.applicantFullName.split(" ").pop() + " Family",
+
+      serviceTypes: form.serviceTypes,
+
+      visitSchedule: {
+        frequency: form.visitFrequency,
+        duration: form.visitDuration,
+        durationOther: form.visitDuration === "Other" ? form.visitDurationOther : "",
+        location: form.visitLocation,
+        locationOther: form.visitLocation === "Other" ? form.visitLocationOther : "",
+        preferredTimes: form.preferredTimes,
+        preferredDates: form.preferredDates,
+      },
+
+      courtOrder: form.courtOrder,
+      courtOrderDocUrl,
+      childWelfareInvolvement: form.childWelfareInvolvement,
+
+      specialNeeds: form.specialNeeds,
+      allergies: form.allergies,
+      currentMedications: form.currentMedications,
+
+      domesticViolence: form.domesticViolence,
+      safetyDocUrl,
+      additionalSafetyConcerns: form.additionalSafetyConcerns,
+
+      emergencyContacts: form.emergencyContacts,
+
+      additionalInfo: form.additionalInfo,
+
+      payment: {
+        responsibility: form.paymentResponsibility,
+        responsibilityOther: form.paymentResponsibility === "Other" ? form.paymentResponsibilityOther : "",
+        method: form.paymentMethod,
+        notes: form.paymentNotes,
+        acknowledged: form.paymentAck1 && form.paymentAck2 && form.paymentAck3,
+      },
+
+      signature: {
+        dataUrl: form.signatureDataUrl,
+        signerName: form.signerName,
+        signerDate: form.signerDate,
+      },
+
+      engagementProtocols: {
+        acknowledged: form.protocolAcknowledged,
+        acknowledgedBy: form.protocolAckName,
+        acknowledgedDate: form.protocolAckDate,
+      },
+    };
+  };
+
+  // ── Save as Draft ─────────────────────────────────────────────────────
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const payload = await buildPayload("Draft");
+      const docRef = await addDoc(collection(db, "InTakeForms"), payload);
+
+      // Link intakeId back to the assessment document
+      if (user?.assessmentId) {
+        await import("firebase/firestore").then(({ doc, updateDoc }) =>
+          updateDoc(doc(db, "InTakeForms", user.assessmentId), { intakeId: docRef.id })
+        );
+      }
+
+      alert("Draft saved successfully!");
+    } catch (err) {
+      console.error("Draft save error:", err);
+      alert("Failed to save draft: " + err.message);
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   // ── Submit ───────────────────────────────────────────────────────────────
@@ -330,89 +555,15 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      // Upload child photos
-      const childrenData = await Promise.all(form.children.map(async (c) => {
-        let photoUrl = "";
-        if (c.photo) {
-          const fileRef = ref(storage, `private_family_forms/${Date.now()}_${c.photo.name}`);
-          await uploadBytes(fileRef, c.photo);
-          photoUrl = await getDownloadURL(fileRef);
-        }
-        return { fullName: c.fullName, dob: c.dob, age: calcAge(c.dob), gender: c.gender, custody: c.custody, photoUrl };
-      }));
+      const payload = await buildPayload("Submitted");
+      const docRef = await addDoc(collection(db, "InTakeForms"), payload);
 
-      const payload = {
-        formType: "private",
-        status: "Submitted",
-        submittedAt: serverTimestamp(),
-        submittedBy: user?.id || "",
-        applicantEmail: form.applicantEmail,
-
-        applicationDate: form.applicationDate,
-        referralSource: form.referralSource,
-
-        applicant: {
-          fullName: form.applicantFullName,
-          street: form.applicantStreet,
-          street2: form.applicantStreet2,
-          city: form.applicantCity,
-          province: form.applicantProvince,
-          postalCode: form.applicantPostal,
-          phone: form.applicantPhone,
-          email: form.applicantEmail,
-          relationship: form.applicantRelationship,
-        },
-
-        otherGuardian: {
-          fullName: form.otherGuardianName,
-          phone: form.otherGuardianPhone,
-          email: form.otherGuardianEmail,
-          address: form.otherGuardianAddress,
-          relationship: form.otherGuardianRelationship,
-        },
-
-        children: childrenData,
-        familyName: form.applicantFullName.split(" ").pop() + " Family",
-
-        serviceTypes: form.serviceTypes,
-
-        visitSchedule: {
-          frequency: form.visitFrequency,
-          duration: form.visitDuration,
-          location: form.visitLocation,
-          preferredTimes: form.preferredTimes,
-          preferredDates: form.preferredDates,
-        },
-
-        courtOrder: form.courtOrder,
-        childWelfareInvolvement: form.childWelfareInvolvement,
-
-        specialNeeds: form.specialNeeds,
-        allergies: form.allergies,
-        currentMedications: form.currentMedications,
-
-        domesticViolence: form.domesticViolence,
-        additionalSafetyConcerns: form.additionalSafetyConcerns,
-
-        emergencyContacts: form.emergencyContacts,
-
-        additionalInfo: form.additionalInfo,
-
-        payment: {
-          responsibility: form.paymentResponsibility,
-          method: form.paymentMethod,
-          notes: form.paymentNotes,
-          acknowledged: form.paymentAck1 && form.paymentAck2 && form.paymentAck3,
-        },
-
-        engagementProtocols: {
-          acknowledged: form.protocolAcknowledged,
-          acknowledgedBy: form.protocolAckName,
-          acknowledgedDate: form.protocolAckDate,
-        },
-      };
-
-      await addDoc(collection(db, "InTakeForms"), payload);
+      // Link intakeId back to the assessment document
+      if (user?.assessmentId) {
+        await import("firebase/firestore").then(({ doc, updateDoc }) =>
+          updateDoc(doc(db, "InTakeForms", user.assessmentId), { intakeId: docRef.id })
+        );
+      }
 
       if (onSubmitSuccess) onSubmitSuccess();
       else navigate("/intake-form/submitted");
@@ -450,6 +601,14 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               </select>
             </div>
           </div>
+          {form.referralSource === "Other" && (
+            <Input
+              label="Please specify referral source"
+              placeholder="Describe how you heard about us..."
+              value={form.referralSourceOther}
+              onChange={e => set("referralSourceOther", e.target.value)}
+            />
+          )}
         </SectionCard>
       );
 
@@ -465,14 +624,16 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
           />
           {errors.applicantFullName && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantFullName}</p>}
 
-          <Input
-            label="Street Address"
-            required
-            placeholder="Street number and name"
-            value={form.applicantStreet}
-            onChange={e => set("applicantStreet", e.target.value)}
-          />
-          {errors.applicantStreet && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantStreet}</p>}
+          <div className="mb-4">
+            <Label required>Street Address</Label>
+            <PlacesAutocomplete
+              value={form.applicantStreet}
+              onChange={v => set("applicantStreet", v)}
+              placeholder="Start typing street number and name..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
+            />
+            {errors.applicantStreet && <p className="text-red-500 text-xs mt-1">{errors.applicantStreet}</p>}
+          </div>
 
           <Input
             label="Street Address Line 2 (Optional)"
@@ -548,6 +709,16 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             </select>
             {errors.applicantRelationship && <p className="text-red-500 text-xs">{errors.applicantRelationship}</p>}
           </div>
+          {form.applicantRelationship === "Other" && (
+            <div className="mt-3">
+              <Input
+                label="Please specify relationship"
+                placeholder="Describe your relationship to the child..."
+                value={form.applicantRelationshipOther}
+                onChange={e => set("applicantRelationshipOther", e.target.value)}
+              />
+            </div>
+          )}
         </SectionCard>
       );
 
@@ -574,11 +745,15 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               onChange={e => set("otherGuardianEmail", e.target.value)}
             />
           </div>
-          <Input
-            label="Address"
-            value={form.otherGuardianAddress}
-            onChange={e => set("otherGuardianAddress", e.target.value)}
-          />
+          <div className="mb-4">
+            <Label>Address</Label>
+            <PlacesAutocomplete
+              value={form.otherGuardianAddress}
+              onChange={v => set("otherGuardianAddress", v)}
+              placeholder="Start typing address..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
+            />
+          </div>
           <Select
             label="Relationship to Child/Children"
             options={RELATIONSHIPS}
@@ -586,6 +761,14 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             value={form.otherGuardianRelationship}
             onChange={v => set("otherGuardianRelationship", v)}
           />
+          {form.otherGuardianRelationship === "Other" && (
+            <Input
+              label="Please specify relationship"
+              placeholder="Describe the relationship..."
+              value={form.otherGuardianRelationshipOther}
+              onChange={e => set("otherGuardianRelationshipOther", e.target.value)}
+            />
+          )}
         </SectionCard>
       );
 
@@ -648,7 +831,7 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
                   </select>
                 </div>
                 <div>
-                  <Label>Custody</Label>
+                  <Label>Custody Arrangement</Label>
                   <select
                     value={child.custody}
                     onChange={e => updateChild(i, "custody", e.target.value)}
@@ -659,6 +842,19 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
                   </select>
                 </div>
               </div>
+
+              {/* Sole custody — With Whom? */}
+              {child.custody === "Sole Custody" && (
+                <div className="mt-2">
+                  <Label>Sole Custody With Whom?</Label>
+                  <input
+                    value={child.custodyWith}
+                    onChange={e => updateChild(i, "custodyWith", e.target.value)}
+                    placeholder="Name of the person who has sole custody"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
+                  />
+                </div>
+              )}
 
               <div className="mt-3">
                 <Label>Child's Picture (Optional)</Label>
@@ -730,21 +926,43 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               value={form.visitFrequency}
               onChange={v => set("visitFrequency", v)}
             />
-            <Select
-              label="Requested Duration per Visit"
-              options={DURATIONS}
-              placeholder="Select duration"
-              value={form.visitDuration}
-              onChange={v => set("visitDuration", v)}
-            />
+            <div>
+              <Select
+                label="Requested Hours per Visit"
+                options={DURATIONS}
+                placeholder="Select duration"
+                value={form.visitDuration}
+                onChange={v => set("visitDuration", v)}
+              />
+              {form.visitDuration === "Other" && (
+                <input
+                  placeholder="Please specify duration (e.g., 5 hours, 90 minutes)"
+                  value={form.visitDurationOther}
+                  onChange={e => set("visitDurationOther", e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mt-1"
+                />
+              )}
+            </div>
           </div>
-          <Select
-            label="Visit Location"
-            options={LOCATIONS}
-            placeholder="Select location"
-            value={form.visitLocation}
-            onChange={v => set("visitLocation", v)}
-          />
+
+          <div>
+            <Select
+              label="Visit Location"
+              options={LOCATIONS}
+              placeholder="Select location"
+              value={form.visitLocation}
+              onChange={v => set("visitLocation", v)}
+            />
+            {form.visitLocation === "Other" && (
+              <input
+                placeholder="Please specify the location..."
+                value={form.visitLocationOther}
+                onChange={e => set("visitLocationOther", e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mt-1 mb-4"
+              />
+            )}
+          </div>
+
           <Input
             label="Preferred Times of Day"
             placeholder="e.g., Morning (8am-12pm), Afternoon (1pm-5pm)"
@@ -789,6 +1007,17 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               value={form.courtOrder}
               onChange={v => set("courtOrder", v)}
             />
+            {form.courtOrder === "Yes" && (
+              <div className="mt-2">
+                <FileUpload
+                  label="Upload Court Order Document"
+                  hint="Please upload a copy of the court order (PDF, JPG, or PNG)."
+                  fileRef={courtOrderFileRef}
+                  file={form.courtOrderFile}
+                  onChange={f => set("courtOrderFile", f)}
+                />
+              </div>
+            )}
           </SectionCard>
           <SectionCard num={8} title="Child Welfare Involvement">
             <Radio
@@ -834,6 +1063,17 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             value={form.domesticViolence}
             onChange={v => set("domesticViolence", v)}
           />
+          {form.domesticViolence === "Yes" && (
+            <div className="mt-2 mb-2">
+              <FileUpload
+                label="Upload Supporting Safety Document (Optional)"
+                hint="You may upload any relevant police report, protection order, or other supporting document."
+                fileRef={safetyFileRef}
+                file={form.safetyFile}
+                onChange={f => set("safetyFile", f)}
+              />
+            </div>
+          )}
           <Textarea
             label="Additional Safety Concerns or Risk Factors"
             placeholder="Please describe any other safety concerns, threats, or risk factors we should be aware of to ensure everyone's safety..."
@@ -995,6 +1235,14 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             value={form.paymentResponsibility}
             onChange={v => set("paymentResponsibility", v)}
           />
+          {form.paymentResponsibility === "Other" && (
+            <Input
+              label="Please specify payment responsibility"
+              placeholder="Describe who will be responsible..."
+              value={form.paymentResponsibilityOther}
+              onChange={e => set("paymentResponsibilityOther", e.target.value)}
+            />
+          )}
           <Select
             label="Preferred Payment Method"
             options={PAYMENT_METHODS}
@@ -1032,9 +1280,77 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         </SectionCard>
       );
 
-      // ── STEP 14: Engagement Protocols ─────────────────────────────────────
+      // ── STEP 14: Signature ─────────────────────────────────────────────────
       case 14: return (
-        <SectionCard num={15} title="Engagement Protocols – Family Forever Inc.">
+        <SectionCard num={15} title="Applicant Signature">
+          <p className="text-sm text-gray-600 mb-5">
+            By signing below, I confirm that all information provided in this application is accurate and complete to the best of my knowledge. I authorize Family Forever Inc. to use this information for the purpose of providing family services.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4 mb-5">
+            <div>
+              <Label required>Full Name (Print)</Label>
+              <input
+                value={form.signerName}
+                onChange={e => set("signerName", e.target.value)}
+                placeholder="Type your full legal name"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
+              />
+              {errors.signerName && <p className="text-red-500 text-xs mt-1">{errors.signerName}</p>}
+            </div>
+            <div>
+              <Label required>Date</Label>
+              <input
+                type="date"
+                value={form.signerDate}
+                onChange={e => set("signerDate", e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
+              />
+            </div>
+          </div>
+
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <Label required>Signature</Label>
+              <button
+                type="button"
+                onClick={clearSignature}
+                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 rounded-md px-2 py-1 transition"
+              >
+                <Trash2 size={12} /> Clear
+              </button>
+            </div>
+            <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50 hover:border-green-500 transition">
+              <SignatureCanvas
+                ref={sigCanvasRef}
+                penColor={GREEN}
+                canvasProps={{
+                  width: 700,
+                  height: 180,
+                  className: "w-full",
+                  style: { touchAction: "none" }
+                }}
+                onEnd={saveSignature}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
+              <Pen size={11} /> Draw your signature using your mouse or touchscreen
+            </p>
+            {errors.signature && <p className="text-red-500 text-xs mt-1">{errors.signature}</p>}
+          </div>
+
+          {form.signatureDataUrl && (
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-xs text-green-700 font-semibold mb-2">Signature Preview:</p>
+              <img src={form.signatureDataUrl} alt="Signature preview" className="max-h-16 object-contain" />
+            </div>
+          )}
+        </SectionCard>
+      );
+
+      // ── STEP 15: Engagement Protocols ─────────────────────────────────────
+      case 15: return (
+        <SectionCard num={16} title="Engagement Protocols – Family Forever Inc.">
           <p className="text-sm text-gray-600 mb-4">Family Forever Inc. Engagement Protocols establish clear expectations for participants to ensure visits are conducted in a safe, respectful, and child-focused manner. All individuals participating in supervised visits are required to comply with these protocols. Failure to comply may result in immediate suspension or termination of the visit and/or services.</p>
 
           <div className="space-y-4 text-sm text-gray-700 mb-6 max-h-96 overflow-y-auto pr-2 border border-gray-100 rounded-lg p-4 bg-gray-50">
@@ -1113,12 +1429,21 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
+
+          {/* Top back button row */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50"
+              style={{ borderColor: "#e5e7eb", fontSize: 13, color: "#374151" }}
+            >
+              <ArrowLeft size={15} /> Back
+            </button>
             <div>
               <h1 className="text-xl font-bold text-gray-800">Family Service Request</h1>
               <p className="text-xs text-gray-500 mt-0.5">Family Forever Inc. — Private Family Intake Form</p>
             </div>
-            <div className="text-right">
+            <div className="ml-auto text-right">
               <span className="text-xs text-gray-500">Step {step} of {STEPS.length}</span>
               <div className="w-32 h-1.5 bg-gray-200 rounded-full mt-1">
                 <div
@@ -1128,7 +1453,13 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               </div>
             </div>
           </div>
-          <Stepper current={step} total={STEPS.length} />
+
+          <Stepper
+            current={step}
+            total={STEPS.length}
+            onStepClick={handleStepClick}
+            completedSteps={completedSteps}
+          />
         </div>
       </div>
 
@@ -1138,32 +1469,54 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
         {/* Navigation Buttons */}
         <div className="flex justify-between items-center mt-4 pb-8">
-          <button
-            onClick={back}
-            disabled={step === 1}
-            className="flex items-center gap-2 px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-          >
-            <ChevronLeft size={16} /> Back
-          </button>
+          {/* Left — Back + Cancel */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (step === 1) navigate(-1);
+                else back();
+              }}
+              className="flex items-center gap-2 px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+            >
+              <ChevronLeft size={16} /> Back
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="px-5 py-2 border border-red-200 rounded-lg text-sm font-semibold text-red-500 hover:bg-red-50 transition"
+            >
+              Cancel
+            </button>
+          </div>
 
-          {step < STEPS.length ? (
+          {/* Right — Save Draft + Continue/Submit */}
+          <div className="flex items-center gap-3">
             <button
-              onClick={next}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition"
-              style={{ background: GREEN }}
+              onClick={handleSaveDraft}
+              disabled={savingDraft}
+              className="px-5 py-2 border border-gray-400 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
             >
-              Continue <ChevronRight size={16} />
+              {savingDraft ? "Saving..." : "Save as Draft"}
             </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
-              style={{ background: GREEN }}
-            >
-              {submitting ? "Submitting..." : <><Check size={16} /> Submit Application</>}
-            </button>
-          )}
+
+            {step < STEPS.length ? (
+              <button
+                onClick={next}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition"
+                style={{ background: GREEN }}
+              >
+                Continue <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
+                style={{ background: GREEN }}
+              >
+                {submitting ? "Submitting..." : <><Check size={16} /> Submit Application</>}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -64,11 +64,11 @@ const serviceTypeStyles = {
 const getRoundedTime = () => {
   const coeff = 1000 * 60 * 15;
   const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString("en-US", { 
-    hour: "2-digit", 
-    minute: "2-digit", 
+  return rounded.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
     hour12: true,
-    timeZone: "America/Edmonton" 
+    timeZone: "America/Edmonton"
   });
 };
 
@@ -199,7 +199,7 @@ export default function ShiftDetails() {
         for (const collName of collections) {
           if (matchedIntake) break;
           const snapshot = await getDocs(collection(db, collName));
-          
+
           snapshot.docs.some((docSnap) => {
             const data = docSnap.data();
             const docId = docSnap.id;
@@ -351,7 +351,7 @@ export default function ShiftDetails() {
           for (const collName of collections) {
             if (matched) break;
             const snapshot = await getDocs(collection(db, collName));
-            
+
             snapshot.docs.some((docSnap) => {
               const data = docSnap.data();
               const docId = docSnap.id;
@@ -401,11 +401,11 @@ export default function ShiftDetails() {
     fetchIntake();
   }, [shift]);
 
-  const intakeDescription = intakeData?.services?.serviceDesc || 
-                            intakeData?.serviceDesc || 
-                            (Array.isArray(intakeData?.serviceRequired) ? intakeData.serviceRequired.join(", ") : intakeData?.serviceRequired) || 
-                            intakeData?.serviceDetail || 
-                            "";
+  const intakeDescription = intakeData?.services?.serviceDesc ||
+    intakeData?.serviceDesc ||
+    (Array.isArray(intakeData?.serviceRequired) ? intakeData.serviceRequired.join(", ") : intakeData?.serviceRequired) ||
+    intakeData?.serviceDetail ||
+    "";
 
   const displayDescription = shift?.jobdescription || shift?.description || shift?.shiftDescription || shift?.notes || clientInfo?.serviceDesc || clientInfo?.jobDescription || intakeDescription;
 
@@ -515,14 +515,18 @@ export default function ShiftDetails() {
   // ── Transport report: pick receipt image ────────────────────────────────
   const pickReceipt = async () => {
     Alert.alert("Upload Receipt", "Choose source", [
-      { text: "Camera", onPress: async () => {
-        const res = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: false });
-        if (!res.canceled) setReceiptImage(res.assets[0]);
-      }},
-      { text: "Gallery", onPress: async () => {
-        const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions.Images });
-        if (!res.canceled) setReceiptImage(res.assets[0]);
-      }},
+      {
+        text: "Camera", onPress: async () => {
+          const res = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: false });
+          if (!res.canceled) setReceiptImage(res.assets[0]);
+        }
+      },
+      {
+        text: "Gallery", onPress: async () => {
+          const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+          if (!res.canceled) setReceiptImage(res.assets[0]);
+        }
+      },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -620,7 +624,7 @@ export default function ShiftDetails() {
     }
     return safeString(intakeData.clientName || intakeData.name || intakeData.familyName || intakeData.nameInClientTable || intakeData.childName);
   })();
-  
+
   const clientName = (isNumericId(rawName) && intakeName) ? intakeName : (rawName || intakeName || "Client");
   const clientId = safeString(shift.clientId || shift.clientDetails?.id || intakeData?.clientId || intakeData?.formId) || "\u2014";
   const clientInitials = clientName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -628,9 +632,9 @@ export default function ShiftDetails() {
   const staffInitials = staffName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   let rawServiceType = safeString(shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory) || "Respite Care";
   // Auto-detect Transportation if miscategorized but has transit markers
-  const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation || 
-                           (shift.description && shift.description.toLowerCase().includes("pick up")) ||
-                           (shift.description && shift.description.toLowerCase().includes("drop to"));
+  const hasTransitMarkers = shift.pickupLocation || shift.dropLocation || shift.visitLocation ||
+    (shift.description && shift.description.toLowerCase().includes("pick up")) ||
+    (shift.description && shift.description.toLowerCase().includes("drop to"));
   if ((rawServiceType === "Respite Care" || !rawServiceType) && hasTransitMarkers) {
     rawServiceType = "Transportation";
   }
@@ -719,17 +723,17 @@ export default function ShiftDetails() {
         </View>
 
         {/* ── Family Members / Children (Shift Points) ── */}
-        {( (Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0) || (Array.isArray(clientInfo?.shiftPoints) && clientInfo.shiftPoints.length > 0) ) && (
+        {((Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0) || (Array.isArray(clientInfo?.shiftPoints) && clientInfo.shiftPoints.length > 0)) && (
           <View style={[styles.sectionCard, { marginTop: 15 }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
               <Ionicons name="people-outline" size={18} color={PRIMARY_GREEN} />
               <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Family Members / Children</Text>
             </View>
             {(shift?.shiftPoints || clientInfo?.shiftPoints).map((member, mIdx) => (
-              <View key={`member-${mIdx}`} style={{ 
-                padding: 12, 
-                backgroundColor: "#F9FAFB", 
-                borderRadius: 12, 
+              <View key={`member-${mIdx}`} style={{
+                padding: 12,
+                backgroundColor: "#F9FAFB",
+                borderRadius: 12,
                 marginBottom: 8,
                 borderWidth: 1,
                 borderColor: "#F3F4F6"
@@ -832,7 +836,7 @@ export default function ShiftDetails() {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Daily Shift Report</Text>
           <Text style={styles.sectionDesc}>Document activities, medications, meals, mood, interactions...</Text>
-          
+
           {shiftStatus === "assigned" || shiftStatus === "upcoming" ? (
             <View style={styles.lockedReportBox}>
               <Ionicons name="lock-closed-outline" size={32} color="#D1D5DB" />
@@ -843,7 +847,7 @@ export default function ShiftDetails() {
 
               <TextInput
                 style={[
-                  styles.reportInput, 
+                  styles.reportInput,
                   (shiftLocked || shift?.reportSubmitted) && { backgroundColor: "#F3F4F6", color: "#6B7280" }
                 ]}
                 placeholder="Type your shift report here..."
@@ -855,7 +859,7 @@ export default function ShiftDetails() {
                 onChangeText={setReportText}
                 editable={!shiftLocked && !shift?.reportSubmitted}
               />
-              
+
               {shift?.reportSubmitted ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: -4, marginBottom: 10 }}>
                   <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />
@@ -863,15 +867,15 @@ export default function ShiftDetails() {
                 </View>
               ) : !shiftLocked && (
                 <View style={styles.reportBtnRow}>
-                  <Pressable 
-                    style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]} 
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]}
                     onPress={() => handleUpdateReport(false)}
                     disabled={savingReport}
                   >
                     <Text style={[styles.reportBtnText, { color: DARK_TEXT }]}>Save Draft</Text>
                   </Pressable>
-                  <Pressable 
-                    style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]} 
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]}
                     onPress={() => handleUpdateReport(true)}
                     disabled={savingReport}
                   >
@@ -891,7 +895,7 @@ export default function ShiftDetails() {
           const dropOfficeNum = parseFloat(dropToOffice) || 0;
           const totalKm = isPersonalVehicle ? (routeKm + officePickupNum + dropOfficeNum) : routeKm;
           const totalMins = shift?.totalTimeMinutes || 0;
-          const fmtMins = (m) => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+          const fmtMins = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
           return (
             <View style={[styles.sectionCard, { marginTop: 15 }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -1002,7 +1006,7 @@ export default function ShiftDetails() {
 
         {/* ── Shift Actions ──────────────────────────────────────────────── */}
         <Text style={[styles.sectionTitle, { marginTop: 20, marginBottom: 15 }]}>Shift Actions</Text>
-        
+
         {(clientInfo?.medicalNotes || clientInfo?.medications || clientInfo?.specialNeeds || clientInfo?.allergies || clientInfo?.conditions) && (
           <Pressable
             style={styles.actionCard}
@@ -1040,7 +1044,7 @@ export default function ShiftDetails() {
         {shiftStatus !== "assigned" && (
           <View style={{ marginTop: 15 }}>
             <Text style={[styles.sectionTitle, { marginBottom: 15 }]}>Other Actions</Text>
-            
+
             <Pressable style={[styles.otherActionCard, { borderLeftColor: "#DC2626" }]} onPress={() => setActiveModal("critical")}>
               <View style={styles.otherActionHeader}>
                 <Ionicons name="alert-circle-outline" color="#DC2626" size={20} />
@@ -1176,7 +1180,7 @@ export default function ShiftDetails() {
                     <Ionicons name="checkmark" size={32} color={TEXT_GREEN} />
                   </View>
                   <Text style={styles.modalTitle}>Confirm this shift?</Text>
-                  
+
                   <View style={styles.modalSummaryBox}>
                     <Text style={styles.summaryPrimary}>{rawServiceType} · {clientName}</Text>
                     <Text style={styles.summarySecondary}>{displayDate} · {safeString(shift.startTime) || "—"} – {safeString(shift.endTime) || "—"}</Text>
@@ -1212,10 +1216,10 @@ export default function ShiftDetails() {
                 </>
               )}
 
-              <Pressable 
-                onPress={handleAction} 
+              <Pressable
+                onPress={handleAction}
                 style={[
-                  styles.modalActionBtn, 
+                  styles.modalActionBtn,
                   confirmAction.type === "confirm" && { backgroundColor: PRIMARY_GREEN },
                   confirmAction.type === "clockIn" && { backgroundColor: "#1D4ED8" },
                   confirmAction.type === "clockOut" && { backgroundColor: ERROR_RED }
@@ -1242,24 +1246,24 @@ export default function ShiftDetails() {
       <Modal visible={showIntakeModal} animationType="slide" presentationStyle="pageSheet">
         <View style={{ flex: 1, backgroundColor: "#FFF" }}>
           {/* Header */}
-          <View style={{ 
-            flexDirection: "row", 
-            alignItems: "center", 
-            paddingHorizontal: 20, 
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 20,
             paddingTop: 60, // Manual top padding for Notch/Island
             paddingBottom: 15,
-            borderBottomWidth: 1, 
+            borderBottomWidth: 1,
             borderBottomColor: "#E5E7EB"
           }}>
             <Pressable onPress={() => setShowIntakeModal(false)} style={{ padding: 5 }}>
               <Ionicons name="close" size={28} color="#000" />
             </Pressable>
-            <Text style={{ 
-              fontSize: 18, 
-              fontWeight: "800", 
-              marginLeft: 15, 
+            <Text style={{
+              fontSize: 18,
+              fontWeight: "800",
+              marginLeft: 15,
               fontFamily: "Poppins-Bold",
-              color: "#111827" 
+              color: "#111827"
             }}>Client Intake Form</Text>
           </View>
 
@@ -1354,7 +1358,7 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: "#FFF", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: GRAY_BORDER, marginTop: 15 },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: DARK_TEXT, fontFamily: "Poppins-Bold", marginBottom: 4 },
   sectionDesc: { fontSize: 13, color: GRAY_TEXT, marginBottom: 15, fontFamily: "Inter", lineHeight: 18 },
-  
+
   lockedReportBox: { height: 120, backgroundColor: "#F9FAFB", borderRadius: 16, borderWidth: 1, borderColor: "#F3F4F6", alignItems: "center", justifyContent: "center", gap: 8 },
   lockedReportText: { fontSize: 13, color: "#9CA3AF", fontFamily: "Inter-Medium" },
 

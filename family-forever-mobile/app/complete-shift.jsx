@@ -41,8 +41,8 @@ function haversineKm(c1, c2) {
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(c1.latitude * (Math.PI / 180)) *
-      Math.cos(c2.latitude * (Math.PI / 180)) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos(c2.latitude * (Math.PI / 180)) *
+    Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -67,9 +67,9 @@ const RED = "#DC2626";
 
 // ── Demo data (used when Firebase shiftPoints is empty / single-client) ───────
 const DEMO_CLIENTS = [
-  { id: "c1", name: "Michael Chen",   seatType: "Car Seat", pickupAddr: "1234 Oak Street, Suite 5",  pickupTime: "2:00 PM",  dropAddr: "789 Maple Avenue, Apt 3",  dropTime: "6:00 PM" },
-  { id: "c2", name: "Adriana Torres", seatType: "Booster",  pickupAddr: "1234 Oak Street, Suite 5",  pickupTime: "2:00 PM",  dropAddr: "789 Maple Avenue, Apt 3",  dropTime: "6:00 PM" },
-  { id: "c3", name: "Liam Kim",       seatType: null,        pickupAddr: "456 Elm Drive, Unit 2",      pickupTime: "2:20 PM",  dropAddr: "1200 Pine Street",          dropTime: "6:30 PM" },
+  { id: "c1", name: "Michael Chen", seatType: "Car Seat", pickupAddr: "1234 Oak Street, Suite 5", pickupTime: "2:00 PM", dropAddr: "789 Maple Avenue, Apt 3", dropTime: "6:00 PM" },
+  { id: "c2", name: "Adriana Torres", seatType: "Booster", pickupAddr: "1234 Oak Street, Suite 5", pickupTime: "2:00 PM", dropAddr: "789 Maple Avenue, Apt 3", dropTime: "6:00 PM" },
+  { id: "c3", name: "Liam Kim", seatType: null, pickupAddr: "456 Elm Drive, Unit 2", pickupTime: "2:20 PM", dropAddr: "1200 Pine Street", dropTime: "6:30 PM" },
 ];
 const DEMO_VISIT_ADDR = "500 City Hall Plaza";
 const DEMO_VISIT_TIME = "3:00 PM";
@@ -131,7 +131,7 @@ function buildStops(shiftPoints, shift) {
   if (clients.length === 0 && shift) {
     const pt = Array.isArray(shift.shiftPoints) && shift.shiftPoints[0];
     const pickupAddr = safeString(pt?.pickupLocation || shift.pickupLocation);
-    const dropAddr   = safeString(pt?.dropLocation   || shift.dropLocation);
+    const dropAddr = safeString(pt?.dropLocation || shift.dropLocation);
     if (pickupAddr) {
       clients.push({
         id: shift.clientId || "c0",
@@ -152,7 +152,7 @@ function buildStops(shiftPoints, shift) {
 
   const stops = [];
   const pickupGroups = {};
-  const dropGroups   = {};
+  const dropGroups = {};
 
   clients.forEach((c) => {
     const pk = c.pickupAddr || "Unknown";
@@ -232,9 +232,9 @@ function ProgressBar({ stops, currentIdx, completedStops }) {
     <View style={pbStyles.row}>
       {stops.map((stop, i) => {
         const isCompleted = completedStops.includes(i);
-        const isCurrent   = i === currentIdx;
+        const isCurrent = i === currentIdx;
         const circleColor = isCompleted || isCurrent ? GREEN : "#D1D5DB";
-        const lineColor   = isCompleted ? GREEN : "#E5E7EB";
+        const lineColor = isCompleted ? GREEN : "#E5E7EB";
         return (
           <View key={i} style={pbStyles.stepWrap}>
             {i > 0 && (
@@ -273,8 +273,8 @@ const pbStyles = StyleSheet.create({
 
 // ── Client Row ────────────────────────────────────────────────────────────────
 function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, confirmedLabel }) {
-  const isConfirmed  = status === "confirmed";
-  const isCancelled  = status === "cancelled";
+  const isConfirmed = status === "confirmed";
+  const isCancelled = status === "cancelled";
   const avatarColors = [
     { bg: "#E0F2FE", text: "#0369A1" },
     { bg: "#EDE9FE", text: "#5B21B6" },
@@ -312,8 +312,8 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
           <Pressable onPress={onConfirm} style={crStyles.confirmBtn}>
             <Text style={crStyles.confirmBtnText}>{actionLabel}</Text>
           </Pressable>
-          <Pressable onPress={onCancel} style={crStyles.cancelBtn}>
-            <Ionicons name="close" size={16} color={GRAY} />
+          <Pressable onPress={onCancel} style={crStyles.noShowBtn}>
+            <Text style={crStyles.noShowBtnText}>No-show</Text>
           </Pressable>
         </View>
       )}
@@ -335,7 +335,8 @@ const crStyles = StyleSheet.create({
   cancelledText: { fontSize: 12, color: RED, fontWeight: "600", fontFamily: "Inter-SemiBold" },
   confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#86EFAC" },
   confirmBtnText: { fontSize: 12, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" },
-  cancelBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  noShowBtn: { backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#FECACA" },
+  noShowBtnText: { fontSize: 12, fontWeight: "700", color: RED, fontFamily: "Inter-Bold" },
 });
 
 // ── Completed Stop Row ────────────────────────────────────────────────────────
@@ -365,20 +366,20 @@ const csStyles = StyleSheet.create({
 export default function CompleteShift() {
   const { shiftId, vehicleType } = useLocalSearchParams();
 
-  const [shift, setShift]       = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [stops, setStops]       = useState([]);
+  const [shift, setShift] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [stops, setStops] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [completedIdxs, setCompletedIdxs] = useState([]);
   // stopClientStatus: { stopIndex_clientId → 'waiting'|'confirmed'|'cancelled' }
   const [clientStatus, setClientStatus] = useState({});
-  const [visitArrived, setVisitArrived]  = useState(false);
-  const [visitNotes, setVisitNotes]      = useState("");
-  const [totalKm, setTotalKm]   = useState(0);
+  const [visitArrived, setVisitArrived] = useState(false);
+  const [visitNotes, setVisitNotes] = useState("");
+  const [totalKm, setTotalKm] = useState(0);
   const locationSubRef = useRef(null);
-  const lastCoordsRef  = useRef(null);
-  const startTimeRef   = useRef(Date.now());
-  const kmRef          = useRef(null); // fallback simulation
+  const lastCoordsRef = useRef(null);
+  const startTimeRef = useRef(Date.now());
+  const kmRef = useRef(null); // fallback simulation
 
   // GPS distance tracking
   useEffect(() => {
@@ -442,8 +443,8 @@ export default function CompleteShift() {
 
   const currentStop = stops[currentIdx];
   const isPickup = currentStop?.type === "pickup";
-  const isDrop   = currentStop?.type === "drop";
-  const isVisit  = currentStop?.type === "visit";
+  const isDrop = currentStop?.type === "drop";
+  const isVisit = currentStop?.type === "visit";
 
   // Check if all clients in current stop are resolved (confirmed or cancelled)
   const allResolved = currentStop?.clients.every(
@@ -513,12 +514,45 @@ export default function CompleteShift() {
     setVisitArrived(false);
   };
 
+  const handleCancelShift = () => {
+    Alert.alert(
+      "Cancel Shift?",
+      "Are you sure you want to cancel this shift? This will log your current mileage and end the drive early.",
+      [
+        { text: "No, Continue", style: "cancel" },
+        {
+          text: "Yes, Cancel Shift",
+          style: "destructive",
+          onPress: async () => {
+            const totalTimeMinutes = Math.round((Date.now() - startTimeRef.current) / 60000);
+            if (shiftId) {
+              try {
+                await updateDoc(doc(db, "shifts", shiftId), {
+                  transportationCompleted: true,
+                  transportationKm: totalKm,
+                  transportationCancelled: true,
+                  transportationCompletedAt: serverTimestamp(),
+                  status: "cancelled",
+                  totalTimeMinutes,
+                });
+                router.replace({ pathname: "/shift-detail", params: { shiftId } });
+              } catch (e) {
+                console.warn("Cancel shift error:", e);
+                Alert.alert("Error", "Could not cancel shift. Please try again.");
+              }
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // CTA config
   const getCtaConfig = () => {
     if (isPickup || isDrop) {
       const label = isPickup ? "Confirm Pickup" : "Confirm Drop-off";
       if (!allResolved) return { text: "Confirm all clients to continue", disabled: true, color: "#A7C4B5" };
-      const isLast  = currentIdx === stops.length - 1;
+      const isLast = currentIdx === stops.length - 1;
       const nextStop = stops[currentIdx + 1];
       let text = "Next →";
       if (nextStop?.type === "pickup") text = `Next ${nextStop.label} →`;
@@ -537,7 +571,7 @@ export default function CompleteShift() {
   const ctaConfig = getCtaConfig();
 
   const confirmLabel = isPickup ? "Picked up" : "Dropped off";
-  const actionLabel  = isPickup ? "Confirm Pickup" : "Confirm Drop-off";
+  const actionLabel = isPickup ? "Confirm Pickup" : "Confirm Drop-off";
 
   // Stop type color
   const stopColor = isPickup ? GREEN : isVisit ? BLUE : RED;
@@ -561,8 +595,23 @@ export default function CompleteShift() {
           <Text style={s.headerTitle}>Complete Shift</Text>
           <Text style={s.headerSub}>{formatHeaderDate(shift)}</Text>
         </View>
-        <View style={s.kmBadge}>
-          <Text style={s.kmText}>{totalKm.toFixed(1)} km</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable
+            onPress={handleCancelShift}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 8,
+              backgroundColor: "#FEF2F2",
+              borderWidth: 1,
+              borderColor: "#FECACA",
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: "700", color: RED, fontFamily: "Inter-Bold" }}>Cancel Shift</Text>
+          </Pressable>
+          <View style={s.kmBadge}>
+            <Text style={s.kmText}>{totalKm.toFixed(1)} km</Text>
+          </View>
         </View>
       </View>
 

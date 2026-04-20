@@ -110,7 +110,7 @@ export default function TransportationShiftDetail() {
           for (const collName of collections) {
             if (matched) break;
             const snapshot = await getDocs(collection(db, collName));
-            
+
             snapshot.docs.some((docSnap) => {
               const data = docSnap.data();
               const docId = docSnap.id;
@@ -172,7 +172,7 @@ export default function TransportationShiftDetail() {
   }
 
   const pt = Array.isArray(shift?.shiftPoints) && shift.shiftPoints[0];
-  
+
   const rawName = safeString(shift?.familyName || shift?.childName || shift?.clientName || shift?.name || shift?.client || shift?.clientDetails?.name);
   const intakeName = (() => {
     if (!intake) return "";
@@ -189,8 +189,8 @@ export default function TransportationShiftDetail() {
   })();
 
   const isId = (val) => val && /^\d+$/.test(String(val)) && String(val).length > 8;
-  const clientName = isId(rawName) 
-    ? (intakeName || shift?.familyName || shift?.childName || "Client") 
+  const clientName = isId(rawName)
+    ? (intakeName || shift?.familyName || shift?.childName || "Client")
     : (rawName || intakeName || "Client");
   const clientId = safeString(shift?.clientId || intake?.clientId || intake?.formId) || "\u2014";
 
@@ -228,11 +228,11 @@ export default function TransportationShiftDetail() {
     },
     pt?.visitLocation || shift?.visitLocation
       ? {
-          label: "Visit Location",
-          address: safeString(pt?.visitLocation || shift?.visitLocation),
-          time: safeString(pt?.visitTime || ""),
-          color: "#1E5FA6",
-        }
+        label: "Visit Location",
+        address: safeString(pt?.visitLocation || shift?.visitLocation),
+        time: safeString(pt?.visitTime || ""),
+        color: "#1E5FA6",
+      }
       : null,
     {
       label: "Drop-off",
@@ -314,7 +314,7 @@ export default function TransportationShiftDetail() {
                 {clientName}
               </Text>
               <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter-Medium", marginBottom: 8 }}>ID: {clientId}</Text>
-              
+
               {seatType ? (
                 <View
                   style={{
@@ -587,67 +587,69 @@ export default function TransportationShiftDetail() {
       </ScrollView>
 
       {/* ── Bottom: Choose Vehicle ─────────────────────────────────────────── */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: "#fff",
-          borderTopWidth: 1,
-          borderTopColor: BORDER,
-          padding: 20,
-        }}
-      >
-        <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/vehicle-check",
-              params: { shiftId: shiftId },
-            })
-          }
-          style={({ pressed }) => ({
-            backgroundColor: pressed ? "#185A37" : GREEN,
-            borderRadius: 14,
-            paddingVertical: 17,
-            alignItems: "center",
-            justifyContent: "center",
-          })}
+      {shift?.shiftConfirmed && (shift?.clockInTime || shift?.clockIn) && (
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: "#fff",
+            borderTopWidth: 1,
+            borderTopColor: BORDER,
+            padding: 20,
+          }}
         >
-          <Text
-            style={{
-              color: "#fff",
-              fontSize: 16,
-              fontWeight: "700",
-              fontFamily: "Poppins-SemiBold",
-            }}
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/vehicle-check",
+                params: { shiftId: shiftId },
+              })
+            }
+            style={({ pressed }) => ({
+              backgroundColor: pressed ? "#185A37" : GREEN,
+              borderRadius: 14,
+              paddingVertical: 17,
+              alignItems: "center",
+              justifyContent: "center",
+            })}
           >
-            Choose Vehicle
-          </Text>
-        </Pressable>
-      </View>
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 16,
+                fontWeight: "700",
+                fontFamily: "Poppins-SemiBold",
+              }}
+            >
+              Choose Vehicle
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       <Modal visible={showIntake} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowIntake(false)}>
         <View style={{ flex: 1, backgroundColor: "#FFF" }}>
           {/* Modal Header */}
-          <View style={{ 
-            flexDirection: "row", 
-            alignItems: "center", 
-            paddingHorizontal: 20, 
-            paddingTop: 60, 
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 20,
+            paddingTop: 60,
             paddingBottom: 15,
-            borderBottomWidth: 1, 
+            borderBottomWidth: 1,
             borderBottomColor: "#E5E7EB"
           }}>
             <Pressable onPress={() => setShowIntake(false)} style={{ padding: 5 }}>
               <Ionicons name="close" size={28} color="#000" />
             </Pressable>
-            <Text style={{ 
-              fontSize: 18, 
-              fontWeight: "800", 
-              marginLeft: 15, 
+            <Text style={{
+              fontSize: 18,
+              fontWeight: "800",
+              marginLeft: 15,
               fontFamily: "Poppins-Bold",
-              color: "#111827" 
+              color: "#111827"
             }}>Client Intake Form</Text>
           </View>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>

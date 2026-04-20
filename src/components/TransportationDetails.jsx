@@ -141,21 +141,35 @@ const TransportationDetails = ({ shift, onClose }) => {
         </div>
 
         <hr className="border-light-gray" />
+        
+        {/* Visit Destination - Conditionally Show */}
+        {(() => {
+          const startDateObj = shift.startDate?.toDate ? shift.startDate.toDate() : new Date(shift.startDate);
+          const day = startDateObj.getDay();
+          const isWeekend = day === 0 || day === 6;
+          const cat = (shift.shiftCategory || shift.categoryName || "").toLowerCase();
+          const desc = (shift.description || shift.jobdescription || "").toLowerCase();
+          const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
 
-        {/* Visit Destination */}
-        <div className="flex flex-col gap-[2px]">
-          <p className="text-sm font-normal text-[#44474B]">Visit Destination</p>
-          <p className={addressClass} title={visitAddress}>
-            {visitAddress}
-          </p>
-          {visitDuration && visitDuration !== "N/A" && (
-            <p className="text-xs font-normal text-gray-600">
-              Visit Duration: <span className="font-semibold">{visitDuration}</span>
-            </p>
-          )}
-        </div>
+          if (!needsVisit) return null;
 
-        <hr className="border-light-gray" />
+          return (
+            <>
+              <div className="flex flex-col gap-[2px]">
+                <p className="text-sm font-normal text-[#44474B]">Visit Destination</p>
+                <p className={addressClass} title={visitAddress}>
+                  {visitAddress}
+                </p>
+                {visitDuration && visitDuration !== "N/A" && (
+                  <p className="text-xs font-normal text-gray-600">
+                    Visit Duration: <span className="font-semibold">{visitDuration}</span>
+                  </p>
+                )}
+              </div>
+              <hr className="border-light-gray" />
+            </>
+          );
+        })()}
 
         {/* Ending Point */}
         <div className="flex flex-col gap-[2px]">

@@ -12,6 +12,7 @@ import {
   ClipboardList, Briefcase, UserPlus, Inbox, Pencil, Trash2, MoreHorizontal,
 } from "lucide-react";
 import FileClosureSlider from "./FileClosureSlider";
+import { getEdmontonToday } from "../utils/dateHelpers";
 
 const FONT = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 const ITEMS_PER_PAGE = 7;
@@ -96,7 +97,9 @@ function Sidebar({ activePage, onNavigate, onLogout }) {
 
   const navItems = [
     { icon: <LayoutGrid className="size-4" strokeWidth={1.7} />, label: "Dashboard", key: "dashboard" },
-    { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Intake Form", key: "new" },
+    { icon: <FileText className="size-4" strokeWidth={1.7} />, label: "Submissions", key: "dashboard" }, // Point to dashboard/list
+    { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Intake Form", key: "new_standard" },
+    { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Private Intake Form", key: "new_private" },
   ];
 
   const width = isCollapsed ? 64 : 240;
@@ -137,8 +140,11 @@ function Sidebar({ activePage, onNavigate, onLogout }) {
             <button
               key={item.key}
               onClick={() => {
-                if (item.key === "new") navigate("/intake-form/add");
-                else onNavigate(item.key);
+                if (item.key === "new_standard") {
+                  navigate("/intake-form/add");
+                } else if (item.key === "new_private") {
+                  navigate("/intake-form/private-form");
+                } else onNavigate(item.key);
               }}
               className="w-full flex items-center gap-3 rounded-lg mb-1 transition-all"
               style={{
@@ -216,7 +222,14 @@ function Header({ workerName, workerProfile, notifCount, navigate }) {
 
         {/* Add New */}
         <button
-          onClick={() => navigate("/intake-form/add")}
+          onClick={() => {
+            const r = (workerProfile?.role || user?.role || "").toLowerCase();
+            if (r === "parent" || r === "private family") {
+              navigate("/intake-form/private-form");
+            } else {
+              navigate("/intake-form/add");
+            }
+          }}
           className="px-4 py-2 rounded-lg font-semibold transition-all hover:opacity-90 text-white"
           style={{ background: "#145228", fontSize: 13, boxShadow: "0 1px 2px rgba(20,82,40,0.2)" }}
         >
@@ -675,7 +688,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
   }, [workerId, workerName]);
 
   // ── KPIs ──
-  const now = new Date();
+  const now = getEdmontonToday();
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const totalForms = allForms.length;
   const submittedCount = allForms.filter(f => (f.status || "").toLowerCase() === "submitted").length;
@@ -897,6 +910,49 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
               {kpiCards.map((card, i) => (
                 <KPICard key={i} {...card} loading={loading} />
               ))}
+            </div>
+
+            {/* Quick Actions Card Grid */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* Card 1: New Intake Form */}
+              <div 
+                onClick={() => navigate("/intake-form/add")}
+                className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group"
+                style={{ borderColor: "#e5e7eb" }}
+              >
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
+                    <Plus size={24} style={{ color: "#145228" }} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Intake Form</h3>
+                    <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Standard worker intake submission</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                  <ChevronRight size={20} />
+                </div>
+              </div>
+
+              {/* Card 2: New Private Intake Form */}
+              <div 
+                onClick={() => navigate("/intake-form/private-form")}
+                className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group"
+                style={{ borderColor: "#e5e7eb" }}
+              >
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
+                    <Users size={24} style={{ color: "#145228" }} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Private Intake Form</h3>
+                    <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Parent or guardian requesting services</p>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                  <ChevronRight size={20} />
+                </div>
+              </div>
             </div>
 
             {/* Main grid: forms table */}

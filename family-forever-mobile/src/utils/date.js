@@ -98,8 +98,51 @@ export const parseDate = (dateStr) => {
 };
 
 export const formatDateKey = (date) => {
+  if (!date) return "";
   const d = new Date(date);
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  if (isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Returns a JS Date representing midnight at the start of CURRENT day in Edmonton.
+ */
+export const getEdmontonToday = () => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Edmonton',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
+  const parts = formatter.formatToParts(now);
+  const y = parseInt(parts.find(p => p.type === 'year').value, 10);
+  const m = parseInt(parts.find(p => p.type === 'month').value, 10);
+  const d = parseInt(parts.find(p => p.type === 'day').value, 10);
+  return new Date(y, m - 1, d);
+};
+
+/**
+ * Formats a date to YYYY-MM-DD from the perspective of Edmonton timezone.
+ */
+export const formatEdmontonISO = (date) => {
+  if (!date) return "";
+  const dObj = new Date(date);
+  if (isNaN(dObj.getTime())) return "";
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Edmonton',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
+  const parts = formatter.formatToParts(dObj);
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value.padStart(2, '0');
+  const d = parts.find(p => p.type === 'day').value.padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 export const formatCanadaTime = (timeVal) => {

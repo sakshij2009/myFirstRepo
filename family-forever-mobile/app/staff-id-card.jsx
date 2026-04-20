@@ -9,6 +9,7 @@ import {
   Animated,
   Image,
   Dimensions,
+  Modal,
 } from "react-native";
 import QRCode from "qrcode";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,6 +34,7 @@ export default function StaffIdCard() {
   const [user, setUser] = useState(null);
   const [qrMatrix, setQrMatrix] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isZoomed, setIsZoomed] = useState(false);
   const flipAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -100,9 +102,10 @@ export default function StaffIdCard() {
           <Animated.View style={[styles.idCard, frontAnimatedStyle, { backfaceVisibility: "hidden" }]}>
             <View style={styles.cardHeader}>
               <View style={styles.logoRow}>
-                <View style={styles.logoCircle}>
-                  <Ionicons name="pulse" size={18} color={PRIMARY_GREEN} />
-                </View>
+                <Image 
+                  source={require("../assets/logo.png")} 
+                  style={{ width: 28, height: 28, resizeMode: "contain" }} 
+                />
                 <Text style={styles.cardOrgName}>Family Forever Inc.</Text>
               </View>
               <Text style={styles.cardEmployeeId}>Employee ID {user?.employeeId || "27"}</Text>
@@ -113,6 +116,12 @@ export default function StaffIdCard() {
 
             <View style={styles.cardBody}>
               <View style={styles.avatarContainer}>
+                <Pressable 
+                  onPress={() => setIsZoomed(true)}
+                  style={StyleSheet.absoluteFill}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  zIndex={50}
+                />
                 <Image 
                   source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
                   style={styles.avatarImg} 
@@ -130,7 +139,7 @@ export default function StaffIdCard() {
               </View>
 
               <View style={styles.footerBrand}>
-                <Text style={styles.brandSlogan}>From Humanity to Community</Text>
+                <Text style={styles.brandSlogan}>From Humanity To Community.</Text>
               </View>
             </View>
           </Animated.View>
@@ -171,6 +180,24 @@ export default function StaffIdCard() {
           <View style={[styles.pagerDot, isFlipped && styles.pagerDotActive]} />
         </View>
       </ScrollView>
+
+      {/* Profile Zoom Modal */}
+      <Modal visible={isZoomed} transparent animationType="fade">
+        <View style={styles.zoomOverlay}>
+          <Pressable style={styles.zoomBackground} onPress={() => setIsZoomed(false)} />
+          <View style={styles.zoomContent}>
+            <View style={styles.zoomedImageWrapper}>
+              <Image 
+                source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
+                style={styles.zoomedImage} 
+              />
+            </View>
+            <Pressable onPress={() => setIsZoomed(false)} style={styles.zoomCloseBtn}>
+              <Ionicons name="close" size={28} color="#FFF" />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -315,4 +342,29 @@ const styles = StyleSheet.create({
   pager: { flexDirection: "row", gap: 8, marginTop: 25 },
   pagerDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#333" },
   pagerDotActive: { backgroundColor: "#FFF" },
+
+  // Zoom Modal
+  zoomOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center", alignItems: "center" },
+  zoomBackground: { ...StyleSheet.absoluteFillObject },
+  zoomContent: { width: width * 0.9, alignItems: "center" },
+  zoomedImageWrapper: { 
+    width: width * 0.85, 
+    height: width * 0.85, 
+    borderRadius: 30, 
+    overflow: "hidden", 
+    borderWidth: 4, 
+    borderColor: "rgba(255,255,255,0.15)" 
+  },
+  zoomedImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  zoomCloseBtn: { 
+    marginTop: 40, 
+    width: 64, 
+    height: 64, 
+    borderRadius: 32, 
+    backgroundColor: "rgba(255,255,255,0.1)", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    borderWidth: 1, 
+    borderColor: "rgba(255,255,255,0.2)" 
+  },
 });
