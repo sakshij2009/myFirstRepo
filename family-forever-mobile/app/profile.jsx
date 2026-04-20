@@ -7,6 +7,7 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +35,7 @@ export default function Profile() {
   const [user, setUser] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   useEffect(() => {
     let unsub;
@@ -142,10 +144,15 @@ export default function Profile() {
         {/* Profile Card */}
         <View style={styles.profileBox}>
           <View style={styles.avatarWrapper}>
-            <Image 
-              source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
-              style={styles.avatar} 
-            />
+            <Pressable 
+              onPress={() => setIsZoomed(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Image 
+                source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
+                style={styles.avatar} 
+              />
+            </Pressable>
             <Pressable onPress={handleChangePhoto} style={styles.editAvatarBtn}>
               <Ionicons name="camera" size={14} color="#FFF" />
             </Pressable>
@@ -234,6 +241,24 @@ export default function Profile() {
         
         <Text style={styles.versionText}>Version 1.0.2</Text>
       </ScrollView>
+
+      {/* Profile Zoom Modal */}
+      <Modal visible={isZoomed} transparent animationType="fade">
+        <View style={styles.zoomOverlay}>
+          <Pressable style={styles.zoomBackground} onPress={() => setIsZoomed(false)} />
+          <View style={styles.zoomContent}>
+            <View style={styles.zoomedImageWrapper}>
+              <Image 
+                source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} 
+                style={styles.zoomedImage} 
+              />
+            </View>
+            <Pressable onPress={() => setIsZoomed(false)} style={styles.zoomCloseBtn}>
+              <Ionicons name="close" size={28} color="#FFF" />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -328,4 +353,29 @@ const styles = StyleSheet.create({
   signOutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 40, height: 56, borderRadius: 16, borderWidth: 2, borderColor: "#FEE2E2", backgroundColor: "#FEF2F2" },
   signOutText: { fontSize: 16, fontWeight: "700", color: ERROR_RED, fontFamily: "Inter-Bold" },
   versionText: { textAlign: "center", color: "#D1D5DB", marginTop: 20, fontSize: 12, fontFamily: "Inter" },
+
+  // Zoom Modal
+  zoomOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center", alignItems: "center" },
+  zoomBackground: { ...StyleSheet.absoluteFillObject },
+  zoomContent: { width: "90%", alignItems: "center" },
+  zoomedImageWrapper: { 
+    width: 340, 
+    height: 340, 
+    borderRadius: 30, 
+    overflow: "hidden", 
+    borderWidth: 4, 
+    borderColor: "rgba(255,255,255,0.15)" 
+  },
+  zoomedImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  zoomCloseBtn: { 
+    marginTop: 40, 
+    width: 64, 
+    height: 64, 
+    borderRadius: 32, 
+    backgroundColor: "rgba(255,255,255,0.1)", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    borderWidth: 1, 
+    borderColor: "rgba(255,255,255,0.2)" 
+  },
 });

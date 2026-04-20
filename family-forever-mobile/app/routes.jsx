@@ -82,9 +82,6 @@ export default function Routes() {
           <Text style={styles.headerTitle}>Transportation</Text>
           <Text style={styles.headerSubtitle}>Recent Transportations</Text>
         </View>
-        <Pressable style={styles.addBtn}>
-          <Ionicons name="add" size={26} color="#FFF" />
-        </Pressable>
       </View>
 
       {/* Tabs */}
@@ -217,18 +214,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   headerSubtitle: { fontSize: 14, color: GRAY_TEXT, fontFamily: "Inter" },
-  addBtn: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 12, 
-    backgroundColor: PRIMARY_GREEN, 
-    alignItems: "center", 
-    justifyContent: "center",
-    shadowColor: PRIMARY_GREEN,
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5
-  },
   
   tabContainer: { 
     flexDirection: "row", 

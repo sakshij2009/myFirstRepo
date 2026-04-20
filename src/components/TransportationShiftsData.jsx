@@ -188,13 +188,6 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
 
         const visitDuration = buildRangeLabel(arrivedVisitTime, visitEndTime);
 
-        // ----- DROP -----
-        const dropAddress =
-          primaryPoint?.dropLocation ||
-          clientForm.dropOffAddress ||
-          shift.dropLocation ||
-          "N/A";
-
         const dropTime =
           shift.transportation?.dropTime ||
           primaryPoint?.dropTime ||
@@ -202,7 +195,18 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
           shift.dropTime ||
           "N/A";
 
-        const progressItems = getProgressItems(shift, clientForm);
+        // ✅ Hide Visit if not relevant
+        const startDateObj = shift.startDate?.toDate ? shift.startDate.toDate() : new Date(shift.startDate);
+        const day = startDateObj.getDay();
+        const isWeekend = day === 0 || day === 6;
+        const cat = (shift.shiftCategory || shift.categoryName || "").toLowerCase();
+        const desc = (shift.description || shift.jobdescription || "").toLowerCase();
+        const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
+
+        const progressItems = getProgressItems(shift, clientForm).filter(item => {
+           if (item.key === "visit" && !needsVisit) return false;
+           return true;
+        });
 
         return (
           <div
@@ -231,7 +235,7 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
                   </div>
 
                   {/* VISIT */}
-                  {visitAddress && visitAddress.trim() !== "" && (
+                  {needsVisit && visitAddress && visitAddress.trim() !== "" && (
                     <div className="text-center">
                       <p className="font-normal text-[14px]">
                         Visit Address:

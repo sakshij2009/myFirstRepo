@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getFirestore, collection, query, getDocs } from "firebase/firestore";
+import { formatLocalISO, parseLocalSafe, getEdmontonToday } from "../utils/dateHelpers";
 
 export default function AdminShiftCalendar() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(getEdmontonToday());
   const [shifts, setShifts] = useState([]);
   const [expandedUsers, setExpandedUsers] = useState({});
 
@@ -42,11 +43,10 @@ export default function AdminShiftCalendar() {
     const map = {};
 
     shifts.forEach((shift) => {
-      const d = shift.startDate?.toDate
-        ? shift.startDate.toDate()
-        : new Date(shift.startDate);
+      const d = parseLocalSafe(shift.startDate);
+      if (!d) return;
 
-      const dateKey = d.toISOString().split("T")[0];
+      const dateKey = formatEdmontonISO(d);
       const userKey = shift.name  ;
 
       if (!map[dateKey]) map[dateKey] = {};
@@ -117,7 +117,7 @@ export default function AdminShiftCalendar() {
       {/* CALENDAR */}
       <div className="grid grid-cols-7 border border-gray-200">
         {monthDays.map((day, idx) => {
-          const dateKey = day ? day.toISOString().split("T")[0] : null;
+          const dateKey = day ? formatEdmontonISO(day) : null;
           const usersForDay = dateKey ? shiftMap[dateKey] || {} : {};
 
           return (

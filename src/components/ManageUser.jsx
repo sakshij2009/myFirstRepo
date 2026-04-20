@@ -13,6 +13,7 @@ const GENDER_TABS = ["All", "Male", "Female"];
 /* ── ID Card Modal ─────────────────────────────────────────── */
 function IDCardModal({ user, onClose }) {
   const [side, setSide] = useState("front");
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const initials = user.name
     ? user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)
@@ -43,11 +44,11 @@ function IDCardModal({ user, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 360, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden relative" style={{ width: 360, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {/* Modal Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
           <div
@@ -83,10 +84,15 @@ function IDCardModal({ user, onClose }) {
                 </div>
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>Employee ID {user.userId || "—"}</div>
 
-                {/* Avatar circle — positioned so it overlaps white section */}
+                {/* Avatar circle — clickable zoom */}
                 <div
-                  className="absolute w-16 h-16 rounded-full border-4 border-white overflow-hidden flex items-center justify-center"
+                  className="absolute w-16 h-16 rounded-full border-4 border-white overflow-hidden flex items-center justify-center cursor-pointer transform transition-transform hover:scale-110 active:scale-95 z-20"
                   style={{ backgroundColor: "#e5e7eb", bottom: -32 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsZoomed(true);
+                  }}
+                  title="Click to zoom"
                 >
                   <img
                     src={user.profilePhotoUrl || "/images/profile.jpeg"}
@@ -102,7 +108,7 @@ function IDCardModal({ user, onClose }) {
                 <div className="mb-3" style={{ fontSize: 12, color: "#6b7280" }}>{user.jobTitle || user.position || "Child and Youth Care Worker"}</div>
                 <div style={{ fontSize: 12, color: "#374151" }}>{user.email || "—"}</div>
                 <div style={{ fontSize: 12, color: "#374151" }}>{user.phone || "—"}</div>
-                <div className="mt-4 font-semibold" style={{ fontSize: 12, color: "#374151" }}>From Humanity to Community</div>
+                <div className="mt-4 font-semibold" style={{ fontSize: 12, color: "#374151" }}>From Humanity To Community.</div>
               </div>
             </div>
           ) : (
@@ -152,6 +158,29 @@ function IDCardModal({ user, onClose }) {
           </button>
         </div>
       </div>
+
+      {/* Image Zoom Overlay */}
+      {isZoomed && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-6 cursor-zoom-out animate-in fade-in zoom-in duration-200"
+          onClick={() => setIsZoomed(false)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]">
+            <img 
+              src={user.profilePhotoUrl || "/images/profile.jpeg"} 
+              alt={user.name || "Zoomed Profile"} 
+              className="rounded-2xl shadow-2xl max-w-full max-h-[75vh] border-4 border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button 
+              className="mt-8 text-white text-sm font-bold flex items-center gap-2 px-6 py-2 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-all mx-auto"
+              onClick={() => setIsZoomed(false)}
+            >
+              <X size={18} /> Close Preview
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

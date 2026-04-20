@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, addDoc, query, where, updateDoc } from "firebase/firestore";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { db, auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X, Users,
 } from "lucide-react";
+import { getEdmontonToday } from "../utils/dateHelpers";
 
 const ManagePrivateFamilies = () => {
   const [activeTab, setActiveTab] = useState("Families"); // "Families" or "Requests"
@@ -17,6 +18,11 @@ const ManagePrivateFamilies = () => {
   const [goToPage, setGoToPage] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [secondParentEmail, setSecondParentEmail] = useState("");
+  const [primaryShowAssessment, setPrimaryShowAssessment] = useState(false);
+  const [primaryShowIntakeForm, setPrimaryShowIntakeForm] = useState(false);
+  const [secondShowAssessment, setSecondShowAssessment] = useState(false);
+  const [secondShowIntakeForm, setSecondShowIntakeForm] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
 
@@ -99,7 +105,8 @@ const ManagePrivateFamilies = () => {
 
     setInviting(true);
 
-    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
+    const primaryEmail = inviteEmail.trim().toLowerCase();
+    const encodedEmail = encodeURIComponent(primaryEmail);
     const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
     const actionCodeSettings = {
       url: `${continueBase}/intake-form/login?email=${encodedEmail}&role=parent`,
@@ -107,11 +114,85 @@ const ManagePrivateFamilies = () => {
     };
 
     try {
-      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+      // Save per-parent settings to Firestore before sending invite
+      await addDoc(collection(db, "parentInvites"), {
+        primaryEmail,
+        primaryShowAssessmentLink: primaryShowAssessment,
+        primaryShowIntakeFormLink: primaryShowIntakeForm,
+        secondParentEmail: secondParentEmail.trim().toLowerCase() || "",
+        secondShowAssessmentLink: secondShowAssessment,
+        secondShowIntakeFormLink: secondShowIntakeForm,
+        createdAt: getEdmontonToday(),
+      });
 
-      alert(`Invitation link sent to ${inviteEmail}`);
+      // If second parent email provided, create their intakeUser record linked to primary
+      if (secondParentEmail.trim()) {
+        const secondEmail = secondParentEmail.trim().toLowerCase();
+        const secondQ = query(
+          collection(db, "intakeUsers"),
+          where("email", "==", secondEmail)
+        );
+        const secondSnap = await getDocs(secondQ);
+
+        if (secondSnap.empty) {
+          // Create second parent account with their own form settings
+          const primaryQ = query(
+            collection(db, "intakeUsers"),
+            where("email", "==", primaryEmail)
+          );
+          const primarySnap = await getDocs(primaryQ);
+          const primaryId = primarySnap.empty ? null : primarySnap.docs[0].id;
+
+          await addDoc(collection(db, "intakeUsers"), {
+            name: "",
+            role: "Parent",
+            email: secondEmail,
+            phone: "",
+            showAssessmentLink: secondShowAssessment,
+            showIntakeFormLink: secondShowIntakeForm,
+            linkedParentId: primaryId || "",
+            createdAt: getEdmontonToday(),
+          });
+        } else {
+          // Update existing account with their form settings
+          const primaryQ = query(
+            collection(db, "intakeUsers"),
+            where("email", "==", primaryEmail)
+          );
+          const primarySnap = await getDocs(primaryQ);
+          const primaryId = primarySnap.empty ? null : primarySnap.docs[0].id;
+          await updateDoc(doc(db, "intakeUsers", secondSnap.docs[0].id), {
+            showAssessmentLink: secondShowAssessment,
+            showIntakeFormLink: secondShowIntakeForm,
+            ...(primaryId ? { linkedParentId: primaryId } : {}),
+          });
+        }
+      }
+
+      await sendSignInLinkToEmail(auth, primaryEmail, actionCodeSettings);
+
+      // Also send invite to second parent if provided
+      if (secondParentEmail.trim()) {
+        const secondEmail = secondParentEmail.trim().toLowerCase();
+        const encodedSecond = encodeURIComponent(secondEmail);
+        const secondActionCodeSettings = {
+          url: `${continueBase}/intake-form/login?email=${encodedSecond}&role=parent`,
+          handleCodeInApp: true,
+        };
+        await sendSignInLinkToEmail(auth, secondEmail, secondActionCodeSettings);
+      }
+
+      const sentTo = secondParentEmail.trim()
+        ? `${primaryEmail} and ${secondParentEmail.trim().toLowerCase()}`
+        : primaryEmail;
+      alert(`Invitation link sent to ${sentTo}`);
       setShowModal(false);
       setInviteEmail("");
+      setSecondParentEmail("");
+      setPrimaryShowAssessment(false);
+      setPrimaryShowIntakeForm(false);
+      setSecondShowAssessment(false);
+      setSecondShowIntakeForm(false);
     } catch (error) {
       console.error("Error sending invite:", error);
       alert("Error sending invite: " + error.message);
@@ -405,16 +486,52 @@ const ManagePrivateFamilies = () => {
 
               {/* Body */}
               <div className="flex flex-col gap-4 mb-6">
+                {/* Primary Parent */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-gray-900">Email Address</label>
+                  <label className="text-sm font-semibold text-gray-900">Primary Parent Email</label>
                   <input
                     type="email"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="family@example.com"
+                    placeholder="parent1@example.com"
                     className="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
                     style={{ fontSize: 13 }}
                   />
+                  <div className="flex gap-3 mt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border border-gray-200 flex-1" style={{ backgroundColor: primaryShowAssessment ? "#fffbeb" : "#f9fafb", borderColor: primaryShowAssessment ? "#fbbf24" : "#e5e7eb" }}>
+                      <input type="checkbox" checked={primaryShowAssessment} onChange={e => setPrimaryShowAssessment(e.target.checked)} className="w-4 h-4 accent-amber-600" />
+                      Assessment Form
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border border-gray-200 flex-1" style={{ backgroundColor: primaryShowIntakeForm ? "#eff6ff" : "#f9fafb", borderColor: primaryShowIntakeForm ? "#93c5fd" : "#e5e7eb" }}>
+                      <input type="checkbox" checked={primaryShowIntakeForm} onChange={e => setPrimaryShowIntakeForm(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                      Intake Form
+                    </label>
+                  </div>
+                </div>
+
+                {/* Second Parent */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-gray-900">Second Parent Email <span className="font-normal text-gray-400">(Optional)</span></label>
+                  <input
+                    type="email"
+                    value={secondParentEmail}
+                    onChange={(e) => setSecondParentEmail(e.target.value)}
+                    placeholder="parent2@example.com"
+                    className="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+                    style={{ fontSize: 13 }}
+                  />
+                  {secondParentEmail.trim() && (
+                    <div className="flex gap-3 mt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border border-gray-200 flex-1" style={{ backgroundColor: secondShowAssessment ? "#fffbeb" : "#f9fafb", borderColor: secondShowAssessment ? "#fbbf24" : "#e5e7eb" }}>
+                        <input type="checkbox" checked={secondShowAssessment} onChange={e => setSecondShowAssessment(e.target.checked)} className="w-4 h-4 accent-amber-600" />
+                        Assessment Form
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 px-3 py-2 rounded-lg border border-gray-200 flex-1" style={{ backgroundColor: secondShowIntakeForm ? "#eff6ff" : "#f9fafb", borderColor: secondShowIntakeForm ? "#93c5fd" : "#e5e7eb" }}>
+                        <input type="checkbox" checked={secondShowIntakeForm} onChange={e => setSecondShowIntakeForm(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                        Intake Form
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -425,7 +542,7 @@ const ManagePrivateFamilies = () => {
                     color: "#166534",
                   }}
                 >
-                  A unique registration link will be sent to the family. They will be registered with the 'Parent' role.
+                  A unique registration link will be sent to the primary parent. Both parents will be registered with the 'Parent' role and can access the same family information.
                 </div>
               </div>
 
@@ -450,6 +567,7 @@ const ManagePrivateFamilies = () => {
           </div>
         </>
       )}
+
     </div>
   );
 };

@@ -409,7 +409,7 @@ const [viewRecord, setViewRecord]         = useState(null);
           <div className="grid grid-cols-2" style={{ borderTop: "none" }}>
             {/* Private Family */}
             <button
-              onClick={() => navigate("/admin-dashboard/add/add-intake-form?type=Private")}
+              onClick={() => navigate("/admin-dashboard/add/private-family-form")}
               className="flex items-center gap-4 px-6 py-5 text-left transition-all group hover:bg-green-50/40 border-r"
               style={{ borderColor: "#f3f4f6" }}
             >

@@ -20,7 +20,11 @@ import { useNavigate } from 'react-router-dom';
       navigate(`/admin-dashboard/add/update-intake-form/${intakeId}?type=${choice}`);
     } else {
       // ✅ Navigate for add mode
-      navigate(`/admin-dashboard/add/add-intake-form?type=${choice}`);
+      if (choice === "Private") {
+        navigate("/admin-dashboard/add/private-family-form");
+      } else {
+        navigate(`/admin-dashboard/add/add-intake-form?type=${choice}`);
+      }
     }
   };
 

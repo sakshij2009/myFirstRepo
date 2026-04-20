@@ -1,6 +1,10 @@
 import React, { useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
+import {
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+} from "firebase/auth";
 import { Mail, ArrowRight, ClipboardList, Shield, Heart } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -29,9 +33,57 @@ const IntakeLogin = () => {
 
   // UI state
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Pre-fill email/role from magic link URL param (e.g. ?email=worker@example.com&role=parent)
+  // ── On mount: clear stale session & detect magic link return ──────────────
+  React.useEffect(() => {
+    // Clear stale session so login page always appears fresh
+    localStorage.removeItem("intakeUser");
+
+    // Detect if user has returned from a magic link email
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      const emailParam = new URLSearchParams(window.location.search).get("email");
+      let emailForSignIn = emailParam
+        ? decodeURIComponent(emailParam)
+        : window.localStorage.getItem("emailForSignIn");
+
+      if (!emailForSignIn) {
+        emailForSignIn = window.prompt("Please confirm your email address:");
+      }
+
+      if (emailForSignIn) {
+        setIsLoading(true);
+        signInWithEmailLink(auth, emailForSignIn.trim().toLowerCase(), window.location.href)
+          .then(async () => {
+            window.localStorage.removeItem("emailForSignIn");
+            const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
+            const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+              localStorage.setItem("intakeUser", JSON.stringify(userData));
+              localStorage.setItem("user", JSON.stringify(userData));
+              if ((userData.role || "").toLowerCase() === "parent") {
+                navigate("/intake-form/private-form");
+              } else {
+                navigate("/intake-form/dashboard");
+              }
+            } else {
+              setError("Account not found. Please sign up first.");
+              setIsLoading(false);
+            }
+          })
+          .catch((err) => {
+            console.error("Magic link error:", err);
+            setError("The link may have expired or already been used. Please request a new one.");
+            setIsLoading(false);
+          });
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pre-fill email/role from URL params (from invitation email)
   React.useEffect(() => {
     const emailParam = searchParams.get("email");
     const roleParam = searchParams.get("role");
@@ -53,9 +105,10 @@ const IntakeLogin = () => {
     }
   }, [searchParams]);
 
-  // ── Sign In — verify email from Firestore ───────────────────────────────
+  // ── Sign In — check email exists then send magic link ───────────────────────
   const handleSignIn = async () => {
     setError("");
+    setMessage("");
     if (!loginEmail) {
       setError("Please enter your email address.");
       return;
@@ -63,8 +116,6 @@ const IntakeLogin = () => {
 
     setIsLoading(true);
     try {
-      // Search all intakeUsers — Firestore doesn't support case-insensitive queries
-      // So we fetch all and match manually
       const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
       const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", loginEmail.trim().toLowerCase()));
       const snap = await getDocs(q);
@@ -75,27 +126,27 @@ const IntakeLogin = () => {
         return;
       }
 
-      const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      // Send magic link
+      const encodedEmail = encodeURIComponent(loginEmail.trim().toLowerCase());
+      const actionCodeSettings = {
+        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, loginEmail.trim().toLowerCase(), actionCodeSettings);
+      window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
 
-      // Store in localStorage — this acts as our auth session
-      localStorage.setItem("intakeUser", JSON.stringify(userData));
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      if ((userData.role || "").toLowerCase() === "parent") {
-        navigate("/intake-form/private-form");
-      } else {
-        navigate("/intake-form/dashboard");
-      }
+      setMessage("Sign-in link sent! Please check your email and click the link to continue.");
     } catch (err) {
-      setError("Sign in failed: " + err.message);
+      setError("Failed to send sign-in link: " + err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Sign Up — add new user to Firestore ────────────────────────────────
+  // ── Sign Up — add new user to Firestore then send verification link ─────────
   const handleSignUp = async () => {
     setError("");
+    setMessage("");
     if (!name || !role || !email || !phone || !invoiceEmail) {
       setError("Please fill in all required fields.");
       return;
@@ -129,18 +180,21 @@ const IntakeLogin = () => {
         invoiceEmail: invoiceEmail.trim().toLowerCase(),
         createdAt: new Date(),
       };
+      await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
-      const docRef = await addDoc(fbCollection(db, "intakeUsers"), newUser);
+      // Send verification magic link
+      const encodedEmail = encodeURIComponent(email.trim().toLowerCase());
+      const actionCodeSettings = {
+        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, email.trim().toLowerCase(), actionCodeSettings);
+      window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
 
-      const userData = { id: docRef.id, ...newUser };
-      localStorage.setItem("intakeUser", JSON.stringify(userData));
-      localStorage.setItem("user", JSON.stringify(userData));
-
-      if ((newUser.role || "").toLowerCase() === "parent") {
-        navigate("/intake-form/private-form");
-      } else {
-        navigate("/intake-form/dashboard");
-      }
+      // Switch to Sign In tab and show success
+      setIsSignUp(false);
+      setLoginEmail(email.trim().toLowerCase());
+      setMessage("Account created! A verification link has been sent to your email. Click it to sign in.");
     } catch (err) {
       setError("Sign up failed: " + err.message);
     } finally {
@@ -148,7 +202,7 @@ const IntakeLogin = () => {
     }
   };
 
-  // ── Styles ─────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Styles ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const inputStyle = () => ({
     width: "100%",
     height: 48,
@@ -166,7 +220,7 @@ const IntakeLogin = () => {
 
   return (
     <div className="flex min-h-screen" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {/* ── Left panel ── */}
+      {/* ΓöÇΓöÇ Left panel ΓöÇΓöÇ */}
       <div
         className="relative hidden md:flex flex-col items-center justify-center overflow-hidden"
         style={{ width: "55%", minHeight: "100vh", background: "linear-gradient(160deg, #1B5E37 0%, #14472A 50%, #0D3520 100%)" }}
@@ -230,7 +284,7 @@ const IntakeLogin = () => {
         </div>
       </div>
 
-      {/* ── Right panel ── */}
+      {/* ΓöÇΓöÇ Right panel ΓöÇΓöÇ */}
       <div
         className="flex flex-col items-center justify-center relative flex-1 bg-white"
         style={{ padding: "48px 40px" }}
@@ -278,9 +332,22 @@ const IntakeLogin = () => {
             </div>
           )}
 
+          {/* Success message */}
+          {message && (
+            <div
+              className="flex items-center gap-2 px-4 py-3 rounded-lg mb-4"
+              style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#166534", fontSize: 13 }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="20 6 9 17 4 12" />
+              </svg>
+              {message}
+            </div>
+          )}
+
           {isSignUp ? (
             <>
-              {/* ── SIGN UP FORM ── */}
+              {/* ΓöÇΓöÇ SIGN UP FORM ΓöÇΓöÇ */}
               <div style={{ display: "flex", flexDirection: "column", gap: 18, marginBottom: 24 }}>
                 <div>
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
@@ -423,7 +490,7 @@ const IntakeLogin = () => {
             </>
           ) : (
             <>
-              {/* ── SIGN IN FORM ── */}
+              {/* ΓöÇΓöÇ SIGN IN FORM ΓöÇΓöÇ */}
               <div style={{ marginBottom: 24 }}>
                 <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
                   Email Address

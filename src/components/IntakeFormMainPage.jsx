@@ -14,7 +14,7 @@ const IntakeFormMainPage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // ── Load user from localStorage synchronously on mount ──────────────────
+  // ΓöÇΓöÇ Load user from localStorage synchronously on mount ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   useEffect(() => {
     const stored = localStorage.getItem("intakeUser");
     if (stored) {
@@ -48,17 +48,7 @@ const IntakeFormMainPage = () => {
       {/* LOGIN PAGE */}
       <Route
         path="login"
-        element={
-          getUser() ? (
-            (getUser().role || "").toLowerCase() === "parent" ? (
-              <Navigate to="/intake-form/private-form" replace />
-            ) : (
-              <Navigate to="/intake-form/dashboard" replace />
-            )
-          ) : (
-            <IntakeLogin />
-          )
-        }
+        element={<IntakeLogin />}
       />
 
       {/* DASHBOARD PAGE (Protected) */}
@@ -120,7 +110,7 @@ const IntakeFormMainPage = () => {
         }
       />
 
-      {/* PRIVATE FAMILY INTAKE FORM (Protected — role=parent) */}
+      {/* PRIVATE FAMILY INTAKE FORM (Protected ΓÇö role=parent) */}
       <Route
         path="private-form"
         element={

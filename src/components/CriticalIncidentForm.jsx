@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase"; // adjust path if needed
+import { formatLocalISO } from "../utils/dateHelpers";
 
 // Your existing input primitives (keep as-is)
 import { Field, TextInput, TextArea, Select, Check, Radio } from "../components/Inputs";
@@ -296,7 +297,7 @@ const buildDefaultInitialValues = (seed = {}) => ({
     date:
       seed.bg?.date ??
       seed.bgDate ??
-      new Date().toISOString().split("T")[0],
+      formatLocalISO(new Date()),
     timeOccur: seed.bg?.timeOccur ?? "",
     timeEnd: seed.bg?.timeEnd ?? "",
     location: seed.bg?.location ?? "",
@@ -505,14 +506,14 @@ useEffect(() => {
           let v = seed.dob;
 
           if (v instanceof Object && v.toDate) {
-            v = v.toDate().toISOString().split("T")[0];
+            v = formatLocalISO(v.toDate());
           } else if (
             typeof v === "string" &&
             /^\d{4}-\d{2}-\d{2}$/.test(v)
           ) {
             // already correct
           } else {
-            v = new Date(v).toISOString().split("T")[0];
+            v = formatLocalISO(v);
           }
 
           seed.dob = v;
@@ -529,7 +530,7 @@ useEffect(() => {
 
       if (!incidentData) {
         // NEW REPORT → auto set today's date if not present
-        merged.bg.date = new Date().toISOString().split("T")[0];
+        merged.bg.date = formatLocalISO(new Date());
       }
 
       if (mounted) setInitialValues(merged);

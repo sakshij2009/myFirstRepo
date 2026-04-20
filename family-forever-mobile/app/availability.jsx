@@ -24,6 +24,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { getEdmontonToday, formatEdmontonISO } from "../src/utils/date";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY_GREEN = "#1F6F43";
@@ -79,7 +80,7 @@ function getMondayOf(date) {
 }
 
 function getWeekDays(weekOffset = 0) {
-  const today = new Date();
+  const today = getEdmontonToday();
   const monday = getMondayOf(today);
   monday.setDate(monday.getDate() + weekOffset * 7);
   return DAY_KEYS.map((key, i) => {
@@ -91,7 +92,7 @@ function getWeekDays(weekOffset = 0) {
       label: DAY_LABELS[i],
       date: String(d.getDate()),
       fullDate: d,
-      dateStr: toDateStr(d),
+      dateStr: formatEdmontonISO(d),
       isToday: isSameDay(d, today),
     };
   });
