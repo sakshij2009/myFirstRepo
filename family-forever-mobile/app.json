@@ -19,7 +19,11 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture.",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location to track driving distance for shift reports.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
-        "NSLocationAlwaysUsageDescription": "This app needs background location access to accurately track your mileage during transportation shifts."
+        "NSLocationAlwaysUsageDescription": "This app needs background location access to accurately track your mileage during transportation shifts.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -48,7 +52,22 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
+          "locationAlwaysPermission": "This app needs background location access to accurately track your mileage during transportation shifts.",
+          "locationWhenInUsePermission": "This app needs access to your location to track driving distance for shift reports."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photo library to select a profile picture.",
+          "cameraPermission": "This app needs access to the camera to update your profile photo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
