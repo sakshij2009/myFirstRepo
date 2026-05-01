@@ -1,9 +1,9 @@
-import React, { useState, useRef } from "react";
-import { collection, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import React, { useState, useRef, useEffect } from "react";
+import { collection, addDoc, serverTimestamp, doc, setDoc, getDocs, query, where, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db, storage, COLLECTION_NEW_INTAKES } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLeft, ShieldCheck, Lock, CreditCard, FileText, Users } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { formatLocalISO } from "../utils/dateHelpers";
@@ -14,33 +14,19 @@ const GREEN = "#1f6f43";
 
 // ── Step definitions ───────────────────────────────────────────────────────
 const STEPS = [
-  { id: 1,  label: "Application Info" },
-  { id: 2,  label: "Applicant" },
-  { id: 3,  label: "Other Guardian" },
-  { id: 4,  label: "Children" },
-  { id: 5,  label: "Services" },
-  { id: 6,  label: "Schedule" },
-  { id: 7,  label: "Court & Welfare" },
-  { id: 8,  label: "Special Needs" },
-  { id: 9,  label: "Safety" },
-  { id: 10, label: "Emergency" },
-  { id: 11, label: "Additional" },
-  { id: 12, label: "Rates & Fees" },
-  { id: 13, label: "Payment" },
-  { id: 14, label: "Signature" },
-  { id: 15, label: "Protocols" },
+  { id: 1,  label: "Welcome & Privacy" },
+  { id: 2,  label: "Part A: Case Information" },
+  { id: 3,  label: "Part B/C: Confidential Profile" },
+  { id: 4,  label: "Part D: Payment Model" },
+  { id: 5,  label: "Reports & Documentation" },
+  { id: 6,  label: "Protocols & Confidentiality" },
+  { id: 7,  label: "Sign & Complete" },
 ];
 
-const PROVINCES = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Northwest Territories","Nova Scotia","Nunavut","Ontario","Prince Edward Island","Quebec","Saskatchewan","Yukon"];
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
 const RELATIONSHIPS = ["Mother","Father","Grandmother","Grandfather","Aunt","Uncle","Legal Guardian","Foster Parent","Other"];
 const GENDERS = ["Male","Female","Non-binary","Prefer not to say"];
 const CUSTODY_OPTIONS = ["Sole Custody","Shared Custody","Court-Ordered Visitation","Informal Arrangement","Other"];
-const FREQUENCIES = ["Once a week","Twice a week","Three times a week","Bi-weekly","Monthly"];
-const DURATIONS = ["1 hour","2 hours","3 hours","4 hours","Half day","Full day","Other"];
-const LOCATIONS = ["Community (parent chooses)","Family Forever Office","Neutral Location","Child's Home","School","Library","Community Centre","Other"];
-const PAYMENT_RESP = ["Applicant (self-pay)","CFS / Government","Legal Aid","Insurance","Other"];
-const PAYMENT_METHODS = ["E-transfer","Cheque","Cash","Credit Card","Pre-authorized debit"];
 
 const emptyChild = () => ({ fullName: "", dob: "", gender: "", custody: "", custodyWith: "", photo: null, photoPreview: "" });
 const emptyEmergency = () => ({ fullName: "", relationship: "", phone: "" });
@@ -90,7 +76,7 @@ const Select = ({ label, required, options, placeholder, value, onChange }) => (
 const Radio = ({ label, options, value, onChange }) => (
   <div className="mb-4">
     {label && <Label>{label}</Label>}
-    <div className="flex gap-6 mt-1">
+    <div className="flex flex-wrap gap-4 mt-1">
       {options.map(o => (
         <label key={o} className="flex items-center gap-2 cursor-pointer text-sm">
           <input
@@ -107,22 +93,6 @@ const Radio = ({ label, options, value, onChange }) => (
   </div>
 );
 
-const SectionCard = ({ num, title, subtitle, children }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-    <div className="flex items-start gap-3 mb-4">
-      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ background: GREEN }}>
-        {num}
-      </div>
-      <div>
-        <h3 className="text-base font-bold text-gray-800">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-      </div>
-    </div>
-    {children}
-  </div>
-);
-
-// ── File Upload Field ──────────────────────────────────────────────────────
 const FileUpload = ({ label, hint, fileRef, file, onChange }) => (
   <div className="mb-4">
     {label && <Label>{label}</Label>}
@@ -150,46 +120,27 @@ const FileUpload = ({ label, hint, fileRef, file, onChange }) => (
   </div>
 );
 
-// ── Stepper ────────────────────────────────────────────────────────────────
-const Stepper = ({ current, total, onStepClick, completedSteps }) => {
-  const visible = 8;
-  const half = Math.floor(visible / 2);
-  let start = Math.max(0, current - 1 - half);
-  let end = Math.min(total, start + visible);
-  if (end - start < visible) start = Math.max(0, end - visible);
-  const shown = STEPS.slice(start, end);
-
-  return (
-    <div className="flex items-center gap-0 overflow-x-auto pb-1">
-      {shown.map((s, i) => {
-        const isActive = s.id === current;
-        const isDone = completedSteps.includes(s.id);
-        const isLast = i === shown.length - 1;
-        const isClickable = isDone || s.id <= current;
-        return (
-          <div key={s.id} className="flex items-center">
-            <div
-              className={`flex flex-col items-center ${isActive ? "opacity-100" : isDone ? "opacity-80" : "opacity-40"} ${isClickable ? "cursor-pointer" : "cursor-default"}`}
-              onClick={() => isClickable && onStepClick(s.id)}
-              title={s.label}
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all"
-                style={{ background: isDone || isActive ? GREEN : "#E5E7EB", color: isDone || isActive ? "#fff" : "#6B7280" }}
-              >
-                {isDone && !isActive ? <Check size={14} /> : s.id}
-              </div>
-              <span className="text-[9px] text-gray-500 mt-1 text-center w-16 leading-tight hidden sm:block">{s.label}</span>
-            </div>
-            {!isLast && (
-              <div className="w-8 h-0.5 mx-1 flex-shrink-0" style={{ background: isDone ? GREEN : "#E5E7EB" }} />
-            )}
-          </div>
-        );
-      })}
+const SectionCard = ({ num, title, subtitle, children, confidential }) => (
+  <div className={`bg-white rounded-xl border border-gray-200 p-6 mb-6 ${confidential ? "border-amber-200 shadow-sm shadow-amber-50" : ""}`}>
+    {confidential && (
+      <div className="flex items-center gap-2 mb-4 px-3 py-1.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-[10px] font-bold uppercase tracking-wider">
+        <Lock size={12} /> Confidential – Not disclosed to the other party
+      </div>
+    )}
+    <div className="flex items-start gap-3 mb-4">
+      {num && (
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ background: GREEN }}>
+          {num}
+        </div>
+      )}
+      <div>
+        <h3 className="text-base font-bold text-gray-800">{title}</h3>
+        {subtitle && <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{subtitle}</p>}
+      </div>
     </div>
-  );
-};
+    {children}
+  </div>
+);
 
 // ── Age from DOB ───────────────────────────────────────────────────────────
 const calcAge = (dob) => {
@@ -209,344 +160,165 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const [savingDraft, setSavingDraft] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
   const [completedSteps, setCompletedSteps] = useState([]);
+  const [formId, setFormId] = useState(null);
+  const [partyType, setPartyType] = useState("A"); // "A" or "B"
+
   const fileInputRefs = useRef({});
   const courtOrderFileRef = useRef(null);
-  const safetyFileRef = useRef(null);
   const sigCanvasRef = useRef(null);
 
   // ── Form state ──────────────────────────────────────────────────────────
   const [form, setForm] = useState({
-    // Step 1
+    // Part A: Shared Case Info
     applicationDate: formatLocalISO(new Date()),
     referralSource: "",
     referralSourceOther: "",
-
-    // Step 2 — Applicant
-    applicantFullName: "",
-    applicantStreet: "",
-    applicantStreet2: "",
-    applicantCity: "",
-    applicantProvince: "",
-    applicantPostal: "",
-    applicantPhone: "",
-    applicantEmail: user?.email || "",
-    applicantRelationship: "",
-    applicantRelationshipOther: "",
-
-    // Step 3 — Other Parent/Guardian
-    otherGuardianName: "",
-    otherGuardianPhone: "",
-    otherGuardianEmail: "",
-    otherGuardianAddress: "",
-    otherGuardianRelationship: "",
-    otherGuardianRelationshipOther: "",
-
-    // Step 4 — Children
     children: [emptyChild()],
-
-    // Step 5 — Services
-    serviceTypes: [],
-
-    // Step 6 — Schedule
-    visitFrequency: "",
-    visitDuration: "",
-    visitDurationOther: "",
-    visitLocation: "",
-    visitLocationOther: "",
-    preferredTimes: "",
-    preferredDates: [],
-
-    // Step 7 — Court & Welfare
     courtOrder: "",
     courtOrderFile: null,
     childWelfareInvolvement: "",
+    visitType: "",
+    visitGoals: "",
+    schedulingPreferences: "",
+    approvedVisitors: "",
+    safetyConcerns: "",
+    
+    // Part B/C: Party Confidential Profile (Dynamic)
+    fullName: "",
+    address: "",
+    phone: "",
+    email: user?.email || "",
+    relationship: "",
+    relationshipOther: "",
+    emergencyContact: emptyEmergency(),
+    
+    // Part D: Payment
+    paymentOption: "",
+    responsibleParty: "", // For Option 1
+    thirdPartyName: "",
+    costSplit: "50/50", // For Option 2
+    costSplitDetail: "",
+    thirdPartyPayer: "", // For Option 3
+    billingContact: "",
 
-    // Step 8 — Special Needs
-    specialNeeds: "",
-    allergies: "",
-    currentMedications: "",
+    // Reports
+    reportAckPayable: false,
 
-    // Step 9 — Safety
-    domesticViolence: "",
-    safetyFile: null,
-    additionalSafetyConcerns: "",
-
-    // Step 10 — Emergency Contacts
-    emergencyContacts: [emptyEmergency(), emptyEmergency()],
-
-    // Step 11 — Additional
-    additionalInfo: "",
-
-    // Step 13 — Payment
-    paymentResponsibility: "",
-    paymentResponsibilityOther: "",
-    paymentMethod: "",
-    paymentNotes: "",
-    paymentAck1: false,
-    paymentAck2: false,
-    paymentAck3: false,
-
-    // Step 14 — Signature
+    // Signature
     signatureDataUrl: "",
     signerName: "",
     signerDate: formatLocalISO(new Date()),
 
-    // Step 15 — Protocols
-    protocolAckName: "",
-    protocolAckDate: formatLocalISO(new Date()),
+    // Protocols
     protocolAcknowledged: false,
+    partyA_signed: false,
+    partyB_signed: false,
   });
 
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
+  // ── Initial Fetch ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // 1. Determine if current user is Party A or B
+        const qInv = query(collection(db, "parentInvites"), where("primaryEmail", "==", user?.email?.toLowerCase()));
+        const snapInv = await getDocs(qInv);
+        
+        let targetParty = "A";
+        if (snapInv.empty) {
+           const qInv2 = query(collection(db, "parentInvites"), where("secondParentEmail", "==", user?.email?.toLowerCase()));
+           const snapInv2 = await getDocs(qInv2);
+           if (!snapInv2.empty) targetParty = "B";
+        }
+        setPartyType(targetParty);
+
+        // 2. Load existing intake form
+        const qForm = query(collection(db, COLLECTION_NEW_INTAKES), where("formType", "==", "private"));
+        const snapForm = await getDocs(qForm);
+        
+        const existing = snapForm.docs.find(d => {
+           const data = d.data();
+           return (data.partyA_email === user?.email?.toLowerCase() || data.partyB_email === user?.email?.toLowerCase() || data.applicantEmail === user?.email?.toLowerCase() || data.secondaryParentEmail === user?.email?.toLowerCase());
+        });
+
+        if (existing) {
+          const data = { id: existing.id, ...existing.data() };
+          setFormId(existing.id);
+          
+          // Map data to local state
+          const partyData = targetParty === "A" ? data.partyA : data.partyB;
+          const shared = data.shared || {};
+          
+          setForm(prev => ({
+            ...prev,
+            ...shared,
+            ...(partyData || {}),
+            paymentOption: data.payment?.option || "",
+            responsibleParty: data.payment?.responsibleParty || "",
+            thirdPartyName: data.payment?.thirdPartyName || "",
+            costSplit: data.payment?.costSplit || "50/50",
+            costSplitDetail: data.payment?.costSplitDetail || "",
+            thirdPartyPayer: data.payment?.thirdPartyPayer || "",
+            billingContact: data.payment?.billingContact || "",
+            reportAckPayable: data.reports?.acknowledged || false,
+            partyA_signed: !!data.partyA?.signature,
+            partyB_signed: !!data.partyB?.signature,
+            signerName: partyData?.fullName || prev.signerName,
+          }));
+        }
+      } catch (err) {
+        console.error("Error fetching intake data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [user]);
+
   // ── Validation per step ─────────────────────────────────────────────────
   const validate = () => {
     const e = {};
-    if (step === 1) {
-      if (!form.applicationDate) e.applicationDate = "Required";
-    }
     if (step === 2) {
-      if (!form.applicantFullName.trim()) e.applicantFullName = "Full name is required";
-      if (!form.applicantStreet.trim()) e.applicantStreet = "Street address is required";
-      if (!form.applicantCity.trim()) e.applicantCity = "City is required";
-      if (!form.applicantProvince) e.applicantProvince = "Province is required";
-      if (!form.applicantPhone.trim()) e.applicantPhone = "Phone is required";
-      if (!form.applicantEmail.trim()) e.applicantEmail = "Email is required";
-      if (!form.applicantRelationship) e.applicantRelationship = "Relationship is required";
+      if (!form.children[0].fullName.trim()) e.child0 = "At least one child name is required";
+    }
+    if (step === 3) {
+      if (!form.fullName.trim()) e.fullName = "Full name is required";
+      if (!form.phone.trim()) e.phone = "Phone is required";
+      if (!form.relationship) e.relationship = "Relationship is required";
     }
     if (step === 4) {
-      form.children.forEach((c, i) => {
-        if (!c.fullName.trim()) e[`child_${i}_name`] = "Name is required";
-        if (!c.dob) e[`child_${i}_dob`] = "Date of birth is required";
-      });
+      if (!form.paymentOption) e.paymentOption = "Please select a payment option";
     }
-    if (step === 5) {
-      if (form.serviceTypes.length === 0) e.serviceTypes = "Select at least one service";
-    }
-    if (step === 10) {
-      if (!form.emergencyContacts[0].fullName.trim()) e.ec1_name = "Custodial parent name is required";
-      if (!form.emergencyContacts[0].phone.trim()) e.ec1_phone = "Phone is required";
-    }
-    if (step === 14) {
+    if (step === 7) {
       if (!form.signatureDataUrl) e.signature = "Signature is required";
-      if (!form.signerName.trim()) e.signerName = "Name is required";
-    }
-    if (step === 15) {
-      if (!form.protocolAcknowledged) e.protocolAcknowledged = "You must acknowledge the protocols";
-      if (!form.protocolAckName.trim()) e.protocolAckName = "Name is required";
+      if (!form.protocolAcknowledged) e.protocol = "You must acknowledge the protocols";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const next = () => {
-    if (validate()) {
-      setCompletedSteps(prev => prev.includes(step) ? prev : [...prev, step]);
-      setStep(s => Math.min(STEPS.length, s + 1));
-    }
-  };
-  const back = () => { setErrors({}); setStep(s => Math.max(1, s - 1)); };
+  const next = () => { if (validate()) { setCompletedSteps([...new Set([...completedSteps, step])]); setStep(s => s + 1); } };
+  const back = () => { setErrors({}); setStep(s => s - 1); };
 
-  const handleStepClick = (targetStep) => {
-    if (completedSteps.includes(step) || targetStep < step) {
-      setErrors({});
-      setStep(targetStep);
-    }
-  };
-
-  // ── Signature ───────────────────────────────────────────────────────────
-  const clearSignature = () => {
-    sigCanvasRef.current?.clear();
-    set("signatureDataUrl", "");
-  };
-  const saveSignature = () => {
-    if (sigCanvasRef.current && !sigCanvasRef.current.isEmpty()) {
-      set("signatureDataUrl", sigCanvasRef.current.toDataURL("image/png"));
-    }
-  };
-
-  // ── Child photo upload ──────────────────────────────────────────────────
-  const handleChildPhoto = (idx, file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const updated = [...form.children];
-      updated[idx] = { ...updated[idx], photo: file, photoPreview: e.target.result };
-      set("children", updated);
-    };
-    reader.readAsDataURL(file);
-  };
-
+  // ── Handlers ────────────────────────────────────────────────────────────
   const addChild = () => set("children", [...form.children, emptyChild()]);
   const removeChild = (i) => set("children", form.children.filter((_, idx) => idx !== i));
-
   const updateChild = (i, field, val) => {
     const updated = [...form.children];
     updated[i] = { ...updated[i], [field]: val };
     set("children", updated);
   };
+  const updateEC = (field, val) => set("emergencyContact", { ...form.emergencyContact, [field]: val });
 
-  const updateEC = (i, field, val) => {
-    const updated = [...form.emergencyContacts];
-    updated[i] = { ...updated[i], [field]: val };
-    set("emergencyContacts", updated);
-  };
-
-  const toggleService = (svc) => {
-    const curr = form.serviceTypes;
-    set("serviceTypes", curr.includes(svc) ? curr.filter(s => s !== svc) : [...curr, svc]);
-  };
-
-  const toggleDate = (date) => {
-    const str = formatLocalISO(date);
-    const curr = form.preferredDates;
-    set("preferredDates", curr.includes(str) ? curr.filter(d => d !== str) : [...curr, str]);
-  };
-
-  // ── Build payload (shared between submit & draft) ─────────────────────
-  const buildPayload = async (status) => {
-    // Upload child photos
-    const childrenData = await Promise.all(form.children.map(async (c) => {
-      let photoUrl = "";
-      if (c.photo) {
-        const fileRef = ref(storage, `private_family_forms/${Date.now()}_${c.photo.name}`);
-        await uploadBytes(fileRef, c.photo);
-        photoUrl = await getDownloadURL(fileRef);
-      }
-      return {
-        fullName: c.fullName, dob: c.dob, age: calcAge(c.dob),
-        gender: c.gender, custody: c.custody, custodyWith: c.custodyWith, photoUrl
-      };
-    }));
-
-    // Upload court order doc
-    let courtOrderDocUrl = "";
-    if (form.courtOrderFile) {
-      const coRef = ref(storage, `private_family_forms/court_orders/${Date.now()}_${form.courtOrderFile.name}`);
-      await uploadBytes(coRef, form.courtOrderFile);
-      courtOrderDocUrl = await getDownloadURL(coRef);
-    }
-
-    // Upload safety doc
-    let safetyDocUrl = "";
-    if (form.safetyFile) {
-      const sfRef = ref(storage, `private_family_forms/safety_docs/${Date.now()}_${form.safetyFile.name}`);
-      await uploadBytes(sfRef, form.safetyFile);
-      safetyDocUrl = await getDownloadURL(sfRef);
-    }
-
-    return {
-      formType: "private",
-      status,
-      submittedAt: serverTimestamp(),
-      submittedBy: user?.id || "",
-      applicantEmail: form.applicantEmail,
-
-      // Link to assessment if exists
-      assessmentId: user?.assessmentId || null,
-
-      applicationDate: form.applicationDate,
-      referralSource: form.referralSource,
-      referralSourceOther: form.referralSource === "Other" ? form.referralSourceOther : "",
-
-      applicant: {
-        fullName: form.applicantFullName,
-        street: form.applicantStreet,
-        street2: form.applicantStreet2,
-        city: form.applicantCity,
-        province: form.applicantProvince,
-        postalCode: form.applicantPostal,
-        phone: form.applicantPhone,
-        email: form.applicantEmail,
-        relationship: form.applicantRelationship,
-        relationshipOther: form.applicantRelationship === "Other" ? form.applicantRelationshipOther : "",
-      },
-
-      otherGuardian: {
-        fullName: form.otherGuardianName,
-        phone: form.otherGuardianPhone,
-        email: form.otherGuardianEmail,
-        address: form.otherGuardianAddress,
-        relationship: form.otherGuardianRelationship,
-        relationshipOther: form.otherGuardianRelationship === "Other" ? form.otherGuardianRelationshipOther : "",
-      },
-
-      children: childrenData,
-      familyName: form.applicantFullName.split(" ").pop() + " Family",
-
-      serviceTypes: form.serviceTypes,
-
-      visitSchedule: {
-        frequency: form.visitFrequency,
-        duration: form.visitDuration,
-        durationOther: form.visitDuration === "Other" ? form.visitDurationOther : "",
-        location: form.visitLocation,
-        locationOther: form.visitLocation === "Other" ? form.visitLocationOther : "",
-        preferredTimes: form.preferredTimes,
-        preferredDates: form.preferredDates,
-      },
-
-      courtOrder: form.courtOrder,
-      courtOrderDocUrl,
-      childWelfareInvolvement: form.childWelfareInvolvement,
-
-      specialNeeds: form.specialNeeds,
-      allergies: form.allergies,
-      currentMedications: form.currentMedications,
-
-      domesticViolence: form.domesticViolence,
-      safetyDocUrl,
-      additionalSafetyConcerns: form.additionalSafetyConcerns,
-
-      emergencyContacts: form.emergencyContacts,
-
-      additionalInfo: form.additionalInfo,
-
-      payment: {
-        responsibility: form.paymentResponsibility,
-        responsibilityOther: form.paymentResponsibility === "Other" ? form.paymentResponsibilityOther : "",
-        method: form.paymentMethod,
-        notes: form.paymentNotes,
-        acknowledged: form.paymentAck1 && form.paymentAck2 && form.paymentAck3,
-      },
-
-      signature: {
-        dataUrl: form.signatureDataUrl,
-        signerName: form.signerName,
-        signerDate: form.signerDate,
-      },
-
-      engagementProtocols: {
-        acknowledged: form.protocolAcknowledged,
-        acknowledgedBy: form.protocolAckName,
-        acknowledgedDate: form.protocolAckDate,
-      },
-    };
-  };
-
-  // ── Save as Draft ─────────────────────────────────────────────────────
-  const handleSaveDraft = async () => {
-    setSavingDraft(true);
-    try {
-      const payload = await buildPayload("Draft");
-      const docRef = await addDoc(collection(db, "InTakeForms"), payload);
-
-      // Link intakeId back to the assessment document
-      if (user?.assessmentId) {
-        await import("firebase/firestore").then(({ doc, updateDoc }) =>
-          updateDoc(doc(db, "InTakeForms", user.assessmentId), { intakeId: docRef.id })
-        );
-      }
-
-      alert("Draft saved successfully!");
-    } catch (err) {
-      console.error("Draft save error:", err);
-      alert("Failed to save draft: " + err.message);
-    } finally {
-      setSavingDraft(false);
+  const clearSignature = () => { sigCanvasRef.current?.clear(); set("signatureDataUrl", ""); };
+  const saveSignature = () => {
+    if (sigCanvasRef.current && !sigCanvasRef.current.isEmpty()) {
+      set("signatureDataUrl", sigCanvasRef.current.toDataURL("image/png"));
     }
   };
 
@@ -555,14 +327,65 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const payload = await buildPayload("Submitted");
-      const docRef = await addDoc(collection(db, "InTakeForms"), payload);
+      // 1. Upload signature/files if needed
+      let courtOrderDocUrl = form.courtOrderDocUrl || "";
+      if (form.courtOrderFile) {
+        const coRef = ref(storage, `private_family_forms/court_orders/${Date.now()}_${form.courtOrderFile.name}`);
+        await uploadBytes(coRef, form.courtOrderFile);
+        courtOrderDocUrl = await getDownloadURL(coRef);
+      }
 
-      // Link intakeId back to the assessment document
-      if (user?.assessmentId) {
-        await import("firebase/firestore").then(({ doc, updateDoc }) =>
-          updateDoc(doc(db, "InTakeForms", user.assessmentId), { intakeId: docRef.id })
-        );
+      const partyData = {
+        fullName: form.fullName,
+        address: form.address,
+        phone: form.phone,
+        email: form.email,
+        relationship: form.relationship,
+        relationshipOther: form.relationshipOther,
+        emergencyContact: form.emergencyContact,
+        signature: form.signatureDataUrl,
+        signedAt: serverTimestamp(),
+      };
+
+      const sharedData = {
+        applicationDate: form.applicationDate,
+        fileNumber: form.fileNumber || "",
+        referralSource: form.referralSource,
+        referralSourceOther: form.referralSourceOther,
+        children: form.children.map(c => ({ fullName: c.fullName, dob: c.dob, age: calcAge(c.dob), gender: c.gender, custody: c.custody })),
+        courtOrder: form.courtOrder,
+        courtOrderDocUrl,
+        childWelfareInvolvement: form.childWelfareInvolvement,
+        visitType: form.visitType,
+        visitGoals: form.visitGoals,
+        schedulingPreferences: form.schedulingPreferences,
+        approvedVisitors: form.approvedVisitors,
+        safetyConcerns: form.safetyConcerns,
+      };
+
+      const payload = {
+        formType: "private",
+        lastUpdated: serverTimestamp(),
+        shared: sharedData,
+        payment: {
+          option: form.paymentOption,
+          responsibleParty: form.responsibleParty,
+          thirdPartyName: form.thirdPartyName,
+          costSplit: form.costSplit,
+          costSplitDetail: form.costSplitDetail,
+          thirdPartyPayer: form.thirdPartyPayer,
+          billingContact: form.billingContact,
+        },
+        reports: { acknowledged: form.reportAckPayable },
+        [`party${partyType}`]: partyData,
+        [`party${partyType}_email`]: form.email.toLowerCase(),
+        status: "Submitted",
+      };
+
+      if (formId) {
+        await updateDoc(doc(db, COLLECTION_NEW_INTAKES, formId), payload);
+      } else {
+        await addDoc(collection(db, COLLECTION_NEW_INTAKES), payload);
       }
 
       if (onSubmitSuccess) onSubmitSuccess();
@@ -575,847 +398,271 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     }
   };
 
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><p className="text-gray-500 font-medium animate-pulse">Loading intake form...</p></div>;
+
   // ── Step renderers ───────────────────────────────────────────────────────
   const renderStep = () => {
     switch (step) {
-
-      // ── STEP 1: Application Information ─────────────────────────────────
       case 1: return (
-        <SectionCard num={1} title="Application Information">
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Date of Application"
-              type="date"
-              value={form.applicationDate}
-              onChange={e => set("applicationDate", e.target.value)}
-            />
-            <div className="mb-4">
-              <Label>Referral Source</Label>
-              <select
-                value={form.referralSource}
-                onChange={e => set("referralSource", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white"
-              >
-                <option value="">Select referral source</option>
-                {REFERRAL_SOURCES.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+        <div className="space-y-6">
+          <SectionCard title="SECTION – PARTY INFORMATION & CONFIDENTIALITY">
+            <div className="bg-emerald-50 border-l-4 border-emerald-600 p-4 rounded-r-lg mb-6">
+               <p className="text-sm text-emerald-800 leading-relaxed">
+                This intake is maintained as one case file for the purpose of service coordination, scheduling, safety planning, and documentation. 
+                Each party shall complete only their own section. Personal contact information provided by one party will not be disclosed 
+                to the other party unless required by law, court order, or written consent.
+               </p>
             </div>
-          </div>
-          {form.referralSource === "Other" && (
-            <Input
-              label="Please specify referral source"
-              placeholder="Describe how you heard about us..."
-              value={form.referralSourceOther}
-              onChange={e => set("referralSourceOther", e.target.value)}
-            />
-          )}
-        </SectionCard>
+            <div className="space-y-4">
+               <div className="flex items-start gap-3">
+                  <ShieldCheck className="text-emerald-600 shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">Your Privacy is Protected</h4>
+                    <p className="text-xs text-gray-500 mt-1">Your personal contact details like address, phone, and email stay hidden from the other party.</p>
+                  </div>
+               </div>
+               <div className="flex items-start gap-3">
+                  <FileText className="text-emerald-600 shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">Unified Case Management</h4>
+                    <p className="text-xs text-gray-500 mt-1">We maintain one file for the family to ensure seamless scheduling and safety coordination.</p>
+                  </div>
+               </div>
+            </div>
+          </SectionCard>
+          <SectionCard num={1} title="Initial Application Info">
+              <div className="grid grid-cols-3 gap-4">
+                <Input label="Date of Application" type="date" value={form.applicationDate} onChange={e => set("applicationDate", e.target.value)} />
+                <Input label="File Number (Internal)" placeholder="e.g. FF-2024-001" value={form.fileNumber} onChange={e => set("fileNumber", e.target.value)} />
+                <Select
+                  label="Referral Source"
+                  options={REFERRAL_SOURCES}
+                  value={form.referralSource}
+                  onChange={v => set("referralSource", v)}
+                />
+              </div>
+              {form.referralSource === "Other" && (
+                <Input label="Specify Referral Source" value={form.referralSourceOther} onChange={e => set("referralSourceOther", e.target.value)} />
+              )}
+          </SectionCard>
+        </div>
       );
 
-      // ── STEP 2: Applicant Information ────────────────────────────────────
       case 2: return (
-        <SectionCard num={2} title="Applicant Information" subtitle="Person completing this form and requesting service">
-          <Input
-            label="Full Legal Name"
-            required
-            placeholder="First Name, Middle Name, Last Name"
-            value={form.applicantFullName}
-            onChange={e => set("applicantFullName", e.target.value)}
-          />
-          {errors.applicantFullName && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantFullName}</p>}
-
-          <div className="mb-4">
-            <Label required>Street Address</Label>
-            <PlacesAutocomplete
-              value={form.applicantStreet}
-              onChange={v => set("applicantStreet", v)}
-              placeholder="Start typing street number and name..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-            />
-            {errors.applicantStreet && <p className="text-red-500 text-xs mt-1">{errors.applicantStreet}</p>}
-          </div>
-
-          <Input
-            label="Street Address Line 2 (Optional)"
-            placeholder="Suite, apartment, or building number"
-            value={form.applicantStreet2}
-            onChange={e => set("applicantStreet2", e.target.value)}
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Input
-                label="City"
-                required
-                value={form.applicantCity}
-                onChange={e => set("applicantCity", e.target.value)}
-              />
-              {errors.applicantCity && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantCity}</p>}
+        <div className="space-y-6">
+          <SectionCard num={2} title="Part A – Case Information" subtitle="This section is shared internal case information used by Family Forever Inc.">
+            <div className="mb-8">
+              <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <Users size={16} /> Child(ren) Information
+              </h4>
+              {form.children.map((child, i) => (
+                <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 relative">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Child #{i+1}</span>
+                    {form.children.length > 1 && <button onClick={() => removeChild(i)} className="text-red-400 hover:text-red-600"><X size={14}/></button>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <Input label="Full Legal Name" required value={child.fullName} onChange={e => updateChild(i, "fullName", e.target.value)} />
+                    <Input label="Date of Birth" type="date" required value={child.dob} onChange={e => updateChild(i, "dob", e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Select label="Gender" options={GENDERS} value={child.gender} onChange={v => updateChild(i, "gender", v)} />
+                    <Select label="Custody Status" options={CUSTODY_OPTIONS} value={child.custody} onChange={v => updateChild(i, "custody", v)} />
+                  </div>
+                </div>
+              ))}
+              <button onClick={addChild} className="flex items-center gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800"><Plus size={14}/> Add Another Child</button>
+              {errors.child0 && <p className="text-red-500 text-xs mt-2">{errors.child0}</p>}
             </div>
-            <div>
-              <Label required>Province</Label>
-              <select
-                value={form.applicantProvince}
-                onChange={e => set("applicantProvince", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white mb-4"
-              >
-                <option value="">Alberta</option>
-                {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              {errors.applicantProvince && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantProvince}</p>}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Input
-                label="Postal Code"
-                placeholder="e.g. T5J 1P6"
-                value={form.applicantPostal}
-                onChange={e => set("applicantPostal", e.target.value)}
-              />
+            <div className="space-y-4">
+              <Radio label="Court Order Status" options={["Yes", "No", "Pending"]} value={form.courtOrder} onChange={v => set("courtOrder", v)} />
+              {form.courtOrder === "Yes" && (
+                <FileUpload label="Upload Court Order" fileRef={courtOrderFileRef} file={form.courtOrderFile} onChange={f => set("courtOrderFile", f)} />
+              )}
+              <Radio label="Child Welfare Involvement?" options={["Yes", "No"]} value={form.childWelfareInvolvement} onChange={v => set("childWelfareInvolvement", v)} />
+              <Input label="Visit Type (e.g. Supervised, Exchange)" value={form.visitType} onChange={e => set("visitType", e.target.value)} />
+              <Textarea label="Visit Goals" placeholder="What are your goals for these visits?" value={form.visitGoals} onChange={e => set("visitGoals", e.target.value)} />
+              <Textarea label="Scheduling Preferences" placeholder="Days/times that work best for visits..." value={form.schedulingPreferences} onChange={e => set("schedulingPreferences", e.target.value)} />
+              <Textarea label="Approved Visitors" placeholder="Names of individuals approved to participate..." value={form.approvedVisitors} onChange={e => set("approvedVisitors", e.target.value)} />
+              <Textarea label="Shared Safety Concerns" placeholder="Non-confidential safety details relevant to visitation..." value={form.safetyConcerns} onChange={e => set("safetyConcerns", e.target.value)} />
             </div>
-            <div>
-              <Input
-                label="Cell Phone"
-                required
-                placeholder="(780) 123-4567"
-                value={form.applicantPhone}
-                onChange={e => set("applicantPhone", e.target.value)}
-              />
-              {errors.applicantPhone && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantPhone}</p>}
-            </div>
-          </div>
-
-          <Input
-            label="Email Address"
-            required
-            type="email"
-            placeholder="your@email.com"
-            value={form.applicantEmail}
-            onChange={e => set("applicantEmail", e.target.value)}
-          />
-          {errors.applicantEmail && <p className="text-red-500 text-xs -mt-3 mb-3">{errors.applicantEmail}</p>}
-
-          <div>
-            <Label required>Relationship to Child/Children</Label>
-            <select
-              value={form.applicantRelationship}
-              onChange={e => set("applicantRelationship", e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white mb-1"
-            >
-              <option value="">Select relationship</option>
-              {RELATIONSHIPS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            {errors.applicantRelationship && <p className="text-red-500 text-xs">{errors.applicantRelationship}</p>}
-          </div>
-          {form.applicantRelationship === "Other" && (
-            <div className="mt-3">
-              <Input
-                label="Please specify relationship"
-                placeholder="Describe your relationship to the child..."
-                value={form.applicantRelationshipOther}
-                onChange={e => set("applicantRelationshipOther", e.target.value)}
-              />
-            </div>
-          )}
-        </SectionCard>
+          </SectionCard>
+        </div>
       );
 
-      // ── STEP 3: Other Parent/Guardian ─────────────────────────────────────
       case 3: return (
-        <SectionCard num={3} title="Other Parent/Guardian Information">
-          <Input
-            label="Full Legal Name"
-            placeholder="First Name, Middle Name, Last Name"
-            value={form.otherGuardianName}
-            onChange={e => set("otherGuardianName", e.target.value)}
-          />
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Phone"
-              placeholder="(780) 123-4567"
-              value={form.otherGuardianPhone}
-              onChange={e => set("otherGuardianPhone", e.target.value)}
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={form.otherGuardianEmail}
-              onChange={e => set("otherGuardianEmail", e.target.value)}
-            />
-          </div>
-          <div className="mb-4">
-            <Label>Address</Label>
-            <PlacesAutocomplete
-              value={form.otherGuardianAddress}
-              onChange={v => set("otherGuardianAddress", v)}
-              placeholder="Start typing address..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-            />
-          </div>
-          <Select
-            label="Relationship to Child/Children"
-            options={RELATIONSHIPS}
-            placeholder="Select relationship"
-            value={form.otherGuardianRelationship}
-            onChange={v => set("otherGuardianRelationship", v)}
-          />
-          {form.otherGuardianRelationship === "Other" && (
-            <Input
-              label="Please specify relationship"
-              placeholder="Describe the relationship..."
-              value={form.otherGuardianRelationshipOther}
-              onChange={e => set("otherGuardianRelationshipOther", e.target.value)}
-            />
-          )}
+        <SectionCard num={3} confidential title={`Part ${partyType === "A" ? "B" : "C"} – Personal Confidential Section`} subtitle="This information belongs only to you and will not be shared with the other party.">
+            <Input label="Full Name" required value={form.fullName} onChange={e => set("fullName", e.target.value)} />
+            <div className="mb-4">
+              <Label>Home Address</Label>
+              <PlacesAutocomplete value={form.address} onChange={v => set("address", v)} placeholder="Type address..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Phone Number" required value={form.phone} onChange={e => set("phone", e.target.value)} />
+              <Input label="Email Address" required readOnly value={form.email} className="bg-gray-50 text-gray-500 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <Select label="Relationship to Child" required options={RELATIONSHIPS} value={form.relationship} onChange={v => set("relationship", v)} />
+            {form.relationship === "Other" && <Input label="Specify Relationship" value={form.relationshipOther} onChange={e => set("relationshipOther", e.target.value)} />}
+            
+            <div className="mt-8 pt-6 border-t">
+              <h4 className="text-sm font-bold text-gray-700 mb-4">Emergency Contact Details</h4>
+              <Input label="Full Name" value={form.emergencyContact.fullName} onChange={e => updateEC("fullName", e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Relationship" value={form.emergencyContact.relationship} onChange={e => updateEC("relationship", e.target.value)} />
+                <Input label="Phone" value={form.emergencyContact.phone} onChange={e => updateEC("phone", e.target.value)} />
+              </div>
+            </div>
+            {errors.fullName && <p className="text-red-500 text-xs mt-2">{errors.fullName}</p>}
         </SectionCard>
       );
 
-      // ── STEP 4: Children's Information ────────────────────────────────────
       case 4: return (
-        <SectionCard num={4} title="Children's Information">
-          {form.children.map((child, i) => (
-            <div key={i} className="border border-gray-200 rounded-xl p-4 mb-4 relative">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-bold text-gray-700">Child {i + 1}</h4>
-                {form.children.length > 1 && (
-                  <button onClick={() => removeChild(i)} className="text-red-400 hover:text-red-600">
-                    <X size={16} />
-                  </button>
+        <div className="space-y-6">
+          <SectionCard num={4} title="Part D – Payment Model Section">
+            <p className="text-sm text-gray-600 mb-6">Select how service costs will be handled for this case file.</p>
+            
+            <div className="space-y-4">
+              {/* Option 1 */}
+              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 1" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 1")}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 1" ? "border-emerald-600" : "border-gray-300"}`}>
+                    {form.paymentOption === "Option 1" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
+                  </div>
+                  <span className="font-bold text-gray-800 leading-tight">Option 1 – One Party Responsible for All Costs</span>
+                </div>
+                <p className="text-xs text-gray-500 ml-8 mb-3">One party will be responsible for all visit fees, mileage, and additional services.</p>
+                {form.paymentOption === "Option 1" && (
+                  <div className="ml-8 grid grid-cols-2 gap-3" onClick={e => e.stopPropagation()}>
+                    <Radio label="Responsible Party" options={["Party A", "Party B", "Third Party / Agency"]} value={form.responsibleParty} onChange={v => set("responsibleParty", v)} />
+                    {form.responsibleParty === "Third Party / Agency" && <Input label="Name of Third Party" value={form.thirdPartyName} onChange={e => set("thirdPartyName", e.target.value)} />}
+                  </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label required>Child's Full Name</Label>
-                  <input
-                    value={child.fullName}
-                    onChange={e => updateChild(i, "fullName", e.target.value)}
-                    placeholder="First name, Last name"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mb-1"
-                  />
-                  {errors[`child_${i}_name`] && <p className="text-red-500 text-xs">{errors[`child_${i}_name`]}</p>}
+              {/* Option 2 */}
+              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 2" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 2")}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 2" ? "border-emerald-600" : "border-gray-300"}`}>
+                    {form.paymentOption === "Option 2" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
+                  </div>
+                  <span className="font-bold text-gray-800 leading-tight">Option 2 – Shared Cost Between Parties</span>
                 </div>
-                <div>
-                  <Label required>Date of Birth</Label>
-                  <input
-                    type="date"
-                    value={child.dob}
-                    onChange={e => updateChild(i, "dob", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mb-1"
-                  />
-                  {errors[`child_${i}_dob`] && <p className="text-red-500 text-xs">{errors[`child_${i}_dob`]}</p>}
-                </div>
+                <p className="text-xs text-gray-500 ml-8 mb-3">Both parties agree to share service costs. Full payment from both must be received before visit confirmation.</p>
+                {form.paymentOption === "Option 2" && (
+                  <div className="ml-8 grid grid-cols-2 gap-3" onClick={e => e.stopPropagation()}>
+                    <Radio label="Cost Allocation" options={["50/50", "Other split"]} value={form.costSplit} onChange={v => set("costSplit", v)} />
+                    {form.costSplit === "Other split" && <Input label="Specify Split Detail" placeholder="e.g. 70/30" value={form.costSplitDetail} onChange={e => set("costSplitDetail", e.target.value)} />}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label>Age</Label>
-                  <input
-                    readOnly
-                    value={calcAge(child.dob)}
-                    placeholder="Auto-calculated"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50"
-                  />
+              {/* Option 3 */}
+              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 3" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 3")}>
+                <div className="flex items-center gap-3 mb-2">
+                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 3" ? "border-emerald-600" : "border-gray-300"}`}>
+                    {form.paymentOption === "Option 3" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
+                  </div>
+                  <span className="font-bold text-gray-800 leading-tight">Option 3 – Third-Party Payment</span>
                 </div>
-                <div>
-                  <Label>Gender</Label>
-                  <select
-                    value={child.gender}
-                    onChange={e => updateChild(i, "gender", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white"
-                  >
-                    <option value="">Select</option>
-                    {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label>Custody Arrangement</Label>
-                  <select
-                    value={child.custody}
-                    onChange={e => updateChild(i, "custody", e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white"
-                  >
-                    <option value="">Select</option>
-                    {CUSTODY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Sole custody — With Whom? */}
-              {child.custody === "Sole Custody" && (
-                <div className="mt-2">
-                  <Label>Sole Custody With Whom?</Label>
-                  <input
-                    value={child.custodyWith}
-                    onChange={e => updateChild(i, "custodyWith", e.target.value)}
-                    placeholder="Name of the person who has sole custody"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-                  />
-                </div>
-              )}
-
-              <div className="mt-3">
-                <Label>Child's Picture (Optional)</Label>
-                <div
-                  className="border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center cursor-pointer hover:border-green-600 transition"
-                  onClick={() => fileInputRefs.current[`child_${i}`]?.click()}
-                >
-                  {child.photoPreview ? (
-                    <img src={child.photoPreview} alt="preview" className="w-20 h-20 rounded-full object-cover mb-2" />
-                  ) : (
-                    <Upload size={24} className="text-gray-400 mb-2" />
-                  )}
-                  <p className="text-xs text-gray-500">
-                    {child.photoPreview ? "Click to change" : "Choose File — jpg, jpeg, PNG, or other image formats"}
-                  </p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    ref={el => fileInputRefs.current[`child_${i}`] = el}
-                    onChange={e => handleChildPhoto(i, e.target.files[0])}
-                  />
-                </div>
+                {form.paymentOption === "Option 3" && (
+                  <div className="ml-8 mt-3 grid grid-cols-2 gap-4" onClick={e => e.stopPropagation()}>
+                    <Select label="Payer" options={["CFS", "Agency", "Lawyer", "Other"]} value={form.thirdPartyPayer} onChange={v => set("thirdPartyPayer", v)} />
+                    <Input label="Billing Contact" value={form.billingContact} onChange={e => set("billingContact", e.target.value)} />
+                  </div>
+                )}
               </div>
             </div>
-          ))}
-
-          <button
-            onClick={addChild}
-            className="flex items-center gap-2 text-sm font-semibold border border-dashed border-green-700 text-green-700 rounded-lg px-4 py-2 hover:bg-green-50 transition"
-          >
-            <Plus size={16} /> Add Child
-          </button>
-        </SectionCard>
+            {errors.paymentOption && <p className="text-red-500 text-xs mt-4">{errors.paymentOption}</p>}
+          </SectionCard>
+        </div>
       );
 
-      // ── STEP 5: Type of Service Required ─────────────────────────────────
       case 5: return (
-        <SectionCard num={5} title="Type of Service Required">
-          <Label required>Service Type</Label>
-          {errors.serviceTypes && <p className="text-red-500 text-xs mb-2">{errors.serviceTypes}</p>}
-          {[
-            "Transportation assistance with travel to and from visits",
-            "Respite care (temporary care for the child)",
-            "Supervised visits (visits monitored by trained staff)",
-            "Supervised Exchanges",
-          ].map(svc => (
-            <label key={svc} className="flex items-start gap-3 mb-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.serviceTypes.includes(svc)}
-                onChange={() => toggleService(svc)}
-                className="mt-0.5 w-4 h-4 accent-green-800"
-              />
-              <span className="text-sm text-gray-700">{svc}</span>
-            </label>
-          ))}
+        <SectionCard num={5} title="Reports & Documentation">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
+            <div className="flex items-start gap-4">
+              <FileText className="text-emerald-700 shrink-0 mt-1" size={20} />
+              <div>
+                <h4 className="text-sm font-bold text-gray-800">Standard Reports</h4>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  Reports are optional and are not included in standard visit fees. 
+                  Reports are available at <strong>$40 per report</strong>, per requesting party. 
+                  Reports will only be released after payment is received.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-4 pt-4 border-t">
+              <CreditCard className="text-emerald-700 shrink-0 mt-1" size={20} />
+              <div>
+                <h4 className="text-sm font-bold text-gray-800">Billing Responsibility</h4>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  A party requesting a report is responsible for that report cost unless otherwise agreed in writing. 
+                  If both parties request the same report, each party is billed separately unless otherwise approved by Family Forever Inc.
+                </p>
+              </div>
+            </div>
+          </div>
+          <label className="flex items-start gap-3 mt-6 cursor-pointer border p-4 rounded-xl hover:bg-gray-50 transition-all">
+            <input type="checkbox" checked={form.reportAckPayable} onChange={e => set("reportAckPayable", e.target.checked)} className="mt-1 w-4 h-4 accent-emerald-700" />
+            <span className="text-sm text-gray-700 font-medium italic">I understand that reports are billed separately and available upon request for a fee of $40 per requesting party.</span>
+          </label>
         </SectionCard>
       );
 
-      // ── STEP 6: Requested Visit Schedule ─────────────────────────────────
       case 6: return (
-        <SectionCard num={6} title="Requested Visit Schedule">
-          <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Requested Frequency"
-              options={FREQUENCIES}
-              placeholder="Select Frequency"
-              value={form.visitFrequency}
-              onChange={v => set("visitFrequency", v)}
-            />
-            <div>
-              <Select
-                label="Requested Hours per Visit"
-                options={DURATIONS}
-                placeholder="Select duration"
-                value={form.visitDuration}
-                onChange={v => set("visitDuration", v)}
-              />
-              {form.visitDuration === "Other" && (
-                <input
-                  placeholder="Please specify duration (e.g., 5 hours, 90 minutes)"
-                  value={form.visitDurationOther}
-                  onChange={e => set("visitDurationOther", e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mt-1"
-                />
-              )}
-            </div>
-          </div>
+        <div className="space-y-6">
+           <SectionCard num={6} title="Engagement Protocols">
+             <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-4 bg-gray-50 text-[11px] text-gray-600 leading-relaxed mb-4">
+                <p className="font-bold text-gray-800 mb-2">FAMILY FOREVER INC. – ENGAGEMENT PROTOCOLS</p>
+                <div className="space-y-4">
+                   {[
+                    { t: "1. Attendance", d: "Participants must arrive on time. Late arrivals may result in shortened or cancelled visits." },
+                    { t: "2. Conduct", d: "Respectful behaviour toward the child and staff is mandatory. Aggressive or abusive behaviour will not be tolerated." },
+                    { t: "3. Compliance", d: "Participants must follow all instructions provided by the supervising staff." },
+                    { t: "4. Child Focus", d: "Adult matters, legal issues, or conflicts must not be discussed in the child's presence." },
+                    { t: "5. Substance Use", d: "Attendance under the influence of drugs or alcohol is strictly prohibited." },
+                    { t: "6. Photography", d: "Audio or video recording is prohibited unless authorized in writing." }
+                   ].map((p, i) => (
+                     <div key={i}><span className="font-bold text-gray-700">{p.t}:</span> {p.d}</div>
+                   ))}
+                </div>
+             </div>
+             <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={form.protocolAcknowledged} onChange={e => set("protocolAcknowledged", e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-700" />
+                <span className="text-sm text-gray-700">I have read, understood, and agree to comply with the Engagement Protocols.</span>
+             </label>
+           </SectionCard>
 
-          <div>
-            <Select
-              label="Visit Location"
-              options={LOCATIONS}
-              placeholder="Select location"
-              value={form.visitLocation}
-              onChange={v => set("visitLocation", v)}
-            />
-            {form.visitLocation === "Other" && (
-              <input
-                placeholder="Please specify the location..."
-                value={form.visitLocationOther}
-                onChange={e => set("visitLocationOther", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 mt-1 mb-4"
-              />
-            )}
-          </div>
-
-          <Input
-            label="Preferred Times of Day"
-            placeholder="e.g., Morning (8am-12pm), Afternoon (1pm-5pm)"
-            value={form.preferredTimes}
-            onChange={e => set("preferredTimes", e.target.value)}
-          />
-
-          <div className="mb-4">
-            <Label>Select Preferred Visit Dates (Optional)</Label>
-            <p className="text-xs text-gray-500 mb-2">Click on the calendar below to select your preferred visit dates. You can select dates over the next 6 months.</p>
-            {form.preferredDates.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {form.preferredDates.map(d => (
-                  <span key={d} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center gap-1">
-                    {d}
-                    <button onClick={() => set("preferredDates", form.preferredDates.filter(x => x !== d))}><X size={10} /></button>
-                  </span>
-                ))}
+           <SectionCard title="SECTION – PARTY CONFIDENTIALITY">
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                 <p className="text-sm text-blue-800 font-medium mb-3">Confidential Information Policy</p>
+                 <p className="text-xs text-blue-700 leading-relaxed">
+                   Family Forever Inc. maintains one case file for administrative purposes. Personal contact information provided (address, phone, email, emergency contacts) will be kept confidential from the other party unless required by law.
+                 </p>
               </div>
-            )}
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <DayPicker
-                mode="multiple"
-                selected={form.preferredDates.map(d => new Date(d + "T12:00:00"))}
-                onDayClick={toggleDate}
-                fromDate={new Date()}
-                toDate={new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000)}
-                styles={{ root: { margin: 0 } }}
-              />
-            </div>
-          </div>
-        </SectionCard>
+           </SectionCard>
+        </div>
       );
 
-      // ── STEP 7: Court Order & Child Welfare ───────────────────────────────
       case 7: return (
-        <>
-          <SectionCard num={7} title="Court Order Information">
-            <Radio
-              label="Is there a court order in place?"
-              options={["Yes", "No", "Pending"]}
-              value={form.courtOrder}
-              onChange={v => set("courtOrder", v)}
-            />
-            {form.courtOrder === "Yes" && (
-              <div className="mt-2">
-                <FileUpload
-                  label="Upload Court Order Document"
-                  hint="Please upload a copy of the court order (PDF, JPG, or PNG)."
-                  fileRef={courtOrderFileRef}
-                  file={form.courtOrderFile}
-                  onChange={f => set("courtOrderFile", f)}
-                />
-              </div>
-            )}
-          </SectionCard>
-          <SectionCard num={8} title="Child Welfare Involvement">
-            <Radio
-              label="Is there current child welfare involvement?"
-              options={["Yes", "No"]}
-              value={form.childWelfareInvolvement}
-              onChange={v => set("childWelfareInvolvement", v)}
-            />
-          </SectionCard>
-        </>
-      );
-
-      // ── STEP 8: Special Needs & Accommodations ────────────────────────────
-      case 8: return (
-        <SectionCard num={9} title="Special Needs & Accommodations">
-          <Textarea
-            label="Child's Special Needs or Developmental Considerations"
-            placeholder="Describe any special needs, developmental delays, behavioral considerations, or support requirements..."
-            value={form.specialNeeds}
-            onChange={e => set("specialNeeds", e.target.value)}
-          />
-          <Textarea
-            label="Allergies (Food, Environmental, Medications)"
-            placeholder="List any known allergies..."
-            value={form.allergies}
-            onChange={e => set("allergies", e.target.value)}
-          />
-          <Textarea
-            label="Current Medications"
-            placeholder="List any medications the child is currently taking..."
-            value={form.currentMedications}
-            onChange={e => set("currentMedications", e.target.value)}
-          />
-        </SectionCard>
-      );
-
-      // ── STEP 9: Safety & Risk Assessment ──────────────────────────────────
-      case 9: return (
-        <SectionCard num={10} title="Safety & Risk Assessment">
-          <Radio
-            label="History of domestic violence or family violence?"
-            options={["Yes", "No"]}
-            value={form.domesticViolence}
-            onChange={v => set("domesticViolence", v)}
-          />
-          {form.domesticViolence === "Yes" && (
-            <div className="mt-2 mb-2">
-              <FileUpload
-                label="Upload Supporting Safety Document (Optional)"
-                hint="You may upload any relevant police report, protection order, or other supporting document."
-                fileRef={safetyFileRef}
-                file={form.safetyFile}
-                onChange={f => set("safetyFile", f)}
-              />
-            </div>
-          )}
-          <Textarea
-            label="Additional Safety Concerns or Risk Factors"
-            placeholder="Please describe any other safety concerns, threats, or risk factors we should be aware of to ensure everyone's safety..."
-            value={form.additionalSafetyConcerns}
-            onChange={e => set("additionalSafetyConcerns", e.target.value)}
-          />
-        </SectionCard>
-      );
-
-      // ── STEP 10: Emergency Contacts ────────────────────────────────────────
-      case 10: return (
-        <SectionCard num={11} title="Emergency Contacts">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-5 text-xs text-blue-700">
-            <strong>Important: Custodial Parent Information</strong><br />
-            The first emergency contact should be the custodial parent (the parent who has primary custody of the child/children). This allows us to reach the legal guardian in case of any emergency during visits or services. The second contact is optional and can be another trusted individual over the custodial parent is unavailable.
+        <SectionCard num={7} title="Applicant Signature">
+          <p className="text-sm text-gray-600 mb-6">By signing below, you confirm that all information provided is accurate and you agree to the confidentiality and payment terms outlined.</p>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <Input label="Name (Print)" required value={form.signerName} onChange={e => set("signerName", e.target.value)} />
+            <Input label="Date" type="date" required value={form.signerDate} onChange={e => set("signerDate", e.target.value)} />
           </div>
-
-          <h4 className="text-sm font-bold text-gray-700 mb-3">Emergency Contact #1 (Custodial Parent)</h4>
-          <div className="grid grid-cols-3 gap-4 mb-5">
-            <div>
-              <Label required>Full Name</Label>
-              <input
-                value={form.emergencyContacts[0].fullName}
-                onChange={e => updateEC(0, "fullName", e.target.value)}
-                placeholder="Full name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-              {errors.ec1_name && <p className="text-red-500 text-xs mt-1">{errors.ec1_name}</p>}
-            </div>
-            <div>
-              <Label>Relationship</Label>
-              <input
-                value={form.emergencyContacts[0].relationship}
-                onChange={e => updateEC(0, "relationship", e.target.value)}
-                placeholder="e.g., Mother, Father"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-            </div>
-            <div>
-              <Label required>Phone Number</Label>
-              <input
-                value={form.emergencyContacts[0].phone}
-                onChange={e => updateEC(0, "phone", e.target.value)}
-                placeholder="(780) 123-4567"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-              {errors.ec1_phone && <p className="text-red-500 text-xs mt-1">{errors.ec1_phone}</p>}
-            </div>
-          </div>
-
-          <h4 className="text-sm font-bold text-gray-700 mb-1">Emergency Contact #2 (Optional Backup Contact)</h4>
-          <p className="text-xs text-gray-500 mb-3">Provide a secondary contact person in case the custodial parent cannot be reached.</p>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label>Full Name</Label>
-              <input
-                value={form.emergencyContacts[1].fullName}
-                onChange={e => updateEC(1, "fullName", e.target.value)}
-                placeholder="Full name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-            </div>
-            <div>
-              <Label>Relationship</Label>
-              <input
-                value={form.emergencyContacts[1].relationship}
-                onChange={e => updateEC(1, "relationship", e.target.value)}
-                placeholder="e.g., Grandmother, Aunt, Friend"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-            </div>
-            <div>
-              <Label>Phone Number</Label>
-              <input
-                value={form.emergencyContacts[1].phone}
-                onChange={e => updateEC(1, "phone", e.target.value)}
-                placeholder="(780) 123-4567"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-            </div>
-          </div>
-        </SectionCard>
-      );
-
-      // ── STEP 11: Additional Information ───────────────────────────────────
-      case 11: return (
-        <SectionCard num={12} title="Additional Information">
-          <Textarea
-            label="Is there anything else we should know about your situation?"
-            placeholder="Please share any other relevant details, concerns, or information that may help us provide the best service..."
-            value={form.additionalInfo}
-            onChange={e => set("additionalInfo", e.target.value)}
-          />
-        </SectionCard>
-      );
-
-      // ── STEP 12: Service Rates & Fees ──────────────────────────────────────
-      case 12: return (
-        <SectionCard num={13} title="Service Rates & Fees">
-          <p className="text-sm text-gray-600 mb-5">Family Forever operates on a fee-for-service basis. Our rates are designed to be accessible while ensuring quality, supervised access services.</p>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded border-2 border-gray-300 flex-shrink-0"></span>
-                Supervised Visits
-              </h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                <div className="flex justify-between"><span>1-hour visit</span><span className="font-semibold">$75.00</span></div>
-                <div className="flex justify-between"><span>2-hour visit</span><span className="font-semibold">$130.00</span></div>
-                <div className="flex justify-between"><span>3-hour visit</span><span className="font-semibold">$180.00</span></div>
-                <div className="flex justify-between"><span>4-hour visit</span><span className="font-semibold">$230.00</span></div>
-              </div>
-            </div>
-            <div className="border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded border-2 border-gray-300 flex-shrink-0"></span>
-                Supervised Exchanges
-              </h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                <div className="flex justify-between"><span>Standard exchange</span><span className="font-semibold">$45.00</span></div>
-                <div className="flex justify-between"><span>Weekend exchange</span><span className="font-semibold">$60.00</span></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-bold text-gray-700 mb-3">Additional Services</h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                <div className="flex justify-between"><span>Report writing</span><span className="font-semibold">$60.00</span></div>
-                <div className="flex justify-between"><span>Court attendance</span><span className="font-semibold">$75/hr</span></div>
-                <div className="flex justify-between"><span>File preparation</span><span className="font-semibold">$35.00</span></div>
-              </div>
-            </div>
-            <div className="border border-gray-200 rounded-xl p-4">
-              <h4 className="text-sm font-bold text-gray-700 mb-3">Cancellation Policy</h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                <div className="flex justify-between"><span>No charge</span><span className="font-semibold text-green-700">24h+ notice</span></div>
-                <div className="flex justify-between"><span>Full charge</span><span className="font-semibold text-red-600">&lt;24h notice</span></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-            <strong>Financial Assistance:</strong> We understand that supervised access services represent a financial commitment. Sliding scale and payment plans may be available based on demonstrated financial need. Please discuss your situation with our intake coordinator.
-          </div>
-        </SectionCard>
-      );
-
-      // ── STEP 13: Payment Procedures ────────────────────────────────────────
-      case 13: return (
-        <SectionCard num={14} title="Payment Procedures">
-          <Select
-            label="Who will be responsible for payment?"
-            required
-            options={PAYMENT_RESP}
-            placeholder="Select payment responsibility"
-            value={form.paymentResponsibility}
-            onChange={v => set("paymentResponsibility", v)}
-          />
-          {form.paymentResponsibility === "Other" && (
-            <Input
-              label="Please specify payment responsibility"
-              placeholder="Describe who will be responsible..."
-              value={form.paymentResponsibilityOther}
-              onChange={e => set("paymentResponsibilityOther", e.target.value)}
-            />
-          )}
-          <Select
-            label="Preferred Payment Method"
-            options={PAYMENT_METHODS}
-            placeholder="Select payment method"
-            value={form.paymentMethod}
-            onChange={v => set("paymentMethod", v)}
-          />
-          <Textarea
-            label="Payment Notes or Special Arrangements"
-            placeholder="Please provide any additional information about payment arrangements, financial assistance needs, or special circumstances..."
-            value={form.paymentNotes}
-            onChange={e => set("paymentNotes", e.target.value)}
-          />
-
-          <div className="mt-2">
-            <Label>Payment Policy Acknowledgement</Label>
-            <div className="space-y-3">
-              {[
-                { key: "paymentAck1", text: "I understand and acknowledge the service rates and payment policies outlined above." },
-                { key: "paymentAck2", text: "I understand that payment must be made at least 48 hours in advance of scheduled services." },
-                { key: "paymentAck3", text: "I understand the cancellation policy; cancellations with less than 24 hours notice will be charged in full, regardless of who cancels the visit." },
-              ].map(({ key, text }) => (
-                <label key={key} className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form[key]}
-                    onChange={e => set(key, e.target.checked)}
-                    className="mt-0.5 w-4 h-4 accent-green-800"
-                  />
-                  <span className="text-sm text-gray-700">{text}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </SectionCard>
-      );
-
-      // ── STEP 14: Signature ─────────────────────────────────────────────────
-      case 14: return (
-        <SectionCard num={15} title="Applicant Signature">
-          <p className="text-sm text-gray-600 mb-5">
-            By signing below, I confirm that all information provided in this application is accurate and complete to the best of my knowledge. I authorize Family Forever Inc. to use this information for the purpose of providing family services.
-          </p>
-
-          <div className="grid grid-cols-2 gap-4 mb-5">
-            <div>
-              <Label required>Full Name (Print)</Label>
-              <input
-                value={form.signerName}
-                onChange={e => set("signerName", e.target.value)}
-                placeholder="Type your full legal name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-              {errors.signerName && <p className="text-red-500 text-xs mt-1">{errors.signerName}</p>}
-            </div>
-            <div>
-              <Label required>Date</Label>
-              <input
-                type="date"
-                value={form.signerDate}
-                onChange={e => set("signerDate", e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-              />
-            </div>
-          </div>
-
-          <div className="mb-2">
-            <div className="flex items-center justify-between mb-2">
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
               <Label required>Signature</Label>
-              <button
-                type="button"
-                onClick={clearSignature}
-                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 rounded-md px-2 py-1 transition"
-              >
-                <Trash2 size={12} /> Clear
-              </button>
+              <button onClick={clearSignature} className="text-xs text-red-500 font-bold hover:underline">Clear</button>
             </div>
-            <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50 hover:border-green-500 transition">
-              <SignatureCanvas
-                ref={sigCanvasRef}
-                penColor={GREEN}
-                canvasProps={{
-                  width: 700,
-                  height: 180,
-                  className: "w-full",
-                  style: { touchAction: "none" }
-                }}
-                onEnd={saveSignature}
-              />
+            <div className="border border-gray-300 rounded-xl overflow-hidden bg-gray-50">
+              <SignatureCanvas ref={sigCanvasRef} penColor={GREEN} canvasProps={{ width: 700, height: 180, className: "w-full cursor-crosshair" }} onEnd={saveSignature} />
             </div>
-            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
-              <Pen size={11} /> Draw your signature using your mouse or touchscreen
-            </p>
-            {errors.signature && <p className="text-red-500 text-xs mt-1">{errors.signature}</p>}
+            {errors.signature && <p className="text-red-500 text-xs mt-2">{errors.signature}</p>}
           </div>
-
-          {form.signatureDataUrl && (
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-xs text-green-700 font-semibold mb-2">Signature Preview:</p>
-              <img src={form.signatureDataUrl} alt="Signature preview" className="max-h-16 object-contain" />
-            </div>
-          )}
-        </SectionCard>
-      );
-
-      // ── STEP 15: Engagement Protocols ─────────────────────────────────────
-      case 15: return (
-        <SectionCard num={16} title="Engagement Protocols – Family Forever Inc.">
-          <p className="text-sm text-gray-600 mb-4">Family Forever Inc. Engagement Protocols establish clear expectations for participants to ensure visits are conducted in a safe, respectful, and child-focused manner. All individuals participating in supervised visits are required to comply with these protocols. Failure to comply may result in immediate suspension or termination of the visit and/or services.</p>
-
-          <div className="space-y-4 text-sm text-gray-700 mb-6 max-h-96 overflow-y-auto pr-2 border border-gray-100 rounded-lg p-4 bg-gray-50">
-            {[
-              { title: "1. Attendance and Scheduling", points: ["Participants must arrive on time and have respect for the approved visit location.", "Any inability to attend or request for changes must be communicated to the supervisor as soon as reasonably possible.", "Late arrivals may result in shortened or cancelled visits at the agency's discretion."] },
-              { title: "2. Conduct and Professional Interaction", points: ["All participants are expected to behave respectfully and appropriately toward the child, staff, and other parties.", "Aggressive, confrontational, abusive, or disrespectful behaviour, whether in person, will not be tolerated.", "Concerns or feedback must be raised safely and through appropriate channels."] },
-              { title: "3. Compliance With Supervision", points: ["Participants must follow all instructions provided by the supervising staff.", "Limits placed on activities, discussion, or movement must be respected at all times.", "Supervisors have the authority to intervene, redirect, or end a visit where necessary."] },
-              { title: "4. Child Safety and Well-Being", points: ["The emotional and physical safety of the child is the primary focus of all visits.", "Participants must act in a manner that supports the child's comfort, security, and developmental needs.", "All agency emergency procedures must be followed without exception."] },
-              { title: "5. Communication Standards", points: ["Conversations must remain between age-appropriate, supportive, and child-focused.", "Adult matters, legal issues, conflicts, or distressing topics must not be discussed in the child's presence.", "Language must be respectful, non-derogatory, and appropriate and supportive of the child's well-being."] },
-              { title: "6. Physical Boundaries", points: ["Physical contact with the child must be appropriate, minimal, and consistent with supervision guidelines, court orders, and the child's comfort level.", "Physical contact with staff or supervisors is strictly prohibited."] },
-              { title: "7. Activities and Materials", points: ["Only activities approved by the supervisor may occur during visits.", "Visually inappropriate or unapproved activities or materials are not permitted.", "All food, books, and materials must be age-appropriate and suitable for supervised settings."] },
-              { title: "8. Substance Use", points: ["Attendance under the influence of alcohol, drugs, or impairing substances is strictly prohibited.", "If impairment is suspected, the supervisor may immediately terminate the visit."] },
-              { title: "9. Confidentiality and Privacy", points: ["Confidential or sensitive information must not be discussed in the presence of the child.", "Case details must not be shared outside the agency unless authorized or legally required through appropriate channels."] },
-              { title: "10. Photography and Recording", points: ["Audio or video recording of visits is prohibited unless explicitly authorized in writing by the agency.", "Photography of staff, supervisors, or other individuals is not permitted."] },
-              { title: "11. Supervision Proximity", points: ["Supervisory staff will remain within appropriate proximity throughout the visit to ensure safety and compliance.", "The level of supervision is mandatory for all supervised visits."] },
-              { title: "12. Supervisor's Role and Documentation", points: ["Supervisors provide neutral oversight and objective documentation.", "Requests to favour, amend, or question supervisor reports in ways that are not accurate will not be accepted.", "All records reflect factual observations only."] },
-              { title: "13. Reporting Concerns", points: ["Any concerns must be raised respectfully with the Supervisor or through designated agency channels.", "Issues should not be discussed during the visit in a manner that impacts the child."] },
-              { title: "14. Legal Compliance", points: ["All visits must comply with applicable court orders, legal agreements, and statutory requirements."] },
-            ].map(({ title, points }) => (
-              <div key={title}>
-                <p className="font-semibold text-gray-800 mb-1">{title}</p>
-                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                  {points.map((p, i) => <li key={i}>{p}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="border border-gray-200 rounded-xl p-4 bg-white">
-            <h4 className="text-sm font-bold text-gray-800 mb-3">Acknowledgement of Engagement Protocols</h4>
-            <p className="text-xs text-gray-500 mb-4">I acknowledge that I have read and understood the Engagement Protocols above and agree to comply with them throughout the visitation process.</p>
-
-            <label className="flex items-start gap-3 cursor-pointer mb-4">
-              <input
-                type="checkbox"
-                checked={form.protocolAcknowledged}
-                onChange={e => set("protocolAcknowledged", e.target.checked)}
-                className="mt-0.5 w-4 h-4 accent-green-800"
-              />
-              <span className="text-sm text-gray-700">I acknowledge that I have read and understood the Engagement Protocols above and agree to comply with them throughout the visitation process.</span>
-            </label>
-            {errors.protocolAcknowledged && <p className="text-red-500 text-xs mb-3">{errors.protocolAcknowledged}</p>}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label required>Name</Label>
-                <input
-                  value={form.protocolAckName}
-                  onChange={e => set("protocolAckName", e.target.value)}
-                  placeholder="Type your full name"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-                />
-                {errors.protocolAckName && <p className="text-red-500 text-xs mt-1">{errors.protocolAckName}</p>}
-              </div>
-              <div>
-                <Label required>Date</Label>
-                <input
-                  type="date"
-                  value={form.protocolAckDate}
-                  onChange={e => set("protocolAckDate", e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700"
-                />
-              </div>
-            </div>
-          </div>
+          {form.signatureDataUrl && <img src={form.signatureDataUrl} alt="Signature" className="h-16 object-contain border p-2 rounded mt-2" />}
         </SectionCard>
       );
 
@@ -1423,101 +670,82 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const currentIdx = step - 1;
+  const progress = (step / STEPS.length) * 100;
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#FDFEFE] font-sans text-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-3xl mx-auto">
-
-          {/* Top back button row */}
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50"
-              style={{ borderColor: "#e5e7eb", fontSize: 13, color: "#374151" }}
-            >
-              <ArrowLeft size={15} /> Back
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">Family Service Request</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Family Forever Inc. — Private Family Intake Form</p>
-            </div>
-            <div className="ml-auto text-right">
-              <span className="text-xs text-gray-500">Step {step} of {STEPS.length}</span>
-              <div className="w-32 h-1.5 bg-gray-200 rounded-full mt-1">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{ width: `${(step / STEPS.length) * 100}%`, background: GREEN }}
-                />
-              </div>
-            </div>
+      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-2">
+             <div className="flex items-center gap-3">
+                <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-500"><ArrowLeft size={20} /></button>
+                <div>
+                   <h1 className="text-lg font-bold tracking-tight">Family Intake Form</h1>
+                   <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-widest">{partyType === "A" ? "Primary Party Section" : "Secondary Party Section"}</p>
+                </div>
+             </div>
+             <div className="text-right">
+                <p className="text-xs font-bold text-gray-400">Step {step} of {STEPS.length}</p>
+                <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                   <div className="h-full bg-emerald-600 transition-all duration-500" style={{ width: `${progress}%` }} />
+                </div>
+             </div>
           </div>
-
-          <Stepper
-            current={step}
-            total={STEPS.length}
-            onStepClick={handleStepClick}
-            completedSteps={completedSteps}
-          />
+          
+          <div className="flex items-center gap-2 overflow-x-auto py-2 no-scrollbar">
+             {STEPS.map((s, i) => (
+                <div key={s.id} className="flex items-center shrink-0">
+                   <div 
+                    onClick={() => (completedSteps.includes(s.id) || s.id < step) && setStep(s.id)}
+                    className={`flex flex-col items-center gap-1 cursor-pointer transition-all ${s.id === step ? "opacity-100" : "opacity-40"}`}
+                   >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${s.id === step ? "bg-emerald-600 text-white" : completedSteps.includes(s.id) ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                        {completedSteps.includes(s.id) ? <Check size={14} /> : s.id}
+                      </div>
+                   </div>
+                   {i < STEPS.length - 1 && <div className="w-8 h-[2px] bg-gray-100 mx-1" />}
+                </div>
+             ))}
+          </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-3xl mx-auto px-6 py-6">
-        {renderStep()}
+      {/* Main Content */}
+      <div className="max-w-3xl mx-auto px-6 py-8">
+         <div className="transition-all duration-300 transform opacity-100 translate-y-0">
+            {renderStep()}
+         </div>
 
-        {/* Navigation Buttons */}
-        <div className="flex justify-between items-center mt-4 pb-8">
-          {/* Left — Back + Cancel */}
-          <div className="flex items-center gap-3">
+         <div className="flex items-center justify-between mt-8 pt-8 border-t border-gray-100">
             <button
-              onClick={() => {
-                if (step === 1) navigate(-1);
-                else back();
-              }}
-              className="flex items-center gap-2 px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+               disabled={step === 1}
+               onClick={back}
+               className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-30"
             >
-              <ChevronLeft size={16} /> Back
-            </button>
-            <button
-              onClick={() => navigate(-1)}
-              className="px-5 py-2 border border-red-200 rounded-lg text-sm font-semibold text-red-500 hover:bg-red-50 transition"
-            >
-              Cancel
-            </button>
-          </div>
-
-          {/* Right — Save Draft + Continue/Submit */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSaveDraft}
-              disabled={savingDraft}
-              className="px-5 py-2 border border-gray-400 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition disabled:opacity-50"
-            >
-              {savingDraft ? "Saving..." : "Save as Draft"}
+               <ChevronLeft size={18} /> Back
             </button>
 
-            {step < STEPS.length ? (
-              <button
-                onClick={next}
-                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition"
-                style={{ background: GREEN }}
-              >
-                Continue <ChevronRight size={16} />
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold text-white transition disabled:opacity-60"
-                style={{ background: GREEN }}
-              >
-                {submitting ? "Submitting..." : <><Check size={16} /> Submit Application</>}
-              </button>
-            )}
-          </div>
-        </div>
+            <div className="flex items-center gap-4">
+               {step < STEPS.length ? (
+                 <button
+                    onClick={next}
+                    className="flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-bold bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 transition-all active:scale-95"
+                 >
+                    Next <ChevronRight size={18} />
+                 </button>
+               ) : (
+                 <button
+                    disabled={submitting}
+                    onClick={handleSubmit}
+                    className="flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-bold bg-emerald-700 text-white shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 transition-all active:scale-95 disabled:opacity-50"
+                 >
+                    {submitting ? "Submitting..." : <><Check size={18} /> Submit Application</>}
+                 </button>
+               )}
+            </div>
+         </div>
       </div>
     </div>
   );

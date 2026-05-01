@@ -10,9 +10,9 @@
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.famforever.admin",
+      "bundleIdentifier": "com.familyforever.staffapp",
+      "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
-      "buildNumber": "5",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app needs access to the camera to update your profile photo.",

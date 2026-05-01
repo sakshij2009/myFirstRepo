@@ -73,8 +73,7 @@ useEffect(() => {
     fetchCategories();
   }, []);
 
-  // ✅ Fetch intake forms
-  // ✅ Fetch intake forms (filtered by logged-in user and flattened clients)
+// ✅ Fetch intake forms (from BOTH old InTakeForms and new mobile intakeForms collections)
 useEffect(() => {
   const fetchIntakeForms = async () => {
     if (!user?.name) {
@@ -83,16 +82,24 @@ useEffect(() => {
     }
 
     try {
-      // ✅ Fetch all forms, clients, and categories
-      const [formsSnap, categoriesSnap] = await Promise.all([
+      // ✅ Fetch all 3 collections + categories in parallel
+      const [oldFormsSnap, newFormsSnap, v2FormsSnap, categoriesSnap] = await Promise.all([
         getDocs(collection(db, "InTakeForms")),
+        getDocs(collection(db, "intakeForms")),
+        getDocs(collection(db, "IntakeFormsV2")),
         getDocs(collection(db, "shiftCategories")),
       ]);
 
-      const allForms = formsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      // Merge all 3 collections, deduplicating by id (v2 → old → mobile priority)
+      const oldForms = oldFormsSnap.docs.map((doc) => ({ id: doc.id, _source: "old", ...doc.data() }));
+      const newForms = newFormsSnap.docs.map((doc) => ({ id: doc.id, _source: "new", ...doc.data() }));
+      const v2Forms  = v2FormsSnap.docs.map((doc) => ({ id: doc.id, _source: "v2",  ...doc.data() }));
+      const seenIds = new Set();
+      const allForms = [...v2Forms, ...oldForms, ...newForms].filter(f => {
+        if (seenIds.has(f.id)) return false;
+        seenIds.add(f.id);
+        return true;
+      });
 
       // 🔹 Create a category map (ID → Name)
       const categoryMap = {};
@@ -107,6 +114,7 @@ useEffect(() => {
           form.workerInfo?.workerName ||
           form.intakeworkerName ||
           form.nameOfPerson ||
+          form.staffName || // ← new mobile app field
           "";
 
         return (
@@ -150,6 +158,7 @@ useEffect(() => {
                 form.workerInfo?.workerName ||
                 form.intakeworkerName ||
                 form.nameOfPerson ||
+                form.staffName ||
                 "",
               agencyName: form.agencyName || "",
               clientName: client.fullName || "Unnamed Client",
@@ -160,6 +169,19 @@ useEffect(() => {
               status: form.status || "",
             };
           });
+        } else if (form._source === "new" && form.clientName) {
+          // 📱 New mobile app forms have a flat structure
+          return [{
+            intakeId: form.id,
+            intakeworkerName: form.staffName || "",
+            agencyName: "",
+            clientName: form.clientName || "Unnamed Client",
+            clientCode: "—",
+            dob: "",
+            address: "",
+            serviceRequired: "—",
+            status: form.status || "submitted",
+          }];
         } else {
           return (form.inTakeClients || []).map((c) => {
             const matchedClient =
@@ -175,6 +197,7 @@ useEffect(() => {
                 form.workerInfo?.workerName ||
                 form.intakeworkerName ||
                 form.nameOfPerson ||
+                form.staffName ||
                 "",
               agencyName: form.agencyName || "",
               clientName: c.name || form.nameInClientTable || "Unnamed Client",
@@ -188,7 +211,7 @@ useEffect(() => {
         }
       });
 
-      console.log("✅ Flattened client records:", flattenedClients);
+      console.log("✅ Flattened client records (both sources):", flattenedClients);
       setIntakeForms(flattenedClients);
     } catch (error) {
       console.error("❌ Error fetching intake forms:", error);

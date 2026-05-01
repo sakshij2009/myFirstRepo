@@ -5,11 +5,44 @@
  * @param {object} formData - The full intake form data
  * @returns {object} - Filtered data object safe for parent viewing
  */
-export function filterFieldsForParents(formData) {
+/**
+ * Filters intake form data to only include fields visible to parents.
+ * Handles the new "1 file / 2 party" structure.
+ *
+ * @param {object} formData - The full intake form data
+ * @param {string} currentUserEmail - The email of the parent currently viewing
+ * @returns {object} - Filtered data object safe for parent viewing
+ */
+export function filterFieldsForParents(formData, currentUserEmail) {
   if (!formData) return formData;
 
   const filtered = { ...formData };
+  const email = (currentUserEmail || "").toLowerCase();
 
+  // If it's the new structured model
+  if (filtered.shared) {
+    // Redact Party A if it's not the current user
+    if (filtered.partyA_email && filtered.partyA_email !== email) {
+      filtered.partyA = {
+        fullName: filtered.partyA?.fullName || "Other Party",
+        relationship: filtered.partyA?.relationship || "",
+        hidden: true
+      };
+    }
+
+    // Redact Party B if it's not the current user
+    if (filtered.partyB_email && filtered.partyB_email !== email) {
+      filtered.partyB = {
+        fullName: filtered.partyB?.fullName || "Other Party",
+        relationship: filtered.partyB?.relationship || "",
+        hidden: true
+      };
+    }
+    
+    return filtered;
+  }
+
+  // Fallback for old flat model
   // Filter applicant - only keep name, phone, email, relationship
   if (filtered.applicant) {
     filtered.applicant = {
@@ -31,13 +64,9 @@ export function filterFieldsForParents(formData) {
     filtered.children = filtered.children.map(({ custodyWith, ...rest }) => rest);
   }
 
-  // Remove court order document URL (contains sensitive legal docs)
+  // Remove sensitive docs
   delete filtered.courtOrderDocUrl;
-
-  // Remove safety document URL
   delete filtered.safetyDocUrl;
-
-  // Remove domestic violence details (sensitive safety info)
   delete filtered.domesticViolence;
   delete filtered.additionalSafetyConcerns;
 

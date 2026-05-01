@@ -91,16 +91,25 @@ function ServiceTypeBadge({ type }) {
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({ activePage, onNavigate, onLogout }) {
+function Sidebar({ activePage, onNavigate, onLogout, isParent, parentShowAssessment, parentShowIntake }) {
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(true); // Default to collapsed
 
   const navItems = [
     { icon: <LayoutGrid className="size-4" strokeWidth={1.7} />, label: "Dashboard", key: "dashboard" },
     { icon: <FileText className="size-4" strokeWidth={1.7} />, label: "Submissions", key: "dashboard" }, // Point to dashboard/list
-    { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Intake Form", key: "new_standard" },
-    { icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Private Intake Form", key: "new_private" },
   ];
+
+  if (isParent) {
+    if (parentShowAssessment) {
+      navItems.push({ icon: <ClipboardList className="size-4" strokeWidth={1.7} />, label: "New Assessment Form", key: "new_assessment" });
+    }
+    if (parentShowIntake) {
+      navItems.push({ icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Private Intake Form", key: "new_private" });
+    }
+  } else {
+    navItems.push({ icon: <Plus className="size-4" strokeWidth={1.7} />, label: "New Intake Form", key: "new_standard" });
+  }
 
   const width = isCollapsed ? 64 : 240;
 
@@ -144,6 +153,8 @@ function Sidebar({ activePage, onNavigate, onLogout }) {
                   navigate("/intake-form/add");
                 } else if (item.key === "new_private") {
                   navigate("/intake-form/private-form");
+                } else if (item.key === "new_assessment") {
+                  navigate("/intake-form/assessment"); // Assessment Placeholder
                 } else onNavigate(item.key);
               }}
               className="w-full flex items-center gap-3 rounded-lg mb-1 transition-all"
@@ -190,7 +201,7 @@ function Sidebar({ activePage, onNavigate, onLogout }) {
 }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
-function Header({ workerName, workerProfile, notifCount, navigate }) {
+function Header({ workerName, workerProfile, notifCount, navigate, isParent }) {
   return (
     <header
       className="h-[58px] border-b flex items-center justify-between px-6 bg-white flex-shrink-0"
@@ -223,8 +234,7 @@ function Header({ workerName, workerProfile, notifCount, navigate }) {
         {/* Add New */}
         <button
           onClick={() => {
-            const r = (workerProfile?.role || user?.role || "").toLowerCase();
-            if (r === "parent" || r === "private family") {
+            if (isParent) {
               navigate("/intake-form/private-form");
             } else {
               navigate("/intake-form/add");
@@ -275,6 +285,9 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
 
   // Helpers to extract display values from raw form data
   const extractClientName = (form) => {
+    if (form.shared?.children && Array.isArray(form.shared.children)) {
+      return form.shared.children.map(c => c.fullName).join(", ");
+    }
     const clients = form.clients ? Object.values(form.clients) : (Array.isArray(form.inTakeClients) ? form.inTakeClients : []);
     const names = clients.map(c => c?.fullName || c?.name || c?.clientName || c?.firstName || c?.displayName || null).filter(Boolean);
     if (names.length) return names.join(", ");
@@ -282,6 +295,9 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
   };
 
   const extractFamilyName = (form) => {
+    if (form.shared?.children && Array.isArray(form.shared.children)) {
+      return "—"; // For shared cases, family name might be redundant or mixed
+    }
     const clients = form.clients ? Object.values(form.clients) : (Array.isArray(form.inTakeClients) ? form.inTakeClients : []);
     const names = clients.map(c => c?.familyName || c?.lastName || c?.surname || c?.family || c?.family_name || null).filter(Boolean);
     if (names.length) return names.join(", ");
@@ -639,34 +655,60 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     })();
   }, []);
 
-  // ── Real-time intake forms listener ──
+  // ── Real-time intake forms listener (fetches from ALL 3 collections) ──
   useEffect(() => {
     if (!workerId && !workerName) { setLoading(false); return; }
     setLoading(true);
 
-    const unsub = onSnapshot(
+    let oldAppForms = [];
+    let newAppForms = [];
+    let v2Forms     = [];
+    let oldLoaded = false;
+    let newLoaded = false;
+    let v2Loaded  = false;
+
+    const merge = () => {
+      if (!oldLoaded || !newLoaded || !v2Loaded) return;
+      // Deduplicate: v2 → old → mobile priority
+      const seen = new Set();
+      const unique = [...v2Forms, ...oldAppForms, ...newAppForms].filter(f => {
+        if (seen.has(f.id)) return false;
+        seen.add(f.id);
+        return true;
+      });
+      const mine = unique.filter(f => {
+        const fWorkerId = f.workerId || f.workerInfo?.workerId || "";
+        const fWorkerName = f.workerInfo?.workerName || f.intakeworkerName || f.nameOfPerson || f.staffName || "";
+        return (
+          (workerId && fWorkerId === workerId) ||
+          (workerName && fWorkerName.trim().toLowerCase() === workerName.trim().toLowerCase())
+        );
+      });
+      setAllForms(mine);
+      setLoading(false);
+    };
+
+    const unsubOld = onSnapshot(
       collection(db, "InTakeForms"),
-      (snap) => {
-        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const mine = all.filter(f => {
-          const fWorkerId = f.workerId || f.workerInfo?.workerId || "";
-          const fWorkerName = f.workerInfo?.workerName || f.intakeworkerName || f.nameOfPerson || "";
-          return (
-            (workerId && fWorkerId === workerId) ||
-            (workerName && fWorkerName.trim().toLowerCase() === workerName.trim().toLowerCase())
-          );
-        });
-        setAllForms(mine);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Forms listener:", err);
-        toast.error("Failed to load intake forms");
-        setLoading(false);
-      }
+      (snap) => { oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() })); oldLoaded = true; merge(); },
+      (err) => { console.error("InTakeForms listener:", err); toast.error("Failed to load intake forms"); setLoading(false); }
     );
-    return () => unsub();
+
+    const unsubNew = onSnapshot(
+      collection(db, "intakeForms"),
+      (snap) => { newAppForms = snap.docs.map(d => ({ id: d.id, _source: "new", ...d.data() })); newLoaded = true; merge(); },
+      (err) => { console.error("intakeForms listener:", err); newLoaded = true; merge(); }
+    );
+
+    const unsubV2 = onSnapshot(
+      collection(db, "IntakeFormsV2"),
+      (snap) => { v2Forms = snap.docs.map(d => ({ id: d.id, _source: "v2", ...d.data() })); v2Loaded = true; merge(); },
+      (err) => { console.error("IntakeFormsV2 listener:", err); v2Loaded = true; merge(); }
+    );
+
+    return () => { unsubOld(); unsubNew(); unsubV2(); };
   }, [workerId, workerName]);
+
 
   // ── Worker profile ──
   useEffect(() => {
@@ -891,15 +933,20 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     return () => { cancelled = true; };
   }, [isShiftModalOpen, selectedShiftFormId]);
 
+  const userRole = (workerProfile?.role || currentUser?.role || user?.role || "").toLowerCase();
+  const isParent = userRole === "parent" || userRole === "private family";
+  const parentShowAssessment = isParent ? !!workerProfile?.showAssessmentLink : false;
+  const parentShowIntake = isParent ? !!workerProfile?.showIntakeFormLink : false;
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ ...FONT, background: "#f9fafb" }}>
       {/* Sidebar */}
-      <Sidebar activePage={activePage} onNavigate={setActivePage} onLogout={onLogout} />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} onLogout={onLogout} isParent={isParent} parentShowAssessment={parentShowAssessment} parentShowIntake={parentShowIntake} />
 
       {/* Main area */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
-        <Header workerName={workerName} workerProfile={workerProfile} notifCount={notifications.length} navigate={navigate} />
+        <Header workerName={workerName} workerProfile={workerProfile} notifCount={notifications.length} navigate={navigate} isParent={isParent} />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
@@ -912,47 +959,73 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
               ))}
             </div>
 
-            {/* Quick Actions Card Grid */}
-            <div className="grid grid-cols-2 gap-6">
-              {/* Card 1: New Intake Form */}
-              <div 
-                onClick={() => navigate("/intake-form/add")}
-                className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group"
-                style={{ borderColor: "#e5e7eb" }}
-              >
-                <div className="flex items-center gap-5">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
-                    <Plus size={24} style={{ color: "#145228" }} />
+            {/* Quick Actions Card */}
+            <div className={`grid gap-6 ${isParent && parentShowAssessment && parentShowIntake ? "grid-cols-2" : "grid-cols-1"}`}>
+              {/* Card 1: New Intake Form (Only for Staff/Intake Workers) */}
+              {!isParent && (
+                <div 
+                  onClick={() => navigate("/intake-form/add")}
+                  className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group md:col-span-1"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
+                      <Plus size={24} style={{ color: "#145228" }} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Intake Form</h3>
+                      <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Standard worker intake submission</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Intake Form</h3>
-                    <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Standard worker intake submission</p>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                    <ChevronRight size={20} />
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                  <ChevronRight size={20} />
-                </div>
-              </div>
+              )}
 
-              {/* Card 2: New Private Intake Form */}
-              <div 
-                onClick={() => navigate("/intake-form/private-form")}
-                className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group"
-                style={{ borderColor: "#e5e7eb" }}
-              >
-                <div className="flex items-center gap-5">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
-                    <Users size={24} style={{ color: "#145228" }} />
+              {/* Card 2: New Private Intake Form (For Parents/Private Family with access) */}
+              {isParent && parentShowIntake && (
+                <div 
+                  onClick={() => navigate("/intake-form/private-form")}
+                  className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group md:col-span-1"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
+                      <Users size={24} style={{ color: "#145228" }} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Private Intake Form</h3>
+                      <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Parent or guardian requesting services</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Private Intake Form</h3>
-                    <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Parent or guardian requesting services</p>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                    <ChevronRight size={20} />
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                  <ChevronRight size={20} />
+              )}
+
+              {/* Card 3: New Assessment Form (For Parents/Private Family with access) */}
+              {isParent && parentShowAssessment && (
+                <div 
+                  onClick={() => navigate("/intake-form/assessment")}
+                  className="bg-white rounded-2xl border p-6 flex items-center justify-between cursor-pointer transition-all hover:shadow-lg hover:border-emerald-200 group md:col-span-1"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center transition-colors group-hover:bg-emerald-100" style={{ background: "#f0fdf4" }}>
+                      <ClipboardList size={24} style={{ color: "#D97706" }} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900" style={{ fontSize: 16 }}>New Assessment Form</h3>
+                      <p className="text-gray-500 mt-1" style={{ fontSize: 13 }}>Family assessment documentation</p>
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-50 text-gray-400 group-hover:bg-amber-600 group-hover:text-white transition-all">
+                    <ChevronRight size={20} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Main grid: forms table */}

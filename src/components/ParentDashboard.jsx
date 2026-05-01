@@ -163,55 +163,70 @@ const ParentDashboard = ({ user, onLogout }) => {
       return;
     }
 
-    // Find all private intake forms accessible to this parent
-    // Either submitted by this user, or linked via linkedParentId
-    const formsQuery = query(
-      collection(db, "InTakeForms"),
-      where("formType", "==", "private")
+    // Track forms from both collections
+    let oldAppForms = [];
+    let v2Forms     = [];
+    let oldLoaded   = false;
+    let v2Loaded    = false;
+
+    const mergeAndFilter = () => {
+      if (!oldLoaded || !v2Loaded) return;
+      // Deduplicate by id, IntakeFormsV2 (new web app) takes priority
+      const seen = new Set();
+      const all = [...v2Forms, ...oldAppForms].filter(f => {
+        if (seen.has(f.id)) return false;
+        seen.add(f.id);
+        return true;
+      });
+      // Keep only forms belonging to this parent
+      const myForms = all.filter(f =>
+        f.submittedBy === user.id ||
+        f.secondaryParentId === user.id ||
+        f.applicantEmail === user?.email ||
+        f.partyA_email === user?.email?.toLowerCase() ||
+        f.partyB_email === user?.email?.toLowerCase()
+      );
+      setForms(myForms);
+      setLoading(false);
+    };
+
+    // ── Listen to old InTakeForms (private forms only) ──
+    const unsubOld = onSnapshot(
+      query(collection(db, "InTakeForms"), where("formType", "==", "private")),
+      (snap) => {
+        oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() }));
+        oldLoaded = true;
+        mergeAndFilter();
+      },
+      () => { oldLoaded = true; mergeAndFilter(); }
     );
 
-    const unsubForms = onSnapshot(formsQuery, async (snap) => {
-      const allForms = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // ── Listen to IntakeFormsV2 (new web app private + assessment forms) ──
+    const unsubV2 = onSnapshot(
+      query(collection(db, "IntakeFormsV2"), where("formType", "==", "private")),
+      (snap) => {
+        v2Forms = snap.docs.map(d => ({ id: d.id, _source: "v2", ...d.data() }));
+        v2Loaded = true;
+        mergeAndFilter();
+      },
+      () => { v2Loaded = true; mergeAndFilter(); }
+    );
 
-      // Filter forms accessible to this parent
-      const myForms = allForms.filter((f) => {
-        return (
-          f.submittedBy === user.id ||
-          f.secondaryParentId === user.id ||
-          f.applicantEmail === user?.email
-        );
-      });
-
-      setForms(myForms);
-    });
-
-    // Listen to shifts for accessible clients
-    const shiftsQuery = query(collection(db, "shifts"));
-    const unsubShifts = onSnapshot(shiftsQuery, (snap) => {
-      const allShifts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      // Get client IDs from our forms
+    // ── Shifts listener (unchanged) ──
+    const unsubShifts = onSnapshot(query(collection(db, "shifts")), (snap) => {
+      const allShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const clientIds = [];
-      allForms.forEach((f) => {
+      forms.forEach(f => {
         if (f.clientsCreated && f.clients) {
-          Object.keys(f.clients).forEach((cid) => clientIds.push(cid));
+          Object.keys(f.clients).forEach(cid => clientIds.push(cid));
         }
       });
-
-      // Filter shifts for our clients
-      const myShifts = allShifts.filter((s) =>
+      setShifts(allShifts.filter(s =>
         clientIds.includes(s.clientId) || clientIds.includes(s.client)
-      );
-
-      setShifts(myShifts);
+      ));
     });
 
-    setLoading(false);
-
-    return () => {
-      unsubForms();
-      unsubShifts();
-    };
+    return () => { unsubOld(); unsubV2(); unsubShifts(); };
   }, [user?.id]);
 
   // Filter forms by search

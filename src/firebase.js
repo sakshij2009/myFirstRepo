@@ -27,3 +27,8 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 auth.settings.appVerificationDisabledForTesting = false;
 
+// ── Firestore Collection Names ─────────────────────────────────
+// OLD web app (legacy structure) → keeps old InTakeForms data
+export const COLLECTION_OLD_INTAKES = "InTakeForms";
+// NEW web app (IntakeForm.jsx / PrivateFamilyIntakeForm / Assessment)
+export const COLLECTION_NEW_INTAKES = "IntakeFormsV2";

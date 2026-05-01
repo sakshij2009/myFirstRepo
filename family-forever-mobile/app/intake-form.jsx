@@ -34,6 +34,17 @@ export default function IntakeForm() {
       const q = query(collection(db, "shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      
+      const userStr = await AsyncStorage.getItem("user");
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        const desig = (u.designation || u.role || "").toLowerCase();
+        if (desig.includes("parent")) {
+          setFormType("private");
+        } else {
+          setFormType("intake");
+        }
+      }
     } catch {}
   };
 
@@ -88,42 +99,7 @@ export default function IntakeForm() {
         </View>
 
         <View style={{ padding: 20 }}>
-          {/* Form Type Selector */}
-          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#e5e7eb" }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#6b7280", marginBottom: 12 }}>FORM TYPE</Text>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {["intake", "private"].map((type) => (
-                <Pressable
-                  key={type}
-                  onPress={() => setFormType(type)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    paddingHorizontal: 16,
-                    borderRadius: 10,
-                    borderWidth: 2,
-                    borderColor: formType === type ? GREEN : "#e5e7eb",
-                    backgroundColor: formType === type ? GREEN + "15" : "#fff",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "600",
-                      color: formType === type ? GREEN : "#6b7280",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {type === "intake" ? "Intake" : "Private"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {formType === "private" && (
-              <Text style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>Private forms won't display staff worker information in reports.</Text>
-            )}
-          </View>
+          {/* Form Type Selector REMOVED as per user instructions */}
 
           {/* Client Banner */}
           {shift && (

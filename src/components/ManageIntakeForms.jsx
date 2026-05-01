@@ -204,8 +204,14 @@ const [viewRecord, setViewRecord]         = useState(null);
     const fetchForms = async () => {
       setLoading(true);
       try {
-        const snap = await getDocs(collection(db, "InTakeForms"));
-        const list = snap.docs.map((d) => {
+        // Fetch from ALL 3 collections in parallel
+        const [oldSnap, newSnap, v2Snap] = await Promise.all([
+          getDocs(collection(db, "InTakeForms")),
+          getDocs(collection(db, "intakeForms")),
+          getDocs(collection(db, "IntakeFormsV2")),
+        ]);
+
+        const processDoc = (d, sourceLabel) => {
           const data = d.data();
           const rawFormType = data.formType || (data.inTakeWorkerName ? "Intake Worker" : "Private Family");
           const formType = normalizeFormType(rawFormType);
@@ -217,7 +223,9 @@ const [viewRecord, setViewRecord]         = useState(null);
           let agency = data.agencyName || data.agency || "—";
           let serviceType = normalizeServiceType(data.serviceType || data.shiftCategory || "");
 
-          if (Array.isArray(data.inTakeClients) && data.inTakeClients.length > 0) {
+          if (data.shared?.children && Array.isArray(data.shared.children) && data.shared.children.length > 0) {
+            clientName = data.shared.children.map(c => c.fullName).join(", ");
+          } else if (Array.isArray(data.inTakeClients) && data.inTakeClients.length > 0) {
             const first = data.inTakeClients[0];
             clientName  = first.name || clientName;
             clientCode  = first.clientId || first.id || clientCode;
@@ -230,6 +238,10 @@ const [viewRecord, setViewRecord]         = useState(null);
               clientName  = vals[0].fullName || vals[0].name || clientName;
               parentEmail = vals[0].parentEmail || parentEmail;
             }
+          } else if (sourceLabel === "new" && data.clientName) {
+            // 📱 New mobile app flat structure
+            clientName = data.clientName;
+            agency = "—";
           } else {
             clientName = data.nameInClientTable || data.filledBy || data.parentName
               || data.inTakeWorkerName || data.nameOfPerson || "—";
@@ -247,15 +259,29 @@ const [viewRecord, setViewRecord]         = useState(null);
             parentEmail,
             agency,
             formType,
-            submittedAt: data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || "—",
+            submittedAt: data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || data.submittedAt || "—",
             isEditable: data.isEditable || false,
-            filledBy: data.filledBy || data.inTakeWorkerName || data.parentName || "—",
+            filledBy: data.filledBy || data.inTakeWorkerName || data.parentName || data.staffName || "—",
+            _source: sourceLabel,
           };
+        };
+
+        const oldList = oldSnap.docs.map(d => processDoc(d, "old"));
+        const newList = newSnap.docs.map(d => processDoc(d, "new"));
+        const v2List  = v2Snap.docs.map(d => processDoc(d, "v2"));
+
+        // Merge: v2 (new web app) + old + mobile, deduplicate by id
+        const seenIds = new Set();
+        const merged = [...v2List, ...oldList, ...newList].filter(f => {
+          if (seenIds.has(f.id)) return false;
+          seenIds.add(f.id);
+          return true;
         });
 
-        list.sort((a, b) => {
+        merged.sort((a, b) => {
           const parseDate = (s) => {
             if (!s || s === "—") return 0;
+            if (s?.toDate) return s.toDate().getTime();
             if (s.includes("PM") || s.includes("AM"))
               return new Date(s.replace(/(\d{2}) (\w{3}) (\d{4})/, "$2 $1, $3")).getTime() || 0;
             if (s.includes("-")) {
@@ -267,7 +293,7 @@ const [viewRecord, setViewRecord]         = useState(null);
           return parseDate(b.submittedAt) - parseDate(a.submittedAt);
         });
 
-        setForms(list);
+        setForms(merged);
       } catch (e) {
         console.error("Error fetching intake forms:", e);
       } finally {
@@ -280,7 +306,9 @@ const [viewRecord, setViewRecord]         = useState(null);
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this form?")) return;
     try {
-      await deleteDoc(doc(db, "InTakeForms", id));
+      const form = forms.find(f => f.id === id);
+      const col = form?._source === "v2" ? "IntakeFormsV2" : form?._source === "new" ? "intakeForms" : "InTakeForms";
+      await deleteDoc(doc(db, col, id));
       setForms((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
       console.error("Error deleting form:", e);
@@ -290,7 +318,8 @@ const [viewRecord, setViewRecord]         = useState(null);
   const handleToggleEdit = async (form) => {
     const newState = !form.isEditable;
     try {
-      await updateDoc(doc(db, "InTakeForms", form.id), { isEditable: newState });
+      const col = form._source === "v2" ? "IntakeFormsV2" : form._source === "new" ? "intakeForms" : "InTakeForms";
+      await updateDoc(doc(db, col, form.id), { isEditable: newState });
       setForms((prev) => prev.map((f) => (f.id === form.id ? { ...f, isEditable: newState } : f)));
     } catch (e) {
       console.error("Error updating edit access:", e);

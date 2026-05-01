@@ -15,7 +15,7 @@ import {
   query,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage, auth } from "../firebase";
+import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload, X } from "lucide-react";
@@ -273,15 +273,20 @@ const mapOldIntakeToInitialValues = (raw) => {
           gender: normalizeGender(c.gender || c.otherGender || ""),
           birthDate: convertToISO(c.dob || ""),
           address: c.address || "",
-          latitude: c.latitude,
-          longitude: c.longitude,
+          latitude: c.latitude ?? "",
+          longitude: c.longitude ?? "",
           startDate: formatDateLocal(
             c.serviceStartDate || raw.serviceStartDate || ""
           ),
-          clientInfo: c.otherServiceConcerns || "",
+          clientInfo: c.otherServiceConcerns || c.servicePlanAndRisk || "",
           phone: c.parentPhone || "",
           email: c.parentEmail || "",
           photos: [],
+          // Old structure field mappings
+          cfsStatus: c.childStatus || "",
+          dfnaNumber: c.cyimId || c.healthCareNumber || "",
+          treatyNumber: c.treatyNumber || "",
+          apartmentUnit: "",
         }))
       : base.clients;
 
@@ -354,8 +359,8 @@ const mapOldIntakeToInitialValues = (raw) => {
       serviceType: [], // cannot reliably map to shiftCategories id
       servicePhone: "",
       serviceEmail: "",
-      serviceDesc: raw.serviceDetail || "",
-      safetyPlan: raw.servicePlanAndRisk || "",
+      serviceDesc: raw.serviceDetail || primaryClient.serviceDetail || "",
+      safetyPlan: raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
     },
     clients,
     billingInfo: {
@@ -371,14 +376,20 @@ const mapOldIntakeToInitialValues = (raw) => {
       date: convertToISO(raw.dateOfInTake || raw.date || ""),
       signature: raw.signature || "",
     },
+    // Intake worker fields (old key: inTakeWorker*)
     intakeworkerName: raw.inTakeWorkerName || "",
     agencyName: raw.inTakeWorkerAgencyName || "",
     intakeworkerPhone: raw.inTakeWorkerPhone || "",
     intakeworkerEmail: raw.inTakeWorkerEmail || "",
+    // Case worker fields (old key: caseWorker*)
+    caseworkerName: raw.caseWorkerName || "",
+    caseworkerAgencyName: raw.caseWorkerAgencyName || "",
+    caseworkerPhone: raw.caseWorkerPhone || "",
+    caseworkerEmail: raw.caseWorkerEmail || "",
     uploadDocs: [],
     uploadMedicalDocs: [],
     status: raw.status || "Submitted",
-    familyName: raw.familyName || "",
+    familyName: raw.familyName || raw.nameInClientTable || "",
   };
 };
 
@@ -496,6 +507,11 @@ const mapDataToInitialValues = (data) => {
       agencyName: data.agencyName || "",
       intakeworkerPhone: data.intakeworkerPhone || "",
       intakeworkerEmail: data.intakeworkerEmail || "",
+      // Case worker fields
+      caseworkerName: data.caseworkerName || "",
+      caseworkerAgencyName: data.caseworkerAgencyName || "",
+      caseworkerPhone: data.caseworkerPhone || "",
+      caseworkerEmail: data.caseworkerEmail || "",
       uploadDocs: data.uploadedDocs || [],
       status: data.status,
       familyName: data.familyName || "",
@@ -531,6 +547,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [notFoundError, setNotFoundError] = useState(false);
   const serviceDropdownRef = useRef(null);
   const formikRef = useRef(null);
+  // Holds old-form service name strings (e.g. ["Transportation"]) until shiftCategories loads
+  const pendingServiceNamesRef = useRef([]);
 
   const handleSaveDraft = () => {
     if (formikRef.current) {
@@ -557,8 +575,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   
   
   const intakeFormId = propId || paramId;
-  // type can be "Intake Worker" or "Private Family"
-  const urlCaseWorker = formType === "Intake Worker";
+  // type can be "Intake Worker", "intake worker", "intake-worker", etc. — normalize for comparison
+  const urlCaseWorker = !!formType && ["intake worker", "intake-worker", "intake_worker"].includes(formType.toLowerCase().trim());
   const isCaseWorker = propCaseWorker ?? urlCaseWorker;
 
   const [initialValues, setInitialValues] = useState(() => {
@@ -620,7 +638,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     }
   }, [existingData]);
 
-  // Fetch shift categories
+  // Fetch shift categories — then resolve any pending old-form service name strings to IDs
   useEffect(() => {
     const fetchShiftCategories = async () => {
       try {
@@ -630,6 +648,24 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           ...d.data(),
         }));
         setShiftCategories(categories);
+
+        // If we have pending old-form service names (e.g. ["Transportation"]),
+        // resolve them to real IDs now that we have the categories list.
+        // Uses EXACT match (case-insensitive) so "transportation" never hits
+        // composite names like "Supervised Visitation + Transportation".
+        if (pendingServiceNamesRef.current.length > 0) {
+          const names = pendingServiceNamesRef.current.map(n => n.toLowerCase().trim());
+          const matchedIds = categories
+            .filter(cat => names.includes((cat.name || "").toLowerCase().trim()))
+            .map(cat => cat.id);
+          if (matchedIds.length > 0) {
+            setInitialValues(prev => ({
+              ...prev,
+              services: { ...prev.services, serviceType: matchedIds },
+            }));
+          }
+          pendingServiceNamesRef.current = [];
+        }
       } catch (error) {
         console.error("Error fetching shift categories:", error);
       }
@@ -649,7 +685,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         setLoading(true);
         try {
           // Attempt Strategy A: Direct Doc ID fetch
-          const docRef = doc(db, "InTakeForms", String(intakeFormId));
+          const docRef = doc(db, COLLECTION_NEW_INTAKES, String(intakeFormId));
           let docSnap = await getDoc(docRef);
           let data = docSnap.exists() ? docSnap.data() : null;
 
@@ -663,7 +699,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
              for (const field of searchFields) {
                if (data) break;
                for (const val of variants) {
-                 const q = query(collection(db, "InTakeForms"), where(field, "==", val));
+                 const q = query(collection(db, COLLECTION_NEW_INTAKES), where(field, "==", val));
                  const snap = await getDocs(q);
                  if (!snap.empty) {
                    data = snap.docs[0].id ? { id: snap.docs[0].id, ...snap.docs[0].data() } : snap.docs[0].data();
@@ -701,7 +737,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
              }
 
              if (realIntakeId) {
-                const trueDocSnap = await getDoc(doc(db, "InTakeForms", String(realIntakeId)));
+                const trueDocSnap = await getDoc(doc(db, COLLECTION_NEW_INTAKES, String(realIntakeId)));
                 if (trueDocSnap.exists()) {
                    data = { id: trueDocSnap.id, ...trueDocSnap.data() };
                 }
@@ -712,7 +748,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           // If the clientId is nested inside an array (e.g., inTakeClients), Firestore cannot query it directly.
           // We must fetch all documents and do a deep scan.
            if (!data) {
-             const allDocsSnap = await getDocs(collection(db, "InTakeForms"));
+             const allDocsSnap = await getDocs(collection(db, COLLECTION_NEW_INTAKES));
              const searchTarget = String(intakeFormId);
              
              // If we found a name via the database link, use it. Otherwise, assume the URL parameter itself MIGHT be a name!
@@ -773,6 +809,15 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           const nextVals = mapDataToInitialValues(data);
           setInitialValues(nextVals);
 
+          // For old-structure forms, stash the human-readable service names so
+          // they can be resolved to IDs once shiftCategories finishes loading.
+          const oldServiceRequired = data.inTakeClients?.[0]?.serviceRequired
+            ?? data.serviceRequired
+            ?? [];
+          if (Array.isArray(oldServiceRequired) && oldServiceRequired.length > 0 && nextVals.services?.serviceType?.length === 0) {
+            pendingServiceNamesRef.current = oldServiceRequired;
+          }
+
           if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
           if (data.photo) setAvatarPreview(data.photo);
           
@@ -788,6 +833,23 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     }, [mode, intakeFormId, existingData]);
 
 
+  // Secondary resolver: if form data loaded BEFORE shiftCategories, resolve pending service names now
+  // Uses EXACT match (case-insensitive) to avoid matching composite names.
+  useEffect(() => {
+    if (shiftCategories.length === 0) return;
+    if (pendingServiceNamesRef.current.length === 0) return;
+    const names = pendingServiceNamesRef.current.map(n => n.toLowerCase().trim());
+    const matchedIds = shiftCategories
+      .filter(cat => names.includes((cat.name || "").toLowerCase().trim()))
+      .map(cat => cat.id);
+    if (matchedIds.length > 0) {
+      setInitialValues(prev => ({
+        ...prev,
+        services: { ...prev.services, serviceType: matchedIds },
+      }));
+    }
+    pendingServiceNamesRef.current = [];
+  }, [shiftCategories]);
 
   // Validation
   const validationSchema = Yup.object().shape({
@@ -1071,6 +1133,20 @@ const handleSubmit = async (values, { resetForm }) => {
       clientsObj[`client${i + 1}`] = c;
     });
 
+    // ================== SANITIZE FOR FIRESTORE ==================
+    // Firestore rejects `undefined` values — recursively replace with ""
+    const sanitizeForFirestore = (obj) => {
+      if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+      if (obj !== null && typeof obj === "object" && !(obj instanceof File)) {
+        const out = {};
+        for (const [k, v] of Object.entries(obj)) {
+          out[k] = sanitizeForFirestore(v);
+        }
+        return out;
+      }
+      return obj === undefined ? "" : obj;
+    };
+
     // ================== FINAL PAYLOAD ==================
     const payload = {
       avatar: avatarPreview || null,
@@ -1112,7 +1188,8 @@ const handleSubmit = async (values, { resetForm }) => {
     };
 
     // ================== SAVE INTAKE ==================
-    const formId = mode === "update" && id ? id : Date.now().toString();
+    // In update mode use the existing document ID; in add mode generate a new timestamp ID
+    const formId = mode === "update" && intakeFormId ? intakeFormId : Date.now().toString();
 
     // 🔥 CREATE CLIENTS ONLY WHEN STATUS CHANGES TO ACCEPTED
     if (
@@ -1120,22 +1197,36 @@ const handleSubmit = async (values, { resetForm }) => {
       values.status === "Accepted" &&
       !values.clientsCreated
     ) {
-      await createClientsFromIntake(values, formId, db);
+      // Inject runtime flags that createClientsFromIntake needs but aren't in Formik values
+      await createClientsFromIntake(
+        { ...values, isCaseWorker: !!isCaseWorker },
+        formId,
+        db
+      );
       payload.clientsCreated = true; // mark processed
     }
 
-    await setDoc(doc(db, "InTakeForms", formId), payload);
+    await setDoc(doc(db, COLLECTION_NEW_INTAKES, formId), sanitizeForFirestore(payload));
 
     if (isDraft) {
       alert("✅ Draft saved successfully");
       if (mode !== "update") {
         resetForm();
         setAvatarPreview(null);
+      } else {
+        // In update mode: keep the form as-is but sync initialValues to saved state
+        setInitialValues(values);
       }
     } else {
-      alert("✅ Intake form submitted successfully");
-      resetForm();
-      setAvatarPreview(null);
+      alert("✅ Intake form updated successfully");
+      if (mode === "update") {
+        // Stay on the form showing the saved data — just sync initialValues
+        // so that if the user edits again, the "old" baseline is the just-saved data
+        setInitialValues(values);
+      } else {
+        resetForm();
+        setAvatarPreview(null);
+      }
     }
   } catch (err) {
     console.error(isDraft ? "❌ Draft save failed" : "❌ Intake submit failed", err);
@@ -1265,7 +1356,7 @@ const handleSubmit = async (values, { resetForm }) => {
                     <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                       <label className="font-semibold text-sm text-gray-700">Status</label>
                       <div className="relative">
-                        <Field as="select" name="status" disabled={isCaseWorker} className={sCls(false, !values.status)}>
+                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
                           <option value="Submitted">Submitted</option>
                           <option value="Accepted">Accepted</option>
                           <option value="Rejected">Rejected</option>
@@ -2269,6 +2360,10 @@ const handleSubmit = async (values, { resetForm }) => {
                             { label: "Billing Info", filled: !!(values.billingInfo?.invoiceEmail) },
                             { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName) },
                             { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName) },
+                            ...(isCaseWorker ? [
+                              { label: "Case Worker Info", filled: !!(values.caseworkerName) },
+                              { label: "Intake Worker Info", filled: !!(values.intakeworkerName) },
+                            ] : []),
                             { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
                           ].map(({ label, filled }) => (
                             <li key={label} className="flex items-center gap-2.5">
