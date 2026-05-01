@@ -673,6 +673,9 @@ const AddUserShift = ({ mode = "add", user }) => {
             clockOut: "",
             isRatified: false,
             isCancelled: false,
+            shiftReportImageUrl: "",
+            expenseReceiptUrl: "",
+            profilePhotoUrl: "",
             dateKey: formatLocalISO(primaryDate),
           });
 
@@ -721,7 +724,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           clientName: selectedClient?.name || "",
           userId: selectedUser?.id || selectedUser?.userId || values.user || "",
           userName: selectedUser?.name || "",
-          name: selectedUser?.name || "", 
+          name: selectedUser?.name || "",
           createdAt: new Date(),
           shiftReport: "",
           shiftConfirmed: false,
@@ -747,6 +750,9 @@ const AddUserShift = ({ mode = "add", user }) => {
           clockOut: "",
           isRatify: false,
           isCancelled: false,
+          shiftReportImageUrl: "",
+          expenseReceiptUrl: "",
+          profilePhotoUrl: "",
           dateKey: formatLocalISO(startDateObj), // Added for consistency with update mode
         });
 

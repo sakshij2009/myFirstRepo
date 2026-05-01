@@ -8,6 +8,7 @@ import IntakeLogin from "./IntakeLogin";
 import IntakeWorkerDashboard from "./IntakeWorkerDashboard";
 import IntakeFormPage from "./IntakeFormPage";
 import PrivateFamilyIntakeForm from "./PrivateFamilyIntakeForm";
+import AssessmentForm from "./AssessmentForm";
 
 const IntakeFormMainPage = () => {
   const [userData, setUserData] = useState(null);
@@ -110,12 +111,27 @@ const IntakeFormMainPage = () => {
         }
       />
 
-      {/* PRIVATE FAMILY INTAKE FORM (Protected ΓÇö role=parent) */}
+      {/* PRIVATE FAMILY INTAKE FORM (Protected — role=parent) */}
       <Route
         path="private-form"
         element={
           getUser() ? (
             <PrivateFamilyIntakeForm
+              user={getUser()}
+              onSubmitSuccess={() => navigate("/intake-form/submitted")}
+            />
+          ) : (
+            <Navigate to="/intake-form/login" replace />
+          )
+        }
+      />
+
+      {/* ASSESSMENT FORM (Protected) */}
+      <Route
+        path="assessment"
+        element={
+          getUser() ? (
+            <AssessmentForm
               user={getUser()}
               onSubmitSuccess={() => navigate("/intake-form/submitted")}
             />

@@ -64,11 +64,7 @@ const IntakeLogin = () => {
               const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
               localStorage.setItem("intakeUser", JSON.stringify(userData));
               localStorage.setItem("user", JSON.stringify(userData));
-              if ((userData.role || "").toLowerCase() === "parent") {
-                navigate("/intake-form/private-form");
-              } else {
-                navigate("/intake-form/dashboard");
-              }
+              navigate("/intake-form/dashboard");
             } else {
               setError("Account not found. Please sign up first.");
               setIsLoading(false);
@@ -158,7 +154,7 @@ const IntakeLogin = () => {
 
     setIsLoading(true);
     try {
-      const { collection: fbCollection, query: fbQuery, where, getDocs, addDoc } = await import("firebase/firestore");
+      const { collection: fbCollection, query: fbQuery, where, getDocs, addDoc, orderBy, limit } = await import("firebase/firestore");
 
       // Check if email already exists
       const q = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", email.trim().toLowerCase()));
@@ -170,6 +166,44 @@ const IntakeLogin = () => {
         return;
       }
 
+      let showAssessmentLink = false;
+      let showIntakeFormLink = role !== "Parent"; // Default true if not parent, but parents need explicit logic
+      let linkedParentId = "";
+      
+      if (role === "Parent" || role.toLowerCase() === "parent") {
+         const userEmail = email.trim().toLowerCase();
+         // Check if they are primary email
+         let invQ = fbQuery(fbCollection(db, "parentInvites"), where("primaryEmail", "==", userEmail));
+         let invSnap = await getDocs(invQ);
+         
+         if (!invSnap.empty) {
+            const latestInvite = invSnap.docs.sort((a,b) => b.data().createdAt - a.data().createdAt)[0].data();
+            showAssessmentLink = !!latestInvite.primaryShowAssessmentLink;
+            showIntakeFormLink = !!latestInvite.primaryShowIntakeFormLink;
+         } else {
+            // Check if they are secondary email
+            const secondQ = fbQuery(fbCollection(db, "parentInvites"), where("secondParentEmail", "==", userEmail));
+            const secondSnap = await getDocs(secondQ);
+            
+            if (!secondSnap.empty) {
+               const latestInvite = secondSnap.docs.sort((a,b) => b.data().createdAt - a.data().createdAt)[0].data();
+               showAssessmentLink = !!latestInvite.secondShowAssessmentLink;
+               showIntakeFormLink = !!latestInvite.secondShowIntakeFormLink;
+
+               // Link to primary parent if they exist
+               if (latestInvite.primaryEmail) {
+                  const pQuery = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", latestInvite.primaryEmail));
+                  const pSnap = await getDocs(pQuery);
+                  if (!pSnap.empty) {
+                     linkedParentId = pSnap.docs[0].id;
+                  }
+               }
+            } else {
+               showIntakeFormLink = true; // Fallback
+            }
+         }
+      }
+
       // Add to Firestore
       const newUser = {
         name,
@@ -178,6 +212,9 @@ const IntakeLogin = () => {
         phone,
         email: email.trim().toLowerCase(),
         invoiceEmail: invoiceEmail.trim().toLowerCase(),
+        showAssessmentLink,
+        showIntakeFormLink,
+        ...(linkedParentId ? { linkedParentId } : {}),
         createdAt: new Date(),
       };
       await addDoc(fbCollection(db, "intakeUsers"), newUser);

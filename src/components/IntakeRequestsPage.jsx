@@ -18,11 +18,47 @@ export default function IntakeRequestsPage() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        const snap = await getDocs(collection(db, "InTakeForms"));
-        const data = snap.docs.map((doc) => {
+        // ── Fetch from ALL 3 collections ──
+        const [oldSnap, newSnap, v2Snap] = await Promise.all([
+          getDocs(collection(db, "InTakeForms")),
+          getDocs(collection(db, "intakeForms")),
+          getDocs(collection(db, "IntakeFormsV2")),
+        ]);
+
+        const normalizeDoc = (doc, source) => {
           const d = doc.data();
 
-          // ── Determine form type ──
+          // ── For new mobile app forms: flat structure ──
+          if (source === "new") {
+            return {
+              id: doc.id,
+              firestoreId: doc.id,
+              _source: "new",
+              source: "intake-worker", // mobile app staff submissions
+              status: (d.status || "submitted").toLowerCase(),
+              childName: d.clientName || "Unknown",
+              submitterName: d.staffName || "Unknown",
+              submitterRole: "Staff",
+              agencyName: null,
+              serviceType: d.formType || "N/A",
+              urgency: "standard",
+              priority: null,
+              preferredStartDate: d.submittedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              phone: "N/A",
+              email: "N/A",
+              location: null,
+              descriptionPreview: d.staffNotes || d.conditionNotes || "No description provided.",
+              dataQuality: "complete",
+              clientId: null,
+              caseReference: null,
+              hasDocuments: false,
+              approvalStatus: null,
+              submittedDate: d.submittedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              ...d,
+            };
+          }
+
+          // ── Old web app forms: complex structure ──
           const isIntakeWorker = (() => {
             if (d.formType === "intake-worker") return true;
             if (d.formType === "private") return false;
@@ -31,14 +67,10 @@ export default function IntakeRequestsPage() {
             return false;
           })();
 
-          // ── Who filed the form ──
-          // Intake worker: intakeworkerName → caseworkerName → workerInfo.workerName
-          // Private family: parentInfoList[0].parentName → workerInfo.workerName → parentName
           const filerName = isIntakeWorker
             ? (d.intakeworkerName?.trim() || d.caseworkerName?.trim() || d.workerInfo?.workerName?.trim() || "Unknown")
             : (d.parentInfoList?.[0]?.parentName?.trim() || d.workerInfo?.workerName?.trim() || d.parentName?.trim() || d.submitterName?.trim() || "Unknown");
 
-          // ── Filer role/agency ──
           const filerRole = isIntakeWorker
             ? (d.caseworkerName ? "Case Worker" : "Intake Worker")
             : (d.parentInfoList?.[0]?.relationShip?.trim() || null);
@@ -47,7 +79,6 @@ export default function IntakeRequestsPage() {
             ? (d.agencyName?.trim() || d.caseworkerAgencyName?.trim() || null)
             : null;
 
-          // ── Contact info (prefer from filer) ──
           const filerPhone = isIntakeWorker
             ? (d.intakeworkerPhone || d.caseworkerPhone || d.phone || "N/A")
             : (d.parentInfoList?.[0]?.parentPhone || d.phone || "N/A");
@@ -56,14 +87,11 @@ export default function IntakeRequestsPage() {
             ? (d.intakeworkerEmail || d.caseworkerEmail || d.email || "N/A")
             : (d.parentInfoList?.[0]?.parentEmail || d.email || "N/A");
 
-          // ── Client/child name ──
           const clientName = (() => {
-            // Try clients object keys
             if (d.clients && typeof d.clients === "object" && !Array.isArray(d.clients)) {
               const names = Object.values(d.clients).map(c => c.fullName || c.name || "").filter(Boolean);
               if (names.length) return names.join(", ");
             }
-            // Try inTakeClients array
             if (Array.isArray(d.inTakeClients)) {
               const names = d.inTakeClients.map(c => c.name || "").filter(Boolean);
               if (names.length) return names.join(", ");
@@ -74,6 +102,7 @@ export default function IntakeRequestsPage() {
           return {
             id: doc.id,
             firestoreId: doc.id,
+            _source: "old",
             source: isIntakeWorker ? "intake-worker" : "private-family",
             status: (d.status || "new").toLowerCase(),
             childName: clientName,
@@ -96,6 +125,18 @@ export default function IntakeRequestsPage() {
             submittedDate: d.submittedDate || d.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             ...d,
           };
+        };
+
+        const oldData = oldSnap.docs.map(d => normalizeDoc(d, "old"));
+        const newData = newSnap.docs.map(d => normalizeDoc(d, "new"));
+        const v2Data  = v2Snap.docs.map(d => normalizeDoc(d, "v2"));
+
+        // Merge: v2 first, then old, then mobile — deduplicate by id
+        const seenIds = new Set();
+        const data = [...v2Data, ...oldData, ...newData].filter(f => {
+          if (seenIds.has(f.id)) return false;
+          seenIds.add(f.id);
+          return true;
         });
         setRequests(data);
       } catch (err) {
