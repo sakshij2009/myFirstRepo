@@ -643,10 +643,12 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     const fetchShiftCategories = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "shiftCategories"));
-        const categories = querySnapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
+        const categories = querySnapshot.docs
+          .map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         setShiftCategories(categories);
 
         // If we have pending old-form service names (e.g. ["Transportation"]),

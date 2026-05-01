@@ -31,10 +31,14 @@ export default function ShiftCalendar({ user }) {
   const fetchShifts = async () => {
     try {
       const db = getFirestore();
-      const q = query(collection(db, "shifts"), where("userId", "==", user.userId));
-      const snap = await getDocs(q);
+      // Fetching all shifts and filtering in JS to handle both primary and secondary assignments
+      const shiftsRef = collection(db, "shifts");
+      const snap = await getDocs(shiftsRef);
 
-      const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const data = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter(s => s.userId === user.userId || s.secondaryUserId === user.userId);
+        
       setShifts(data);
     } catch (err) {
       console.error("Error fetching shifts", err);

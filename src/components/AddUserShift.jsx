@@ -57,22 +57,27 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftType: "",
     shiftCategory: "",
     client: "",
-    user: "",
+    primaryUser: "",
+    secondaryUser: "",
     startDate: "",
     endDate: "",
     startTime: "",
     endTime: "",
     description: "",
+    vehicleType: "",
     accessToShiftReport: false,
     shiftDates: [],
   });
 
   const [selectedClient, setSelectedClient] = useState(null);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedPrimaryUser, setSelectedPrimaryUser] = useState(null);
+  const [selectedSecondaryUser, setSelectedSecondaryUser] = useState(null);
   const [selectedShiftType, setSelectedShiftType] = useState(null);
   const [selectedShiftCategory, setSelectedShiftCategory] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [monthShifts, setMonthShifts] = useState([]);
+  const [originalClockIn, setOriginalClockIn] = useState("");
+  const [originalClockOut, setOriginalClockOut] = useState("");
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatDays, setRepeatDays] = useState([]); // 0=Mon … 6=Sun
   const [repeatEndCondition, setRepeatEndCondition] = useState("none"); // "none"|"after"|"on"
@@ -105,7 +110,8 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftType: Yup.string().required("Shift type is required"),
     shiftCategory: Yup.string().required("Shift category is required"),
     client: Yup.string().required("Client selection is required"),
-    user: Yup.string().required("User selection is required"),
+    primaryUser: Yup.string().required("Primary Staff selection is required"),
+    secondaryUser: Yup.string().optional(),
     shiftDates: Yup.array()
       .of(Yup.date().typeError("Invalid date"))
       .min(1, "At least one shift date is required"),
@@ -138,18 +144,37 @@ const AddUserShift = ({ mode = "add", user }) => {
             getDocs(collection(db, "users")),
           ]);
 
+        const sortByName = (a, b) => {
+          const nameA = a.name || "";
+          const nameB = b.name || "";
+          return nameA.localeCompare(nameB);
+        };
+
         setShiftTypes(
-          shiftTypeSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+          shiftTypeSnap.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort(sortByName)
         );
+
         const allowedCategories = [
           { id: "emergent", name: "Emergent Care" },
           { id: "respite", name: "Respite Care" },
           { id: "supervised", name: "Supervised Visitation" },
           { id: "transportation", name: "Transportation" },
-        ];
+        ].sort(sortByName);
         setShiftCategories(allowedCategories);
-        setClients(clientSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        setUsers(userSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+
+        setClients(
+          clientSnap.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort(sortByName)
+        );
+
+        setUsers(
+          userSnap.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort(sortByName)
+        );
       } catch (error) {
         console.error("Error fetching dropdown data: ", error);
       }
@@ -246,6 +271,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             "";
 
           const userName =
+            data.primaryUserName ||
             data.name ||
             data.userName ||
             data.userDetails?.name ||
@@ -268,15 +294,23 @@ const AddUserShift = ({ mode = "add", user }) => {
           const clientObj = clients.find(
             (c) =>
               c.name?.toLowerCase() === clientName.toLowerCase() ||
-              c.id === data.client ||
-              c.id === data.clientId
+              String(c.id) === String(data.client) ||
+              String(c.id) === String(data.clientId)
           );
 
           const userObj = users.find(
             (u) =>
               u.name?.toLowerCase() === userName.toLowerCase() ||
-              u.id === data.user ||
-              u.id === data.userId
+              String(u.id) === String(data.primaryUserId) ||
+              String(u.id) === String(data.user) ||
+              String(u.id) === String(data.userId)
+          );
+
+          const secondaryUserName = data.secondaryUserName || "";
+          const secondaryUserObj = users.find(
+            (u) =>
+              (secondaryUserName && u.name?.toLowerCase() === secondaryUserName.toLowerCase()) ||
+              String(u.id) === String(data.secondaryUserId)
           );
 
           // ✅ Normalize dates
@@ -342,7 +376,10 @@ const AddUserShift = ({ mode = "add", user }) => {
             // Remember this client ID — used to detect when user later changes client
             initialLoadedClientIdRef.current = clientObj.id;
           }
-          if (userObj) setSelectedUser(userObj);
+          if (userObj) setSelectedPrimaryUser(userObj);
+          if (secondaryUserObj) setSelectedSecondaryUser(secondaryUserObj);
+          if (shiftTypeObj) setSelectedShiftType(shiftTypeObj);
+          if (shiftCategoryObj) setSelectedShiftCategory(shiftCategoryObj);
 
           // ✅ Prefill all fields
           setInitialValues((prev) => ({
@@ -350,7 +387,8 @@ const AddUserShift = ({ mode = "add", user }) => {
             shiftType: shiftTypeObj ? shiftTypeObj.name : shiftTypeName,
             shiftCategory: shiftCategoryObj ? shiftCategoryObj.name : shiftCategoryName,
             client: clientObj ? clientObj.id : "",
-            user: userObj ? userObj.id : "",
+            primaryUser: userObj ? userObj.id : "",
+            secondaryUser: secondaryUserObj ? secondaryUserObj.id : (data.secondaryUserId || ""),
             startDate: startISO,
             endDate: endISO,
             startTime: data.startTime || "",
@@ -358,7 +396,11 @@ const AddUserShift = ({ mode = "add", user }) => {
             description: data.jobdescription || data.description || "",
             accessToShiftReport: data.accessToShiftReport || false,
             shiftDates: calendarDates,
+            vehicleType: data.vehicleType || "",
           }));
+
+          setOriginalClockIn(data.clockIn || "");
+          setOriginalClockOut(data.clockOut || "");
 
           console.log("✅ Prefilled Shift Data:", {
             shiftTypeName,
@@ -400,13 +442,14 @@ const AddUserShift = ({ mode = "add", user }) => {
       // 1. The saved shift points have real data, AND
       // 2. The currently selected client is the same one that was originally loaded
       //    (i.e. the user has NOT changed the client — if they did, always re-fetch)
-      if (mode === "update" && Array.isArray(shiftPoints) && shiftPoints.length > 0) {
-        const hasRealData = shiftPoints.some(
-          (p) => p.name || p.pickupLocation || p.visitLocation || p.dropLocation
-        );
+      // In update mode, skip intake fetch if we just loaded the specific shift data for this client
+      if (mode === "update") {
         const isSameClientAsLoaded = initialLoadedClientIdRef.current &&
           selectedClient?.id === initialLoadedClientIdRef.current;
-        if (hasRealData && isSameClientAsLoaded) return;
+
+        // If it's the same client, we trust the points already in state (or just set by fetchShiftData)
+        // We only proceed to fetch from intake if the user deliberately changed the client
+        if (isSameClientAsLoaded) return;
       }
 
       // Always clear stale data from the previous client before loading new one
@@ -632,17 +675,26 @@ const AddUserShift = ({ mode = "add", user }) => {
           let endDateObj = new Date(primaryDate);
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
+          const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+          const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
+
           await updateDoc(docRef, {
             ...restValues,
             startDate: Timestamp.fromDate(primaryDate),
             endDate: Timestamp.fromDate(endDateObj),
             clientDetails: selectedClient,
-            // Sync redundant fields to ensure manual changes stick across all app views
             clientId: selectedClient?.id || values.client || "",
             clientName: selectedClient?.name || "",
-            userId: selectedUser?.id || selectedUser?.userId || values.user || "",
-            userName: selectedUser?.name || "",
-            name: selectedUser?.name || "", // Legacy field support
+            // Primary Staff
+            userId: primaryStaff?.id || values.primaryUser || "",
+            userName: primaryStaff?.name || "",
+            name: primaryStaff?.name || "",
+            primaryUserId: primaryStaff?.id || "",
+            primaryUserName: primaryStaff?.name || "",
+            // Secondary Staff
+            secondaryUserId: secondaryStaff?.id || "",
+            secondaryUserName: secondaryStaff?.name || "",
+            vehicleType: values.vehicleType || "",
             updatedAt: new Date(),
             // Ensure legacy top-level visit fields are cleared
             visitLocation: "",
@@ -669,8 +721,9 @@ const AddUserShift = ({ mode = "add", user }) => {
                 visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
               };
             }),
-            clockIn: "",
-            clockOut: "",
+            // SYNC CLOCK IN/OUT WITH NEW SCHEDULE (if they exist)
+            clockIn: originalClockIn ? `${formatEdmontonISO(primaryDate)}, ${values.startTime}:00` : "",
+            clockOut: originalClockOut ? `${formatEdmontonISO(endDateObj)}, ${values.endTime}:00` : "",
             isRatified: false,
             isCancelled: false,
             shiftReportImageUrl: "",
@@ -714,12 +767,14 @@ const AddUserShift = ({ mode = "add", user }) => {
           visitLongitude: needsVisit ? (p.visitLongitude || 0) : 0,
         }));
 
+        const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+        const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
+
         await setDoc(doc(db, "shifts", newShiftId), {
           ...values,
           startDate: startDateObj,
           endDate: endDateObj,
           clientDetails: selectedClient,
-          // Sync redundant fields for visibility across multiple dashboard views
           clientId: selectedClient?.id || values.client || "",
           clientName: selectedClient?.name || "",
           userId: selectedUser?.id || selectedUser?.userId || values.user || "",
@@ -954,13 +1009,18 @@ const AddUserShift = ({ mode = "add", user }) => {
             useEffect(() => {
               const clientData = clients.find((c) => c.id === values.client);
               setSelectedClient(clientData || null);
-              const userData = users.find((u) => u.id === values.user);
-              setSelectedUser(userData || null);
+
+              const primaryData = users.find((u) => u.id === values.primaryUser);
+              setSelectedPrimaryUser(primaryData || null);
+
+              const secondaryData = users.find((u) => u.id === values.secondaryUser);
+              setSelectedSecondaryUser(secondaryData || null);
+
               const shiftTypeData = shiftTypes.find((s) => s.id === values.shiftType);
               setSelectedShiftType(shiftTypeData || null);
               const shiftCategoryData = shiftCategories.find((s) => s.name === values.shiftCategory);
               setSelectedShiftCategory(shiftCategoryData || null);
-            }, [values.client, values.user, values.shiftType, values.shiftCategory]);
+            }, [values.client, values.primaryUser, values.secondaryUser, values.shiftType, values.shiftCategory]);
 
             // Auto-fill description from intake when it loads
             // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -1002,45 +1062,47 @@ const AddUserShift = ({ mode = "add", user }) => {
                 <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
                   {/* Assignment Context Header */}
-                  {(selectedClient || selectedUser) && (
-                    <div className="flex items-center justify-between px-6 py-4 border-b" style={{ background: "#fafafa", borderColor: "#f3f4f6" }}>
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                          style={{ width: 44, height: 44, background: "linear-gradient(135deg,#145228,#1f7a3c)" }}>
-                          {(selectedClient?.name || "C").charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-[13px] text-gray-900">{selectedClient?.name || "—"}</p>
-                          <p className="text-[11px] text-gray-500">Client ID: {selectedClient?.clientCode || selectedClient?.id || "—"}</p>
-                          {selectedClient && (
-                            <span className="inline-block px-2 py-0.5 rounded-full font-semibold mt-0.5" style={{ fontSize: 10, background: "#dcfce7", color: "#15803d" }}>
-                              {values.shiftCategory || "No Category"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-center gap-0.5">
-                        <div className="flex items-center gap-1.5 text-gray-300">
-                          <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 12 19 12" /><polyline points="13 6 19 12 13 18" /></svg>
-                          <div style={{ width: 40, height: 1, background: "#d1d5db" }} />
-                        </div>
-                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Assigns to</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold text-[13px] text-gray-900">{selectedUser?.name || "—"}</p>
-                          <p className="text-[11px] text-gray-500">Staff ID: {selectedUser?.userId || selectedUser?.id || "—"}</p>
-                          {selectedUser && (
-                            <span className="inline-block px-2 py-0.5 rounded-full font-semibold mt-0.5" style={{ fontSize: 10, background: "#e0e7ff", color: "#4338ca" }}>
-                              {values.shiftType || "No Type"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                          style={{ width: 44, height: 44, background: "linear-gradient(135deg,#4338ca,#6366f1)" }}>
-                          {(selectedUser?.name || "S").charAt(0).toUpperCase()}
-                        </div>
+                  {(selectedClient || selectedPrimaryUser || selectedSecondaryUser) && (
+                    <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50/50" style={{ borderColor: "#f3f4f6" }}>
+                      <div className="flex flex-wrap items-center gap-6">
+                        {/* Client Info */}
+                        {selectedClient && (
+                          <div className="flex items-center gap-3 pr-6 border-r border-gray-200 last:border-r-0">
+                            <div className="w-10 h-10 rounded-full bg-[#145228] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              {(selectedClient.name || "C").charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-[13px] text-gray-900">{selectedClient.name || "—"}</p>
+                              <p className="text-[11px] text-gray-500 uppercase tracking-wider">Client</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Primary Staff Info */}
+                        {selectedPrimaryUser && (
+                          <div className="flex items-center gap-3 pr-6 border-r border-gray-200 last:border-r-0">
+                            <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              {(selectedPrimaryUser.name || "P").charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-[13px] text-gray-900">{selectedPrimaryUser.name || "—"}</p>
+                              <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wider">Primary Staff</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Secondary Staff Info */}
+                        {selectedSecondaryUser && (
+                          <div className="flex items-center gap-3 pr-6 border-r border-gray-200 last:border-r-0">
+                            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                              {(selectedSecondaryUser.name || "S").charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-[13px] text-gray-900">{selectedSecondaryUser.name || "—"}</p>
+                              <p className="text-[11px] text-blue-600 font-medium uppercase tracking-wider">Secondary Staff</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1096,11 +1158,26 @@ const AddUserShift = ({ mode = "add", user }) => {
                         <ErrorMessage name="client" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
-                      {/* Select User (Staff) */}
+                      {/* Vehicle Type */}
                       <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Select User (Staff)</label>
-                        <Field as="select" name="user" className={selectCls(touched.user && errors.user, !values.user)}>
-                          <option value="">Select a staff member</option>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Vehicle Type</label>
+                        <Field as="select" name="vehicleType" className={selectCls(touched.vehicleType && errors.vehicleType, !values.vehicleType)}>
+                          <option value="">Please select vehicle type</option>
+                          <option value="Personal Vehicle">Personal Vehicle</option>
+                          <option value="Agency Vehicle">Agency Vehicle</option>
+                          <option value="Other">Other</option>
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="vehicleType" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Select Primary User (Staff) */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Primary User (Staff)</label>
+                        <Field as="select" name="primaryUser" className={selectCls(touched.primaryUser && errors.primaryUser, !values.primaryUser)}>
+                          <option value="">Select primary staff</option>
                           {users.map((item) => (
                             <option key={item.id} value={item.id}>{item.name}</option>
                           ))}
@@ -1108,7 +1185,22 @@ const AddUserShift = ({ mode = "add", user }) => {
                         <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
                           <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
                         </span>
-                        <ErrorMessage name="user" component="div" className="text-red-500 text-xs mt-1" />
+                        <ErrorMessage name="primaryUser" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Select Secondary User (Staff) */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Secondary User (Staff)</label>
+                        <Field as="select" name="secondaryUser" className={selectCls(touched.secondaryUser && errors.secondaryUser, !values.secondaryUser)}>
+                          <option value="">Select secondary staff (optional)</option>
+                          {users.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="secondaryUser" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
                       {/* Start Time */}
@@ -1610,7 +1702,12 @@ const AddUserShift = ({ mode = "add", user }) => {
                     <button type="submit"
                       className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
                       style={{ backgroundColor: "#145228" }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                      {mode !== "update" && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      )}
                       {mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`}
                     </button>
                   </div>
@@ -1627,9 +1724,13 @@ const AddUserShift = ({ mode = "add", user }) => {
           subtitle={slider.subtitle}
           viewText="View Shift"
           onView={() => {
-            navigate("/admin-dashboard/dashboard", {
-              state: { shiftCategory: selectedShiftCategory?.name }
-            });
+            if (mode === "update" && id) {
+              navigate(`/admin-dashboard/shift-report/${id}`);
+            } else {
+              navigate("/admin-dashboard/dashboard", {
+                state: { shiftCategory: selectedShiftCategory?.name }
+              });
+            }
             setSlider({ ...slider, show: false });
 
           }}

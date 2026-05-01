@@ -243,16 +243,20 @@ const handleTransferShift = async () => {
 
               <div className="flex flex-col w-full justify-center gap-[8px]">
                 <div className="flex flex-row justify-between text-[#2B3232] p-1">
-                  <div className="flex flex-col gap-[2px]">
-                    <div className="flex justify-start gap-6">
-                      <p className="font-normal text-[14px] leading-[20px]">Client</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientName || emp.clientDetails?.name ||  "-"}</p>
+                    <div className="flex flex-col gap-[2px]">
+                      <div className="flex justify-start gap-6">
+                        <p className="font-normal text-[14px] leading-[20px]">Client</p>
+                        <p className="font-bold text-[14px] leading-[20px]">{emp.clientName || emp.clientDetails?.name ||  "-"}</p>
+                      </div>
+                      <div className="flex justify-start gap-[8px]">
+                        <p className="font-normal text-[14px] leading-[20px]">Partner</p>
+                        <p className="font-bold text-[12px] leading-[20px] text-gray-600">
+                          {emp.secondaryUserId && emp.userId === user?.userId 
+                            ? `${emp.secondaryUserName || "N/A"} (S)` 
+                            : (emp.secondaryUserId === user?.userId ? `${emp.primaryUserName || emp.userName || emp.name || "N/A"} (P)` : "None")}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex justify-start gap-[8px]">
-                      <p className="font-normal text-[14px] leading-[20px]">Client ID</p>
-                      <p className="font-bold text-[14px] leading-[20px]">{emp.clientId || emp.clientDetails?.id || "-"}</p>
-                    </div>
-                  </div>
 
                   <div className="flex flex-row gap-[24px] justify-end">
                     <div className="w-[100px]">

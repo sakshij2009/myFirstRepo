@@ -281,11 +281,12 @@ useEffect(() => {
         ...docSnap.data(),
       }));
 
-      // 🔸 Shifts assigned to this user
+      // 🔸 Shifts assigned to this user (Primary or Secondary)
       let regularShifts = allShifts.filter(
         (shift) =>
           shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
-          shift.userId === user?.userId
+          shift.userId === user?.userId ||
+          shift.secondaryUserId === user?.userId
       );
 
       // 🔥 Remove transportation shifts from main list
@@ -322,11 +323,12 @@ useEffect(() => {
       setUserShifts(regularShifts);
 
     
-      // ------------ TRANSPORTATION SHIFTS ------------
+// ------------ TRANSPORTATION SHIFTS ------------
 let transportShifts = allShifts.filter((shift) => {
   const assigned =
     shift.name?.toLowerCase() === user?.name?.toLowerCase() ||
-    shift.userId === user?.userId;
+    shift.userId === user?.userId ||
+    shift.secondaryUserId === user?.userId;
 
   return assigned && isTransportationShift(shift);
 });
@@ -545,55 +547,65 @@ const getEdmontonTimeString = (date = new Date()) => {
   // =============== CLOCK IN / OUT HANDLERS ===============
 
   const handleClockIn = async () => {
-  if (!activeShift || lockClockIn) return;
+    if (!activeShift || lockClockIn) return;
 
-  const start = parseShiftDate(activeShift.startDate, activeShift.startTime);
-  const now = new Date();
+    const scheduledStart = parseShiftDate(activeShift.startDate, activeShift.startTime);
+    const now = new Date();
 
-  if (now < new Date(start.getTime() - 15 * 60000)) return;
+    // Allow clock in up to 15 mins before scheduled
+    if (now < new Date(scheduledStart.getTime() - 15 * 60000)) return;
 
-  const { latitude, longitude } = await getUserLocation();
-  const address = await getAddressFromCoords(latitude, longitude);
+    const { latitude, longitude } = await getUserLocation();
+    const address = await getAddressFromCoords(latitude, longitude);
 
-  // UI state (unchanged)
-  setClockInTime(
-    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
-  setClockInLocation(address);
-  setClockInDone(true);
+    setClockInTime(activeShift.startTime);
+    setClockInLocation(address);
+    setClockInDone(true);
 
-  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT START)
-  await updateDoc(doc(db, "shifts", activeShift.id), {
-    clockIn: getEdmontonTimeString(start),
-    clockInLocation: address,
-    clockInTimeZone: "America/Edmonton",
-  });
-};
+    // Store the scheduled start time as the clock-in to keep them perfectly synced
+    // Format: YYYY-MM-DD, HH:mm:ss (using scheduled HH:mm)
+    const datePart = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Edmonton",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(scheduledStart);
+    
+    const clockInStr = `${datePart}, ${activeShift.startTime}:00`;
 
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      clockIn: clockInStr,
+      clockInLocation: address,
+      clockInTimeZone: "America/Edmonton",
+    });
+  };
 
-const handleClockOut = async () => {
-  if (!activeShift || lockClockOut) return;
+  const handleClockOut = async () => {
+    if (!activeShift || lockClockOut) return;
 
-  const end = parseShiftDate(activeShift.endDate, activeShift.endTime);
-  const now = new Date();
+    const { latitude, longitude } = await getUserLocation();
+    const address = await getAddressFromCoords(latitude, longitude);
 
-  const { latitude, longitude } = await getUserLocation();
-  const address = await getAddressFromCoords(latitude, longitude);
+    setClockOutTime(activeShift.endTime);
+    setClockOutLocation(address);
+    setClockOutDone(true);
 
-  // UI state (unchanged)
-  setClockOutTime(
-    now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
-  setClockOutLocation(address);
-  setClockOutDone(true);
+    const scheduledEnd = parseShiftDate(activeShift.endDate || activeShift.startDate, activeShift.endTime);
+    const datePart = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Edmonton",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(scheduledEnd);
 
-  // ✅ STORE EDMONTON TIME (ROUNDED TO SHIFT END)
-  await updateDoc(doc(db, "shifts", activeShift.id), {
-    clockOut: getEdmontonTimeString(end),
-    clockOutLocation: address,
-    clockOutTimeZone: "America/Edmonton",
-  });
-};
+    const clockOutStr = `${datePart}, ${activeShift.endTime}:00`;
+
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      clockOut: clockOutStr,
+      clockOutLocation: address,
+      clockOutTimeZone: "America/Edmonton",
+    });
+  };
 
 
 const handleExtendShift = async () => {

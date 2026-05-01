@@ -421,6 +421,10 @@ const ParentDashboard = ({ user, onLogout }) => {
                         {formatDate(shift.clockIn)} {shift.clockIn?.toDate ? shift.clockIn.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
                         {shift.clockOut?.toDate ? ` - ${shift.clockOut.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}` : ""}
                       </p>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        {shift.primaryUserName || shift.userName || shift.name || "—"} (P)
+                        {shift.secondaryUserName && <span className="ml-1">& {shift.secondaryUserName} (S)</span>}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: "#DBEAFE", color: "#2563EB" }}>

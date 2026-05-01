@@ -127,14 +127,15 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           const s = { id: d.id, ...d.data() };
           const clientName = s.clientName || s.clientDetails?.name || s.clientDetails?.clientName || "—";
           const clientId   = s.clientId   || s.clientDetails?.id   || s.clientDetails?.clientId   || "—";
-          const staff      = s.staffName || s.assignedUser || s.userName || s.name || s.user || "—";
+          const staff      = s.primaryUserName || s.staffName || s.assignedUser || s.userName || s.name || s.user || "—";
+          const secondaryStaff = s.secondaryUserName || "";
           const agency     = s.agencyName || s.agency              || "—";
           const service    = normService(s.categoryName || s.shiftCategory);
           const shiftType  = s.typeName || s.shiftType || "Regular";
           const status     = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
           const hoursWorked= s.hoursWorked || 8;
           return {
-            id: s.id, clientName, clientId, staff, agency,
+            id: s.id, clientName, clientId, staff, secondaryStaff, agency,
             service, shiftType, status, hoursWorked,
             billingRate: s.billingRate || BILLING_RATE,
             locked: s.locked || false,
@@ -233,7 +234,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   const detailRows = (r) => [
     { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Client Name",    value: r.clientName, sub: r.clientId },
     { icon: <Briefcase size={13} strokeWidth={2} style={{ color: svcColor(r.service) }} />, iconBg: svcBg(r.service), label: "Service Type", value: r.service, sub: `${r.shiftType} shift` },
-    { icon: <User size={13} strokeWidth={2} style={{ color: "#8b5cf6" }} />, iconBg: "#f5f3ff", label: "Assigned Staff", value: r.staff },
+    { icon: <User size={13} strokeWidth={2} style={{ color: "#8b5cf6" }} />, iconBg: "#f5f3ff", label: "Primary Staff", value: r.staff },
+    { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Secondary Staff", value: r.secondaryStaff || "None" },
     { icon: <Clock size={13} strokeWidth={2} style={{ color: "#f59e0b" }} />, iconBg: "#fef3c7", label: "Hours Worked",  value: `${r.hoursWorked} hours` },
     { icon: <DollarSign size={13} strokeWidth={2} style={{ color: "#16a34a" }} />, iconBg: "#f0fdf4", label: "Billing Rate", value: `$${r.billingRate.toFixed(2)} / hr` },
   ];
@@ -365,7 +367,10 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                       }}
                       title={row.staff}
                     >
-                      {row.staff}
+                      <div>{row.staff} (P)</div>
+                      {row.secondaryStaff && (
+                        <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>{row.secondaryStaff} (S)</div>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">

@@ -100,7 +100,7 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
   if (c.includes("supervised visitation")) return "Supervised Visitation";
 
   if (c.includes("emergent care")) return "Emergent Care";
-  if (c.includes("respite care")) return "Respite Care";
+  if (c.includes("respite")) return "Respite Care";
   if (c.includes("transportation")) return "Transportation";
 
   return category || "";
@@ -203,7 +203,9 @@ try {
   const searchMatches =
     !searchTerm ||
     clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    clientId.toString().toLowerCase().includes(searchTerm.toLowerCase());
+    clientId.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (shift.primaryUserName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (shift.secondaryUserName || "").toLowerCase().includes(searchTerm.toLowerCase());
 
   const passes =
     statusMatches && categoryMatches && dateMatches && searchMatches;

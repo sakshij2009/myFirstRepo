@@ -108,6 +108,8 @@ const ReportsSection = ({ shiftId, shiftData,user }) => {
     alert("Draft saved locally!");
   };
 
+
+
   // ✅ Submit and update Firestore
   const handleSubmit = async () => {
     if (isTooShort) {
@@ -127,15 +129,31 @@ const ReportsSection = ({ shiftId, shiftData,user }) => {
   };
 
   // Format time like "08:59 AM"
-const formatTime = (timestamp, timeZone = "UTC") => {
-  try {
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+const formatTime = (ts) => {
+  if (!ts) return "—";
+  
+  // If it's a string in "YYYY-MM-DD, HH:mm:ss" format, just extract the time
+  // to avoid browser timezone shifts.
+  if (typeof ts === "string" && ts.includes(",")) {
+    try {
+      const timePart = ts.split(",")[1].trim();
+      const [h, m] = timePart.split(":");
+      const hours = parseInt(h, 10);
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const displayHours = hours % 12 || 12;
+      return `${String(displayHours).padStart(2, "0")}:${m} ${ampm}`;
+    } catch (e) {
+      console.error("Error parsing time string:", e);
+    }
+  }
 
+  try {
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
-      timeZone, // 👈 this ensures we use the given timezone
+      timeZone: "America/Edmonton", 
     });
   } catch (error) {
     console.error("Error formatting time:", error);

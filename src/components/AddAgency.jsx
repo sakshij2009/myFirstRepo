@@ -43,10 +43,12 @@ const AddAgency = ({  mode = "add", user }) => {
     const fetchAgencyTypes = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "AgencyTypes"));
-        const typeList = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-        }));
+        const typeList = querySnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            name: doc.data().name,
+          }))
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         setAgencyType(typeList);
       } catch (error) {
         console.error("Error fetching agency types:", error);
