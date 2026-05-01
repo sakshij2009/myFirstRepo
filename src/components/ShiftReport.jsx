@@ -15,7 +15,7 @@ import {
   ChevronRight, Flag, MessageSquare, Plus, TrendingUp,
   Shield, Clipboard, Activity, X, Printer, ChevronDown,
   PenLine, Stamp, Pill, Truck, Upload, Receipt,
-  AlertTriangle, Stethoscope, CheckCircle2,
+  AlertTriangle, Stethoscope, CheckCircle2, Car,
 } from "lucide-react";
 import { calculateRouteDistance, reverseGeocode } from "../utils/mapboxHelper";
 
@@ -154,7 +154,8 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                     { label: "Service Type", value: normalized.serviceType },
                     { label: "Shift Type",   value: normalized.category    },
                     { label: "Agency",       value: normalized.agency      },
-                    { label: "Staff",        value: primaryStaff?.name || "—" },
+                    { label: "Primary Staff", value: primaryStaff?.name || "—" },
+                    { label: "Secondary Staff", value: shiftData.secondaryUserName || "—" },
                   ].map((f, i) => (
                     <div key={i}>
                       <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>{f.label}</p>
@@ -187,7 +188,10 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                 <div className="rounded-lg p-2" style={{ background: "#f0fdf4" }}><PenLine size={15} style={{ color: "#145228" }} /></div>
                 <div>
                   <p className="font-bold" style={{ fontSize: 15, color: "#111827" }}>Shift Narrative Report</p>
-                  <p style={{ fontSize: 11, color: "#9ca3af" }}>Written by {staffName}</p>
+                  <p style={{ fontSize: 11, color: "#9ca3af" }}>
+                    Written by {staffName}
+                    {shiftData.secondaryUserName && ` · Co-caregiver: ${shiftData.secondaryUserName}`}
+                  </p>
                 </div>
               </div>
               <div className="border-b mb-5" style={{ borderColor: "#f3f4f6" }} />
@@ -810,10 +814,12 @@ const ShiftReport = ({ user }) => {
 
         <div className="flex items-center gap-6 flex-1 flex-wrap">
           {[
-            { icon: <User size={12} style={{ color: "#145228" }} />,    label: "Assigned Staff", value: primaryStaff?.name || "—", bg: "#f0fdf4" },
-            { icon: <FileText size={12} style={{ color: "#2563eb" }} />, label: "Service Type",   value: normalized.serviceType,   bg: "#eff6ff" },
-            { icon: <Clock size={12} style={{ color: "#7c3aed" }} />,    label: "Shift Type",     value: normalized.category,      bg: "#faf5ff" },
-            { icon: <MapPin size={12} style={{ color: "#ea580c" }} />,   label: "Agency",         value: normalized.agency,        bg: "#fff7ed" },
+            { icon: <User size={12} style={{ color: "#145228" }} />,    label: "Primary Staff", value: primaryStaff?.name || "—", bg: "#f0fdf4" },
+            { icon: <User size={12} style={{ color: "#2563eb" }} />,    label: "Secondary Staff", value: shiftData.secondaryUserName || "—", bg: "#eff6ff" },
+            { icon: <FileText size={12} style={{ color: "#7c3aed" }} />, label: "Service Type",   value: normalized.serviceType,   bg: "#faf5ff" },
+            { icon: <Clock size={12} style={{ color: "#ea580c" }} />,    label: "Shift Type",     value: normalized.category,      bg: "#fff7ed" },
+            { icon: <MapPin size={12} style={{ color: "#9ca3af" }} />,   label: "Agency",         value: normalized.agency,        bg: "#f3f4f6" },
+            { icon: <Car size={12} style={{ color: "#000" }} />,      label: "Vehicle",        value: shiftData.vehicleType || "—", bg: "#f3f4f6" },
           ].map((item, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className="rounded-md flex items-center justify-center flex-shrink-0" style={{ width: 26, height: 26, background: item.bg }}>{item.icon}</div>
@@ -1005,7 +1011,10 @@ const ShiftReport = ({ user }) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{primaryStaff?.name || "—"}</p>
+                      <p className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>
+                        {primaryStaff?.name || "—"} (P)
+                        {shiftData.secondaryUserName && <span className="ml-2 font-normal text-gray-500 text-[11px]"> & {shiftData.secondaryUserName} (S)</span>}
+                      </p>
                       <span className="px-1.5 py-0.5 rounded-md font-semibold" style={{ fontSize: 10, background: "#e0e7ff", color: "#4338ca" }}>{normalized.category}</span>
                     </div>
                     <p style={{ fontSize: 11, color: "#6b7280" }}>{normalized.serviceType} · {normalized.agency}</p>

@@ -328,12 +328,19 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
                 </p>
                 <div className="w-px h-6 bg-gray-400" />
 
-                <p>
-                  Staff Name:{" "}
-                  <span className="font-bold">
-                    {shift.name || shift.user || "N/A"}
-                  </span>
-                </p>
+                <div className="flex flex-col">
+                  <p>
+                    Staff Name:{" "}
+                    <span className="font-bold">
+                      {shift.primaryUserName || shift.name || shift.user || "N/A"} (P)
+                    </span>
+                  </p>
+                  {shift.secondaryUserName && (
+                    <p style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                      Secondary: <span className="font-semibold">{shift.secondaryUserName} (S)</span>
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* ✅ Actions */}

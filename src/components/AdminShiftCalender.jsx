@@ -149,7 +149,13 @@ export default function AdminShiftCalendar() {
                               key={shift.id}
                               className={`rounded px-2 py-1 text-xs font-semibold ${detectCategory(shift)}`}
                             >
-                              <div>{shift.clientName || shift.name}</div>
+                               <div>{shift.clientName || shift.name}</div>
+                              <div className="flex flex-col gap-0.5 mt-0.5 text-[10px] text-gray-500">
+                                <span className="font-medium text-gray-700">{shift.userName || shift.name || "—"} (P)</span>
+                                {shift.secondaryUserName && (
+                                  <span className="text-gray-500">{shift.secondaryUserName} (S)</span>
+                                )}
+                              </div>
                               <div>{shift.startTime} → {shift.endTime}</div>
                             </div>
                           ))}

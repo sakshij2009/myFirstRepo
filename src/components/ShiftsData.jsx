@@ -6,7 +6,7 @@ import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
 import {
   ChevronLeft, ChevronRight, Calendar, User, Tag, Clock,
-  FileText, Edit2, Download, Lock, Building2,
+  FileText, Edit2, Download, Lock, Building2, Car,
 } from "lucide-react";
 
 function statusBadge(status) {
@@ -65,11 +65,33 @@ const formatDate = (ts) => {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+const formatTime = (ts) => {
+  if (!ts) return "—";
+
+  // If it's a string in "YYYY-MM-DD, HH:mm:ss" format, just extract the time
+  // to avoid browser timezone shifts.
+  if (typeof ts === "string" && ts.includes(",")) {
+    try {
+      const timePart = ts.split(",")[1].trim();
+      const [h, m] = timePart.split(":");
+      const hours = parseInt(h, 10);
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const displayHours = hours % 12 || 12;
+      return `${String(displayHours).padStart(2, "0")}:${m} ${ampm}`;
+    } catch (e) {
+      console.error("Error parsing time string:", e);
+    }
+  }
+
+  const d = typeof ts?.toDate === "function" ? ts.toDate() : new Date(ts);
+  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Edmonton" });
+};
+
 const normalizeCategory = (cat) => {
   const c = (cat || "").toLowerCase().trim();
   if (c.includes("supervised visitation")) return "Supervised Visitation";
   if (c.includes("emergent care")) return "Emergent Care";
-  if (c.includes("respite care")) return "Respite Care";
+  if (c.includes("respite")) return "Respite Care";
   return cat || "—";
 };
 
@@ -178,11 +200,14 @@ const ShiftsData = ({ filteredShifts = [] }) => {
             <div className="grid grid-cols-4 gap-4 px-5 py-3">
               <div>
                 <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
-                  Caregiver
+                  Staff
                 </p>
-                <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
-                  {shift.name || shift.user || "—"}
-                </p>
+                <div style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+                  <p>{shift.primaryUserName || shift.userName || shift.name || "—"} (P)</p>
+                  {shift.secondaryUserName && (
+                    <p className="mt-0.5" style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{shift.secondaryUserName} (S)</p>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
@@ -191,6 +216,12 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                 <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
                   {shift.typeName || shift.shiftType || "—"}
                 </p>
+                {shift.vehicleType && (
+                  <div className="flex items-center gap-1 mt-1 text-gray-500" style={{ fontSize: 11 }}>
+                    <Car size={12} />
+                    <span>{shift.vehicleType}</span>
+                  </div>
+                )}
               </div>
               <div>
                 <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
@@ -208,7 +239,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                   Clock In / Out
                 </p>
                 <p style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
-                  {shift.clockIn ? formatDate(shift.clockIn) : "—"} / {shift.clockOut ? formatDate(shift.clockOut) : "—"}
+                  {shift.clockIn ? formatTime(shift.clockIn) : "—"} / {shift.clockOut ? formatTime(shift.clockOut) : "—"}
                 </p>
               </div>
             </div>

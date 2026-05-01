@@ -163,7 +163,7 @@ function ShiftChip({ shift, navigate }) {
       onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
       className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity"
       style={{ background: s.bg, border: `1px solid ${s.border}` }}
-      title={`${shift.timeStart}–${shift.timeEnd} · ${shift.client} · ${shift.staff || "Unassigned"}`}
+      title={`${shift.timeStart}–${shift.timeEnd} · ${shift.client} · P: ${shift.staff || "Unassigned"}${shift.secondaryStaff ? ` · S: ${shift.secondaryStaff}` : ""}`}
     >
       <span className="rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: s.color }} />
       <span className="truncate" style={{ fontSize: 10, color: s.color, fontWeight: 600, lineHeight: 1 }}>
@@ -240,13 +240,18 @@ function ShiftGridRow({ shift, showDate, navigate }) {
 
       {/* Col 3 */}
       <div className="min-w-0 pr-2">
-        {shift.staff ? (
-          <>
+        {shift.staff || shift.secondaryStaff ? (
+          <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
               <User size={12} style={{ color: "#6b7280", flexShrink: 0 }} />
-              <span className="font-semibold truncate" style={{ fontSize: 12, color: "#374151" }}>{shift.staff}</span>
+              <span className="font-semibold truncate" style={{ fontSize: 12, color: "#374151" }}>{shift.staff || "—"} (P)</span>
             </div>
-          </>
+            {shift.secondaryStaff && (
+              <div className="flex items-center gap-1.5 mt-0.5 ml-3.5">
+                <span className="truncate" style={{ fontSize: 10, color: "#6b7280" }}>{shift.secondaryStaff} (S)</span>
+              </div>
+            )}
+          </div>
         ) : (
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md font-semibold"
             style={{ background: "#fff7ed", color: "#ea580c", fontSize: 11 }}>
@@ -309,9 +314,16 @@ function ShiftCompactRow({ shift, navigate }) {
           {svc.label}
         </span>
       </div>
-      <div className="flex items-center gap-1 mt-1" style={{ fontSize: 11, color: shift.staff ? "#6b7280" : "#ea580c" }}>
-        <User size={10} />
-        {shift.staff || "Unassigned"}
+      <div className="flex flex-col gap-0.5 mt-1" style={{ fontSize: 11, color: shift.staff ? "#6b7280" : "#ea580c" }}>
+        <div className="flex items-center gap-1">
+          <User size={10} />
+          <span className="truncate">{shift.staff || "Unassigned"} (P)</span>
+        </div>
+        {shift.secondaryStaff && (
+          <div className="flex items-center gap-1 ml-3">
+            <span className="truncate" style={{ fontSize: 9, color: "#9ca3af" }}>{shift.secondaryStaff} (S)</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -553,9 +565,16 @@ function TodayView({ shifts, navigate }) {
                 <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#6b7280" }}>
                   <Clock size={12} /> {s.timeStart} – {s.timeEnd}
                 </span>
-                <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#6b7280" }}>
-                  <User size={12} /> {s.staff || "Unassigned"}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#6b7280" }}>
+                    <User size={12} /> {s.staff || "Unassigned"} (P)
+                  </span>
+                  {s.secondaryStaff && (
+                    <span className="flex items-center gap-1.5 ml-4.5" style={{ fontSize: 11, color: "#9ca3af" }}>
+                      {s.secondaryStaff} (S)
+                    </span>
+                  )}
+                </div>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold"
                   style={{ background: svc.bg, color: svc.color, fontSize: 11 }}>
                   {svc.label}
@@ -769,7 +788,8 @@ export default function ShiftCommandPage() {
             date: dateStr || todayStr(),
             timeStart: data.startTime || "",
             timeEnd: data.endTime || "",
-            staff: data.name || data.assignedUser || data.staffName || "",
+            staff: data.primaryUserName || data.name || data.assignedUser || data.staffName || "",
+            secondaryStaff: data.secondaryUserName || "",
             client: data.clientName || data.clientDetails?.name || "",
             serviceKey,
             status,
