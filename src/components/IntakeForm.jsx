@@ -1149,6 +1149,65 @@ const handleSubmit = async (values, { resetForm }) => {
       return obj === undefined ? "" : obj;
     };
 
+    // ================== LEGACY FIELDS (backward compat for old Flutter app) ==================
+    // The old Flutter app reads: inTakeClients (array), nameInClientTable, childsName,
+    // dateOfInTake, nameOfPerson, servicePlanAndRisk, serviceRequired, etc.
+    // We write them alongside the new structure so BOTH apps read the same Firestore document.
+    const legacyInTakeClients = clientsWithPhotos.map((c) => {
+      const parent = (values.parentInfoList || []).find(
+        (p) => !p.clientName || p.clientName.includes(c.fullName)
+      ) || {};
+      const medical = (values.medicalInfoList || []).find(
+        (m) => !m.clientName || m.clientName.includes(c.fullName)
+      ) || {};
+      const transport = (values.transportationInfoList || []).find(
+        (t) => !t.clientName || t.clientName.includes(c.fullName)
+      ) || {};
+      const visit = (values.supervisedVisitations || []).find(
+        (v) => !v.clientName || v.clientName.includes(c.fullName)
+      ) || {};
+      return {
+        name: c.fullName || "",
+        gender: c.gender || "",
+        dob: c.birthDate || "",
+        address: c.address || "",
+        serviceStartDate: c.startDate || "",
+        otherServiceConcerns: c.clientInfo || "",
+        // Parent
+        parentName: parent.parentName || "",
+        relationship: parent.relationShip || "",
+        parentPhone: parent.parentPhone || "",
+        parentEmail: parent.parentEmail || "",
+        parentAddress: parent.parentAddress || "",
+        // Medical
+        healthCareNumber: medical.healthCareNo || "",
+        anyDiagnosis: (medical.diagnosis || medical.diagnosisType) ? "Yes" : "No",
+        diagnosisType: medical.diagnosisType || medical.diagnosis || "",
+        criticalMedicalConcerns: medical.medicalConcern || "",
+        mobilityAssistanceRequired: medical.mobilityAssistance || "",
+        mobilityAssistanceDetails: medical.mobilityInfo || "",
+        commAidRequired: medical.communicationAid || "",
+        commAidDetails: medical.communicationInfo || "",
+        // Transportation
+        pickupAddress: transport.pickupAddress || "",
+        dropAddress: transport.dropoffAddress || "",
+        pickupTime: transport.pickupTime || "",
+        dropTime: transport.dropOffTime || "",
+        typeOfSeat: transport.carSeatType || "",
+        transportOverView: transport.transportationOverview || "",
+        // Supervised Visit
+        visitDuration: visit.visitDuration || "",
+        purposeOfVisit: visit.visitPurpose || "",
+        visitAddress: visit.visitAddress || "",
+        visitOverView: visit.visitOverview || "",
+        startVisitTime: visit.visitStartTime || "",
+        endVisitTime: visit.visitEndTime || "",
+      };
+    });
+
+    const primaryClientName = clientsWithPhotos[0]?.fullName || values.familyName || "";
+    const workerName = values.workerInfo?.workerName || user?.name || "";
+
     // ================== FINAL PAYLOAD ==================
     const payload = {
       avatar: avatarPreview || null,
@@ -1170,6 +1229,7 @@ const handleSubmit = async (values, { resetForm }) => {
 
       workerInfo: {
         ...values.workerInfo,
+        workerName: workerName,
         signature: signatureURL,
       },
 
@@ -1183,10 +1243,35 @@ const handleSubmit = async (values, { resetForm }) => {
       formType: isCaseWorker ? "intake-worker" : "private",
       status: isDraft ? "Draft" : (values.status || "Submitted"),
 
-      // 🔐 IMPORTANT FLAG
+      // Flag: clients auto-created when status changes to Accepted
       clientsCreated: values.clientsCreated || false,
 
-      createdAt: formatReadableDate(new Date()),
+      // submittedOn + createdAt set ONCE on creation (preserved on update)
+      ...(mode !== "update" ? {
+        submittedOn: formatReadableDate(new Date()),
+        createdAt: formatReadableDate(new Date()),
+      } : {}),
+
+      // Always track last update
+      lastUpdatedAt: formatReadableDate(new Date()),
+      lastUpdatedBy: workerName || user?.email || "Intake Worker",
+
+      // LEGACY FIELDS — required so the old Flutter app can read these documents
+      inTakeClients: legacyInTakeClients,
+      nameInClientTable: primaryClientName,
+      childsName: primaryClientName,
+      dateOfInTake: values.workerInfo?.date || new Date().toISOString().split("T")[0],
+      nameOfPerson: workerName,
+      inTakeWorkerName: values.intakeworkerName || "",
+      inTakeWorkerAgencyName: values.agencyName || "",
+      inTakeWorkerPhone: values.intakeworkerPhone || "",
+      inTakeWorkerEmail: values.intakeworkerEmail || "",
+      servicePlanAndRisk: values.services?.safetyPlan || "",
+      serviceDetail: values.services?.serviceDesc || "",
+      serviceRequired: values.services?.serviceType || [],
+      date: values.workerInfo?.date || "",
+      signature: signatureURL,
+      filledBy: workerName,
     };
 
     // ================== SAVE INTAKE ==================
