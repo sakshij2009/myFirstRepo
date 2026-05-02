@@ -8,6 +8,7 @@ import AdminHomePage from "./components/AdminHomePage";
 import IntakeFormMainPage from "./components/IntakeFormMainPage";
 import IntakeLogin from "./components/IntakeLogin";
 import UserHomePage from "./components/UserHomePage";
+import MigrateIntakeForms from "./components/MigrateIntakeForms";
 
 // ✅ Protected Route – Main App Only (Admin + User)
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -72,6 +73,16 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["user"]}>
               <UserHomePage user={user} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 🔧 One-time migration tool — admin only */}
+        <Route
+          path="/migrate-intake-forms"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <MigrateIntakeForms />
             </ProtectedRoute>
           }
         />
