@@ -1032,7 +1032,7 @@ const createSingleClient = async (intake, intakeId, client, db) => {
 await setDoc(doc(db, "clients", clientId), {
   // basic
   name: client.fullName,
-  dob: client.birthDate,
+  dob: client.birthDate || null,  // null not "" — Flutter crashes parsing empty string as date
   gender: client.gender || "",
   address: client.address || "",
   avatar: Array.isArray(client.photos) && client.photos.length > 0
@@ -1169,7 +1169,7 @@ const handleSubmit = async (values, { resetForm }) => {
       return {
         name: c.fullName || "",
         gender: c.gender || "",
-        dob: c.birthDate || "",
+        dob: c.birthDate || null,   // null not "" — Flutter crashes parsing empty string as date
         address: c.address || "",
         serviceStartDate: c.startDate || "",
         otherServiceConcerns: c.clientInfo || "",
@@ -1246,6 +1246,9 @@ const handleSubmit = async (values, { resetForm }) => {
       // Flag: clients auto-created when status changes to Accepted
       clientsCreated: values.clientsCreated || false,
 
+      // Flutter app filters forms by isActive == true — must be set so forms appear in old app
+      isActive: true,
+
       // submittedOn + createdAt set ONCE on creation (preserved on update)
       ...(mode !== "update" ? {
         submittedOn: formatReadableDate(new Date()),
@@ -1260,7 +1263,15 @@ const handleSubmit = async (values, { resetForm }) => {
       inTakeClients: legacyInTakeClients,
       nameInClientTable: primaryClientName,
       childsName: primaryClientName,
-      dateOfInTake: values.workerInfo?.date || new Date().toISOString().split("T")[0],
+      dateOfInTake: (() => {
+        // Flutter parses this as DD-MM-YYYY — convert from YYYY-MM-DD if needed
+        const d = values.workerInfo?.date || "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          const [yyyy, mm, dd] = d.split("-");
+          return `${dd}-${mm}-${yyyy}`;
+        }
+        return d || new Date().toLocaleDateString("en-GB").split("/").join("-");
+      })(),
       nameOfPerson: workerName,
       inTakeWorkerName: values.intakeworkerName || "",
       inTakeWorkerAgencyName: values.agencyName || "",
@@ -1269,7 +1280,14 @@ const handleSubmit = async (values, { resetForm }) => {
       servicePlanAndRisk: values.services?.safetyPlan || "",
       serviceDetail: values.services?.serviceDesc || "",
       serviceRequired: values.services?.serviceType || [],
-      date: values.workerInfo?.date || "",
+      date: (() => {
+        const d = values.workerInfo?.date || "";
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          const [yyyy, mm, dd] = d.split("-");
+          return `${dd}-${mm}-${yyyy}`;
+        }
+        return d;
+      })(),
       signature: signatureURL,
       filledBy: workerName,
     };
