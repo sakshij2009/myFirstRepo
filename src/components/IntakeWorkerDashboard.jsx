@@ -662,16 +662,14 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
 
     let oldAppForms = [];
     let newAppForms = [];
-    let v2Forms     = [];
     let oldLoaded = false;
     let newLoaded = false;
-    let v2Loaded  = false;
 
     const merge = () => {
-      if (!oldLoaded || !newLoaded || !v2Loaded) return;
-      // Deduplicate: v2 → old → mobile priority
+      if (!oldLoaded || !newLoaded) return;
+      // Deduplicate
       const seen = new Set();
-      const unique = [...v2Forms, ...oldAppForms, ...newAppForms].filter(f => {
+      const unique = [...oldAppForms, ...newAppForms].filter(f => {
         if (seen.has(f.id)) return false;
         seen.add(f.id);
         return true;
@@ -700,13 +698,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
       (err) => { console.error("intakeForms listener:", err); newLoaded = true; merge(); }
     );
 
-    const unsubV2 = onSnapshot(
-      collection(db, "IntakeFormsV2"),
-      (snap) => { v2Forms = snap.docs.map(d => ({ id: d.id, _source: "v2", ...d.data() })); v2Loaded = true; merge(); },
-      (err) => { console.error("IntakeFormsV2 listener:", err); v2Loaded = true; merge(); }
-    );
-
-    return () => { unsubOld(); unsubNew(); unsubV2(); };
+    return () => { unsubOld(); unsubNew(); };
   }, [workerId, workerName]);
 
 

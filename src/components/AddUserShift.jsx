@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Formik, Form, Field, ErrorMessage } from "formik";
+import { Formik, Form, Field, ErrorMessage, useFormikContext } from "formik";
 import * as Yup from "yup";
 import {
   getDocs,
@@ -57,21 +57,17 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftType: "",
     shiftCategory: "",
     client: "",
-    primaryUser: "",
-    secondaryUser: "",
     startDate: "",
     endDate: "",
     startTime: "",
     endTime: "",
     description: "",
-    vehicleType: "",
     accessToShiftReport: false,
     shiftDates: [],
   });
 
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedPrimaryUser, setSelectedPrimaryUser] = useState(null);
-  const [selectedSecondaryUser, setSelectedSecondaryUser] = useState(null);
   const [selectedShiftType, setSelectedShiftType] = useState(null);
   const [selectedShiftCategory, setSelectedShiftCategory] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -111,7 +107,6 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftCategory: Yup.string().required("Shift category is required"),
     client: Yup.string().required("Client selection is required"),
     primaryUser: Yup.string().required("Primary Staff selection is required"),
-    secondaryUser: Yup.string().optional(),
     shiftDates: Yup.array()
       .of(Yup.date().typeError("Invalid date"))
       .min(1, "At least one shift date is required"),
@@ -676,7 +671,6 @@ const AddUserShift = ({ mode = "add", user }) => {
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
           const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
-          const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
           await updateDoc(docRef, {
             ...restValues,
@@ -691,10 +685,8 @@ const AddUserShift = ({ mode = "add", user }) => {
             name: primaryStaff?.name || "",
             primaryUserId: primaryStaff?.id || "",
             primaryUserName: primaryStaff?.name || "",
-            // Secondary Staff
-            secondaryUserId: secondaryStaff?.id || "",
-            secondaryUserName: secondaryStaff?.name || "",
-            vehicleType: values.vehicleType || "",
+            agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
+            agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
             updatedAt: new Date(),
             // Ensure legacy top-level visit fields are cleared
             visitLocation: "",
@@ -768,7 +760,6 @@ const AddUserShift = ({ mode = "add", user }) => {
         }));
 
         const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
-        const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
         await setDoc(doc(db, "shifts", newShiftId), {
           ...values,
@@ -777,9 +768,11 @@ const AddUserShift = ({ mode = "add", user }) => {
           clientDetails: selectedClient,
           clientId: selectedClient?.id || values.client || "",
           clientName: selectedClient?.name || "",
-          userId: selectedUser?.id || selectedUser?.userId || values.user || "",
-          userName: selectedUser?.name || "",
-          name: selectedUser?.name || "",
+          userId: primaryStaff?.id || primaryStaff?.userId || values.user || "",
+          userName: primaryStaff?.name || "",
+          name: primaryStaff?.name || "",
+          agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
+          agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
           createdAt: new Date(),
           shiftReport: "",
           shiftConfirmed: false,
@@ -1006,30 +999,6 @@ const AddUserShift = ({ mode = "add", user }) => {
           onSubmit={handleSubmit}
         >
           {({ touched, errors, values, setFieldValue }) => {
-            useEffect(() => {
-              const clientData = clients.find((c) => c.id === values.client);
-              setSelectedClient(clientData || null);
-
-              const primaryData = users.find((u) => u.id === values.primaryUser);
-              setSelectedPrimaryUser(primaryData || null);
-
-              const secondaryData = users.find((u) => u.id === values.secondaryUser);
-              setSelectedSecondaryUser(secondaryData || null);
-
-              const shiftTypeData = shiftTypes.find((s) => s.id === values.shiftType);
-              setSelectedShiftType(shiftTypeData || null);
-              const shiftCategoryData = shiftCategories.find((s) => s.name === values.shiftCategory);
-              setSelectedShiftCategory(shiftCategoryData || null);
-            }, [values.client, values.primaryUser, values.secondaryUser, values.shiftType, values.shiftCategory]);
-
-            // Auto-fill description from intake when it loads
-            // eslint-disable-next-line react-hooks/rules-of-hooks
-            useEffect(() => {
-              if (intakeDescription && !values.description) {
-                setFieldValue("description", intakeDescription);
-              }
-            }, [intakeDescription]);
-
             const handleDatesChange = (dates) => {
               const selected = dates || [];
               setFieldValue("shiftDates", selected);
@@ -1043,26 +1012,32 @@ const AddUserShift = ({ mode = "add", user }) => {
               }
             };
 
-            // Auto-generate dates when repeat settings change
-            // eslint-disable-next-line react-hooks/rules-of-hooks
-            useEffect(() => {
-              if (repeatEnabled && repeatDays.length > 0) {
-                const generated = generateRepeatDates(repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate);
-                handleDatesChange(generated);
-              } else if (!repeatEnabled) {
-                handleDatesChange([]);
-              }
-              // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [repeatEnabled, repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate]);
-
             return (
               <Form className="flex flex-col gap-5">
+                <FormikSync
+                  clients={clients}
+                  users={users}
+                  shiftTypes={shiftTypes}
+                  shiftCategories={shiftCategories}
+                  setSelectedClient={setSelectedClient}
+                  setSelectedPrimaryUser={setSelectedPrimaryUser}
+                  setSelectedShiftType={setSelectedShiftType}
+                  setSelectedShiftCategory={setSelectedShiftCategory}
+                  intakeDescription={intakeDescription}
+                  repeatEnabled={repeatEnabled}
+                  repeatDays={repeatDays}
+                  repeatEndCondition={repeatEndCondition}
+                  repeatOccurrences={repeatOccurrences}
+                  repeatEndDate={repeatEndDate}
+                  generateRepeatDates={generateRepeatDates}
+                  handleDatesChange={handleDatesChange}
+                />
 
                 {/* ── Main Card ── */}
                 <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
                   {/* Assignment Context Header */}
-                  {(selectedClient || selectedPrimaryUser || selectedSecondaryUser) && (
+                  {(selectedClient || selectedPrimaryUser) && (
                     <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50/50" style={{ borderColor: "#f3f4f6" }}>
                       <div className="flex flex-wrap items-center gap-6">
                         {/* Client Info */}
@@ -1087,19 +1062,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                             <div>
                               <p className="font-semibold text-[13px] text-gray-900">{selectedPrimaryUser.name || "—"}</p>
                               <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wider">Primary Staff</p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Secondary Staff Info */}
-                        {selectedSecondaryUser && (
-                          <div className="flex items-center gap-3 pr-6 border-r border-gray-200 last:border-r-0">
-                            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                              {(selectedSecondaryUser.name || "S").charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="font-semibold text-[13px] text-gray-900">{selectedSecondaryUser.name || "—"}</p>
-                              <p className="text-[11px] text-blue-600 font-medium uppercase tracking-wider">Secondary Staff</p>
                             </div>
                           </div>
                         )}
@@ -1158,21 +1120,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                         <ErrorMessage name="client" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
-                      {/* Vehicle Type */}
-                      <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Vehicle Type</label>
-                        <Field as="select" name="vehicleType" className={selectCls(touched.vehicleType && errors.vehicleType, !values.vehicleType)}>
-                          <option value="">Please select vehicle type</option>
-                          <option value="Personal Vehicle">Personal Vehicle</option>
-                          <option value="Agency Vehicle">Agency Vehicle</option>
-                          <option value="Other">Other</option>
-                        </Field>
-                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                        <ErrorMessage name="vehicleType" component="div" className="text-red-500 text-xs mt-1" />
-                      </div>
-
                       {/* Select Primary User (Staff) */}
                       <div className="relative">
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Primary User (Staff)</label>
@@ -1186,21 +1133,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                           <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
                         </span>
                         <ErrorMessage name="primaryUser" component="div" className="text-red-500 text-xs mt-1" />
-                      </div>
-
-                      {/* Select Secondary User (Staff) */}
-                      <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Secondary User (Staff)</label>
-                        <Field as="select" name="secondaryUser" className={selectCls(touched.secondaryUser && errors.secondaryUser, !values.secondaryUser)}>
-                          <option value="">Select secondary staff (optional)</option>
-                          {users.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
-                          ))}
-                        </Field>
-                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                        <ErrorMessage name="secondaryUser" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
                       {/* Start Time */}
@@ -1739,6 +1671,60 @@ const AddUserShift = ({ mode = "add", user }) => {
       </div>
     </div>
   );
+};
+
+// ── Helper Component to sync Formik state with local state ──
+const FormikSync = ({
+  clients,
+  users,
+  shiftTypes,
+  shiftCategories,
+  setSelectedClient,
+  setSelectedPrimaryUser,
+  setSelectedShiftType,
+  setSelectedShiftCategory,
+  intakeDescription,
+  repeatEnabled,
+  repeatDays,
+  repeatEndCondition,
+  repeatOccurrences,
+  repeatEndDate,
+  generateRepeatDates,
+  handleDatesChange
+}) => {
+  const { values, setFieldValue } = useFormikContext();
+
+  useEffect(() => {
+    const clientData = clients.find((c) => c.id === values.client);
+    setSelectedClient(clientData || null);
+
+    const primaryData = users.find((u) => u.id === values.primaryUser);
+    setSelectedPrimaryUser(primaryData || null);
+
+    const shiftTypeData = shiftTypes.find((s) => s.id === values.shiftType);
+    setSelectedShiftType(shiftTypeData || null);
+
+    const shiftCategoryData = shiftCategories.find((s) => s.name === values.shiftCategory);
+    setSelectedShiftCategory(shiftCategoryData || null);
+  }, [values.client, values.primaryUser, values.shiftType, values.shiftCategory, clients, users, shiftTypes, shiftCategories, setSelectedClient, setSelectedPrimaryUser, setSelectedShiftType, setSelectedShiftCategory]);
+
+  useEffect(() => {
+    if (intakeDescription && !values.description) {
+      setFieldValue("description", intakeDescription);
+    }
+  }, [intakeDescription, values.description, setFieldValue]);
+
+  useEffect(() => {
+    if (repeatEnabled && repeatDays.length > 0) {
+      const generated = generateRepeatDates(repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate);
+      handleDatesChange(generated);
+    } else if (!repeatEnabled) {
+      handleDatesChange([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repeatEnabled, repeatDays, repeatEndCondition, repeatOccurrences, repeatEndDate]);
+
+  return null;
 };
 
 export default AddUserShift;

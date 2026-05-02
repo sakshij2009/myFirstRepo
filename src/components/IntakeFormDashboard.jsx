@@ -82,20 +82,18 @@ useEffect(() => {
     }
 
     try {
-      // ✅ Fetch all 3 collections + categories in parallel
-      const [oldFormsSnap, newFormsSnap, v2FormsSnap, categoriesSnap] = await Promise.all([
+      // ✅ Fetch both collections + categories in parallel
+      const [oldFormsSnap, newFormsSnap, categoriesSnap] = await Promise.all([
         getDocs(collection(db, "InTakeForms")),
         getDocs(collection(db, "intakeForms")),
-        getDocs(collection(db, "IntakeFormsV2")),
         getDocs(collection(db, "shiftCategories")),
       ]);
 
-      // Merge all 3 collections, deduplicating by id (v2 → old → mobile priority)
+      // Merge both collections, deduplicating by id
       const oldForms = oldFormsSnap.docs.map((doc) => ({ id: doc.id, _source: "old", ...doc.data() }));
       const newForms = newFormsSnap.docs.map((doc) => ({ id: doc.id, _source: "new", ...doc.data() }));
-      const v2Forms  = v2FormsSnap.docs.map((doc) => ({ id: doc.id, _source: "v2",  ...doc.data() }));
       const seenIds = new Set();
-      const allForms = [...v2Forms, ...oldForms, ...newForms].filter(f => {
+      const allForms = [...oldForms, ...newForms].filter(f => {
         if (seenIds.has(f.id)) return false;
         seenIds.add(f.id);
         return true;
