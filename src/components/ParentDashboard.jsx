@@ -163,23 +163,14 @@ const ParentDashboard = ({ user, onLogout }) => {
       return;
     }
 
-    // Track forms from both collections
+    // Track forms from old collection
     let oldAppForms = [];
-    let v2Forms     = [];
     let oldLoaded   = false;
-    let v2Loaded    = false;
 
     const mergeAndFilter = () => {
-      if (!oldLoaded || !v2Loaded) return;
-      // Deduplicate by id, IntakeFormsV2 (new web app) takes priority
-      const seen = new Set();
-      const all = [...v2Forms, ...oldAppForms].filter(f => {
-        if (seen.has(f.id)) return false;
-        seen.add(f.id);
-        return true;
-      });
+      if (!oldLoaded) return;
       // Keep only forms belonging to this parent
-      const myForms = all.filter(f =>
+      const myForms = oldAppForms.filter(f =>
         f.submittedBy === user.id ||
         f.secondaryParentId === user.id ||
         f.applicantEmail === user?.email ||
@@ -201,15 +192,6 @@ const ParentDashboard = ({ user, onLogout }) => {
       () => { oldLoaded = true; mergeAndFilter(); }
     );
 
-    // ── Listen to IntakeFormsV2 (new web app private + assessment forms) ──
-    const unsubV2 = onSnapshot(
-      query(collection(db, "IntakeFormsV2"), where("formType", "==", "private")),
-      (snap) => {
-        v2Forms = snap.docs.map(d => ({ id: d.id, _source: "v2", ...d.data() }));
-        v2Loaded = true;
-        mergeAndFilter();
-      },
-      () => { v2Loaded = true; mergeAndFilter(); }
     );
 
     // ── Shifts listener (unchanged) ──
@@ -226,7 +208,7 @@ const ParentDashboard = ({ user, onLogout }) => {
       ));
     });
 
-    return () => { unsubOld(); unsubV2(); unsubShifts(); };
+    return () => { unsubOld(); unsubShifts(); };
   }, [user?.id]);
 
   // Filter forms by search

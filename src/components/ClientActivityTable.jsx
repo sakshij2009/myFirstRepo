@@ -15,16 +15,16 @@ import { MiniCalendar } from "./ui/MiniCalendar";
 
 const BILLING_CFG = {
   "Pending Review": { bg: "#fef3c7", color: "#92400e", border: "#fde68a", icon: <Clock size={10} strokeWidth={2.5} /> },
-  Verified:        { bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe", icon: <CheckCircle2 size={10} strokeWidth={2.5} /> },
-  Locked:          { bg: "#fef2f2", color: "#991b1b", border: "#fecaca", icon: <Lock size={10} strokeWidth={2.5} /> },
-  Billable:        { bg: "#f0fdf4", color: "#166534", border: "#bbf7d0", icon: <DollarSign size={10} strokeWidth={2.5} /> },
-  Invoiced:        { bg: "#f3f4f6", color: "#374151", border: "#e5e7eb", icon: <Receipt size={10} strokeWidth={2.5} /> },
+  Verified: { bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe", icon: <CheckCircle2 size={10} strokeWidth={2.5} /> },
+  Locked: { bg: "#fef2f2", color: "#991b1b", border: "#fecaca", icon: <Lock size={10} strokeWidth={2.5} /> },
+  Billable: { bg: "#f0fdf4", color: "#166534", border: "#bbf7d0", icon: <DollarSign size={10} strokeWidth={2.5} /> },
+  Invoiced: { bg: "#f3f4f6", color: "#374151", border: "#e5e7eb", icon: <Receipt size={10} strokeWidth={2.5} /> },
 };
 
 const svcColor = (s) => {
   const l = (s || "").toLowerCase();
   if (l.includes("emergent")) return "#dc2626";
-  if (l.includes("respite"))  return "#1f7a3c";
+  if (l.includes("respite")) return "#1f7a3c";
   if (l.includes("supervised")) return "#7c3aed";
   if (l.includes("transport")) return "#d97706";
   return "#6b7280";
@@ -33,7 +33,7 @@ const svcColor = (s) => {
 const svcBg = (s) => {
   const l = (s || "").toLowerCase();
   if (l.includes("emergent")) return "#fef2f2";
-  if (l.includes("respite"))  return "#f0fdf4";
+  if (l.includes("respite")) return "#f0fdf4";
   if (l.includes("supervised")) return "#f5f3ff";
   if (l.includes("transport")) return "#fef3c7";
   return "#f3f4f6";
@@ -41,10 +41,10 @@ const svcBg = (s) => {
 
 const normService = (raw) => {
   const l = (raw || "").toLowerCase();
-  if (l.includes("emergent"))   return "Emergent Care";
-  if (l.includes("respite"))    return "Respite Care";
+  if (l.includes("emergent")) return "Emergent Care";
+  if (l.includes("respite")) return "Respite Care";
   if (l.includes("supervised")) return "Supervised Visitation";
-  if (l.includes("transport"))  return "Transportation";
+  if (l.includes("transport")) return "Transportation";
   return raw || "—";
 };
 
@@ -59,11 +59,11 @@ const truncateName = (name, length = 20) => {
 };
 
 const TABS = [
-  { id: "all",         label: "All Services",          svc: null,             icon: <Grid3x3 size={14} strokeWidth={1.7} /> },
-  { id: "respite",     label: "Respite Care",           svc: "Respite Care",   icon: <Shield size={14} strokeWidth={1.7} /> },
-  { id: "emergency",   label: "Emergent Care",         svc: "Emergent Care", icon: <Heart size={14} strokeWidth={1.7} /> },
-  { id: "supervised",  label: "Supervised Visitations", svc: "Supervised Visitation", icon: <Eye size={14} strokeWidth={1.7} /> },
-  { id: "transport",   label: "Transportation",        svc: "Transportation",icon: <Car size={14} strokeWidth={1.7} /> },
+  { id: "all", label: "All Services", svc: null, icon: <Grid3x3 size={14} strokeWidth={1.7} /> },
+  { id: "respite", label: "Respite Care", svc: "Respite Care", icon: <Shield size={14} strokeWidth={1.7} /> },
+  { id: "emergency", label: "Emergent Care", svc: "Emergent Care", icon: <Heart size={14} strokeWidth={1.7} /> },
+  { id: "supervised", label: "Supervised Visitations", svc: "Supervised Visitation", icon: <Eye size={14} strokeWidth={1.7} /> },
+  { id: "transport", label: "Transportation", svc: "Transportation", icon: <Car size={14} strokeWidth={1.7} /> },
 ];
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -108,14 +108,14 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
   };
-  const [rows, setRows]             = useState([]);
-  const [activeTab, setActiveTab]   = useState("all");
+  const [rows, setRows] = useState([]);
+  const [activeTab, setActiveTab] = useState("all");
   const [lockTarget, setLockTarget] = useState(null);
   const [unlockTarget, setUnlockTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [selectedDates, setSelectedDates] = useState([new Date()]);
-  const [calendarOpen, setCalendarOpen]   = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [rowsToShow, setRowsToShow] = useState(5);
 
   // Fetch shifts + enrich
@@ -126,14 +126,14 @@ export default function ClientActivityTable({ onNavigateToReport }) {
         const enriched = snap.docs.map((d) => {
           const s = { id: d.id, ...d.data() };
           const clientName = s.clientName || s.clientDetails?.name || s.clientDetails?.clientName || "—";
-          const clientId   = s.clientId   || s.clientDetails?.id   || s.clientDetails?.clientId   || "—";
-          const staff      = s.primaryUserName || s.staffName || s.assignedUser || s.userName || s.name || s.user || "—";
+          const clientId = s.clientId || s.clientDetails?.id || s.clientDetails?.clientId || "—";
+          const staff = s.primaryUserName || s.staffName || s.assignedUser || s.userName || s.name || s.user || "—";
           const secondaryStaff = s.secondaryUserName || "";
-          const agency     = s.agencyName || s.agency              || "—";
-          const service    = normService(s.categoryName || s.shiftCategory);
-          const shiftType  = s.typeName || s.shiftType || "Regular";
-          const status     = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
-          const hoursWorked= s.hoursWorked || 8;
+          const agency = s.agencyName || s.agency || "—";
+          const service = normService(s.categoryName || s.shiftCategory);
+          const shiftType = s.typeName || s.shiftType || "Regular";
+          const status = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
+          const hoursWorked = s.hoursWorked || 8;
           return {
             id: s.id, clientName, clientId, staff, secondaryStaff, agency,
             service, shiftType, status, hoursWorked,
@@ -232,13 +232,13 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   };
 
   const detailRows = (r) => [
-    { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Client Name",    value: r.clientName, sub: r.clientId },
+    { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Client Name", value: r.clientName, sub: r.clientId },
     { icon: <Briefcase size={13} strokeWidth={2} style={{ color: svcColor(r.service) }} />, iconBg: svcBg(r.service), label: "Service Type", value: r.service, sub: `${r.shiftType} shift` },
     { icon: <User size={13} strokeWidth={2} style={{ color: "#8b5cf6" }} />, iconBg: "#f5f3ff", label: "Primary Staff", value: r.staff },
-    { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Secondary Staff", value: r.secondaryStaff || "None" },
-    { icon: <Clock size={13} strokeWidth={2} style={{ color: "#f59e0b" }} />, iconBg: "#fef3c7", label: "Hours Worked",  value: `${r.hoursWorked} hours` },
+    r.secondaryStaff && { icon: <User size={13} strokeWidth={2} style={{ color: "#2563eb" }} />, iconBg: "#eff6ff", label: "Secondary Staff", value: r.secondaryStaff },
+    { icon: <Clock size={13} strokeWidth={2} style={{ color: "#f59e0b" }} />, iconBg: "#fef3c7", label: "Hours Worked", value: `${r.hoursWorked} hours` },
     { icon: <DollarSign size={13} strokeWidth={2} style={{ color: "#16a34a" }} />, iconBg: "#f0fdf4", label: "Billing Rate", value: `$${r.billingRate.toFixed(2)} / hr` },
-  ];
+  ].filter(Boolean);
 
   return (
     <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -254,8 +254,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all"
               style={{
                 borderColor: selectedDates.length ? "#145228" : "#e5e7eb",
-                background:  selectedDates.length ? "#f0fdf4"  : "#fff",
-                color:       selectedDates.length ? "#145228"  : "#374151",
+                background: selectedDates.length ? "#f0fdf4" : "#fff",
+                color: selectedDates.length ? "#145228" : "#374151",
               }}
             >
               <Calendar size={12} strokeWidth={2} />
@@ -331,7 +331,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
             {filtered.length === 0 ? (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No records found</td></tr>
             ) : filtered.slice(0, rowsToShow).map(row => {
-              const bCfg       = BILLING_CFG[row.billingStatus] || BILLING_CFG["Pending Review"];
+              const bCfg = BILLING_CFG[row.billingStatus] || BILLING_CFG["Pending Review"];
               const isInvoiced = row.billingStatus === "Invoiced";
               return (
                 <tr key={row.id} className="border-t transition-colors" style={{ borderColor: "#f3f4f6", backgroundColor: row.locked ? "#fafbfc" : undefined }}>
@@ -398,8 +398,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                       row.status === "Completed"
                         ? { backgroundColor: "#dcfce7", color: "#16a34a", borderColor: "#bbf7d0" }
                         : row.status === "Ongoing"
-                        ? { backgroundColor: "#fef3c7", color: "#d97706", borderColor: "#fde68a" }
-                        : { backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" }
+                          ? { backgroundColor: "#fef3c7", color: "#d97706", borderColor: "#fde68a" }
+                          : { backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" }
                     }>
                       {row.status}
                     </span>
@@ -451,7 +451,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                         onClick={() => !row.locked && navigate(`/admin-dashboard/add/update-user-shift/${row.id}`)}
                         className="w-[26px] h-[26px] flex items-center justify-center rounded-lg transition-all" disabled={row.locked}
                         style={{ background: row.locked ? "#f9fafb" : "#f0fdf4", color: row.locked ? "#d1d5db" : "#16a34a", border: `1px solid ${row.locked ? "#e5e7eb" : "#bbf7d0"}`, cursor: row.locked ? "not-allowed" : "pointer", opacity: row.locked ? 0.55 : 1 }} title={row.locked ? "Unlock to edit" : "Edit"}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                       </button>
                       {/* Delete */}
                       <button

@@ -21,10 +21,10 @@ import { calculateRouteDistance, reverseGeocode } from "../utils/mapboxHelper";
 
 const PILL_COLORS = [
   { label: "Yellow", bg: "#fffae3", border: "#f1e19e" },
-  { label: "White",  bg: "#f9fafb", border: "#e5e7eb" },
-  { label: "Blue",   bg: "#eff6ff", border: "#bfdbfe" },
-  { label: "Pink",   bg: "#fdf2f8", border: "#f9a8d4" },
-  { label: "Red",    bg: "#fef2f2", border: "#fecaca" },
+  { label: "White", bg: "#f9fafb", border: "#e5e7eb" },
+  { label: "Blue", bg: "#eff6ff", border: "#bfdbfe" },
+  { label: "Pink", bg: "#fdf2f8", border: "#f9a8d4" },
+  { label: "Red", bg: "#fef2f2", border: "#fecaca" },
   { label: "Orange", bg: "#fff7ed", border: "#fdba74" },
   { label: "Purple", bg: "#faf5ff", border: "#d8b4fe" },
 ];
@@ -152,8 +152,8 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
                   {[
                     { label: "Service Type", value: normalized.serviceType },
-                    { label: "Shift Type",   value: normalized.category    },
-                    { label: "Agency",       value: normalized.agency      },
+                    { label: "Shift Type", value: normalized.category },
+                    { label: "Agency", value: normalized.agency },
                     { label: "Primary Staff", value: primaryStaff?.name || "—" },
                     { label: "Secondary Staff", value: shiftData.secondaryUserName || "—" },
                   ].map((f, i) => (
@@ -168,10 +168,10 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                 <p className="font-semibold uppercase tracking-widest mb-3" style={{ fontSize: 10, color: "#9ca3af" }}>Shift Details</p>
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
-                    { label: "Date",      value: normalized.displayDate || "—", sub: "",            color: "#111827", bg: "#f9fafb" },
-                    { label: "Clock In",  value: normalized.clockIn  || "—",   sub: "Start",       color: "#145228", bg: "#f0fdf4" },
-                    { label: "Clock Out", value: normalized.clockOut || "—",   sub: "End",         color: "#dc2626", bg: "#fef2f2" },
-                    { label: "Status",    value: normalized.statusVal,          sub: "Shift status", color: "#111827", bg: "#f9fafb" },
+                    { label: "Date", value: normalized.displayDate || "—", sub: "", color: "#111827", bg: "#f9fafb" },
+                    { label: "Clock In", value: normalized.clockIn || "—", sub: "Start", color: "#145228", bg: "#f0fdf4" },
+                    { label: "Clock Out", value: normalized.clockOut || "—", sub: "End", color: "#dc2626", bg: "#fef2f2" },
+                    { label: "Status", value: normalized.statusVal, sub: "Shift status", color: "#111827", bg: "#f9fafb" },
                   ].map((k, i) => (
                     <div key={i} className="rounded-xl p-3 border" style={{ background: k.bg, borderColor: "#f3f4f6" }}>
                       <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{k.label}</p>
@@ -215,61 +215,61 @@ const ShiftReport = ({ user }) => {
   const { id: shiftId } = useParams();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab]       = useState("reports");
-  const [shiftData, setShiftData]       = useState(null);
-  const [loading, setLoading]           = useState(true);
-  const [intakeData, setIntakeData]     = useState(null);
-  const [clientData, setClientData]     = useState(null);
+  const [activeTab, setActiveTab] = useState("reports");
+  const [shiftData, setShiftData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [intakeData, setIntakeData] = useState(null);
+  const [clientData, setClientData] = useState(null);
   const [recentReports, setRecentReports] = useState([]);
   const [primaryStaff, setPrimaryStaff] = useState(null);
   const [showFullReport, setShowFullReport] = useState(false);
-  const [activeModal, setActiveModal]   = useState(null); // 'critical'|'medical'|'noteworthy'|'followthrough'
-  const [agencyData, setAgencyData]     = useState(null);
+  const [activeModal, setActiveModal] = useState(null); // 'critical'|'medical'|'noteworthy'|'followthrough'
+  const [agencyData, setAgencyData] = useState(null);
 
   // ── Clock In/Out edit state ──
   const [editingClock, setEditingClock] = useState(false);
-  const [editClockIn, setEditClockIn]   = useState("");
+  const [editClockIn, setEditClockIn] = useState("");
   const [editClockOut, setEditClockOut] = useState("");
-  const [clockSaving, setClockSaving]   = useState(false);
+  const [clockSaving, setClockSaving] = useState(false);
 
   // ── Shift Report submission state ──
-  const [reportExpanded, setReportExpanded]   = useState(false);
-  const [reportDraft, setReportDraft]         = useState("");
+  const [reportExpanded, setReportExpanded] = useState(false);
+  const [reportDraft, setReportDraft] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
-  const [reportSubmitted, setReportSubmitted]   = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   // ── Medications tab state ──
-  const [showAddMed, setShowAddMed]     = useState(false);
-  const [selectedMedDay, setSelMedDay]  = useState(null);
-  const [calEntries, setCalEntries]     = useState({});
-  const [authName, setAuthName]         = useState("");
-  const [authCreds, setAuthCreds]       = useState("");
-  const [achNum, setAchNum]             = useState("");
-  const [doctorName, setDoctorName]     = useState("");
+  const [showAddMed, setShowAddMed] = useState(false);
+  const [selectedMedDay, setSelMedDay] = useState(null);
+  const [calEntries, setCalEntries] = useState({});
+  const [authName, setAuthName] = useState("");
+  const [authCreds, setAuthCreds] = useState("");
+  const [achNum, setAchNum] = useState("");
+  const [doctorName, setDoctorName] = useState("");
 
   // ── Transportation tab state ──
-  const [stops, setStops]               = useState([""]);
-  const [totalKilometer, setTotalKm]    = useState("");
-  const [staffKilometer, setStaffKm]    = useState("");
-  const [approvedKm, setApprovedKm]     = useState("");
-  const [approvedBy, setApprovedBy]     = useState("");
+  const [stops, setStops] = useState([""]);
+  const [totalKilometer, setTotalKm] = useState("");
+  const [staffKilometer, setStaffKm] = useState("");
+  const [approvedKm, setApprovedKm] = useState("");
+  const [approvedBy, setApprovedBy] = useState("");
   const [travelComments, setTravelComments] = useState("");
   const [uploadedReceipts, setReceipts] = useState([]);
-  const [isDriving, setIsDriving]       = useState(false);
-  const [watchId, setWatchId]           = useState(null);
-  const [prevCoords, setPrevCoords]     = useState(null);
+  const [isDriving, setIsDriving] = useState(false);
+  const [watchId, setWatchId] = useState(null);
+  const [prevCoords, setPrevCoords] = useState(null);
   const [liveDistance, setLiveDistance] = useState(0);
-  const [startPoint, setStartPoint]     = useState("");
-  const [endPoint, setEndPoint]         = useState("");
-  const [expenses, setExpenses]         = useState([]);
-  const [newExpense, setNewExpense]      = useState({ type: EXPENSE_TYPES[0], amount: "", note: "" });
+  const [startPoint, setStartPoint] = useState("");
+  const [endPoint, setEndPoint] = useState("");
+  const [expenses, setExpenses] = useState([]);
+  const [newExpense, setNewExpense] = useState({ type: EXPENSE_TYPES[0], amount: "", note: "" });
   const [transSubmitting, setTransSubmitting] = useState(false);
 
   // ── Helpers ──
   function parseShiftDate(str) {
     if (!str) return null;
     const [day, mon, yr] = str.split(" ");
-    const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    const m = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
       .findIndex(x => x.toLowerCase() === (mon || "").slice(0, 3).toLowerCase());
     if (m === -1) return null;
     return new Date(Number(yr), m, Number(day));
@@ -313,13 +313,13 @@ const ShiftReport = ({ user }) => {
       const clientId = shiftData?.clientId || shiftData?.client || shiftData?.clientDetails?.id;
       const clientName = shiftData?.clientName || shiftData?.clientDetails?.name;
       const intakeIdFromShift = shiftData?.intakeId;
-      
+
       let foundId = intakeIdFromShift;
 
       // --- Helper to verify a candidate ID by direct doc fetch or field search ---
       const resolveToDocId = async (inputId) => {
         if (!inputId || inputId === "undefined") return null;
-        
+
         // Strategy A: Direct Doc ID
         const direct = await getDoc(doc(db, "InTakeForms", String(inputId)));
         if (direct.exists()) return direct.id;
@@ -355,7 +355,7 @@ const ShiftReport = ({ user }) => {
 
         // 3. Fallback to searching IntakeForms by ANY clientId match
         if (!resolved && clientId) {
-           resolved = await resolveToDocId(clientId);
+          resolved = await resolveToDocId(clientId);
         }
 
         // 4. Aggressive Name Search (Last Resort)
@@ -366,7 +366,7 @@ const ShiftReport = ({ user }) => {
           const terms = [cleaned];
           if (parts.length > 0) {
             terms.push(parts[0]);
-            if (parts.length > 1) terms.push(parts[parts.length-1]);
+            if (parts.length > 1) terms.push(parts[parts.length - 1]);
             if (cleaned.toLowerCase().includes("family")) {
               const i = cleaned.toLowerCase().indexOf("family");
               terms.push(cleaned.substring(0, i).trim());
@@ -379,7 +379,7 @@ const ShiftReport = ({ user }) => {
               if (!t || t.length < 2 || resolved) continue;
               const snapE = await getDocs(query(collection(db, "InTakeForms"), where(f, "==", t)));
               if (!snapE.empty) { resolved = snapE.docs[0].id; break; }
-              
+
               const snapR = await getDocs(query(collection(db, "InTakeForms"), where(f, ">=", t), where(f, "<=", t + "\uf8ff")));
               if (!snapR.empty) { resolved = snapR.docs[0].id; break; }
             }
@@ -423,7 +423,7 @@ const ShiftReport = ({ user }) => {
   useEffect(() => {
     if (!shiftData) return;
     const agencyName = shiftData.agencyName || shiftData.agency || "";
-    const agencyId   = shiftData.agencyId   || "";
+    const agencyId = shiftData.agencyId || "";
     if (!agencyName && !agencyId) return;
     (async () => {
       try {
@@ -464,7 +464,7 @@ const ShiftReport = ({ user }) => {
           if (!sDate || isNaN(sDate)) return;
           if (sDate >= windowStart && sDate < startDate) {
             let rep = d.shiftReport;
-            if (typeof rep === "string") { try { rep = JSON.parse(rep); } catch {} }
+            if (typeof rep === "string") { try { rep = JSON.parse(rep); } catch { } }
             list.push({ shiftId: ds.id, shiftReport: rep, staffName: d.name || "Unknown", date: sDate, clockIn: d.clockIn, clockOut: d.clockOut, service: d.typeName || d.shiftType || "Regular" });
           }
         });
@@ -493,10 +493,10 @@ const ShiftReport = ({ user }) => {
           if (!q.empty) ud = q.docs[0].data();
         }
         setPrimaryStaff({
-          name:     ud?.name     || shiftData.userName || shiftData.name || shiftData.user || "N/A",
-          staffId:  ud?.id       || ud?.userId         || shiftData.userId || "N/A",
+          name: ud?.name || shiftData.userName || shiftData.name || shiftData.user || "N/A",
+          staffId: ud?.id || ud?.userId || shiftData.userId || "N/A",
           category: shiftData.categoryName || shiftData.shiftCategory || "N/A",
-          avatar:   ud?.profilePhotoUrl || ud?.photoURL || null,
+          avatar: ud?.profilePhotoUrl || ud?.photoURL || null,
         });
       } catch (e) { console.error(e); }
     })();
@@ -528,8 +528,8 @@ const ShiftReport = ({ user }) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
   const handleStartDrive = () => {
@@ -576,14 +576,14 @@ const ShiftReport = ({ user }) => {
       pos => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setWatchId(null);
-        
+
         // Use Mapbox for all distance and location resolution
         (async () => {
           const endAddr = await reverseGeocode(lng, lat);
           if (endAddr) {
             setEndPoint(endAddr);
             setStaffKm(liveDistance.toFixed(2));
-            
+
             const points = [startPoint];
             stops.forEach(s => { if (s) points.push(s); });
             points.push(endAddr);
@@ -667,25 +667,25 @@ const ShiftReport = ({ user }) => {
   // ── Normalise ──
   const statusVal = shiftData.clockIn && shiftData.clockOut ? "Completed" : shiftData.clockIn ? "Ongoing" : "Incomplete";
   const sc = {
-    Completed:  { bg: "#f0fdf4", text: "#15803d", dot: "#16a34a" },
-    Ongoing:    { bg: "#fef3c7", text: "#b45309", dot: "#f59e0b" },
+    Completed: { bg: "#f0fdf4", text: "#15803d", dot: "#16a34a" },
+    Ongoing: { bg: "#fef3c7", text: "#b45309", dot: "#f59e0b" },
     Incomplete: { bg: "#f3f4f6", text: "#6b7280", dot: "#9ca3af" },
   }[statusVal];
 
   const normalized = {
-    clientId:    shiftData.clientId   || shiftData.client   || shiftData.clientDetails?.id   || "N/A",
-    clientName:  shiftData.clientName || shiftData.clientDetails?.name || "N/A",
-    dob:         shiftData.dob        || "N/A",
-    avatar:      shiftData.clientAvatar || null,
-    category:    shiftData.categoryName || shiftData.category || shiftData.shiftCategory || "N/A",
-    serviceType: shiftData.serviceType  || intakeData?.serviceType || shiftData.typeName  || "N/A",
-    agency:      shiftData.agencyName   || intakeData?.agencyName  || shiftData.agency    || "N/A",
-    startDate:   shiftData.startDate    || null,
+    clientId: shiftData.clientId || shiftData.client || shiftData.clientDetails?.id || "N/A",
+    clientName: shiftData.clientName || shiftData.clientDetails?.name || "N/A",
+    dob: shiftData.dob || "N/A",
+    avatar: shiftData.clientAvatar || null,
+    category: shiftData.categoryName || shiftData.category || shiftData.shiftCategory || "N/A",
+    serviceType: shiftData.serviceType || intakeData?.serviceType || shiftData.typeName || "N/A",
+    agency: shiftData.agencyName || intakeData?.agencyName || shiftData.agency || "N/A",
+    startDate: shiftData.startDate || null,
     displayDate: renderDate(shiftData.startDate),
-    startTime:   shiftData.startTime    || "—",
-    endTime:     shiftData.endTime      || "—",
-    clockIn:     shiftData.clockIn      || null,
-    clockOut:    shiftData.clockOut     || null,
+    startTime: shiftData.startTime || "—",
+    endTime: shiftData.endTime || "—",
+    clockIn: shiftData.clockIn || null,
+    clockOut: shiftData.clockOut || null,
     statusVal,
   };
 
@@ -731,9 +731,9 @@ const ShiftReport = ({ user }) => {
     if (!d) return null;
     return d.getHours() * 60 + d.getMinutes();
   };
-  const clockInMins  = toMinutesOfDay(normalized.clockIn);
+  const clockInMins = toMinutesOfDay(normalized.clockIn);
   const clockOutMins = toMinutesOfDay(normalized.clockOut);
-  const barLeft  = clockInMins  != null ? `${(clockInMins / 1440) * 100}%`  : "37.5%";
+  const barLeft = clockInMins != null ? `${(clockInMins / 1440) * 100}%` : "37.5%";
   const barWidth = (clockInMins != null && clockOutMins != null) ? `${((clockOutMins - clockInMins) / 1440) * 100}%` : "25%";
 
   const hasMedication = Array.isArray(clientData?.medications) &&
@@ -746,23 +746,23 @@ const ShiftReport = ({ user }) => {
     shiftCategoryName.includes("visitation");
 
   const TABS = [
-    { key: "reports",        label: "Reports"        },
+    { key: "reports", label: "Reports" },
     ...(hasMedication ? [{ key: "medications", label: "Medications" }] : []),
     ...(hasTransportation ? [{ key: "transportation", label: "Transportation" }] : []),
   ];
 
-  const actBg   = { success: "#f0fdf4", info: "#eff6ff", warning: "#fef3c7" };
-  const actIcon = { success: "#16a34a", info: "#2563eb",  warning: "#d97706" };
+  const actBg = { success: "#f0fdf4", info: "#eff6ff", warning: "#fef3c7" };
+  const actIcon = { success: "#16a34a", info: "#2563eb", warning: "#d97706" };
 
   return (
     <div className="h-full flex flex-col" style={{ ...FONT, gap: 0 }}>
 
       {/* ── Modals ── */}
       {showFullReport && <FullReportModal shiftData={shiftData} normalized={normalized} primaryStaff={primaryStaff} onClose={() => setShowFullReport(false)} />}
-      {activeModal === "critical"     && <CriticalIncidentForm   onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} user={user} />}
-      {activeModal === "medical"      && <MedicalLogForm         onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} shiftData={shiftData} user={user} />}
-      {activeModal === "noteworthy"   && <NoteworthyIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
-      {activeModal === "followthrough"&& <FollowThroughForm      onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
+      {activeModal === "critical" && <CriticalIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} user={user} />}
+      {activeModal === "medical" && <MedicalLogForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} shiftData={shiftData} user={user} />}
+      {activeModal === "noteworthy" && <NoteworthyIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
+      {activeModal === "followthrough" && <FollowThroughForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
 
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between flex-shrink-0 mb-3">
@@ -796,7 +796,7 @@ const ShiftReport = ({ user }) => {
           {normalized.avatar
             ? <img src={normalized.avatar} className="rounded-full" style={{ width: 40, height: 40, objectFit: "cover" }} />
             : <div className="rounded-full flex items-center justify-center text-white font-bold"
-                style={{ width: 40, height: 40, background: "linear-gradient(135deg,#145228,#1f7a3c)", fontSize: 15 }}>{initials}</div>
+              style={{ width: 40, height: 40, background: "linear-gradient(135deg,#145228,#1f7a3c)", fontSize: 15 }}>{initials}</div>
           }
           <div>
             <div className="flex items-center gap-2">
@@ -814,13 +814,13 @@ const ShiftReport = ({ user }) => {
 
         <div className="flex items-center gap-6 flex-1 flex-wrap">
           {[
-            { icon: <User size={12} style={{ color: "#145228" }} />,    label: "Primary Staff", value: primaryStaff?.name || "—", bg: "#f0fdf4" },
-            { icon: <User size={12} style={{ color: "#2563eb" }} />,    label: "Secondary Staff", value: shiftData.secondaryUserName || "—", bg: "#eff6ff" },
-            { icon: <FileText size={12} style={{ color: "#7c3aed" }} />, label: "Service Type",   value: normalized.serviceType,   bg: "#faf5ff" },
-            { icon: <Clock size={12} style={{ color: "#ea580c" }} />,    label: "Shift Type",     value: normalized.category,      bg: "#fff7ed" },
-            { icon: <MapPin size={12} style={{ color: "#9ca3af" }} />,   label: "Agency",         value: normalized.agency,        bg: "#f3f4f6" },
-            { icon: <Car size={12} style={{ color: "#000" }} />,      label: "Vehicle",        value: shiftData.vehicleType || "—", bg: "#f3f4f6" },
-          ].map((item, i) => (
+            { icon: <User size={12} style={{ color: "#145228" }} />, label: "Primary Staff", value: primaryStaff?.name || "—", bg: "#f0fdf4" },
+            shiftData.secondaryUserName && { icon: <User size={12} style={{ color: "#2563eb" }} />, label: "Secondary Staff", value: shiftData.secondaryUserName, bg: "#eff6ff" },
+            { icon: <FileText size={12} style={{ color: "#7c3aed" }} />, label: "Service Type", value: normalized.serviceType, bg: "#faf5ff" },
+            { icon: <Clock size={12} style={{ color: "#ea580c" }} />, label: "Shift Type", value: normalized.category, bg: "#fff7ed" },
+            { icon: <MapPin size={12} style={{ color: "#9ca3af" }} />, label: "Agency", value: normalized.agency, bg: "#f3f4f6" },
+            shiftData.vehicleType && { icon: <Car size={12} style={{ color: "#000" }} />, label: "Vehicle", value: shiftData.vehicleType, bg: "#f3f4f6" },
+          ].filter(Boolean).map((item, i) => (
             <div key={i} className="flex items-center gap-2">
               <div className="rounded-md flex items-center justify-center flex-shrink-0" style={{ width: 26, height: 26, background: item.bg }}>{item.icon}</div>
               <div>
@@ -856,15 +856,15 @@ const ShiftReport = ({ user }) => {
           <div className="bg-white rounded-xl border p-4 flex-shrink-0" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
             <h3 className="font-bold mb-3" style={{ fontSize: 14, color: "#111827" }}>Shift Description</h3>
             <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-              {intakeData?.services?.serviceDesc || 
-               intakeData?.serviceDesc || 
-               (Array.isArray(intakeData?.serviceRequired) ? intakeData.serviceRequired.join(", ") : intakeData?.serviceRequired) || 
-               intakeData?.serviceDetail || 
-               "No service description available from intake form."}
+              {intakeData?.services?.serviceDesc ||
+                intakeData?.serviceDesc ||
+                (Array.isArray(intakeData?.serviceRequired) ? intakeData.serviceRequired.join(", ") : intakeData?.serviceRequired) ||
+                intakeData?.serviceDetail ||
+                "No service description available from intake form."}
             </p>
           </div>
 
-        {/* ★ TODAY'S SHIFT REPORT CARD ★ */}
+          {/* ★ TODAY'S SHIFT REPORT CARD ★ */}
           <div className="bg-white rounded-xl border border-[#e5e7eb] flex-shrink-0" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
             {/* Card Header */}
@@ -911,10 +911,10 @@ const ShiftReport = ({ user }) => {
                 {/* 4 KPI cards */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
                   {[
-                    { label: "Clock In",  value: formatClockDisplay(normalized.clockIn),  sub: "Start time",   color: "#145228", bg: "#f0fdf4" },
-                    { label: "Clock Out", value: formatClockDisplay(normalized.clockOut), sub: "End time",     color: "#dc2626", bg: "#fef2f2" },
-                    { label: "Duration",  value: duration,                                 sub: "Total hours",  color: "#374151", bg: "#f9fafb" },
-                    { label: "Status",    value: statusVal,                                sub: "Report filed", color: sc.text,   bg: sc.bg    },
+                    { label: "Clock In", value: formatClockDisplay(normalized.clockIn), sub: "Start time", color: "#145228", bg: "#f0fdf4" },
+                    { label: "Clock Out", value: formatClockDisplay(normalized.clockOut), sub: "End time", color: "#dc2626", bg: "#fef2f2" },
+                    { label: "Duration", value: duration, sub: "Total hours", color: "#374151", bg: "#f9fafb" },
+                    { label: "Status", value: statusVal, sub: "Report filed", color: sc.text, bg: sc.bg },
                   ].map((kpi, i) => (
                     <div key={i} className="rounded-xl p-3.5 border" style={{ background: kpi.bg, borderColor: "#f3f4f6" }}>
                       <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{kpi.label}</p>
@@ -932,7 +932,7 @@ const ShiftReport = ({ user }) => {
                         const toInputVal = (val) => {
                           const d = parseClockTime(val);
                           if (!d) return "";
-                          return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
                         };
                         setEditClockIn(toInputVal(normalized.clockIn));
                         setEditClockOut(toInputVal(normalized.clockOut));
@@ -983,7 +983,7 @@ const ShiftReport = ({ user }) => {
                               return d.toISOString();
                             };
                             const updates = {};
-                            if (editClockIn)  updates.clockIn  = toISO(editClockIn);
+                            if (editClockIn) updates.clockIn = toISO(editClockIn);
                             if (editClockOut) updates.clockOut = toISO(editClockOut);
                             await updateDoc(doc(db, "shifts", shiftId), updates);
                             setShiftData((prev) => ({ ...prev, ...updates }));
@@ -1106,7 +1106,7 @@ const ShiftReport = ({ user }) => {
                       <table className="w-full">
                         <thead>
                           <tr style={{ background: "#f9fafb" }}>
-                            {["Medication","Dosage","Route","Frequency","Time"].map(h => (
+                            {["Medication", "Dosage", "Route", "Frequency", "Time"].map(h => (
                               <th key={h} className="text-left px-4 py-2 font-semibold border-b" style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", borderColor: "#f3f4f6" }}>{h}</th>
                             ))}
                           </tr>
@@ -1134,7 +1134,7 @@ const ShiftReport = ({ user }) => {
                     </div>
                     <div className="p-4">
                       <div className="grid grid-cols-7 gap-1 mb-2">
-                        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
+                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
                           <div key={d} className="text-center font-semibold" style={{ fontSize: 10, color: "#9ca3af" }}>{d}</div>
                         ))}
                       </div>
@@ -1171,7 +1171,7 @@ const ShiftReport = ({ user }) => {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="rounded-xl border p-4" style={{ borderColor: "#e5e7eb" }}>
                       <p className="font-bold mb-3" style={{ fontSize: 13, color: "#111827" }}>Administration Codes</p>
-                      {[["A","Administered"],["D","Declined"],["H","Hold"],["S","Self-Admin"],["NA","Not Available"]].map(([code, desc]) => (
+                      {[["A", "Administered"], ["D", "Declined"], ["H", "Hold"], ["S", "Self-Admin"], ["NA", "Not Available"]].map(([code, desc]) => (
                         <div key={code} className="flex items-center gap-2 mb-1.5">
                           <span className="rounded px-1.5 py-0.5 font-bold font-mono flex-shrink-0" style={{ fontSize: 10, background: "#f0fdf4", color: "#145228", minWidth: 24, textAlign: "center" }}>{code}</span>
                           <span style={{ fontSize: 11, color: "#6b7280" }}>{desc}</span>
@@ -1182,8 +1182,8 @@ const ShiftReport = ({ user }) => {
                       <p className="font-bold mb-3" style={{ fontSize: 13, color: "#111827" }}>Pharmacy Information</p>
                       {[
                         { label: "Pharmacy", value: intakeData?.pharmacyName || "—" },
-                        { label: "Phone",    value: intakeData?.pharmacyPhone || "—" },
-                        { label: "Address",  value: intakeData?.pharmacyAddress || "—" },
+                        { label: "Phone", value: intakeData?.pharmacyPhone || "—" },
+                        { label: "Address", value: intakeData?.pharmacyAddress || "—" },
                       ].map((f, i) => (
                         <div key={i} className="mb-2">
                           <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>{f.label}</p>
@@ -1220,10 +1220,10 @@ const ShiftReport = ({ user }) => {
                   {/* Info strip */}
                   <div className="flex flex-wrap items-center gap-6 p-3 rounded-xl" style={{ background: "#f9fafb", border: "1px solid #f3f4f6" }}>
                     {[
-                      { label: "Date",       value: normalized.displayDate },
-                      { label: "Staff",      value: primaryStaff?.name || "—" },
-                      { label: "Staff ID",   value: primaryStaff?.staffId || "—" },
-                      { label: "Client",     value: normalized.clientName },
+                      { label: "Date", value: normalized.displayDate },
+                      { label: "Staff", value: primaryStaff?.name || "—" },
+                      { label: "Staff ID", value: primaryStaff?.staffId || "—" },
+                      { label: "Client", value: normalized.clientName },
                       { label: "Shift Time", value: `${normalized.startTime} – ${normalized.endTime}` },
                     ].map((f, i) => (
                       <div key={i}><span className="font-semibold" style={{ fontSize: 11, color: "#6b7280" }}>{f.label}: </span><span className="font-bold" style={{ fontSize: 12, color: "#111827" }}>{f.value}</span></div>
@@ -1233,15 +1233,15 @@ const ShiftReport = ({ user }) => {
                   {/* Shift Transportation Info (read-only from shift data) */}
                   {(() => {
                     const sp = shiftData?.shiftPoints?.[0] || shiftData?.clientDetails?.shiftPoints?.[0] || {};
-                    const pickupLoc      = sp.pickupLocation   || shiftData?.pickupLocation   || "N/A";
-                    const pickupTime     = sp.pickupTime       || shiftData?.pickupTime       || "N/A";
-                    const pickedUpTime   = sp.pickedUpTime     || shiftData?.pickedUpTime     || "N/A";
-                    const pickedUpLoc    = sp.pickedUpLocation || shiftData?.pickedUpLocation || "N/A";
-                    const visitLoc       = sp.visitLocation    || shiftData?.visitLocation    || "N/A";
-                    const visitStartTime = sp.visitStartTime   || shiftData?.visitStartOfficialTime || "N/A";
-                    const visitEndTime   = sp.visitEndTime     || shiftData?.visitEndOfficialTime   || "N/A";
-                    const dropLoc        = sp.dropLocation     || shiftData?.dropLocation     || "N/A";
-                    const dropTime       = sp.dropTime         || shiftData?.dropTime         || "N/A";
+                    const pickupLoc = sp.pickupLocation || shiftData?.pickupLocation || "N/A";
+                    const pickupTime = sp.pickupTime || shiftData?.pickupTime || "N/A";
+                    const pickedUpTime = sp.pickedUpTime || shiftData?.pickedUpTime || "N/A";
+                    const pickedUpLoc = sp.pickedUpLocation || shiftData?.pickedUpLocation || "N/A";
+                    const visitLoc = sp.visitLocation || shiftData?.visitLocation || "N/A";
+                    const visitStartTime = sp.visitStartTime || shiftData?.visitStartOfficialTime || "N/A";
+                    const visitEndTime = sp.visitEndTime || shiftData?.visitEndOfficialTime || "N/A";
+                    const dropLoc = sp.dropLocation || shiftData?.dropLocation || "N/A";
+                    const dropTime = sp.dropTime || shiftData?.dropTime || "N/A";
 
                     const mapLink = (addr) => addr && addr !== "N/A"
                       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
@@ -1343,7 +1343,7 @@ const ShiftReport = ({ user }) => {
                       <table className="w-full rounded-xl overflow-hidden border" style={{ borderColor: "#e5e7eb" }}>
                         <thead>
                           <tr style={{ background: "#f9fafb" }}>
-                            {["Type","Amount","Note",""].map(h => (
+                            {["Type", "Amount", "Note", ""].map(h => (
                               <th key={h} className="text-left px-3 py-2 font-semibold border-b" style={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", borderColor: "#f3f4f6" }}>{h}</th>
                             ))}
                           </tr>
@@ -1383,7 +1383,7 @@ const ShiftReport = ({ user }) => {
                     {uploadedReceipts.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {uploadedReceipts.map((rec, i) => {
-                          const url  = typeof rec === "string" ? rec : rec.url;
+                          const url = typeof rec === "string" ? rec : rec.url;
                           const name = typeof rec === "string" ? `Receipt ${i + 1}` : (rec.name || `Receipt ${i + 1}`);
                           return (
                             <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
@@ -1699,11 +1699,11 @@ const ShiftReport = ({ user }) => {
             </div>
             <div className="px-4 py-3 space-y-2.5">
               {[
-                { label: "Client",       value: normalized.clientName,  color: "#111827" },
-                { label: "Client ID",    value: normalized.clientId,    color: "#6b7280" },
-                { label: "Date of Birth",value: normalized.dob,         color: "#111827" },
-                { label: "Shift Date",   value: normalized.displayDate, color: "#111827" },
-                { label: "Status",       value: statusVal,              color: sc.text   },
+                { label: "Client", value: normalized.clientName, color: "#111827" },
+                { label: "Client ID", value: normalized.clientId, color: "#6b7280" },
+                { label: "Date of Birth", value: normalized.dob, color: "#111827" },
+                { label: "Shift Date", value: normalized.displayDate, color: "#111827" },
+                { label: "Status", value: statusVal, color: sc.text },
               ].map((s, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <span style={{ fontSize: 12, color: "#6b7280" }}>{s.label}</span>
@@ -1721,9 +1721,9 @@ const ShiftReport = ({ user }) => {
             </div>
             <div className="px-4 py-3 space-y-2.5">
               {[
-                { icon: <User size={11} />,   label: "Guardian", value: intakeData?.parentName || intakeData?.inTakeClients?.[0]?.parentEmail || "—", color: "#145228" },
-                { icon: <Mail size={11} />,   label: "Email",    value: intakeData?.parentEmail || intakeData?.inTakeClients?.[0]?.parentEmail || "—", color: "#2563eb" },
-                { icon: <MapPin size={11} />, label: "Agency",   value: normalized.agency,       color: "#ea580c" },
+                { icon: <User size={11} />, label: "Guardian", value: intakeData?.parentName || intakeData?.inTakeClients?.[0]?.parentEmail || "—", color: "#145228" },
+                { icon: <Mail size={11} />, label: "Email", value: intakeData?.parentEmail || intakeData?.inTakeClients?.[0]?.parentEmail || "—", color: "#2563eb" },
+                { icon: <MapPin size={11} />, label: "Agency", value: normalized.agency, color: "#ea580c" },
               ].map((c, i) => (
                 <div key={i} className="flex items-center gap-2.5">
                   <div className="rounded-md p-1.5 flex-shrink-0" style={{ background: "#f9fafb", color: c.color }}>{c.icon}</div>
@@ -1743,10 +1743,10 @@ const ShiftReport = ({ user }) => {
             </div>
             <div className="px-4 py-3 space-y-2">
               {[
-                { icon: <FileText size={13} />, label: "View Full Report",  color: "#145228", bg: "#f0fdf4", action: () => setShowFullReport(true),        show: true            },
-                { icon: <Pill size={13} />,     label: "Medications",       color: "#7c3aed", bg: "#faf5ff", action: () => setActiveTab("medications"),    show: hasMedication   },
-                { icon: <Truck size={13} />,    label: "Transportation",    color: "#2563eb", bg: "#eff6ff", action: () => setActiveTab("transportation"), show: true            },
-                { icon: <AlertTriangle size={13} />, label: "Log Incident", color: "#dc2626", bg: "#fef2f2", action: () => setActiveModal("critical"),     show: true            },
+                { icon: <FileText size={13} />, label: "View Full Report", color: "#145228", bg: "#f0fdf4", action: () => setShowFullReport(true), show: true },
+                { icon: <Pill size={13} />, label: "Medications", color: "#7c3aed", bg: "#faf5ff", action: () => setActiveTab("medications"), show: hasMedication },
+                { icon: <Truck size={13} />, label: "Transportation", color: "#2563eb", bg: "#eff6ff", action: () => setActiveTab("transportation"), show: true },
+                { icon: <AlertTriangle size={13} />, label: "Log Incident", color: "#dc2626", bg: "#fef2f2", action: () => setActiveModal("critical"), show: true },
               ].filter((a) => a.show).map((a, i) => (
                 <button key={i} onClick={a.action}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border font-semibold transition-all hover:bg-gray-50"

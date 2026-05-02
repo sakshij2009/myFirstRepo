@@ -48,6 +48,28 @@ function normalizeServiceType(raw) {
   return raw || "—";
 }
 
+function formatDate(val) {
+  if (!val || val === "—") return "—";
+  if (val.toDate) {
+    const d = val.toDate();
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  }
+  if (typeof val === "string") return val;
+  try {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = d.toLocaleString("en-US", { month: "short" });
+      const year = d.getFullYear();
+      return `${day} ${month} ${year}`;
+    }
+  } catch (e) {}
+  return String(val);
+}
+
 // ─── FilterChip ───────────────────────────────────────────────────────────────
 function FilterChip({ label, value, options, onChange }) {
   const [open, setOpen] = useState(false);
@@ -129,7 +151,7 @@ function ViewFormModal({ record, onClose }) {
             </div>
             <div>
               <p className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Intake Form Details</p>
-              <p style={{ fontSize: 11, color: "#9ca3af" }}>Submitted {record.submittedAt}</p>
+              <p style={{ fontSize: 11, color: "#9ca3af" }}>Submitted {formatDate(record.submittedAt)}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
@@ -204,47 +226,69 @@ const [viewRecord, setViewRecord]         = useState(null);
     const fetchForms = async () => {
       setLoading(true);
       try {
-        // Fetch from ALL 3 collections in parallel
-        const [oldSnap, newSnap, v2Snap] = await Promise.all([
-          getDocs(collection(db, "InTakeForms")),
-          getDocs(collection(db, "intakeForms")),
-          getDocs(collection(db, "IntakeFormsV2")),
-        ]);
+        // Fetch from potential collections in parallel
+        const collectionsToTry = [
+          "InTakeForms", "intakeForms"
+        ];
+        
+        const snaps = await Promise.all(
+          collectionsToTry.map(c => getDocs(collection(db, c)).catch(() => ({ docs: [] })))
+        );
+
+        const [oldSnap, newSnap] = snaps;
 
         const processDoc = (d, sourceLabel) => {
           const data = d.data();
-          const rawFormType = data.formType || (data.inTakeWorkerName ? "Intake Worker" : "Private Family");
+          const rawFormType = data.formType || (data.intakeworkerName ? "Intake Worker" : "Private Family");
           const formType = normalizeFormType(rawFormType);
 
           // Extract first client name
           let clientName = "—";
           let clientCode = d.id.slice(0, 7);
-          let parentEmail = data.parentEmail || data.email || "—";
+          let parentEmail = data.parentEmail || data.email || data.applicantEmail || "—";
           let agency = data.agencyName || data.agency || "—";
-          let serviceType = normalizeServiceType(data.serviceType || data.shiftCategory || "");
+          let serviceType = normalizeServiceType(data.serviceType || data.shiftCategory || data.visitDetails || "");
 
-          if (data.shared?.children && Array.isArray(data.shared.children) && data.shared.children.length > 0) {
+          // 1. Try Shared/Top-level Children Arrays
+          if (data.shared?.children?.[0]?.fullName) {
             clientName = data.shared.children.map(c => c.fullName).join(", ");
-          } else if (Array.isArray(data.inTakeClients) && data.inTakeClients.length > 0) {
+          } else if (data.children?.[0]?.fullName || data.children?.[0]?.name) {
+            clientName = data.children.map(c => c.fullName || c.name || "").filter(Boolean).join(", ");
+          } 
+          
+          // 2. Try inTakeClients Array (often has more details)
+          if ((!clientName || clientName === "—") && Array.isArray(data.inTakeClients) && data.inTakeClients.length > 0) {
             const first = data.inTakeClients[0];
-            clientName  = first.name || clientName;
-            clientCode  = first.clientId || first.id || clientCode;
-            parentEmail = first.parentEmail || first.email || parentEmail;
-            agency      = first.agencyName  || first.agency || agency;
-            serviceType = normalizeServiceType(first.serviceType || first.shiftCategory || serviceType);
-          } else if (data.clients && typeof data.clients === "object") {
+            if (first.name || first.fullName) {
+              clientName  = first.name || first.fullName;
+              clientCode  = first.clientId || first.id || clientCode;
+              parentEmail = first.parentEmail || first.email || parentEmail;
+              agency      = first.agencyName  || first.agency || agency;
+              serviceType = normalizeServiceType(first.serviceType || first.shiftCategory || serviceType);
+            }
+          } 
+          
+          // 3. Try Clients Object
+          if ((!clientName || clientName === "—") && data.clients && typeof data.clients === "object") {
             const vals = Object.values(data.clients);
-            if (vals.length > 0) {
-              clientName  = vals[0].fullName || vals[0].name || clientName;
+            if (vals.length > 0 && (vals[0].fullName || vals[0].name)) {
+              clientName  = vals[0].fullName || vals[0].name;
               parentEmail = vals[0].parentEmail || parentEmail;
             }
-          } else if (sourceLabel === "new" && data.clientName) {
-            // 📱 New mobile app flat structure
-            clientName = data.clientName;
-            agency = "—";
-          } else {
-            clientName = data.nameInClientTable || data.filledBy || data.parentName
-              || data.inTakeWorkerName || data.nameOfPerson || "—";
+          } 
+          
+          // 4. Try Top-level fields (including mobile app structure)
+          if (!clientName || clientName === "—") {
+            clientName = data.clientName || data.childName || data.childFullName || data.name 
+              || data.nameInClientTable || data.applicantName || data.submitterName 
+              || data.familyLastName || (data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : "")
+              || data.filledBy || data.parentName || data.inTakeWorkerName || data.nameOfPerson || "—";
+            
+            if (clientName === "—" && (data.childFirstName || data.childLastName)) {
+              clientName = `${data.childFirstName || ""} ${data.childLastName || ""}`.trim() || "—";
+            }
+            
+            if (sourceLabel === "new" && data.clientName) agency = "—";
           }
 
           const rawStatus = data.status || "Pending";
@@ -266,17 +310,22 @@ const [viewRecord, setViewRecord]         = useState(null);
           };
         };
 
-        const oldList = oldSnap.docs.map(d => processDoc(d, "old"));
-        const newList = newSnap.docs.map(d => processDoc(d, "new"));
-        const v2List  = v2Snap.docs.map(d => processDoc(d, "v2"));
+        const oldList    = oldSnap.docs.map(d => processDoc(d, "old"));
+        const newList    = newSnap.docs.map(d => processDoc(d, "new"));
 
-        // Merge: v2 (new web app) + old + mobile, deduplicate by id
-        const seenIds = new Set();
-        const merged = [...v2List, ...oldList, ...newList].filter(f => {
-          if (seenIds.has(f.id)) return false;
-          seenIds.add(f.id);
-          return true;
+        // Smart merge: Deduplicate by id, but prefer records that actually have a client name
+        const mergedMap = new Map();
+        [...newList, ...oldList].forEach(f => {
+          const existing = mergedMap.get(f.id);
+          const isNewerBetter = !existing || 
+            (existing.clientName === "—" && f.clientName !== "—") ||
+            (existing.clientName.toLowerCase().includes("unnamed") && !f.clientName.toLowerCase().includes("unnamed"));
+
+          if (isNewerBetter) {
+            mergedMap.set(f.id, f);
+          }
         });
+        const merged = Array.from(mergedMap.values());
 
         merged.sort((a, b) => {
           const parseDate = (s) => {
@@ -307,7 +356,7 @@ const [viewRecord, setViewRecord]         = useState(null);
     if (!window.confirm("Are you sure you want to delete this form?")) return;
     try {
       const form = forms.find(f => f.id === id);
-      const col = form?._source === "v2" ? "IntakeFormsV2" : form?._source === "new" ? "intakeForms" : "InTakeForms";
+      const col = form?._source === "new" ? "intakeForms" : "InTakeForms";
       await deleteDoc(doc(db, col, id));
       setForms((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
@@ -318,7 +367,7 @@ const [viewRecord, setViewRecord]         = useState(null);
   const handleToggleEdit = async (form) => {
     const newState = !form.isEditable;
     try {
-      const col = form._source === "v2" ? "IntakeFormsV2" : form._source === "new" ? "intakeForms" : "InTakeForms";
+      const col = form._source === "new" ? "intakeForms" : "InTakeForms";
       await updateDoc(doc(db, col, form.id), { isEditable: newState });
       setForms((prev) => prev.map((f) => (f.id === form.id ? { ...f, isEditable: newState } : f)));
     } catch (e) {
@@ -647,7 +696,7 @@ const [viewRecord, setViewRecord]         = useState(null);
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-1.5">
                             <Clock size={11} style={{ color: "#9ca3af", flexShrink: 0 }} />
-                            <span style={{ fontSize: 12, color: "#6b7280" }}>{record.submittedAt}</span>
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>{formatDate(record.submittedAt)}</span>
                           </div>
                         </td>
 

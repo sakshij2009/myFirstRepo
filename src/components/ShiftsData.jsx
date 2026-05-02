@@ -11,8 +11,8 @@ import {
 
 function statusBadge(status) {
   const map = {
-    Completed:  { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
-    Ongoing:    { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    Completed: { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
+    Ongoing: { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
     InProgress: { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
     Incomplete: { bg: "#f3f4f6", color: "#6b7280", border: "#e5e7eb" },
   };
@@ -44,9 +44,9 @@ function confirmedBadge(confirmed) {
 
 function categoryBadge(cat) {
   const map = {
-    "Emergent Care":         { bg: "#fff1f2", color: "#c70036", border: "#ffccd3" },
+    "Emergent Care": { bg: "#fff1f2", color: "#c70036", border: "#ffccd3" },
     "Supervised Visitation": { bg: "#fffbeb", color: "#bf4d00", border: "#fee685" },
-    "Respite Care":          { bg: "#ecfeff", color: "#007595", border: "#a2f4fd" },
+    "Respite Care": { bg: "#ecfeff", color: "#007595", border: "#a2f4fd" },
   };
   const s = map[cat] || { bg: "#f3f4f6", color: "#374151", border: "#e5e7eb" };
   return (

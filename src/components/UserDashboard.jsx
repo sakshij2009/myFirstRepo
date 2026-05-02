@@ -755,8 +755,15 @@ useEffect(() => {
         const { latitude, longitude } = await getUserLocation();
         const address = await getAddressFromCoords(latitude, longitude);
 
+        const datePart = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Edmonton",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(end);
+
         await updateDoc(doc(db, "shifts", activeShift.id), {
-          clockOut: end.toISOString(),
+          clockOut: `${datePart}, ${activeShift.endTime}:00`,
           clockOutLocation: address,
           clockOutLocked: true,
         });

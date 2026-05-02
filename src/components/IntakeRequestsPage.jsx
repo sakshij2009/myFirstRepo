@@ -18,11 +18,10 @@ export default function IntakeRequestsPage() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        // ── Fetch from ALL 3 collections ──
-        const [oldSnap, newSnap, v2Snap] = await Promise.all([
+        // ── Fetch from both collections ──
+        const [oldSnap, newSnap] = await Promise.all([
           getDocs(collection(db, "InTakeForms")),
           getDocs(collection(db, "intakeForms")),
-          getDocs(collection(db, "IntakeFormsV2")),
         ]);
 
         const normalizeDoc = (doc, source) => {
@@ -129,11 +128,10 @@ export default function IntakeRequestsPage() {
 
         const oldData = oldSnap.docs.map(d => normalizeDoc(d, "old"));
         const newData = newSnap.docs.map(d => normalizeDoc(d, "new"));
-        const v2Data  = v2Snap.docs.map(d => normalizeDoc(d, "v2"));
 
-        // Merge: v2 first, then old, then mobile — deduplicate by id
+        // Merge: old first, then mobile — deduplicate by id
         const seenIds = new Set();
-        const data = [...v2Data, ...oldData, ...newData].filter(f => {
+        const data = [...oldData, ...newData].filter(f => {
           if (seenIds.has(f.id)) return false;
           seenIds.add(f.id);
           return true;
