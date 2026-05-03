@@ -188,35 +188,78 @@ export default function MigrateIntakeForms() {
           addLog(`  ✓ OK   ${clientName}`, "skip"); continue;
         }
 
-        // Create minimal InTakeForms entry
+        // Build rich InTakeForms entry from ALL available clients data
         const today = todayDDMMYYYY();
+
+        // Resolve dob → DD-MM-YYYY
+        const clientDob = toFlutterDate(cData.dob) || null;
+
+        // Resolve dateOfInTake: prefer intakeDate field, then today
+        const intakeDate = toFlutterDate(cData.intakeDate) || today;
+
+        // Worker names
+        const caseWorker   = cData.caseWorkerInfo   || {};
+        const intakeWorker = cData.inTakeWorkerInfo  || {};
+        const workerName   = intakeWorker.name || intakeWorker.workerName
+                           || caseWorker.name  || caseWorker.workerName || "";
+
+        // Build the inTakeClients entry with all available fields
+        const clientEntry = {
+          name:           clientName,
+          gender:         cData.gender        || "",
+          dob:            clientDob,
+          address:        cData.address       || "",
+          phone:          cData.phone         || cData.parentPhone || "",
+          email:          cData.email         || "",
+          diagnosis:      cData.diagnosis     || "",
+          allergies:      cData.allergies     || "",
+          medicalInfo:    cData.description   || "",   // narrative notes
+          transportNeeds: "",
+          serviceType:    cData.serviceType   || "",
+          visitFrequency: cData.visitFrequency || "",
+        };
+        // Carry across any medications array
+        if (Array.isArray(cData.medications) && cData.medications.length > 0) {
+          clientEntry.medications = cData.medications;
+        }
+
         const newDoc = {
           isActive:          true,
           nameInClientTable: clientName,
           childsName:        clientName,
-          dateOfInTake:      today,
-          nameOfPerson:      "",
-          inTakeWorkerName:  "",
+          dateOfInTake:      intakeDate,
+          nameOfPerson:      workerName,
+          inTakeWorkerName:  workerName,
           formType:          "auto-created",
           status:            "Accepted",
           createdAt:         today,
           submittedOn:       today,
           clientId:          cSnap.id,
-          inTakeClients: [{
-            name:           clientName,
-            gender:         cData.gender || "",
-            dob:            null,
-            address:        cData.address || "",
-            phone:          cData.phone || cData.parentPhone || "",
-            email:          cData.email || "",
-            diagnosis:      cData.diagnosis || "",
-            allergies:      cData.allergies || "",
-            medicalInfo:    "",
-            transportNeeds: "",
-            serviceType:    "",
-            visitFrequency: "",
-          }],
+          inTakeClients:     [clientEntry],
         };
+
+        // Preserve all rich data from clients collection on the top-level doc
+        if (caseWorker.name || caseWorker.phone || caseWorker.email) {
+          newDoc.caseWorkerInfo = caseWorker;
+        }
+        if (intakeWorker.name || intakeWorker.phone || intakeWorker.email) {
+          newDoc.inTakeWorkerInfo = intakeWorker;
+        }
+        if (Array.isArray(cData.contacts) && cData.contacts.length > 0) {
+          newDoc.contacts = cData.contacts;          // parent / guardian info
+        }
+        if (Array.isArray(cData.notes) && cData.notes.length > 0) {
+          newDoc.notes = cData.notes;
+        }
+        if (Array.isArray(cData.shiftPoints) && cData.shiftPoints.length > 0) {
+          newDoc.shiftPoints = cData.shiftPoints;
+        }
+        if (cData.agencyName)    newDoc.agencyName    = cData.agencyName;
+        if (cData.agencyAddress) newDoc.agencyAddress = cData.agencyAddress;
+        if (cData.agencyId)      newDoc.agencyId      = cData.agencyId;
+        if (cData.clientCode)    newDoc.clientCode    = cData.clientCode;
+        if (cData.description)   newDoc.description   = cData.description;
+        if (cData.UID)           newDoc.clientUID     = cData.UID;
 
         try {
           await addDoc(collection(db, "InTakeForms"), newDoc);
@@ -260,7 +303,7 @@ export default function MigrateIntakeForms() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
           {[
             { step: "Step 1", title: "Fix existing InTakeForms", items: ["Sets isActive: true on all docs", "Adds missing dateOfInTake (uses consentDate)", "Adds missing nameInClientTable from inTakeClients[0].name", "Converts dob / dateOfInTake from YYYY-MM-DD → DD-MM-YYYY", "Builds inTakeClients[] for React-created forms"] },
-            { step: "Step 2", title: "Create forms for missing clients", items: ["Reads all 74 clients from clients collection", "Finds clients with no InTakeForms entry", "Creates a minimal InTakeForms doc for each", "These clients now appear in Flutter's Add Shift dropdown"] },
+            { step: "Step 2", title: "Create forms for missing clients", items: ["Reads all clients from clients collection", "Finds clients with no InTakeForms entry", "Creates a FULL InTakeForms doc with all client data", "Preserves: dob, address, diagnosis, allergies, medications", "Preserves: parent/guardian contacts, notes, shift points", "Preserves: case worker & intake worker info, agency info", "These clients now appear in Flutter's Add Shift dropdown"] },
           ].map(({ step, title, items }) => (
             <div key={step} style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 8, padding: "14px 18px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{step}</div>
