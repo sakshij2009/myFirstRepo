@@ -52,21 +52,62 @@ function todayDDMMYYYY() {
 }
 const SKIP_NAMES = new Set(["abc","tara","family example","Family Forever","Britney","Vivian","cammi","ali chabot","TJ","test","demo"]);
 
+// ─── Step-3 shift helpers ─────────────────────────────────────────────────────
+
+const _MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Convert any date-like value → JS Date, or null */
+function parseAnyDate(val) {
+  if (!val) return null;
+  if (val && typeof val.toDate === "function") return val.toDate();   // Firestore Timestamp
+  if (val && val.seconds)  return new Date(val.seconds * 1000);       // plain {seconds, nanoseconds}
+  if (typeof val === "number") return new Date(val);
+  if (typeof val === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+      const [y, m, d] = val.split("-");
+      return new Date(Number(y), Number(m) - 1, Number(d));
+    }
+    if (/^\d{2}-\d{2}-\d{4}$/.test(val)) {
+      const [d, m, y] = val.split("-");
+      return new Date(Number(y), Number(m) - 1, Number(d));
+    }
+    const p = new Date(val);
+    if (!isNaN(p)) return p;
+  }
+  return null;
+}
+/** "03 May 2026" */
+function fmtFlutter(d) {
+  return `${String(d.getDate()).padStart(2,"0")} ${_MON[d.getMonth()]} ${d.getFullYear()}`;
+}
+/** "03-05-2026" */
+function fmtDDMMYYYY(d) {
+  return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+}
+/** "2026-05-03" */
+function fmtISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+/** True if value is a Firestore Timestamp object or {seconds} plain object */
+function isTimestamp(v) {
+  return v && (typeof v.toDate === "function" || (typeof v.seconds === "number" && typeof v.nanoseconds === "number"));
+}
+
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function MigrateIntakeForms() {
   const [status, setStatus] = useState("idle");
   const [log, setLog]       = useState([]);
-  const [stats, setStats]   = useState({ fixed: 0, skipped: 0, created: 0, errors: 0, total: 0 });
+  const [stats, setStats]   = useState({ fixed: 0, skipped: 0, created: 0, errors: 0, total: 0, shiftsFixed: 0 });
 
   const addLog = (msg, type = "info") => setLog(prev => [...prev, { msg, type }]);
 
   const runMigration = async () => {
     setStatus("running");
     setLog([]);
-    setStats({ fixed: 0, skipped: 0, created: 0, errors: 0, total: 0 });
+    setStats({ fixed: 0, skipped: 0, created: 0, errors: 0, total: 0, shiftsFixed: 0 });
 
-    let fixed = 0, skipped = 0, created = 0, errors = 0;
+    let fixed = 0, skipped = 0, created = 0, errors = 0, shiftsFixed = 0;
 
     try {
       // ══════════════════════════════════════════════════════════════
@@ -272,9 +313,224 @@ export default function MigrateIntakeForms() {
         }
       }
 
-      setStats({ fixed, skipped, created, errors, total: intakeSnap.size });
+      // ══════════════════════════════════════════════════════════════
+      // STEP 3 — Fix React-created shifts with wrong field formats
+      // ══════════════════════════════════════════════════════════════
       addLog("", "info");
-      addLog(`Done: ${fixed} fixed, ${created} new IntakeForms created, ${skipped} already OK, ${errors} errors.`, "done");
+      addLog("── STEP 3: Fixing React-created shifts ──", "header");
+      addLog("  (Detecting shifts where dateKey is YYYY-MM-DD or userId is non-numeric…)");
+
+      // ── 3a. Build lookup maps ──────────────────────────────────────
+
+      addLog("  Loading users, shiftTypes, shiftCategories…");
+
+      const [usersSnap, typesSnap, catsSnap] = await Promise.all([
+        getDocs(collection(db, "users")),
+        getDocs(collection(db, "shiftTypes")),
+        getDocs(collection(db, "shiftCategories")),
+      ]);
+
+      // users: keyed by docId and by username (lowercase)
+      const usersByDocId   = {};
+      const usersByUsername = {};
+      for (const uSnap of usersSnap.docs) {
+        const u = uSnap.data();
+        usersByDocId[uSnap.id] = u;
+        if (u.username) usersByUsername[u.username.toLowerCase()] = u;
+        if (u.email)    usersByUsername[u.email.toLowerCase()]    = u;
+      }
+
+      // shiftTypes: keyed by name (lowercase) and by id
+      const typesByName = {};
+      const typesById   = {};
+      for (const tSnap of typesSnap.docs) {
+        const t = { id: tSnap.id, ...tSnap.data() };
+        if (t.name) typesByName[t.name.toLowerCase()] = t;
+        typesById[tSnap.id] = t;
+      }
+
+      // shiftCategories: keyed by name (lowercase) and by id
+      const catsByName = {};
+      const catsById   = {};
+      for (const cSnap of catsSnap.docs) {
+        const c = { id: cSnap.id, ...cSnap.data() };
+        if (c.name) catsByName[c.name.toLowerCase()] = c;
+        catsById[cSnap.id] = c;
+      }
+
+      addLog(`  Loaded ${usersSnap.size} users, ${typesSnap.size} shiftTypes, ${catsSnap.size} categories.`);
+
+      // ── 3b. Fetch and scan all shifts ──────────────────────────────
+
+      addLog("  Fetching all shifts — please wait…");
+      const shiftsSnap = await getDocs(collection(db, "shifts"));
+      addLog(`  Found ${shiftsSnap.size} shifts total.`);
+
+      let s3Fixed = 0, s3Skipped = 0, s3Errors = 0;
+
+      for (const sSnap of shiftsSnap.docs) {
+        const s = sSnap.data();
+
+        // ── Detect React-created (broken) shifts ──
+        const hasWrongDateKey  = typeof s.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dateKey);
+        const hasWrongUserId   = typeof s.userId  === "string" && !/^\d+$/.test((s.userId || "").trim());
+        const missingCoreFields = !s.typeName || !s.categoryId || s.status === undefined || s.billingStatus === undefined;
+
+        // Only touch clearly React-created shifts
+        if (!hasWrongDateKey && !hasWrongUserId && !missingCoreFields) {
+          s3Skipped++;
+          continue;
+        }
+
+        const patch3   = {};
+        const reasons3 = [];
+
+        // ── Fix dateKey ──
+        let shiftDate = null;
+        if (hasWrongDateKey) {
+          shiftDate = parseAnyDate(s.dateKey);
+          if (shiftDate) {
+            patch3.dateKey     = fmtDDMMYYYY(shiftDate);
+            patch3.dateKey_iso = fmtISO(shiftDate);
+            reasons3.push("dateKey");
+          }
+        } else if (typeof s.dateKey === "string" && /^\d{2}-\d{2}-\d{4}$/.test(s.dateKey)) {
+          // Already correct — just parse for later use
+          const [dd, mm, yy] = s.dateKey.split("-");
+          shiftDate = new Date(Number(yy), Number(mm) - 1, Number(dd));
+        }
+
+        // ── Fix startDate / endDate ──
+        const sdRaw = s.startDate;
+        const edRaw = s.endDate;
+
+        // Need to fix if stored as a Firestore Timestamp OR as "YYYY-MM-DD" string
+        const sdNeedsfix = isTimestamp(sdRaw) || (typeof sdRaw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sdRaw));
+        const edNeedsfix = isTimestamp(edRaw) || (typeof edRaw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(edRaw));
+
+        if (sdNeedsfix) {
+          const d = parseAnyDate(sdRaw);
+          if (d) {
+            patch3.startDate = fmtFlutter(d);
+            if (!shiftDate) shiftDate = d;
+            reasons3.push("startDate");
+          }
+        }
+        if (edNeedsfix) {
+          const d = parseAnyDate(edRaw);
+          if (d) { patch3.endDate = fmtFlutter(d); reasons3.push("endDate"); }
+        }
+
+        // ── Fix timeStampId ──
+        if (!s.timeStampId && shiftDate) {
+          patch3.timeStampId = shiftDate.getTime();
+          reasons3.push("timeStampId");
+        }
+
+        // ── Fix userId / user fields ──
+        if (hasWrongUserId) {
+          const key     = (s.userId || "").toLowerCase();
+          const userDoc = usersByUsername[key] || usersByDocId[s.userId] || null;
+
+          if (userDoc) {
+            // userId must be numeric for Flutter
+            const numId = userDoc.userId ?? userDoc.numericId ?? userDoc.id ?? null;
+            if (numId !== null && numId !== undefined) {
+              patch3.userId = Number(numId);
+              reasons3.push(`userId→${numId}`);
+            }
+            if (!s.username && userDoc.username) {
+              patch3.username = userDoc.username; reasons3.push("username");
+            }
+            if (!s.phone && userDoc.phone) {
+              patch3.phone = userDoc.phone; reasons3.push("phone");
+            }
+            if (!s.email && userDoc.email) {
+              patch3.email = userDoc.email; reasons3.push("email");
+            }
+            const fullName = userDoc.name || userDoc.fullName || "";
+            if (!s.primaryUserName && fullName) {
+              patch3.primaryUserName = fullName; reasons3.push("primaryUserName");
+            }
+          } else {
+            addLog(`  ⚠️  shift ${sSnap.id.slice(-8)} — user "${s.userId}" not found in users collection`, "err");
+          }
+
+          if (!s.primaryUserId && s.userId) {
+            patch3.primaryUserId = s.userId; reasons3.push("primaryUserId");
+          }
+        }
+
+        // ── Fix typeName / typeId ──
+        if (!s.typeId && s.typeName) {
+          const t = typesByName[(s.typeName || "").toLowerCase()];
+          if (t) { patch3.typeId = t.id; reasons3.push("typeId"); }
+        }
+        if (!s.typeName && s.typeId) {
+          const t = typesById[s.typeId];
+          if (t?.name) { patch3.typeName = t.name; reasons3.push("typeName"); }
+        }
+
+        // ── Fix categoryName / categoryId ──
+        if (!s.categoryId && s.categoryName) {
+          const c = catsByName[(s.categoryName || "").toLowerCase()];
+          if (c) { patch3.categoryId = c.id; reasons3.push("categoryId"); }
+        }
+        if (!s.categoryName && s.categoryId) {
+          const c = catsById[s.categoryId];
+          if (c?.name) { patch3.categoryName = c.name; reasons3.push("categoryName"); }
+        }
+
+        // ── Fix jobname / jobdescription ──
+        if (!s.jobname && (s.clientName || s.client)) {
+          patch3.jobname = s.clientName || s.client; reasons3.push("jobname");
+        }
+        if (!s.jobdescription && (s.description || s.notes)) {
+          patch3.jobdescription = s.description || s.notes; reasons3.push("jobdescription");
+        }
+
+        // ── Add missing status flags ──
+        if (s.status      === undefined || s.status      === null) { patch3.status       = "Pending";  reasons3.push("status"); }
+        if (s.billingStatus === undefined)                          { patch3.billingStatus = "Billable"; reasons3.push("billingStatus"); }
+        if (s.locked       === undefined)                           { patch3.locked        = false;      reasons3.push("locked"); }
+
+        // ── Add missing numeric/financial fields ──
+        const numDefaults = { kms: 0, approvedKms: 0, expense: 0, approvedExpense: 0, clientRate: 0, clientKMRate: 0 };
+        for (const [k, v] of Object.entries(numDefaults)) {
+          if (s[k] === undefined) patch3[k] = v;
+        }
+
+        // ── Add missing coordinate / media fields ──
+        if (s.startLatitude      === undefined) patch3.startLatitude      = 0;
+        if (s.startLongitude     === undefined) patch3.startLongitude     = 0;
+        if (s.endLatitude        === undefined) patch3.endLatitude        = 0;
+        if (s.endLongitude       === undefined) patch3.endLongitude       = 0;
+        if (!Array.isArray(s.expenseReceiptUrlList)) patch3.expenseReceiptUrlList = [];
+        if (s.profilePhotoUrl    === undefined) patch3.profilePhotoUrl    = "";
+        if (s.shiftReportImageUrl === undefined) patch3.shiftReportImageUrl = "";
+
+        if (Object.keys(patch3).length === 0) {
+          s3Skipped++;
+          continue;
+        }
+
+        try {
+          await updateDoc(doc(db, "shifts", sSnap.id), patch3);
+          addLog(`  ✅ FIXED shift …${sSnap.id.slice(-8)}  → ${reasons3.join(", ")}`, "ok");
+          s3Fixed++;
+          shiftsFixed++;
+        } catch (e) {
+          addLog(`  ❌ ERROR shift ${sSnap.id}: ${e.message}`, "err");
+          s3Errors++;
+          errors++;
+        }
+      }
+
+      addLog(`  Step 3 done: ${s3Fixed} shifts fixed, ${s3Skipped} skipped (already OK), ${s3Errors} errors.`, "done");
+
+      setStats({ fixed, skipped, created, errors, total: intakeSnap.size, shiftsFixed });
+      addLog("", "info");
+      addLog(`All steps done: ${fixed} forms fixed, ${created} new IntakeForms created, ${shiftsFixed} shifts fixed, ${errors} errors.`, "done");
       setStatus("done");
 
     } catch (e) {
@@ -283,7 +539,7 @@ export default function MigrateIntakeForms() {
     }
   };
 
-  const reset = () => { setStatus("idle"); setLog([]); setStats({ fixed:0, skipped:0, created:0, errors:0, total:0 }); };
+  const reset = () => { setStatus("idle"); setLog([]); setStats({ fixed:0, skipped:0, created:0, errors:0, total:0, shiftsFixed:0 }); };
 
   const logColor = (type) => ({
     ok: "#6EE7B7", err: "#FCA5A5", skip: "#9CA3AF", header: "#FCD34D", done: "#6EE7B7", info: "#D1FAE5"
@@ -291,19 +547,50 @@ export default function MigrateIntakeForms() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", fontFamily: "'Plus Jakarta Sans', sans-serif", padding: "40px 24px" }}>
-      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
 
         <h1 style={{ fontSize: 24, fontWeight: 700, color: "#111827", marginBottom: 6 }}>
-          InTakeForms — Full Migration
+          Database Migration — Full Sync
         </h1>
         <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 20 }}>
-          Two-step fix so the old Flutter app shows all clients and all forms correctly.
+          Three-step fix so both the React admin app and the Flutter app share data correctly.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 28 }}>
           {[
-            { step: "Step 1", title: "Fix existing InTakeForms", items: ["Sets isActive: true on all docs", "Adds missing dateOfInTake (uses consentDate)", "Adds missing nameInClientTable from inTakeClients[0].name", "Converts dob / dateOfInTake from YYYY-MM-DD → DD-MM-YYYY", "Builds inTakeClients[] for React-created forms"] },
-            { step: "Step 2", title: "Create forms for missing clients", items: ["Reads all clients from clients collection", "Finds clients with no InTakeForms entry", "Creates a FULL InTakeForms doc with all client data", "Preserves: dob, address, diagnosis, allergies, medications", "Preserves: parent/guardian contacts, notes, shift points", "Preserves: case worker & intake worker info, agency info", "These clients now appear in Flutter's Add Shift dropdown"] },
+            {
+              step: "Step 1", title: "Fix existing InTakeForms",
+              items: [
+                "Sets isActive: true on all docs",
+                "Adds missing dateOfInTake (DD-MM-YYYY)",
+                "Adds missing nameInClientTable",
+                "Converts dob/dates YYYY-MM-DD → DD-MM-YYYY",
+                "Builds inTakeClients[] for React-created forms",
+              ],
+            },
+            {
+              step: "Step 2", title: "Create forms for missing clients",
+              items: [
+                "Reads all docs from clients collection",
+                "Finds clients with no InTakeForms entry",
+                "Creates a FULL InTakeForms doc with all data",
+                "Preserves dob, diagnosis, allergies, medications",
+                "Preserves parent/guardian contacts & agency info",
+                "Clients now appear in Flutter's Add Shift dropdown",
+              ],
+            },
+            {
+              step: "Step 3", title: "Fix React-created shifts",
+              items: [
+                "Scans all shifts for YYYY-MM-DD dateKey",
+                "Converts dateKey to DD-MM-YYYY (Flutter format)",
+                "Converts startDate/endDate Timestamps → strings",
+                "Sets userId to numeric integer (Flutter queries by int)",
+                "Adds missing typeId, categoryId, username, phone…",
+                "Adds status, billingStatus, locked, kms defaults",
+                "These shifts now appear in the Flutter app",
+              ],
+            },
           ].map(({ step, title, items }) => (
             <div key={step} style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 8, padding: "14px 18px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{step}</div>
@@ -319,11 +606,12 @@ export default function MigrateIntakeForms() {
         {status !== "idle" && (
           <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
             {[
-              { label: "Total Docs",   value: stats.total,   color: "#3B82F6" },
-              { label: "Fixed",        value: stats.fixed,   color: "#10B981" },
-              { label: "New Forms",    value: stats.created, color: "#8B5CF6" },
-              { label: "Already OK",  value: stats.skipped, color: "#6B7280" },
-              { label: "Errors",       value: stats.errors,  color: "#EF4444" },
+              { label: "Intake Docs",    value: stats.total,       color: "#3B82F6" },
+              { label: "Forms Fixed",    value: stats.fixed,       color: "#10B981" },
+              { label: "New Forms",      value: stats.created,     color: "#8B5CF6" },
+              { label: "Shifts Fixed",   value: stats.shiftsFixed, color: "#F59E0B" },
+              { label: "Already OK",     value: stats.skipped,     color: "#6B7280" },
+              { label: "Errors",         value: stats.errors,      color: "#EF4444" },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 16px", minWidth: 100, textAlign: "center" }}>
                 <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
@@ -349,7 +637,7 @@ export default function MigrateIntakeForms() {
           <div style={{ background: "#D1FAE5", border: "1px solid #6EE7B7", borderRadius: 8, padding: "14px 20px", fontSize: 14, color: "#065F46", fontWeight: 600, marginBottom: 24 }}>
             ✅ Migration complete!<br />
             <span style={{ fontWeight: 400, fontSize: 13 }}>
-              Now open <strong>famforeveradmin.web.app</strong> in a new <strong>Incognito window</strong> (Ctrl+Shift+N) to see all forms and clients.
+              Open <strong>famforeveradmin.web.app</strong> in a new <strong>Incognito window</strong> (Ctrl+Shift+N) — all shifts and clients should now appear.
             </span>
           </div>
         )}
