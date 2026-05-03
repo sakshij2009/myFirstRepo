@@ -172,7 +172,14 @@ export default function MigrateIntakeForms() {
           reasons.push(`dateOfInTake(fixed)`);
         }
 
-        // 5. nameOfPerson / inTakeWorkerName
+        // 5. familyName — Flutter queries / displays InTakeForms by this field
+        if (!data.familyName) {
+          const fn = data.nameInClientTable || data.childsName
+                  || patch.nameInClientTable || patch.childsName || "";
+          if (fn) { patch.familyName = fn; reasons.push("familyName"); }
+        }
+
+        // 6. nameOfPerson / inTakeWorkerName
         if (!data.nameOfPerson && isReact) {
           const wn = data.workerInfo?.workerName || "";
           if (wn) { patch.nameOfPerson = wn; reasons.push("nameOfPerson"); }
@@ -182,7 +189,7 @@ export default function MigrateIntakeForms() {
           if (wn) { patch.inTakeWorkerName = wn; reasons.push("inTakeWorkerName"); }
         }
 
-        // 6. Null-out empty date strings
+        // 7. Null-out empty date strings
         for (const f of ["submittedOn", "createdAt", "dateOfBirth"]) {
           if (data[f] === "") { patch[f] = null; reasons.push(`${f}→null`); }
         }
@@ -266,6 +273,7 @@ export default function MigrateIntakeForms() {
 
         const newDoc = {
           isActive:          true,
+          familyName:        clientName,   // Flutter queries InTakeForms by this field
           nameInClientTable: clientName,
           childsName:        clientName,
           dateOfInTake:      intakeDate,
@@ -562,8 +570,9 @@ export default function MigrateIntakeForms() {
               step: "Step 1", title: "Fix existing InTakeForms",
               items: [
                 "Sets isActive: true on all docs",
+                "Adds missing familyName (Flutter queries by this)",
                 "Adds missing dateOfInTake (DD-MM-YYYY)",
-                "Adds missing nameInClientTable",
+                "Adds missing nameInClientTable & childsName",
                 "Converts dob/dates YYYY-MM-DD → DD-MM-YYYY",
                 "Builds inTakeClients[] for React-created forms",
               ],
