@@ -1,4 +1,13 @@
 import React, { useEffect, useState, useRef } from "react";
+
+// ── Date format helpers (Flutter compatibility) ───────────────────────────────
+// Flutter stores: startDate="04 Jan 2025", dateKey="04-01-2025"
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const formatFlutterDate = (d) =>
+  `${String(d.getDate()).padStart(2,'0')} ${_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+const formatDDMMYYYY = (d) =>
+  `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+// ─────────────────────────────────────────────────────────────────────────────
 import { Formik, Form, Field, ErrorMessage, useFormikContext } from "formik";
 import * as Yup from "yup";
 import {
@@ -151,13 +160,22 @@ const AddUserShift = ({ mode = "add", user }) => {
             .sort(sortByName)
         );
 
-        const allowedCategories = [
+        // Use real Firestore IDs so Flutter can match categoryId on shifts
+        const allowedNames = new Set([
+          "Emergent Care", "Respite Care",
+          "Supervised Visitation", "Supervised Visitation + Transportation",
+          "Transportation", "Office Admin",
+        ]);
+        const realCategories = shiftCategorySnap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((c) => allowedNames.has(c.name))
+          .sort(sortByName);
+        setShiftCategories(realCategories.length > 0 ? realCategories : [
           { id: "emergent", name: "Emergent Care" },
           { id: "respite", name: "Respite Care" },
           { id: "supervised", name: "Supervised Visitation" },
           { id: "transportation", name: "Transportation" },
-        ].sort(sortByName);
-        setShiftCategories(allowedCategories);
+        ]);
 
         setClients(
           clientSnap.docs
@@ -751,7 +769,19 @@ const AddUserShift = ({ mode = "add", user }) => {
             shiftReportImageUrl: "",
             expenseReceiptUrl: "",
             profilePhotoUrl: "",
-            dateKey: formatLocalISO(primaryDate),
+            dateKey:     formatDDMMYYYY(primaryDate),       // "04-01-2025"
+            dateKey_iso: formatLocalISO(primaryDate),       // "2025-01-04"
+            startDate:   formatFlutterDate(primaryDate),    // "04 Jan 2025"
+            endDate:     formatFlutterDate(endDateObj),
+            userId:      primaryStaff?.userId ?? primaryStaff?.id ?? "",
+            username:    primaryStaff?.username || primaryStaff?.name || "",
+            phone:       primaryStaff?.phone    || "",
+            email:       primaryStaff?.email    || "",
+            typeName:    selectedShiftType?.name  || "",
+            typeId:      selectedShiftType?.id    || "",
+            categoryId:  selectedShiftCategory?.id || "",
+            jobname:     selectedClient?.name   || "",
+            jobdescription: values.description  || "",
           });
 
 
@@ -791,47 +821,107 @@ const AddUserShift = ({ mode = "add", user }) => {
 
         const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
 
+        // Look up client rate for this category
+        const clientRateEntry = (selectedClient?.rateList || [])
+          .find(r => r.id === selectedShiftCategory?.id);
+
         await setDoc(doc(db, "shifts", newShiftId), {
-          ...values,
-          startDate: startDateObj,
-          endDate: endDateObj,
-          clientDetails: selectedClient,
-          clientId: selectedClient?.id || values.client || "",
-          clientName: selectedClient?.name || "",
-          userId: primaryStaff?.id || primaryStaff?.userId || values.user || "",
-          userName: primaryStaff?.name || "",
-          name: primaryStaff?.name || "",
-          agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
-          agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
-          createdAt: new Date(),
-          shiftReport: "",
-          shiftConfirmed: false,
-          id: newShiftId,
-          // Explicitly clear top-level visit fields
-          visitLocation: "",
-          visitStartTime: "",
-          visitEndTime: "",
-          visitLatitude: 0,
-          visitLongitude: 0,
+          // ── Identity ──────────────────────────────────────────────
+          id:            newShiftId,
+          createdAt:     new Date(),
+
+          // ── Dates — Flutter expects "DD Mon YYYY" strings + "DD-MM-YYYY" dateKey ──
+          startDate:     formatFlutterDate(startDateObj),   // "04 Jan 2025"
+          endDate:       formatFlutterDate(endDateObj),     // "04 Jan 2025"
+          dateKey:       formatDDMMYYYY(startDateObj),      // "04-01-2025"
+          timeStampId:   startDateObj.getTime(),            // Unix ms
+          startTime:     values.startTime || "",
+          endTime:       values.endTime   || "",
+
+          // ── Client ────────────────────────────────────────────────
+          clientId:      selectedClient?.id       || values.client || "",
+          clientName:    selectedClient?.name     || "",
+          jobname:       selectedClient?.name     || "",    // Flutter list title
+          clientDetails: selectedClient           || null,
+
+          // ── Staff — userId MUST be numeric (Flutter queries by this) ──
+          userId:        primaryStaff?.userId     ?? primaryStaff?.id ?? "",
+          userName:      primaryStaff?.name       || "",
+          name:          primaryStaff?.name       || "",
+          username:      primaryStaff?.username   || primaryStaff?.name || "",
+          phone:         primaryStaff?.phone      || "",
+          email:         primaryStaff?.email      || "",
+          primaryUserId: primaryStaff?.id         || "",
+          primaryUserName: primaryStaff?.name     || "",
+
+          // ── Shift type & category (with real Firestore IDs) ───────
+          typeName:      selectedShiftType?.name  || values.shiftType     || "",
+          typeId:        selectedShiftType?.id    || "",
+          categoryName:  selectedShiftCategory?.name || values.shiftCategory || "",
+          categoryId:    selectedShiftCategory?.id   || "",
+          shiftType:     values.shiftType         || "",
+          shiftCategory: values.shiftCategory     || "",
+
+          // ── Description ───────────────────────────────────────────
+          jobdescription: values.description      || "",
+          description:    values.description      || "",
+
+          // ── Agency ────────────────────────────────────────────────
+          agencyId:      selectedClient?.agencyId    || primaryStaff?.agencyId    || "",
+          agencyName:    selectedClient?.agencyName  || primaryStaff?.agencyName  || "",
+
+          // ── Financial defaults ────────────────────────────────────
+          clientRate:      clientRateEntry?.rate  || 0,
+          clientKMRate:    clientRateEntry?.kmRate || 0,
+          kms:             0,
+          approvedKms:     0,
+          expense:         0,
+          approvedExpense: 0,
+
+          // ── Status flags ──────────────────────────────────────────
+          status:          "Pending",
+          isRatify:        false,
+          isCancelled:     false,
+          shiftConfirmed:  false,
+          billingStatus:   "Billable",
+          locked:          false,
+          accessToShiftReport: values.accessToShiftReport || false,
+
+          // ── Location defaults ─────────────────────────────────────
+          startLatitude:   0,
+          startLongitude:  0,
+          endLatitude:     0,
+          endLongitude:    0,
+          visitLocation:   "",
+          visitStartTime:  "",
+          visitEndTime:    "",
+          visitLatitude:   0,
+          visitLongitude:  0,
+
+          // ── Shift points ──────────────────────────────────────────
           shiftPoints: filteredPoints.map(p => {
             const vLoc = needsVisit ? (p.visitLocation || "").trim() : "";
             return {
               ...p,
-              visitLocation: vLoc,
+              visitLocation:  vLoc,
               visitStartTime: vLoc ? (p.visitStartTime || "") : "",
-              visitEndTime: vLoc ? (p.visitEndTime || "") : "",
-              visitLatitude: vLoc ? (p.visitLatitude || 0) : 0,
+              visitEndTime:   vLoc ? (p.visitEndTime   || "") : "",
+              visitLatitude:  vLoc ? (p.visitLatitude  || 0) : 0,
               visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
             };
           }),
-          clockIn: "",
-          clockOut: "",
-          isRatify: false,
-          isCancelled: false,
-          shiftReportImageUrl: "",
-          expenseReceiptUrl: "",
-          profilePhotoUrl: "",
-          dateKey: formatLocalISO(startDateObj), // Added for consistency with update mode
+
+          // ── Report / media ────────────────────────────────────────
+          shiftReport:          "",
+          shiftReportImageUrl:  "",
+          expenseReceiptUrl:    "",
+          expenseReceiptUrlList:[],
+          profilePhotoUrl:      "",
+          clockIn:              "",
+          clockOut:             "",
+
+          // ── React-specific extras (for admin app) ─────────────────
+          dateKey_iso:   formatLocalISO(startDateObj),  // keep YYYY-MM-DD for React queries
         });
 
 
@@ -1731,10 +1821,15 @@ const FormikSync = ({
     const primaryData = users.find((u) => u.id === values.primaryUser);
     setSelectedPrimaryUser(primaryData || null);
 
-    const shiftTypeData = shiftTypes.find((s) => s.id === values.shiftType);
+    // Match by name (form stores name) OR by id (update mode stores id)
+    const shiftTypeData = shiftTypes.find(
+      (s) => s.name === values.shiftType || s.id === values.shiftType
+    );
     setSelectedShiftType(shiftTypeData || null);
 
-    const shiftCategoryData = shiftCategories.find((s) => s.name === values.shiftCategory);
+    const shiftCategoryData = shiftCategories.find(
+      (s) => s.name === values.shiftCategory || s.id === values.shiftCategory
+    );
     setSelectedShiftCategory(shiftCategoryData || null);
   }, [values.client, values.primaryUser, values.shiftType, values.shiftCategory, clients, users, shiftTypes, shiftCategories, setSelectedClient, setSelectedPrimaryUser, setSelectedShiftType, setSelectedShiftCategory]);
 
