@@ -511,11 +511,15 @@ const AddUserShift = ({ mode = "add", user }) => {
 
           let isMatch = false;
           // ── Exact matches first ──
-          if (nameMatch(data.clientName) || nameMatch(data.name) || nameMatch(data.nameOfPerson) || nameMatch(data.familyName)) {
+          if (
+            nameMatch(data.clientName) || nameMatch(data.name) ||
+            nameMatch(data.nameOfPerson) || nameMatch(data.familyName) ||
+            nameMatch(data.nameInClientTable) || nameMatch(data.childsName)   // Flutter form fields
+          ) {
             isMatch = true;
           }
           if (!isMatch && Array.isArray(data.inTakeClients)) {
-            if (data.inTakeClients.some(cl => nameMatch(cl.name))) isMatch = true;
+            if (data.inTakeClients.some(cl => nameMatch(cl.name) || nameMatch(cl.fullName))) isMatch = true;
           }
           if (!isMatch && data.clients && typeof data.clients === "object") {
             const clientObjects = Object.values(data.clients);
@@ -528,7 +532,11 @@ const AddUserShift = ({ mode = "add", user }) => {
 
           // ── Surname/partial fallback (e.g. "Kaskamin Family" → matches "Alice Kaskamin") ──
           if (!isMatch && clientKeywords.length > 0) {
-            if (partialMatch(data.clientName) || partialMatch(data.name) || partialMatch(data.nameOfPerson) || partialMatch(data.familyName)) {
+            if (
+              partialMatch(data.clientName) || partialMatch(data.name) ||
+              partialMatch(data.nameOfPerson) || partialMatch(data.familyName) ||
+              partialMatch(data.nameInClientTable) || partialMatch(data.childsName)
+            ) {
               isMatch = true;
             }
             if (!isMatch && data.clients && typeof data.clients === "object") {
@@ -539,14 +547,19 @@ const AddUserShift = ({ mode = "add", user }) => {
             }
             if (!isMatch && data.parentName && partialMatch(data.parentName)) isMatch = true;
             if (!isMatch && Array.isArray(data.inTakeClients)) {
-              if (data.inTakeClients.some(cl => partialMatch(cl.name))) isMatch = true;
+              if (data.inTakeClients.some(cl => partialMatch(cl.name) || partialMatch(cl.fullName))) isMatch = true;
             }
           }
 
           if (isMatch) {
-            // Find Description — check nested services.serviceDesc too
+            // Find Description — check all known field names across old and new form schemas
             const possibleDesc = data.jobDescription || data.description || data.notes
-              || data.services?.serviceDesc || data.serviceDesc || "";
+              || data.services?.serviceDesc || data.serviceDesc
+              || data.serviceDetail                         // old flutter private forms
+              || (Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.otherServiceConcerns)
+              || (Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.serviceDetail)
+              || (Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.servicePlanAndRisk)
+              || "";
             if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
 
             // Find Siblings/Members for Shift Points if we don't have them yet
@@ -596,6 +609,23 @@ const AddUserShift = ({ mode = "add", user }) => {
                   dropTime: sib.dropTime || "",
                   seatType: sib.seatType || "",
                   transportationMode: sib.transportationMode || "",
+                  totalKilometers: 0,
+                }));
+              }
+              // C. Support old Flutter private forms — flat inTakeClients array
+              //    Fields: pickupAddress, dropAddress, pickupTime, dropTime, address, parentAddress
+              else if (Array.isArray(data.inTakeClients) && data.inTakeClients.length > 0) {
+                intakePoints = data.inTakeClients.map((cl) => ({
+                  name: cl.name || cl.fullName || "",
+                  pickupLocation: cl.pickupAddress || cl.address || cl.parentAddress || "",
+                  pickupTime: cl.pickupTime || "",
+                  visitLocation: cl.visitAddress || "",
+                  visitStartTime: cl.startVisitTime || cl.visitStartTime || "",
+                  visitEndTime: cl.endVisitTime || cl.visitEndTime || "",
+                  dropLocation: cl.dropAddress || cl.address || "",
+                  dropTime: cl.dropTime || "",
+                  seatType: cl.typeOfSeat || cl.carSeatRequired || "",
+                  transportationMode: "",
                   totalKilometers: 0,
                 }));
               }
