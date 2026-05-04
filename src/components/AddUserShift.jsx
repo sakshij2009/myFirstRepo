@@ -880,7 +880,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           approvedExpense: 0,
 
           // ── Status flags ──────────────────────────────────────────
-          status:          "Pending",
+          status:          "Confirmed",
           isRatify:        false,
           isCancelled:     false,
           shiftConfirmed:  false,

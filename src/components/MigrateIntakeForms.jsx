@@ -401,8 +401,11 @@ export default function MigrateIntakeForms() {
         const statusMismatch    = s.shiftConfirmed === true && s.status === "Pending";
         // Future shifts should never have pre-filled clockIn/clockOut (they haven't happened yet)
         const hasFakeClockTimes = isFutureShift && !!(s.clockIn || s.clockOut);
+        // React-admin-created shifts have dateKey_iso field — they default to "Pending" but
+        // Flutter mobile only shows "Confirmed" shifts; fix these to "Confirmed" so workers see them
+        const reactCreatedPending = !!(s.dateKey_iso || s.primaryUserId) && s.status === "Pending" && s.shiftConfirmed !== true;
 
-        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields && !statusMismatch && !hasFakeClockTimes) {
+        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields && !statusMismatch && !hasFakeClockTimes && !reactCreatedPending) {
           s3Skipped++;
           continue;
         }
@@ -535,6 +538,14 @@ export default function MigrateIntakeForms() {
         if (s.shiftConfirmed === true && s.status === "Pending") {
           patch3.status = "Confirmed";
           reasons3.push("status→Confirmed(shiftConfirmed)");
+        }
+
+        // ── Fix React-admin-created shifts stuck as "Pending" → "Confirmed" ──
+        // React admin used to create shifts as status:"Pending"; Flutter mobile only shows "Confirmed"
+        // These shifts are identifiable by the dateKey_iso field (added by React admin only)
+        if (reactCreatedPending && !patch3.status) {
+          patch3.status = "Confirmed";
+          reasons3.push("status→Confirmed(react-created)");
         }
 
         // ── Add missing status flags (only when undefined/null — never downgrade existing) ──
