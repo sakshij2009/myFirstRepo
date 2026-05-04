@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { CheckCircle } from "lucide-react";
 import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
 import {
@@ -11,10 +12,13 @@ import {
 
 function statusBadge(status) {
   const map = {
-    Completed: { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
-    Ongoing: { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
-    InProgress: { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
-    Incomplete: { bg: "#f3f4f6", color: "#6b7280", border: "#e5e7eb" },
+    Confirmed:   { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
+    Completed:   { bg: "#dcfce7", color: "#16a34a", border: "#bbf7d0" },
+    "in-progress": { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    Ongoing:     { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    InProgress:  { bg: "#fef3c7", color: "#d97706", border: "#fde68a" },
+    Pending:     { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
+    Incomplete:  { bg: "#f3f4f6", color: "#6b7280", border: "#e5e7eb" },
   };
   const s = map[status] || map.Incomplete;
   return (
@@ -22,7 +26,7 @@ function statusBadge(status) {
       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
       style={{ backgroundColor: s.bg, color: s.color, borderColor: s.border }}
     >
-      {status}
+      {status || "Unknown"}
     </span>
   );
 }
@@ -95,15 +99,38 @@ const normalizeCategory = (cat) => {
   return cat || "—";
 };
 
-const getShiftStatus = (clockIn, clockOut) => {
-  if (clockIn && clockOut) return "Completed";
-  if (clockIn && !clockOut) return "Ongoing";
+// Use the actual status field from Firestore — do NOT infer from clockIn/clockOut
+// because Flutter pre-fills them with scheduled times on every shift.
+const getShiftStatus = (shift) => {
+  const s = (shift.status || "").trim();
+  if (s) return s;                                       // trust Firestore status
+  if (shift.clockIn && shift.clockOut) return "Completed";
+  if (shift.clockIn) return "Ongoing";
   return "Incomplete";
 };
 
 const ShiftsData = ({ filteredShifts = [] }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [localConfirmed, setLocalConfirmed] = useState(new Set());
   const navigate = useNavigate();
+
+  const handleConfirmShift = async (shiftId, e) => {
+    e.stopPropagation();
+    setConfirmingId(shiftId);
+    try {
+      await updateDoc(doc(db, "shifts", shiftId), {
+        status: "Confirmed",
+        shiftConfirmed: true,
+      });
+      setLocalConfirmed(prev => new Set([...prev, shiftId]));
+    } catch (err) {
+      console.error("Failed to confirm shift:", err);
+      alert("Failed to confirm shift: " + err.message);
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const ITEMS_PER_PAGE = 8;
   const totalPages = Math.max(1, Math.ceil(filteredShifts.length / ITEMS_PER_PAGE));
@@ -147,10 +174,13 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     <div className="w-full flex flex-col gap-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Shift Cards */}
       {currentShifts.map((shift) => {
-        const status = getShiftStatus(shift.clockIn, shift.clockOut);
-        const isCompleted = status === "Completed";
+        const isLocallyConfirmed = localConfirmed.has(shift.id);
+        const effectiveShiftConfirmed = isLocallyConfirmed || shift.shiftConfirmed;
+        const effectiveStatus = isLocallyConfirmed ? "Confirmed" : getShiftStatus(shift);
+        const isCompleted = effectiveStatus === "Completed" || effectiveStatus === "Confirmed";
         const rawCategory = shift.categoryName || shift.shiftCategory || "";
         const normCat = normalizeCategory(rawCategory);
+        const canConfirm = !effectiveShiftConfirmed && effectiveStatus !== "Confirmed";
 
         return (
           <div
@@ -176,8 +206,8 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                   )}
                 </div>
                 {categoryBadge(normCat)}
-                {statusBadge(status)}
-                {confirmedBadge(shift.shiftConfirmed)}
+                {statusBadge(effectiveStatus)}
+                {confirmedBadge(effectiveShiftConfirmed)}
               </div>
 
               <div className="flex items-center gap-2">
@@ -261,6 +291,23 @@ const ShiftsData = ({ filteredShifts = [] }) => {
               </button>
 
               <div className="flex items-center gap-3">
+                {canConfirm && (
+                  <button
+                    onClick={(e) => handleConfirmShift(shift.id, e)}
+                    disabled={confirmingId === shift.id}
+                    className="flex items-center gap-1 text-xs font-semibold rounded-md px-2.5 py-1 transition-colors"
+                    style={{
+                      background: confirmingId === shift.id ? "#e5e7eb" : "#1B5E37",
+                      color: confirmingId === shift.id ? "#9ca3af" : "#ffffff",
+                      cursor: confirmingId === shift.id ? "wait" : "pointer",
+                      border: "none",
+                    }}
+                  >
+                    <CheckCircle size={12} />
+                    {confirmingId === shift.id ? "Confirming…" : "Confirm Shift"}
+                  </button>
+                )}
+
                 <ShiftLockToggle shiftId={shift.id} initialValue={shift.isRatify ?? false} className="" />
 
                 <button
