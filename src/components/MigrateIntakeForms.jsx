@@ -385,8 +385,10 @@ export default function MigrateIntakeForms() {
         // Old React used shiftType / shiftCategory (name strings) instead of typeId/typeName/categoryId/categoryName
         const hasOldTypeFields  = (s.shiftType && !s.typeId) || (s.shiftCategory && !s.categoryId);
         const missingCoreFields = !s.typeName || !s.categoryId || s.status === undefined || s.billingStatus === undefined;
+        // shiftConfirmed=true means worker finished+confirmed — status must be "Confirmed" not "Pending"
+        const statusMismatch    = s.shiftConfirmed === true && s.status === "Pending";
 
-        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields) {
+        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields && !statusMismatch) {
           s3Skipped++;
           continue;
         }
@@ -506,8 +508,14 @@ export default function MigrateIntakeForms() {
           patch3.jobdescription = s.description || s.notes; reasons3.push("jobdescription");
         }
 
-        // ── Add missing status flags ──
-        if (s.status      === undefined || s.status      === null) { patch3.status       = "Pending";  reasons3.push("status"); }
+        // ── Fix status mismatch: shiftConfirmed=true but status still "Pending" ──
+        if (s.shiftConfirmed === true && s.status === "Pending") {
+          patch3.status = "Confirmed";
+          reasons3.push("status→Confirmed(shiftConfirmed)");
+        }
+
+        // ── Add missing status flags (only when undefined/null — never downgrade existing) ──
+        if ((s.status      === undefined || s.status      === null) && !patch3.status)  { patch3.status       = "Pending";  reasons3.push("status"); }
         if (s.billingStatus === undefined)                          { patch3.billingStatus = "Billable"; reasons3.push("billingStatus"); }
         if (s.locked       === undefined)                           { patch3.locked        = false;      reasons3.push("locked"); }
 
