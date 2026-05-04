@@ -376,8 +376,20 @@ export default function MigrateIntakeForms() {
 
       let s3Fixed = 0, s3Skipped = 0, s3Errors = 0;
 
+      // Today midnight — used to detect future shifts
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
+
       for (const sSnap of shiftsSnap.docs) {
         const s = sSnap.data();
+
+        // Parse shift date from DD-MM-YYYY for future-shift check
+        let shiftDateParsed = null;
+        if (typeof s.dateKey === "string" && /^\d{2}-\d{2}-\d{4}$/.test(s.dateKey)) {
+          const [dd, mm, yy] = s.dateKey.split("-");
+          shiftDateParsed = new Date(Number(yy), Number(mm) - 1, Number(dd));
+        }
+        const isFutureShift = shiftDateParsed && shiftDateParsed > todayMidnight;
 
         // ── Detect shifts that need fixing ──
         const hasWrongDateKey   = typeof s.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dateKey);
@@ -387,8 +399,10 @@ export default function MigrateIntakeForms() {
         const missingCoreFields = !s.typeName || !s.categoryId || s.status === undefined || s.billingStatus === undefined;
         // shiftConfirmed=true means worker finished+confirmed — status must be "Confirmed" not "Pending"
         const statusMismatch    = s.shiftConfirmed === true && s.status === "Pending";
+        // Future shifts should never have pre-filled clockIn/clockOut (they haven't happened yet)
+        const hasFakeClockTimes = isFutureShift && !!(s.clockIn || s.clockOut);
 
-        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields && !statusMismatch) {
+        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields && !statusMismatch && !hasFakeClockTimes) {
           s3Skipped++;
           continue;
         }
@@ -436,6 +450,15 @@ export default function MigrateIntakeForms() {
         if (!s.timeStampId && shiftDate) {
           patch3.timeStampId = shiftDate.getTime();
           reasons3.push("timeStampId");
+        }
+
+        // ── Clear fake clockIn/clockOut on future shifts ──
+        // Flutter pre-fills these with scheduled times for ALL shifts, even ones months away.
+        // A shift that hasn't happened yet cannot have real clock-in/out times.
+        if (isFutureShift && (s.clockIn || s.clockOut)) {
+          patch3.clockIn  = "";
+          patch3.clockOut = "";
+          reasons3.push("cleared future clockIn/Out");
         }
 
         // ── Fix userId / user fields ──
@@ -615,7 +638,8 @@ export default function MigrateIntakeForms() {
                 "Maps shiftType/shiftCategory → typeId/typeName/categoryId",
                 "Adds missing typeId, categoryId, username, phone…",
                 "Adds status, billingStatus, locked, kms defaults",
-                "These shifts now appear in the Flutter app",
+                "Syncs status→Confirmed when shiftConfirmed=true",
+                "Clears fake clockIn/Out on future shifts (not worked yet)",
               ],
             },
           ].map(({ step, title, items }) => (
