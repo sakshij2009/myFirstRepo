@@ -379,13 +379,14 @@ export default function MigrateIntakeForms() {
       for (const sSnap of shiftsSnap.docs) {
         const s = sSnap.data();
 
-        // ── Detect React-created (broken) shifts ──
-        const hasWrongDateKey  = typeof s.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dateKey);
-        const hasWrongUserId   = typeof s.userId  === "string" && !/^\d+$/.test((s.userId || "").trim());
+        // ── Detect shifts that need fixing ──
+        const hasWrongDateKey   = typeof s.dateKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.dateKey);
+        const hasWrongUserId    = typeof s.userId  === "string" && !/^\d+$/.test((s.userId || "").trim());
+        // Old React used shiftType / shiftCategory (name strings) instead of typeId/typeName/categoryId/categoryName
+        const hasOldTypeFields  = (s.shiftType && !s.typeId) || (s.shiftCategory && !s.categoryId);
         const missingCoreFields = !s.typeName || !s.categoryId || s.status === undefined || s.billingStatus === undefined;
 
-        // Only touch clearly React-created shifts
-        if (!hasWrongDateKey && !hasWrongUserId && !missingCoreFields) {
+        if (!hasWrongDateKey && !hasWrongUserId && !hasOldTypeFields && !missingCoreFields) {
           s3Skipped++;
           continue;
         }
@@ -470,21 +471,29 @@ export default function MigrateIntakeForms() {
         }
 
         // ── Fix typeName / typeId ──
-        if (!s.typeId && s.typeName) {
-          const t = typesByName[(s.typeName || "").toLowerCase()];
-          if (t) { patch3.typeId = t.id; reasons3.push("typeId"); }
-        }
-        if (!s.typeName && s.typeId) {
+        // Source priority: typeName → shiftType (old React field) → nothing
+        const typeNameSrc = (s.typeName || s.shiftType || "").trim();
+        if (typeNameSrc && (!s.typeId || !s.typeName)) {
+          const t = typesByName[typeNameSrc.toLowerCase()];
+          if (t) {
+            if (!s.typeName)  { patch3.typeName = t.name; reasons3.push("typeName"); }
+            if (!s.typeId)    { patch3.typeId   = t.id;   reasons3.push("typeId"); }
+          }
+        } else if (!s.typeName && s.typeId) {
           const t = typesById[s.typeId];
           if (t?.name) { patch3.typeName = t.name; reasons3.push("typeName"); }
         }
 
         // ── Fix categoryName / categoryId ──
-        if (!s.categoryId && s.categoryName) {
-          const c = catsByName[(s.categoryName || "").toLowerCase()];
-          if (c) { patch3.categoryId = c.id; reasons3.push("categoryId"); }
-        }
-        if (!s.categoryName && s.categoryId) {
+        // Source priority: categoryName → shiftCategory (old React field) → nothing
+        const catNameSrc = (s.categoryName || s.shiftCategory || "").trim();
+        if (catNameSrc && (!s.categoryId || !s.categoryName)) {
+          const c = catsByName[catNameSrc.toLowerCase()];
+          if (c) {
+            if (!s.categoryName)  { patch3.categoryName = c.name; reasons3.push("categoryName"); }
+            if (!s.categoryId)    { patch3.categoryId   = c.id;   reasons3.push("categoryId"); }
+          }
+        } else if (!s.categoryName && s.categoryId) {
           const c = catsById[s.categoryId];
           if (c?.name) { patch3.categoryName = c.name; reasons3.push("categoryName"); }
         }
@@ -595,6 +604,7 @@ export default function MigrateIntakeForms() {
                 "Converts dateKey to DD-MM-YYYY (Flutter format)",
                 "Converts startDate/endDate Timestamps → strings",
                 "Sets userId to numeric integer (Flutter queries by int)",
+                "Maps shiftType/shiftCategory → typeId/typeName/categoryId",
                 "Adds missing typeId, categoryId, username, phone…",
                 "Adds status, billingStatus, locked, kms defaults",
                 "These shifts now appear in the Flutter app",

@@ -761,9 +761,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                 visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
               };
             }),
-            // SYNC CLOCK IN/OUT WITH NEW SCHEDULE (if they exist)
-            clockIn: originalClockIn ? `${formatEdmontonISO(primaryDate)}, ${values.startTime}:00` : "",
-            clockOut: originalClockOut ? `${formatEdmontonISO(endDateObj)}, ${values.endTime}:00` : "",
+            // PRESERVE actual clock-in/out times recorded by Flutter worker app
+            // Never overwrite with scheduled times — Flutter sets these when worker clocks in
+            clockIn: originalClockIn || "",
+            clockOut: originalClockOut || "",
             isRatified: false,
             isCancelled: false,
             shiftReportImageUrl: "",
