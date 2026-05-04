@@ -14,7 +14,24 @@
       "Bash(node -e \"console.log\\('Node available'\\)\")",
       "Bash(npm list *)",
       "Bash(python3 -c \"from PIL import Image; img = Image.open\\('screenshot_824.png'\\); print\\(img.size, img.mode\\)\")",
-      "Bash(python -c \"from PIL import Image; img = Image.open\\('screenshot_824.png'\\); print\\(img.size, img.mode\\)\")"
+      "Bash(python -c \"from PIL import Image; img = Image.open\\('screenshot_824.png'\\); print\\(img.size, img.mode\\)\")",
+      "Bash(node inspect-one.cjs)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix: migration v4 — add missing dateOfInTake/nameInClientTable to 40 flutter docs *)",
+      "Bash(git push *)",
+      "Bash(node -e ' *)",
+      "Bash(git commit -m 'feat: migration page now does full 2-step fix in browser UI *)",
+      "Bash(node inspect-clients.cjs)",
+      "Bash(git commit -m ' *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(cat src/utils/dateHelpers.js)",
+      "Bash(cat src/utils/dateHelpers.ts)",
+      "Bash(gh pr *)",
+      "Bash(gh repo *)",
+      "Bash(git config *)",
+      "Bash(git credential *)",
+      "Bash(node create-pr.cjs)",
+      "Bash(del \"C:/Users/Sakshi Jamwal/Desktop/startup/FFAdmin-prod/create-pr.cjs\")"
     ]
   }
 }
