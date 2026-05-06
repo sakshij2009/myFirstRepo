@@ -66,6 +66,9 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftType: "",
     shiftCategory: "",
     client: "",
+    primaryUser: "",
+    secondaryUser: "",
+    vehicleType: "",
     startDate: "",
     endDate: "",
     startTime: "",
@@ -77,6 +80,7 @@ const AddUserShift = ({ mode = "add", user }) => {
 
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedPrimaryUser, setSelectedPrimaryUser] = useState(null);
+  const [selectedSecondaryUser, setSelectedSecondaryUser] = useState(null);
   const [selectedShiftType, setSelectedShiftType] = useState(null);
   const [selectedShiftCategory, setSelectedShiftCategory] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -105,8 +109,6 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [shiftPoints, setShiftPoints] = useState([]);
   // removedShiftPoints: members removed from this shift (can be added back)
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
-  // intakeDescription: auto-fetched from intake form
-  const [intakeDescription, setIntakeDescription] = useState("");
   // Track the client ID that was originally loaded from the saved shift (update mode)
   const initialLoadedClientIdRef = useRef(null);
 
@@ -116,6 +118,7 @@ const AddUserShift = ({ mode = "add", user }) => {
     shiftCategory: Yup.string().required("Shift category is required"),
     client: Yup.string().required("Client selection is required"),
     primaryUser: Yup.string().required("Primary Staff selection is required"),
+    secondaryUser: Yup.string().optional(),
     shiftDates: Yup.array()
       .of(Yup.date().typeError("Invalid date"))
       .min(1, "At least one shift date is required"),
@@ -232,19 +235,9 @@ const AddUserShift = ({ mode = "add", user }) => {
     if (parts.length === 3) {
       const [day, monthName, year] = parts;
       const monthIndex = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ].indexOf(monthName);
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ].findIndex(m => m.toLowerCase() === monthName.toLowerCase() || m.substring(0, 3).toLowerCase() === monthName.toLowerCase());
 
       if (monthIndex !== -1) {
         return new Date(Number(year), monthIndex, Number(day));
@@ -402,6 +395,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             client: clientObj ? clientObj.id : "",
             primaryUser: userObj ? userObj.id : "",
             secondaryUser: secondaryUserObj ? secondaryUserObj.id : (data.secondaryUserId || ""),
+            vehicleType: data.vehicleType || "",
             startDate: startISO,
             endDate: endISO,
             startTime: data.startTime || "",
@@ -651,7 +645,6 @@ const AddUserShift = ({ mode = "add", user }) => {
           }
         });
 
-        if (foundDesc) setIntakeDescription(foundDesc);
 
         // PRIORITIZE Intake points if we found any, otherwise fallback to local client db points
         if (intakePoints.length > 0) {
@@ -719,6 +712,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
           const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+          const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
           await updateDoc(docRef, {
             ...restValues,
@@ -733,6 +727,10 @@ const AddUserShift = ({ mode = "add", user }) => {
             name: primaryStaff?.name || "",
             primaryUserId: primaryStaff?.id || "",
             primaryUserName: primaryStaff?.name || "",
+            // Secondary Staff
+            secondaryUserId: secondaryStaff?.id || "",
+            secondaryUserName: secondaryStaff?.name || "",
+            vehicleType: values.vehicleType || "",
             agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
             agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
             updatedAt: new Date(),
@@ -821,6 +819,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         }));
 
         const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+        const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
         // Look up client rate for this category
         const clientRateEntry = (selectedClient?.rateList || [])
@@ -854,6 +853,10 @@ const AddUserShift = ({ mode = "add", user }) => {
           email:         primaryStaff?.email      || "",
           primaryUserId: primaryStaff?.id         || "",
           primaryUserName: primaryStaff?.name     || "",
+          // Secondary Staff
+          secondaryUserId: secondaryStaff?.id     || "",
+          secondaryUserName: secondaryStaff?.name || "",
+          vehicleType: values.vehicleType         || "",
 
           // ── Shift type & category (with real Firestore IDs) ───────
           typeName:      selectedShiftType?.name  || values.shiftType     || "",
@@ -1144,7 +1147,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                   setSelectedPrimaryUser={setSelectedPrimaryUser}
                   setSelectedShiftType={setSelectedShiftType}
                   setSelectedShiftCategory={setSelectedShiftCategory}
-                  intakeDescription={intakeDescription}
                   repeatEnabled={repeatEnabled}
                   repeatDays={repeatDays}
                   repeatEndCondition={repeatEndCondition}
@@ -1256,6 +1258,35 @@ const AddUserShift = ({ mode = "add", user }) => {
                         <ErrorMessage name="primaryUser" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
+                      {/* Select Secondary User (Staff) */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Secondary User (Staff) <span style={{ fontWeight: 400, color: "#9ca3af" }}>(Optional)</span></label>
+                        <Field as="select" name="secondaryUser" className={selectCls(touched.secondaryUser && errors.secondaryUser, !values.secondaryUser)}>
+                          <option value="">Select secondary staff (optional)</option>
+                          {users.map((item) => (
+                            <option key={item.id} value={item.id}>{item.name}</option>
+                          ))}
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="secondaryUser" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
+                      {/* Vehicle Type */}
+                      <div className="relative">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Vehicle Type</label>
+                        <Field as="select" name="vehicleType" className={selectCls(touched.vehicleType && errors.vehicleType, !values.vehicleType)}>
+                          <option value="">Select vehicle type</option>
+                          <option value="Personal">Personal</option>
+                          <option value="Agency">Agency</option>
+                        </Field>
+                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                        <ErrorMessage name="vehicleType" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
+
                       {/* Start Time */}
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Start Time</label>
@@ -1298,18 +1329,40 @@ const AddUserShift = ({ mode = "add", user }) => {
                           className={`${inputCls(touched.description && errors.description)} resize-none`} />
                         <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
+
+                      {/* Service Dates Summary */}
+                      <div className="col-span-2">
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Dates</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            readOnly
+                            value={values.shiftDates?.length > 0 ? `${values.shiftDates.length} date(s) selected: ${values.shiftDates.map(d => (d instanceof Date ? d : new Date(d)).toLocaleDateString("en-US", { month: "short", day: "numeric" })).join(", ")}` : ""}
+                            placeholder="(select multiple service dates)"
+                            className={inputCls(touched.shiftDates && errors.shiftDates)}
+                            onClick={() => {
+                              document.getElementById("calendar-section")?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }}
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                            <FaRegCalendarAlt className="text-gray-400 w-4 h-4" />
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">Click the field to scroll to the calendar and select dates</p>
+                        <ErrorMessage name="shiftDates" component="div" className="text-red-500 text-xs mt-1" />
+                      </div>
                     </div>
                   </div>
 
                 </div>
 
                 {/* ── Calendar Card ── */}
-                <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                <div id="calendar-section" className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   {/* Calendar Header */}
                   <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
                     <div className="flex items-center gap-2">
                       <FaRegCalendarAlt className="w-4 h-4 text-gray-400" />
-                      <span className="font-semibold text-gray-900" style={{ fontSize: 14 }}>Select Shift Dates</span>
+                      <span className="font-semibold text-gray-900" style={{ fontSize: 14 }}>Service Dates</span>
                     </div>
                     <span style={{ fontSize: 12, color: "#9ca3af" }}>Click a date to select · Click again to deselect</span>
                   </div>
@@ -1755,12 +1808,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                     <button type="submit"
                       className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
                       style={{ backgroundColor: "#145228" }}>
-                      {mode !== "update" && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                      )}
+
                       {mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`}
                     </button>
                   </div>
@@ -1804,7 +1852,6 @@ const FormikSync = ({
   setSelectedPrimaryUser,
   setSelectedShiftType,
   setSelectedShiftCategory,
-  intakeDescription,
   repeatEnabled,
   repeatDays,
   repeatEndCondition,
@@ -1833,12 +1880,6 @@ const FormikSync = ({
     );
     setSelectedShiftCategory(shiftCategoryData || null);
   }, [values.client, values.primaryUser, values.shiftType, values.shiftCategory, clients, users, shiftTypes, shiftCategories, setSelectedClient, setSelectedPrimaryUser, setSelectedShiftType, setSelectedShiftCategory]);
-
-  useEffect(() => {
-    if (intakeDescription && !values.description) {
-      setFieldValue("description", intakeDescription);
-    }
-  }, [intakeDescription, values.description, setFieldValue]);
 
   useEffect(() => {
     if (repeatEnabled && repeatDays.length > 0) {
