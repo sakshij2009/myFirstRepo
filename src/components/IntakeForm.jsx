@@ -24,7 +24,7 @@ import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { EditableProvider } from "./EditableContext";
-import { getEdmontonToday, formatEdmontonISO } from "../utils/dateHelpers";
+import { getEdmontonToday, formatEdmontonISO, parseLocalSafe, formatLocalISO } from "../utils/dateHelpers";
 
 //
 // ---------- helpers ----------
@@ -58,9 +58,9 @@ const convertToISO = (d) => {
 };
 
 
-// format JS Date → YYYY-MM-DD in Edmonton local time
+// format JS Date → YYYY-MM-DD in browser local time (prevents timezone shifts)
 const formatDateLocal = (date) => {
-  return formatEdmontonISO(date);
+  return formatLocalISO(date);
 };
 
 // age in years from YYYY-MM-DD
@@ -153,9 +153,11 @@ const createEmptyInitialValues = () => ({
   familyName: "",
 
   // Billing
-  billingInfo: {
-    invoiceEmail: "",
-  },
+  billingInfoList: [
+    {
+      invoiceEmail: "",
+    },
+  ],
 
   // Parent / Medical / Transport per client
   parentInfoList: [
@@ -180,6 +182,7 @@ const createEmptyInitialValues = () => ({
       mobilityInfo: "",
       communicationAid: "",
       communicationInfo: "",
+      marDocs: [],
     },
   ],
 
@@ -214,10 +217,18 @@ const createEmptyInitialValues = () => ({
     signature: "",
   },
 
-   caseworkerName: "",
+  caseworkerName: "",
   caseworkerAgencyName: "",
   caseworkerPhone: "",
   caseworkerEmail: "",
+  caseworkers: [
+    {
+      name: "",
+      agency: "",
+      phone: "",
+      email: "",
+    },
+  ],
 
   // Case/Intake worker flat fields (for your two sections)
   intakeworkerName: "",
@@ -386,6 +397,16 @@ const mapOldIntakeToInitialValues = (raw) => {
     caseworkerAgencyName: raw.caseWorkerAgencyName || "",
     caseworkerPhone: raw.caseWorkerPhone || "",
     caseworkerEmail: raw.caseWorkerEmail || "",
+    caseworkers: Array.isArray(raw.caseworkers) && raw.caseworkers.length > 0 
+      ? raw.caseworkers 
+      : [
+          {
+            name: raw.caseWorkerName || "",
+            agency: raw.caseWorkerAgencyName || "",
+            phone: raw.caseWorkerPhone || "",
+            email: raw.caseWorkerEmail || "",
+          },
+        ],
     uploadDocs: [],
     uploadMedicalDocs: [],
     status: raw.status || "Submitted",
@@ -439,9 +460,13 @@ const mapDataToInitialValues = (data) => {
           : [],
       },
       clients,
-      billingInfo: {
-        invoiceEmail: data.billingInfo?.invoiceEmail || "",
-      },
+      billingInfoList: Array.isArray(data.billingInfoList) && data.billingInfoList.length > 0
+        ? data.billingInfoList
+        : [
+            {
+              invoiceEmail: data.billingInfo?.invoiceEmail || "",
+            },
+          ],
       parentInfoList: clients.map((c) =>
         data.parentInfoList?.find(
           (p) => p.clientName === c.fullName
@@ -467,6 +492,7 @@ const mapDataToInitialValues = (data) => {
           mobilityInfo: "",
           communicationAid: "",
           communicationInfo: "",
+          marDocs: [],
         }
       ),
       transportationInfoList: clients.map((c) =>
@@ -512,6 +538,16 @@ const mapDataToInitialValues = (data) => {
       caseworkerAgencyName: data.caseworkerAgencyName || "",
       caseworkerPhone: data.caseworkerPhone || "",
       caseworkerEmail: data.caseworkerEmail || "",
+      caseworkers: Array.isArray(data.caseworkers) && data.caseworkers.length > 0
+        ? data.caseworkers
+        : [
+            {
+              name: data.caseworkerName || "",
+              agency: data.caseworkerAgencyName || "",
+              phone: data.caseworkerPhone || "",
+              email: data.caseworkerEmail || "",
+            },
+          ],
       uploadDocs: data.uploadedDocs || [],
       status: data.status,
       familyName: data.familyName || "",
@@ -540,6 +576,8 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: pro
   const [activeClientIdx, setActiveClientIdx] = useState(0);
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
+  const marInputRef = useRef(null);
+  const [activeMarIdx, setActiveMarIdx] = useState(null);
   const fileInputRefMedical = useRef(null);
 
 const [showServiceDropdown, setShowServiceDropdown] = useState(false);
@@ -1110,6 +1148,26 @@ const handleSubmit = async (values, { resetForm }) => {
         };
       })
     );
+    
+    // ================== MAR DOCUMENTS ==================
+    const medicalInfoWithDocs = await Promise.all(
+      (values.medicalInfoList || []).map(async (med) => {
+        const uploadedMarURLs = [];
+        for (const doc of med.marDocs || []) {
+          if (typeof doc === "string") {
+            uploadedMarURLs.push(doc);
+            continue;
+          }
+          const marRef = ref(storage, `medical_docs/${Date.now()}_${med.clientName || 'unknown'}_${doc.name}`);
+          await uploadBytes(marRef, doc);
+          uploadedMarURLs.push(await getDownloadURL(marRef));
+        }
+        return {
+          ...med,
+          marDocs: uploadedMarURLs,
+        };
+      })
+    );
 
     // ================== UPLOAD DOCUMENTS ==================
     const uploadedDocURLs = [];
@@ -1219,9 +1277,13 @@ const handleSubmit = async (values, { resetForm }) => {
 
       clients: clientsObj,
 
-      billingInfo: values.billingInfo,
+      billingInfoList: values.billingInfoList || [],
+      // For backward compatibility, save first invoice email to billingInfo.invoiceEmail
+      billingInfo: {
+        invoiceEmail: values.billingInfoList?.[0]?.invoiceEmail || "",
+      },
       parentInfoList: values.parentInfoList || [],
-      medicalInfoList: values.medicalInfoList || [],
+      medicalInfoList: medicalInfoWithDocs || [],
       transportationInfoList: values.transportationInfoList || [],
       supervisedVisitations: values.supervisedVisitations || [],
 
@@ -1237,6 +1299,13 @@ const handleSubmit = async (values, { resetForm }) => {
       agencyName: values.agencyName || "",
       intakeworkerPhone: values.intakeworkerPhone || "",
       intakeworkerEmail: values.intakeworkerEmail || "",
+
+      // Case worker fields (both flat for compat and array for multiple)
+      caseworkerName: values.caseworkers?.[0]?.name || values.caseworkerName || "",
+      caseworkerAgencyName: values.caseworkers?.[0]?.agency || values.caseworkerAgencyName || "",
+      caseworkerPhone: values.caseworkers?.[0]?.phone || values.caseworkerPhone || "",
+      caseworkerEmail: values.caseworkers?.[0]?.email || values.caseworkerEmail || "",
+      caseworkers: values.caseworkers || [],
 
       familyName: values.familyName || "",
       isCaseWorker: !!isCaseWorker,
@@ -1456,6 +1525,92 @@ const handleSubmit = async (values, { resetForm }) => {
                   {/* ── LEFT: Main content ── */}
                   <div className="flex-1 min-w-0 flex flex-col gap-6">
 
+                {/* ── Case Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <FieldArray name="caseworkers">
+                      {({ push, remove }) => (
+                        <div className="flex flex-col gap-8">
+                          <div className="flex items-center justify-between mb-2">
+                            <SectionTitle title="Case Worker Information" />
+                            <button
+                              type="button"
+                              onClick={() => push({ name: "", agency: "", phone: "", email: "" })}
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                              style={{ backgroundColor: "#145228" }}
+                            >
+                              + Add Another Case Worker
+                            </button>
+                          </div>
+
+                          {values.caseworkers.map((_, index) => (
+                            <div key={index} className={index > 0 ? "pt-8 border-t border-dashed border-gray-200" : ""}>
+                              {index > 0 && (
+                                <div className="flex justify-between items-center mb-4">
+                                  <h4 className="font-bold text-gray-700 text-sm">Additional Case Worker</h4>
+                                  <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700 transition-colors">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                                  <Field name={`caseworkers.${index}.name`} type="text" placeholder="Case worker name" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                                  <Field name={`caseworkers.${index}.agency`} type="text" placeholder="Agency or organisation name" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                                  <Field name={`caseworkers.${index}.phone`} type="text" placeholder="Phone number" className={iCls(false)} />
+                                </div>
+                                <div>
+                                  <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                                  <Field name={`caseworkers.${index}.email`} type="text" placeholder="Case worker email" className={iCls(false)} />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </FieldArray>
+                  </div>
+                )}
+
+                {/* ── Intake Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-6">
+                      <SectionTitle title="Intake Worker Information" />
+                      <button type="button" onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        + Add Intake Worker
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-5">
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                   {/* Status (update mode) */}
                   {mode === "update" && (
                     <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -1480,7 +1635,7 @@ const handleSubmit = async (values, { resetForm }) => {
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Family Name <span className="text-red-500">*</span></label>
                     <Field name="familyName" type="text" placeholder="Enter family / client name"
                       className="w-full px-3 py-2.5 rounded-lg border text-sm border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
-                    <p className="text-xs text-gray-400 mt-1">All siblings added below will be grouped under this name.</p>
+                    <p className="text-xs font-bold text-gray-500 mt-1">All siblings added below will be grouped under this name.</p>
                   </div>
                 </div>
 
@@ -1549,7 +1704,7 @@ const handleSubmit = async (values, { resetForm }) => {
                         } ${(values.services?.serviceDates?.length ?? 0) > 0 ? "text-gray-700" : "text-gray-400"}`}>
                         {(values.services?.serviceDates?.length ?? 0) > 0
                           ? values.services.serviceDates.join(", ")
-                          : "Select service dates"}
+                          : "Select multiple service dates"}
                       </button>
                       {touched.services?.serviceDates && errors.services?.serviceDates && (
                         <div className="text-red-500 text-xs mt-1">{errors.services.serviceDates}</div>
@@ -1560,11 +1715,7 @@ const handleSubmit = async (values, { resetForm }) => {
                             <h2 className="font-bold text-gray-900 mb-4" style={{ fontSize: 15 }}>Select Service Dates</h2>
                             <DayPicker
                               mode="multiple"
-                              selected={(values.services?.serviceDates || []).map((str) => {
-                                const [year, month, day] = (str || "").split("-").map(Number);
-                                if (!year || !month || !day) return new Date();
-                                return new Date(year, month - 1, day);
-                              })}
+                              selected={(values.services?.serviceDates || []).map((str) => parseLocalSafe(str))}
                               onSelect={(dates) => setFieldValue("services.serviceDates", (dates || []).map(formatDateLocal))}
                               className="custom-daypicker-green"
                             />
@@ -1586,17 +1737,19 @@ const handleSubmit = async (values, { resetForm }) => {
                       )}
                     </div>
 
-                    {/* Start Time */}
+                    {/* Start Time
                     <div>
                       <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Start Time</label>
                       <Field name="services.serviceStartTime" type="time" className={iCls(false)} />
                     </div>
+                    */}
 
-                    {/* End Time */}
+                    {/* End Time
                     <div>
                       <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service End Time</label>
                       <Field name="services.serviceEndTime" type="time" className={iCls(false)} />
                     </div>
+                    */}
 
                     {/* Safety Plan */}
                     <div className="col-span-2">
@@ -1816,63 +1969,7 @@ const handleSubmit = async (values, { resetForm }) => {
                   </FieldArray>
                 </div>
 
-                {/* ── Case Worker Info ── */}
-                {isCaseWorker && (
-                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <SectionTitle title="Case Worker Information" />
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
-                        <Field name="caseworkerName" type="text" placeholder="Case worker name" className={iCls(touched.caseworkerName && errors.caseworkerName)} />
-                        {touched.caseworkerName && errors.caseworkerName && <div className="text-red-500 text-xs mt-1">{errors.caseworkerName}</div>}
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
-                        <Field name="caseworkerAgencyName" type="text" placeholder="Agency or organisation name" className={iCls(touched.caseworkerAgencyName && errors.caseworkerAgencyName)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                        <Field name="caseworkerPhone" type="text" placeholder="Phone number" className={iCls(touched.caseworkerPhone && errors.caseworkerPhone)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                        <Field name="caseworkerEmail" type="text" placeholder="Case worker email" className={iCls(touched.caseworkerEmail && errors.caseworkerEmail)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {/* ── Intake Worker Info ── */}
-                {isCaseWorker && (
-                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <div className="flex items-center justify-between mb-6">
-                      <SectionTitle title="Intake Worker Information" />
-                      <button type="button" onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                        style={{ backgroundColor: "#145228" }}>
-                        + Add Intake Worker
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-5">
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
-                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
-                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* ── Parent Info Card ── */}
                 <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -1939,17 +2036,43 @@ const handleSubmit = async (values, { resetForm }) => {
 
                 {/* ── Billing Card ── */}
                 <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                  <SectionTitle title="Billing Info" />
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Invoice Email</label>
-                      <Field name="billingInfo.invoiceEmail" type="email" placeholder="Enter invoice email"
-                        className={iCls(touched.billingInfo?.invoiceEmail && errors.billingInfo?.invoiceEmail)} />
-                      {touched.billingInfo?.invoiceEmail && errors.billingInfo?.invoiceEmail && (
-                        <div className="text-red-500 text-xs mt-1">{errors.billingInfo.invoiceEmail}</div>
-                      )}
-                    </div>
-                  </div>
+                  <FieldArray name="billingInfoList">
+                    {({ push, remove }) => (
+                      <div className="flex flex-col gap-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <SectionTitle title="Billing Info" />
+                          <button
+                            type="button"
+                            onClick={() => push({ invoiceEmail: "" })}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                            style={{ backgroundColor: "#145228" }}
+                          >
+                            + Add Another Billing Info
+                          </button>
+                        </div>
+
+                        {values.billingInfoList.map((_, index) => (
+                          <div key={index} className={index > 0 ? "pt-6 border-t border-dashed border-gray-200" : ""}>
+                            {index > 0 && (
+                              <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-bold text-gray-700 text-sm">Additional Billing Info</h4>
+                                <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700 transition-colors">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-6">
+                              <div>
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Invoice Email</label>
+                                <Field name={`billingInfoList.${index}.invoiceEmail`} type="email" placeholder="Enter invoice email"
+                                  className={iCls(false)} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </FieldArray>
                 </div>
 
                 {/* ── Upload Documents Card ── */}
@@ -2056,9 +2179,56 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <Field as="textarea" name={`medicalInfoList.${index}.communicationInfo`} placeholder="Enter communication details" rows={2}
                                   className={`${iCls(false)} resize-none`} />
                               </div>
+
+                              {/* MAR Sheet Upload */}
+                              <div className="col-span-3">
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>MAR (Medical Administration Record) Sheet</label>
+                                <div className="flex flex-col gap-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${values.medicalInfoList[index].marDocs?.length > 0 ? "text-gray-700" : "text-gray-400"}`} style={{ borderColor: "#e5e7eb", background: "white" }}>
+                                      {values.medicalInfoList[index].marDocs?.length > 0 ? `${values.medicalInfoList[index].marDocs.length} MAR file(s) selected` : "No MAR sheet selected"}
+                                    </div>
+                                    <button type="button" 
+                                      onClick={() => {
+                                        setActiveMarIdx(index);
+                                        marInputRef.current?.click();
+                                      }}
+                                      className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
+                                      style={{ backgroundColor: "#145228" }}>
+                                      Browse File
+                                    </button>
+                                  </div>
+                                  
+                                  {values.medicalInfoList[index].marDocs?.length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {values.medicalInfoList[index].marDocs.map((file, fIdx) => (
+                                        <div key={fIdx} className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg text-xs text-gray-600" style={{ borderColor: "#e5e7eb" }}>
+                                          <span className="truncate max-w-[150px]">{typeof file === "string" ? "Stored File" : file.name}</span>
+                                          <button type="button" onClick={() => {
+                                            const updated = [...values.medicalInfoList[index].marDocs];
+                                            updated.splice(fIdx, 1);
+                                            setFieldValue(`medicalInfoList.${index}.marDocs`, updated);
+                                          }} className="text-red-500 hover:text-red-700">
+                                            <X className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         ))}
+                        
+                        <input type="file" ref={marInputRef} className="hidden" multiple
+                          onChange={(e) => {
+                            if (activeMarIdx === null) return;
+                            const files = Array.from(e.target.files || []);
+                            const current = values.medicalInfoList[activeMarIdx].marDocs || [];
+                            setFieldValue(`medicalInfoList.${activeMarIdx}.marDocs`, [...current, ...files]);
+                            e.target.value = ""; // reset for same file selection
+                          }} />
                       </div>
                     )}
                   </FieldArray>
