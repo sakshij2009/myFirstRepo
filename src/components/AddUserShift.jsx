@@ -721,14 +721,14 @@ const AddUserShift = ({ mode = "add", user }) => {
             clientDetails: selectedClient,
             clientId: selectedClient?.id || values.client || "",
             clientName: selectedClient?.name || "",
-            // Primary Staff
-            userId: primaryStaff?.id || values.primaryUser || "",
+            // Primary Staff — userId MUST be the custom userId field (mobile queries by this)
+            userId: primaryStaff?.userId ?? primaryStaff?.id ?? values.primaryUser ?? "",
             userName: primaryStaff?.name || "",
             name: primaryStaff?.name || "",
             primaryUserId: primaryStaff?.id || "",
             primaryUserName: primaryStaff?.name || "",
-            // Secondary Staff
-            secondaryUserId: secondaryStaff?.id || "",
+            // Secondary Staff — must also use the custom userId field so mobile app can match
+            secondaryUserId: secondaryStaff?.userId ?? secondaryStaff?.id ?? "",
             secondaryUserName: secondaryStaff?.name || "",
             vehicleType: values.vehicleType || "",
             agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
@@ -844,7 +844,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           jobname:       selectedClient?.name     || "",    // Flutter list title
           clientDetails: selectedClient           || null,
 
-          // ── Staff — userId MUST be numeric (Flutter queries by this) ──
+          // ── Staff — userId MUST be the custom userId field (Flutter queries by this) ──
           userId:        primaryStaff?.userId     ?? primaryStaff?.id ?? "",
           userName:      primaryStaff?.name       || "",
           name:          primaryStaff?.name       || "",
@@ -853,8 +853,8 @@ const AddUserShift = ({ mode = "add", user }) => {
           email:         primaryStaff?.email      || "",
           primaryUserId: primaryStaff?.id         || "",
           primaryUserName: primaryStaff?.name     || "",
-          // Secondary Staff
-          secondaryUserId: secondaryStaff?.id     || "",
+          // Secondary Staff — must also use the custom userId field so mobile app can match
+          secondaryUserId: secondaryStaff?.userId ?? secondaryStaff?.id ?? "",
           secondaryUserName: secondaryStaff?.name || "",
           vehicleType: values.vehicleType         || "",
 

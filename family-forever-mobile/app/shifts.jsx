@@ -349,17 +349,23 @@ export default function Shifts() {
   useEffect(() => {
     if (!user) return;
     const userId = user?.userId;
+    const userName = user?.name;
 
-    // Query primary and secondary assignments in parallel, then merge
     let primaryShifts = [];
-    let secondaryShifts = [];
+    let secondaryByIdShifts = [];
+    let secondaryByNameShifts = [];
     let primaryLoaded = false;
-    let secondaryLoaded = false;
+    let secondaryByIdLoaded = false;
+    let secondaryByNameLoaded = false;
 
     const merge = () => {
-      if (!primaryLoaded || !secondaryLoaded) return;
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByNameLoaded) return;
       const seen = new Set();
-      const combined = [...primaryShifts, ...secondaryShifts].filter(s => {
+      const combined = [
+        ...primaryShifts,
+        ...secondaryByIdShifts,
+        ...secondaryByNameShifts,
+      ].filter(s => {
         if (seen.has(s.id)) return false;
         seen.add(s.id);
         const cat = s?.category || s?.categoryName || s?.serviceType;
@@ -371,6 +377,7 @@ export default function Shifts() {
 
     const baseConstraints = [orderBy("startDate", "desc"), limit(150)];
 
+    // Primary user query
     const qPrimary = userId
       ? query(collection(db, "shifts"), where("userId", "==", userId), ...baseConstraints)
       : query(collection(db, "shifts"), ...baseConstraints);
@@ -379,26 +386,43 @@ export default function Shifts() {
       primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       primaryLoaded = true;
       merge();
-    });
+    }, () => { primaryLoaded = true; merge(); });
 
-    // Secondary user query (only if userId available)
-    let unsubSecondary = () => {};
+    // Secondary query by userId (works for shifts saved after the fix)
+    let unsubSecondaryById = () => {};
     if (userId) {
-      const qSecondary = query(
+      const qSecondaryById = query(
         collection(db, "shifts"),
         where("secondaryUserId", "==", userId),
         ...baseConstraints
       );
-      unsubSecondary = onSnapshot(qSecondary, (snap) => {
-        secondaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        secondaryLoaded = true;
+      unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
+        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdLoaded = true;
         merge();
-      }, () => { secondaryLoaded = true; merge(); });
+      }, () => { secondaryByIdLoaded = true; merge(); });
     } else {
-      secondaryLoaded = true;
+      secondaryByIdLoaded = true;
     }
 
-    return () => { unsubPrimary(); unsubSecondary(); };
+    // Secondary fallback query by name (catches older shifts or shifts saved before the fix)
+    let unsubSecondaryByName = () => {};
+    if (userName) {
+      const qSecondaryByName = query(
+        collection(db, "shifts"),
+        where("secondaryUserName", "==", userName),
+        ...baseConstraints
+      );
+      unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
+        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameLoaded = true;
+        merge();
+      }, () => { secondaryByNameLoaded = true; merge(); });
+    } else {
+      secondaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByName(); };
   }, [user]);
 
   // Live tab filtering
