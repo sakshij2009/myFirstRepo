@@ -14,9 +14,11 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   collection,
   query,
+  where,
+  orderBy,
+  limit,
   onSnapshot,
   getDocs,
-  where,
   updateDoc,
   doc,
   addDoc,
@@ -202,19 +204,53 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const userShifts = data.filter((s) => {
-        const nameMatch = s?.name?.toLowerCase() === user?.name?.toLowerCase();
-        const userMatch = s?.userId === user?.userId || s?.staffId === user?.userId;
+    const userId = user?.userId;
+    const baseConstraints = [orderBy("startDate", "desc"), limit(100)];
+
+    let primaryShifts = [];
+    let secondaryShifts = [];
+    let primaryLoaded = false;
+    let secondaryLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryLoaded) return;
+      const seen = new Set();
+      const combined = [...primaryShifts, ...secondaryShifts].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
         const category = s?.category || s?.categoryName || s?.serviceType;
-        const isValidCategory = !category || ALLOWED_CATEGORIES.includes(category);
-        return (nameMatch || userMatch) && isValidCategory;
+        return !category || ALLOWED_CATEGORIES.includes(category);
       });
-      setShifts(userShifts);
+      setShifts(combined);
+    };
+
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...baseConstraints)
+      : query(collection(db, "shifts"), ...baseConstraints);
+
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
     });
-    return () => unsub();
+
+    let unsubSecondary = () => {};
+    if (userId) {
+      const qSecondary = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userId),
+        ...baseConstraints
+      );
+      unsubSecondary = onSnapshot(qSecondary, (snap) => {
+        secondaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryLoaded = true;
+        merge();
+      }, () => { secondaryLoaded = true; merge(); });
+    } else {
+      secondaryLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondary(); };
   }, [user]);
 
   const todayKey = formatEdmontonISO(new Date());

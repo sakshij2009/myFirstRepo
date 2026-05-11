@@ -2,12 +2,19 @@ import html2pdf from "html2pdf.js";
 
 export const formatTime = (value) => {
   if (!value) return "N/A";
+  const s = String(value).trim();
 
-  return new Date(value).toLocaleTimeString("en-CA", {
+  // Already a formatted "HH:MM AM/PM" string (stored by mobile app) — return as-is
+  if (/AM|PM/i.test(s) && s.match(/^\d{1,2}:\d{2}/)) return s.toUpperCase();
+
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s || "N/A";
+
+  return d.toLocaleTimeString("en-CA", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/Edmonton"
+    timeZone: "America/Edmonton",
   });
 };
 

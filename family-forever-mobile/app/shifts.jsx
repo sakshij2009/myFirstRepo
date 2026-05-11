@@ -15,6 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   collection,
   query,
+  where,
+  orderBy,
+  limit,
   onSnapshot,
   doc,
   updateDoc,
@@ -345,18 +348,57 @@ export default function Shifts() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const mine = data.filter(s => {
-        const isUser = s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase();
+    const userId = user?.userId;
+
+    // Query primary and secondary assignments in parallel, then merge
+    let primaryShifts = [];
+    let secondaryShifts = [];
+    let primaryLoaded = false;
+    let secondaryLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryLoaded) return;
+      const seen = new Set();
+      const combined = [...primaryShifts, ...secondaryShifts].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
         const cat = s?.category || s?.categoryName || s?.serviceType;
-        return isUser && (!cat || ALLOWED_CATEGORIES.includes(cat));
+        return !cat || ALLOWED_CATEGORIES.includes(cat);
       });
-      setShifts(mine);
+      setShifts(combined);
       setLoading(false);
+    };
+
+    const baseConstraints = [orderBy("startDate", "desc"), limit(150)];
+
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...baseConstraints)
+      : query(collection(db, "shifts"), ...baseConstraints);
+
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
     });
-    return () => unsub();
+
+    // Secondary user query (only if userId available)
+    let unsubSecondary = () => {};
+    if (userId) {
+      const qSecondary = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userId),
+        ...baseConstraints
+      );
+      unsubSecondary = onSnapshot(qSecondary, (snap) => {
+        secondaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryLoaded = true;
+        merge();
+      }, () => { secondaryLoaded = true; merge(); });
+    } else {
+      secondaryLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondary(); };
   }, [user]);
 
   // Live tab filtering
