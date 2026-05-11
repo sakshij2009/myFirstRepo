@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { collection, query, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { safeString } from "../src/utils/date";
 
@@ -43,18 +43,70 @@ export default function Routes() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const transportShifts = data.filter(
-        (s) =>
-          (s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase()) &&
-          (s.serviceType === "Transportation" || s.category === "Transportation")
-      );
-      setShifts(transportShifts);
+    const userId = user?.userId;
+    const userName = user?.name;
+    const baseConstraints = [orderBy("startDate", "desc"), limit(100)];
+    const isTransport = (s) =>
+      s.serviceType === "Transportation" || s.category === "Transportation" ||
+      s.categoryName === "Transportation";
+
+    let primaryShifts = [];
+    let secondaryByIdShifts = [];
+    let secondaryByNameShifts = [];
+    let primaryLoaded = false;
+    let secondaryByIdLoaded = false;
+    let secondaryByNameLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByNameLoaded) return;
+      const seen = new Set();
+      const combined = [
+        ...primaryShifts,
+        ...secondaryByIdShifts,
+        ...secondaryByNameShifts,
+      ].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return isTransport(s);
+      });
+      setShifts(combined);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...baseConstraints)
+      : query(collection(db, "shifts"), ...baseConstraints);
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
+    }, () => { primaryLoaded = true; merge(); });
+
+    let unsubSecondaryById = () => {};
+    if (userId) {
+      const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...baseConstraints);
+      unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
+        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdLoaded = true;
+        merge();
+      }, () => { secondaryByIdLoaded = true; merge(); });
+    } else {
+      secondaryByIdLoaded = true;
+    }
+
+    let unsubSecondaryByName = () => {};
+    if (userName) {
+      const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...baseConstraints);
+      unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
+        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameLoaded = true;
+        merge();
+      }, () => { secondaryByNameLoaded = true; merge(); });
+    } else {
+      secondaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByName(); };
   }, [user]);
 
   const filteredShifts = shifts.filter((s) => {
