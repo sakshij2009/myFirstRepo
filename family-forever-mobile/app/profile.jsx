@@ -63,7 +63,8 @@ export default function Profile() {
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const mine = data.filter(s =>
-        s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase()
+        s?.userId === user?.userId || s?.staffId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase() ||
+        s?.secondaryUserId === user?.userId || s?.secondaryUserName?.toLowerCase() === user?.name?.toLowerCase() || s?.secondaryUser?.toLowerCase() === user?.name?.toLowerCase()
       );
       setShifts(mine);
     });

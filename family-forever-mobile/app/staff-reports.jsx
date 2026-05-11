@@ -195,46 +195,20 @@ export default function StaffReports() {
 
   const fetchShifts = useCallback(async () => {
     try {
-      let q;
-      const staffId = user?.uid || user?.id || user?.staffId;
-      const staffEmail = user?.email;
-
-      if (staffId) {
-        // Try staffId field
-        q = query(
-          collection(db, "shifts"),
-          where("staffId", "==", staffId)
-        );
-        let snap = await getDocs(q);
-        if (!snap.empty) {
-          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setAllShifts(docs);
-          return;
-        }
-        // Try userId field
-        q = query(collection(db, "shifts"), where("userId", "==", staffId));
-        snap = await getDocs(q);
-        if (!snap.empty) {
-          setAllShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          return;
-        }
-      }
-
-      if (staffEmail) {
-        q = query(
-          collection(db, "shifts"),
-          where("staffEmail", "==", staffEmail)
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          setAllShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          return;
-        }
-      }
-
-      // Fallback: fetch all and let user see their own
       const snap = await getDocs(collection(db, "shifts"));
-      setAllShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const allData = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      
+      const staffId = user?.uid || user?.id || user?.staffId || user?.userId;
+      const staffEmail = user?.email?.toLowerCase();
+      const staffName = user?.name?.toLowerCase();
+
+      const myShifts = allData.filter(s => {
+        const isPrimary = s?.staffId === staffId || s?.userId === staffId || s?.staffEmail?.toLowerCase() === staffEmail || s?.name?.toLowerCase() === staffName;
+        const isSecondary = s?.secondaryUserId === staffId || s?.secondaryUserName?.toLowerCase() === staffName || s?.secondaryUser?.toLowerCase() === staffName;
+        return isPrimary || isSecondary;
+      });
+      
+      setAllShifts(myShifts);
     } catch (e) {
       console.log("Error fetching shifts:", e);
     } finally {
