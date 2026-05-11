@@ -9,6 +9,7 @@ import CriticalIncidentForm from "./CriticalIncidentForm";
 import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
 import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
+import ServicePlanForm from "./ServicePlanForm";
 import {
   ArrowLeft, Calendar, Clock, User, MapPin, Phone, Mail,
   FileText, Download, CheckCircle, AlertCircle, Edit,
@@ -692,24 +693,47 @@ const ShiftReport = ({ user }) => {
   const initials = normalized.clientName.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?";
   const staffInitials = (primaryStaff?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
-  // Parse clockIn/Out — handles ISO timestamps and HH:mm strings
+  // Parse clockIn/Out — handles ISO timestamps, "HH:MM AM/PM", and "HH:mm" strings
   const parseClockTime = (val) => {
     if (!val) return null;
+    if (typeof val !== "string") return null;
+    const s = val.trim();
     // ISO timestamp
-    if (val.includes("T") || val.includes("Z")) {
-      const d = new Date(val);
+    if (s.includes("T") || s.includes("Z")) {
+      const d = new Date(s);
       return isNaN(d) ? null : d;
     }
-    // HH:mm string
-    const [h, m] = val.split(":").map(Number);
+    // 12-hour format: "09:30 AM" or "9:30 PM" (stored by mobile app)
+    const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (ampmMatch) {
+      let h = parseInt(ampmMatch[1], 10);
+      const m = parseInt(ampmMatch[2], 10);
+      const isPM = ampmMatch[3].toUpperCase() === "PM";
+      if (isPM && h !== 12) h += 12;
+      if (!isPM && h === 12) h = 0;
+      const d = new Date(); d.setHours(h, m, 0, 0);
+      return d;
+    }
+    // 24-hour HH:mm string
+    const [h, m] = s.split(":").map(Number);
     if (isNaN(h)) return null;
     const d = new Date(); d.setHours(h, m || 0, 0, 0);
     return d;
   };
 
   const formatClockDisplay = (val) => {
+    if (!val) return "—";
+    // Already a formatted "HH:MM AM/PM" string — return as-is
+    if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
     const d = parseClockTime(val);
     if (!d) return "—";
+    // ISO timestamps: display in Edmonton timezone
+    if (typeof val === "string" && (val.includes("T") || val.includes("Z"))) {
+      return d.toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", hour12: true,
+        timeZone: "America/Edmonton",
+      });
+    }
     return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
@@ -749,6 +773,7 @@ const ShiftReport = ({ user }) => {
     { key: "reports", label: "Reports" },
     ...(hasMedication ? [{ key: "medications", label: "Medications" }] : []),
     ...(hasTransportation ? [{ key: "transportation", label: "Transportation" }] : []),
+    { key: "serviceplan", label: "Service Plan" },
   ];
 
   const actBg = { success: "#f0fdf4", info: "#eff6ff", warning: "#fef3c7" };
@@ -1415,6 +1440,13 @@ const ShiftReport = ({ user }) => {
                 </div>
               );
             })()}
+
+            {/* ── Service Plan Tab ── */}
+            {activeTab === "serviceplan" && (
+              <div className="px-5 py-4">
+                <ServicePlanForm shiftId={shiftId} shiftData={shiftData} />
+              </div>
+            )}
           </div>
 
           {/* ── Shift History Table ── */}
@@ -1450,8 +1482,8 @@ const ShiftReport = ({ user }) => {
                         <td className="px-4 py-2.5"><p className="font-semibold" style={{ fontSize: 12, color: "#111827" }}>{row.date?.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) || "—"}</p></td>
                         <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{row.staffName}</span></td>
                         <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full font-semibold" style={{ fontSize: 10, background: "#f0fdf4", color: "#15803d" }}>{row.service}</span></td>
-                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{row.clockIn || "—"}</span></td>
-                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{row.clockOut || "—"}</span></td>
+                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{formatClockDisplay(row.clockIn)}</span></td>
+                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{formatClockDisplay(row.clockOut)}</span></td>
                         <td className="px-4 py-2.5">
                           {row.shiftReport
                             ? <span className="inline-flex items-center gap-1" style={{ fontSize: 11, color: "#15803d" }}><CheckCircle size={11} /> Filed</span>

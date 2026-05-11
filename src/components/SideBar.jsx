@@ -5,7 +5,7 @@ import {
   BarChart3, Settings, ChevronLeft, ChevronRight, Inbox, UserCheck, ClipboardCheck,
   Receipt, Wallet, Landmark, LogOut,
 } from "lucide-react";
-import { collection, getCountFromServer } from "firebase/firestore";
+import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 
 const SideBar = ({ user, onLogout, onWidthChange }) => {
@@ -34,19 +34,17 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [clients, shifts, intakeUsersSnap] = await Promise.all([
+        const [clients, shifts, intakeWorkers, privateFamilies] = await Promise.all([
           getCountFromServer(collection(db, "clients")),
           getCountFromServer(collection(db, "shifts")),
-          getDocs(collection(db, "intakeUsers")),
+          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Intake Worker"))),
+          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Parent"))),
         ]);
-        
-        const intakeUsers = intakeUsersSnap.docs.map(doc => doc.data());
-        
         setBadges({
           clients: clients.data().count || null,
           shifts: shifts.data().count || null,
-          intakeWorkers: intakeUsers.filter(u => u.role?.toLowerCase() === "intake worker").length || null,
-          privateFamilies: intakeUsers.filter(u => u.role?.toLowerCase() === "parent").length || null,
+          intakeWorkers: intakeWorkers.data().count || null,
+          privateFamilies: privateFamilies.data().count || null,
         });
       } catch (e) { /* silently ignore */ }
     };
@@ -61,27 +59,38 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
         { label: "Clients",    path: "/admin-dashboard/clients",         icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.clients },
         { label: "Staff",      path: "/admin-dashboard/users",           icon: <UserPlus size={16} strokeWidth={1.7} /> },
         { label: "Shifts",     path: "/admin-dashboard/shifts",          icon: <Calendar size={16} strokeWidth={1.7} />,   badge: badges.shifts },
+        { label: "Transportations", path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
+        { label: "Services",         path: "/admin-dashboard/services",         icon: <CheckCircle size={16} strokeWidth={1.7} /> },
       ],
     },
     {
-      group: "Services",
+      group: "Intake Section",
       items: [
-        { label: "Services",        path: "/admin-dashboard/services",        icon: <CheckCircle size={16} strokeWidth={1.7} /> },
-        { label: "Transportations", path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
-        { label: "Intake Workers",  path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
-        { label: "Private Families", path: "/admin-dashboard/private-families", icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.privateFamilies },
         { label: "Intake Forms",    path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
+        { label: "Private Families", path: "/admin-dashboard/private-families", icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.privateFamilies },
+        { label: "Intake Workers",  path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
+      ],
+    },
+    {
+      group: "Accounting",
+      items: [
+        { label: "Billing",          path: "/admin-dashboard/billing",          icon: <Receipt size={16} strokeWidth={1.7} /> },
+        { label: "Payroll",          path: "/admin-dashboard/payroll",          icon: <Wallet size={16} strokeWidth={1.7} /> },
+        { label: "GST Reporting",    path: "/admin-dashboard/gst-reporting",    icon: <Landmark size={16} strokeWidth={1.7} /> },
+      ],
+    },
+    {
+      group: "Reports",
+      items: [
+        { label: "Staff Evaluation", path: "/admin-dashboard/staff-evaluation", icon: <ClipboardCheck size={16} strokeWidth={1.7} /> },
+        { label: "Top Performers", path: "/admin-dashboard/top-performers", icon: <BarChart3 size={16} strokeWidth={1.7} /> },
+        { label: "One on One", path: "/admin-dashboard/one-on-one", icon: <Inbox size={16} strokeWidth={1.7} /> },
       ],
     },
     {
       group: "Admin",
       items: [
         { label: "Agencies",         path: "/admin-dashboard/agency",           icon: <Building size={16} strokeWidth={1.7} /> },
-        { label: "Staff Evaluation", path: "/admin-dashboard/staff-evaluation", icon: <ClipboardCheck size={16} strokeWidth={1.7} /> },
-        { label: "Billing",          path: "/admin-dashboard/billing",          icon: <Receipt size={16} strokeWidth={1.7} /> },
-        { label: "Payroll",          path: "/admin-dashboard/payroll",          icon: <Wallet size={16} strokeWidth={1.7} /> },
-        { label: "GST Reporting",    path: "/admin-dashboard/gst-reporting",    icon: <Landmark size={16} strokeWidth={1.7} /> },
-        { label: "Reports",          path: "/admin-dashboard/reports",          icon: <BarChart3 size={16} strokeWidth={1.7} /> },
         { label: "Settings",         path: "/admin-dashboard/settings",         icon: <Settings size={16} strokeWidth={1.7} /> },
       ],
     },
