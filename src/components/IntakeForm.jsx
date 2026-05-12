@@ -18,7 +18,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { FaChevronDown } from "react-icons/fa6";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Calendar } from "lucide-react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
@@ -893,7 +893,13 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
   // Validation
   const validationSchema = Yup.object().shape({
-  
+
+    familyName: Yup.string().when('clients', {
+      is: (clients) => Array.isArray(clients) && clients.length > 1,
+      then: (schema) => schema.required("Family name is required when there are multiple clients"),
+      otherwise: (schema) => schema.optional(),
+    }),
+
     services: Yup.object().shape({
       serviceType: Yup.array()
         .of(Yup.string())
@@ -1525,14 +1531,46 @@ const handleSubmit = async (values, { resetForm }) => {
                   {/* ── LEFT: Main content ── */}
                   <div className="flex-1 min-w-0 flex flex-col gap-6">
 
-                {/* ── Case Worker Info ── */}
+                {/* ── Intake Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-6">
+                      <SectionTitle title="Intake Worker Information" />
+                      <button type="button" onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        + Add Intake Worker
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-5">
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Case Worker Info (CFS) ── */}
                 {isCaseWorker && (
                   <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                     <FieldArray name="caseworkers">
                       {({ push, remove }) => (
                         <div className="flex flex-col gap-8">
                           <div className="flex items-center justify-between mb-2">
-                            <SectionTitle title="Case Worker Information" />
+                            <SectionTitle title="Case Worker Information (CFS)" />
                             <button
                               type="button"
                               onClick={() => push({ name: "", agency: "", phone: "", email: "" })}
@@ -1579,38 +1617,6 @@ const handleSubmit = async (values, { resetForm }) => {
                   </div>
                 )}
 
-                {/* ── Intake Worker Info ── */}
-                {isCaseWorker && (
-                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <div className="flex items-center justify-between mb-6">
-                      <SectionTitle title="Intake Worker Information" />
-                      <button type="button" onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                        style={{ backgroundColor: "#145228" }}>
-                        + Add Intake Worker
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-5">
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
-                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
-                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                   {/* Status (update mode) */}
                   {mode === "update" && (
                     <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -1632,9 +1638,14 @@ const handleSubmit = async (values, { resetForm }) => {
                 <div className="bg-white rounded-xl border p-8" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <SectionTitle title="Family Name" />
                   <div className="w-full">
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Family Name <span className="text-red-500">*</span></label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
+                      Family Name {values.clients?.length > 1 && <span className="text-red-500">*</span>}
+                    </label>
                     <Field name="familyName" type="text" placeholder="Enter family / client name"
-                      className="w-full px-3 py-2.5 rounded-lg border text-sm border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                      className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${touched.familyName && errors.familyName ? "border-red-400" : "border-[#e5e7eb]"}`} />
+                    {touched.familyName && errors.familyName && (
+                      <div className="text-red-500 text-xs mt-1">{errors.familyName}</div>
+                    )}
                     <p className="text-xs font-bold text-gray-500 mt-1">All siblings added below will be grouped under this name.</p>
                   </div>
                 </div>
@@ -1696,15 +1707,19 @@ const handleSubmit = async (values, { resetForm }) => {
 
                     {/* Service Dates */}
                     <div>
-                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Dates</label>
+                      <label className="block font-semibold mb-2 flex items-center gap-1.5" style={{ fontSize: 13, color: "#374151" }}>
+                        <Calendar className="w-3.5 h-3.5" style={{ color: "#145228" }} />
+                        Service Dates
+                      </label>
                       <button type="button"
                         onClick={() => setShowServiceCalendar(true)}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all flex items-center gap-2 ${
                           touched.services?.serviceDates && errors.services?.serviceDates ? "border-red-400" : "border-[#e5e7eb]"
                         } ${(values.services?.serviceDates?.length ?? 0) > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                        <Calendar className="w-4 h-4 flex-shrink-0" />
                         {(values.services?.serviceDates?.length ?? 0) > 0
                           ? values.services.serviceDates.join(", ")
-                          : "Select multiple service dates"}
+                          : "Select service date (you can select multiple dates)"}
                       </button>
                       {touched.services?.serviceDates && errors.services?.serviceDates && (
                         <div className="text-red-500 text-xs mt-1">{errors.services.serviceDates}</div>
@@ -1862,7 +1877,7 @@ const handleSubmit = async (values, { resetForm }) => {
 
                           <div className="grid grid-cols-3 gap-5">
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Full Name</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Full Name <span className="text-red-500">*</span></label>
                               <Field name={`clients.${idx}.fullName`} type="text" placeholder="Enter client name"
                                 className={iCls(touched.clients?.[idx]?.fullName && errors.clients?.[idx]?.fullName)} />
                               {touched.clients?.[idx]?.fullName && errors.clients?.[idx]?.fullName && (
@@ -1871,7 +1886,7 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div className="relative">
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender <span className="text-red-500">*</span></label>
                               <Field as="select" name={`clients.${idx}.gender`}
                                 className={sCls(touched.clients?.[idx]?.gender && errors.clients?.[idx]?.gender, !values.clients[idx].gender)}>
                                 <option value="">Select gender</option>
@@ -1885,14 +1900,14 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth <span className="text-red-500">*</span></label>
                               <Field name={`clients.${idx}.birthDate`} type="date"
                                 className={iCls(touched.clients?.[idx]?.birthDate && errors.clients?.[idx]?.birthDate)} />
                               {(() => { const age = calculateAgeDisplay(values.clients?.[idx]?.birthDate); return age ? <p className="text-xs text-gray-500 mt-1">Age: {age}</p> : null; })()}
                             </div>
 
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone (Guardian)</label>
                               <Field name={`clients.${idx}.phone`} type="text" placeholder="10-digit phone number"
                                 className={iCls(touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone)} />
                               {touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone && (
@@ -1916,7 +1931,7 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div className="col-span-2">
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address <span className="text-red-500">*</span></label>
                               <PlacesAutocomplete
                                 value={values.clients[idx].address}
                                 placeholder="Enter client address"
@@ -1974,13 +1989,13 @@ const handleSubmit = async (values, { resetForm }) => {
                 {/* ── Parent Info Card ── */}
                 <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <div className="flex items-center justify-between mb-6">
-                    <SectionTitle title="Parents Info" />
+                    <SectionTitle title="Parents / Guardians Info" />
                     <button type="button"
                       onClick={() => setFieldValue("parentInfoList", [...values.parentInfoList, { clientName: "", parentName: "", relationShip: "", parentPhone: "", parentEmail: "", parentAddress: "" }])}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
                       style={{ backgroundColor: "#145228" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      Add Parent Info
+                      Add Parent / Guardian Info
                     </button>
                   </div>
                   <FieldArray name="parentInfoList">
@@ -1989,7 +2004,7 @@ const handleSubmit = async (values, { resetForm }) => {
                         {values.parentInfoList.map((parent, index) => (
                           <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                             <div className="flex items-center justify-between mb-4">
-                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Parent {index + 1}</p>
+                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Parent / Guardian {index + 1}</p>
                               {values.parentInfoList.length > 1 && (
                                 <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
                               )}
@@ -2005,8 +2020,8 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
                               </div>
                               <div>
-                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent Name</label>
-                                <Field name={`parentInfoList.${index}.parentName`} type="text" placeholder="Parent name" className={iCls(false)} />
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent / Guardian Name</label>
+                                <Field name={`parentInfoList.${index}.parentName`} type="text" placeholder="Parent / Guardian name" className={iCls(false)} />
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Relationship</label>
@@ -2014,11 +2029,11 @@ const handleSubmit = async (values, { resetForm }) => {
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
-                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent phone" className={iCls(false)} />
+                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent / Guardian phone" className={iCls(false)} />
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                                <Field name={`parentInfoList.${index}.parentEmail`} type="email" placeholder="Parent email" className={iCls(false)} />
+                                <Field name={`parentInfoList.${index}.parentEmail`} type="email" placeholder="Parent / Guardian email" className={iCls(false)} />
                               </div>
                               <div className="col-span-3">
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
