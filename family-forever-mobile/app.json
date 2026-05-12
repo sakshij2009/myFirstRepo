@@ -27,12 +27,13 @@
       }
     },
     "android": {
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.famforever.admin",
-      "versionCode": 4
+      "versionCode": 5
     },
     "web": {
       "output": "static",
