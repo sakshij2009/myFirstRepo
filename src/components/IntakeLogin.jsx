@@ -29,9 +29,10 @@ const IntakeLogin = () => {
     "invoiceparkland@upcs.org",
   ];
 
+  const normalizedAgency = agency.trim().toLowerCase();
   const isUPCSAgency =
     normalizedAgency.startsWith("upcs") ||
-    normalizedAgency.includes("unlimited potential community services");
+    normalizedAgency.includes("unlimited potential");
 
   // UI state
   const [error, setError] = useState("");
