@@ -44,6 +44,7 @@ export default function Routes() {
   useEffect(() => {
     if (!user) return;
     const userId = user?.userId;
+    const userDocId = user?.username; // Firestore doc ID stored as username field
     const userName = user?.name;
     // Primary uses orderBy+limit; secondary queries use only where+limit (no composite index needed)
     const primaryConstraints = [orderBy("startDate", "desc"), limit(100)];
@@ -54,17 +55,20 @@ export default function Routes() {
 
     let primaryShifts = [];
     let secondaryByIdShifts = [];
+    let secondaryByDocIdShifts = [];
     let secondaryByNameShifts = [];
     let primaryLoaded = false;
     let secondaryByIdLoaded = false;
+    let secondaryByDocIdLoaded = false;
     let secondaryByNameLoaded = false;
 
     const merge = () => {
-      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByNameLoaded) return;
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
       const seen = new Set();
       const combined = [
         ...primaryShifts,
         ...secondaryByIdShifts,
+        ...secondaryByDocIdShifts,
         ...secondaryByNameShifts,
       ].filter(s => {
         if (seen.has(s.id)) return false;
@@ -84,6 +88,7 @@ export default function Routes() {
       merge();
     }, (err) => { console.warn("primary routes query error:", err?.message); primaryLoaded = true; merge(); });
 
+    // Secondary query by custom userId
     let unsubSecondaryById = () => {};
     if (userId) {
       const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...secondaryConstraints);
@@ -96,6 +101,20 @@ export default function Routes() {
       secondaryByIdLoaded = true;
     }
 
+    // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
+    let unsubSecondaryByDocId = () => {};
+    if (userDocId && userDocId !== userId) {
+      const qSecondaryByDocId = query(collection(db, "shifts"), where("secondaryUserId", "==", userDocId), ...secondaryConstraints);
+      unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
+        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByDocId routes query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
+    } else {
+      secondaryByDocIdLoaded = true;
+    }
+
+    // Secondary fallback query by name
     let unsubSecondaryByName = () => {};
     if (userName) {
       const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...secondaryConstraints);
@@ -108,7 +127,7 @@ export default function Routes() {
       secondaryByNameLoaded = true;
     }
 
-    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByName(); };
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
   const filteredShifts = shifts.filter((s) => {

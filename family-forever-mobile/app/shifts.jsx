@@ -349,21 +349,25 @@ export default function Shifts() {
   useEffect(() => {
     if (!user) return;
     const userId = user?.userId;
+    const userDocId = user?.username; // Firestore doc ID stored as username field
     const userName = user?.name;
 
     let primaryShifts = [];
     let secondaryByIdShifts = [];
+    let secondaryByDocIdShifts = [];
     let secondaryByNameShifts = [];
     let primaryLoaded = false;
     let secondaryByIdLoaded = false;
+    let secondaryByDocIdLoaded = false;
     let secondaryByNameLoaded = false;
 
     const merge = () => {
-      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByNameLoaded) return;
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
       const seen = new Set();
       const combined = [
         ...primaryShifts,
         ...secondaryByIdShifts,
+        ...secondaryByDocIdShifts,
         ...secondaryByNameShifts,
       ].filter(s => {
         if (seen.has(s.id)) return false;
@@ -391,7 +395,7 @@ export default function Shifts() {
       merge();
     }, (err) => { console.warn("primary shifts query error:", err?.message); primaryLoaded = true; merge(); });
 
-    // Secondary query by userId (works for shifts saved after the fix)
+    // Secondary query by custom userId
     let unsubSecondaryById = () => {};
     if (userId) {
       const qSecondaryById = query(
@@ -408,7 +412,24 @@ export default function Shifts() {
       secondaryByIdLoaded = true;
     }
 
-    // Secondary fallback query by name (catches older shifts saved before the fix)
+    // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
+    let unsubSecondaryByDocId = () => {};
+    if (userDocId && userDocId !== userId) {
+      const qSecondaryByDocId = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userDocId),
+        ...secondaryConstraints
+      );
+      unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
+        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByDocId query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
+    } else {
+      secondaryByDocIdLoaded = true;
+    }
+
+    // Secondary fallback query by name
     let unsubSecondaryByName = () => {};
     if (userName) {
       const qSecondaryByName = query(
@@ -425,7 +446,7 @@ export default function Shifts() {
       secondaryByNameLoaded = true;
     }
 
-    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByName(); };
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
   // Live tab filtering
