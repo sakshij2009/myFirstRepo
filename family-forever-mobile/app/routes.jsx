@@ -45,7 +45,9 @@ export default function Routes() {
     if (!user) return;
     const userId = user?.userId;
     const userName = user?.name;
-    const baseConstraints = [orderBy("startDate", "desc"), limit(100)];
+    // Primary uses orderBy+limit; secondary queries use only where+limit (no composite index needed)
+    const primaryConstraints = [orderBy("startDate", "desc"), limit(100)];
+    const secondaryConstraints = [limit(100)];
     const isTransport = (s) =>
       s.serviceType === "Transportation" || s.category === "Transportation" ||
       s.categoryName === "Transportation";
@@ -74,34 +76,34 @@ export default function Routes() {
     };
 
     const qPrimary = userId
-      ? query(collection(db, "shifts"), where("userId", "==", userId), ...baseConstraints)
-      : query(collection(db, "shifts"), ...baseConstraints);
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "shifts"), ...primaryConstraints);
     const unsubPrimary = onSnapshot(qPrimary, (snap) => {
       primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       primaryLoaded = true;
       merge();
-    }, () => { primaryLoaded = true; merge(); });
+    }, (err) => { console.warn("primary routes query error:", err?.message); primaryLoaded = true; merge(); });
 
     let unsubSecondaryById = () => {};
     if (userId) {
-      const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...baseConstraints);
+      const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...secondaryConstraints);
       unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
         secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         secondaryByIdLoaded = true;
         merge();
-      }, () => { secondaryByIdLoaded = true; merge(); });
+      }, (err) => { console.warn("secondaryById routes query error:", err?.message); secondaryByIdLoaded = true; merge(); });
     } else {
       secondaryByIdLoaded = true;
     }
 
     let unsubSecondaryByName = () => {};
     if (userName) {
-      const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...baseConstraints);
+      const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...secondaryConstraints);
       unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
         secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         secondaryByNameLoaded = true;
         merge();
-      }, () => { secondaryByNameLoaded = true; merge(); });
+      }, (err) => { console.warn("secondaryByName routes query error:", err?.message); secondaryByNameLoaded = true; merge(); });
     } else {
       secondaryByNameLoaded = true;
     }
