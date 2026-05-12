@@ -36,10 +36,14 @@ const IntakeLogin = () => {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // ── On mount: clear stale session & detect magic link return ──────────────
+  // ── On mount: redirect if already logged in, or handle magic link return ────
   React.useEffect(() => {
-    // Clear stale session so login page always appears fresh
-    localStorage.removeItem("intakeUser");
+    // If already logged in, go straight to dashboard
+    const existing = localStorage.getItem("intakeUser");
+    if (existing) {
+      navigate("/intake-form/dashboard", { replace: true });
+      return;
+    }
 
     // Detect if user has returned from a magic link email
     if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -57,6 +61,8 @@ const IntakeLogin = () => {
         signInWithEmailLink(auth, emailForSignIn.trim().toLowerCase(), window.location.href)
           .then(async () => {
             window.localStorage.removeItem("emailForSignIn");
+            // Remove magic link params from URL so re-renders don't re-process it
+            window.history.replaceState({}, document.title, "/intake-form/login");
             const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
             const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
             const snap = await getDocs(q);
@@ -72,6 +78,8 @@ const IntakeLogin = () => {
           })
           .catch((err) => {
             console.error("Magic link error:", err);
+            // Remove the bad/expired magic link params so the page stops trying to process them
+            window.history.replaceState({}, document.title, "/intake-form/login");
             setError("The link may have expired or already been used. Please request a new one.");
             setIsLoading(false);
           });
