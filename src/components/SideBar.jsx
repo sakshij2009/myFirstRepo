@@ -11,7 +11,7 @@ import { db } from "../firebase";
 const SideBar = ({ user, onLogout, onWidthChange }) => {
   const [collapsed, setCollapsed] = useState(true);
   const [badges, setBadges] = useState({ clients: null, shifts: null, intakeWorkers: null, privateFamilies: null });
-  const [openSections, setOpenSections] = useState({ "Intake Section": true, "Accounting": true, "Reports": true });
+  const [openSections, setOpenSections] = useState({ "Intake Section": false, "Accounting": false, "Reports": false });
   const navigate = useNavigate();
 
   const handleMouseEnter = () => {
