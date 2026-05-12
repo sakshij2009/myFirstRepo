@@ -727,8 +727,9 @@ const AddUserShift = ({ mode = "add", user }) => {
             name: primaryStaff?.name || "",
             primaryUserId: primaryStaff?.id || "",
             primaryUserName: primaryStaff?.name || "",
-            // Secondary Staff — must also use the custom userId field so mobile app can match
-            secondaryUserId: secondaryStaff?.userId ?? secondaryStaff?.id ?? "",
+            // Secondary Staff — use custom userId; fall back to doc ID if userId is empty
+            secondaryUserId: secondaryStaff?.userId || secondaryStaff?.id || "",
+            secondaryUserDocId: secondaryStaff?.id || "",
             secondaryUserName: secondaryStaff?.name || "",
             vehicleType: values.vehicleType || "",
             agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
@@ -853,8 +854,9 @@ const AddUserShift = ({ mode = "add", user }) => {
           email:         primaryStaff?.email      || "",
           primaryUserId: primaryStaff?.id         || "",
           primaryUserName: primaryStaff?.name     || "",
-          // Secondary Staff — must also use the custom userId field so mobile app can match
-          secondaryUserId: secondaryStaff?.userId ?? secondaryStaff?.id ?? "",
+          // Secondary Staff — use custom userId; fall back to doc ID if userId is empty
+          secondaryUserId: secondaryStaff?.userId || secondaryStaff?.id || "",
+          secondaryUserDocId: secondaryStaff?.id || "",
           secondaryUserName: secondaryStaff?.name || "",
           vehicleType: values.vehicleType         || "",
 
