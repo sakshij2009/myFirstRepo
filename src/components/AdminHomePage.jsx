@@ -20,6 +20,10 @@ import StaffEvaluationPage from "./StaffEvaluationPage";
 import BillingPage from "./BillingPage";
 import GSTReportingPage from "./GSTReportingPage";
 import ShiftCommandPage from "./ShiftCommandPage";
+import ServicesPage from "./ServicesPage";
+import FamilyTreatmentHouses from "./FamilyTreatmentHouses";
+
+
 
 // Form Components
 import AddUserForm from "./AddUserForm";
@@ -28,6 +32,8 @@ import AddAgency from "./AddAgency";
 import AddClient from "./AddClient";
 import IntakeForm from "./IntakeForm";
 import AddIntakeUser from "./AddIntakeUser";
+import AddHouse from "./AddHouse";
+
 
 // Add New modal — quick-access shortcuts
 import AddNewModal from "./AddNewModal";
@@ -115,8 +121,11 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="gst-reporting"    element={<GSTReportingPage />} />
 
             {/* Under construction pages */}
-            <Route path="services"         element={<UnderConstruction title="Services" />} />
+            <Route path="services"         element={<ServicesPage />} />
+            <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
             <Route path="reports"          element={<UnderConstruction title="Reports & Analytics" />} />
+
+
             <Route path="settings"         element={<UnderConstruction title="Settings" />} />
 
             {/* Add/Edit forms */}
@@ -134,7 +143,9 @@ const AdminHomePage = ({ user, setUser }) => {
               <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user} />} />
               <Route path="add-intakeworker"      element={<AddIntakeUser mode="add" user={user} />} />
               <Route path="update-intakeworker/:id" element={<AddIntakeUser mode="update" user={user} />} />
+              <Route path="add-house"             element={<AddHouse mode="add" user={user} />} />
             </Route>
+
 
             {/* View intake form (read-only) */}
             <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={true} />} />
