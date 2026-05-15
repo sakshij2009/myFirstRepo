@@ -17,6 +17,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
 import { sendSignInLinkToEmail } from "firebase/auth";
+import { buildAuthActionSettings } from "../config/authConfig";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload, X, Calendar } from "lucide-react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
@@ -2737,12 +2738,7 @@ const handleSubmit = async (values, { resetForm }) => {
                   onClick={async () => {
                     if (!inviteEmail) { alert("Please enter an email address"); return; }
                     setInviting(true);
-                    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
-                    const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
-                    const actionCodeSettings = {
-                      url: `${continueBase}/intake-form/login?email=${encodedEmail}`,
-                      handleCodeInApp: true,
-                    };
+                    const actionCodeSettings = buildAuthActionSettings(inviteEmail.trim().toLowerCase());
                     try {
                       await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
                       window.localStorage.setItem("emailForSignIn", inviteEmail.trim().toLowerCase());

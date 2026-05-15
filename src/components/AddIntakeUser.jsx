@@ -16,6 +16,7 @@ import { FaChevronDown } from "react-icons/fa6";
 import { useNavigate, useParams } from "react-router-dom";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { auth } from "../firebase";
+import { buildAuthActionSettings } from "../config/authConfig";
 
 const UPCS_EMAIL_OPTIONS = [
   "billing@upcs.com",
@@ -161,12 +162,10 @@ const AddIntakeUser = ({ mode = "add" }) => {
 
         // Send Invitation Link
         try {
-          const encodedEmail = encodeURIComponent(values.email.trim().toLowerCase());
-          const actionCodeSettings = {
-            // Redirect to the intake form login page with pre-filled email and role
-            url: `${window.location.origin}/intake-form/login?email=${encodedEmail}&role=${values.role === "Parent" ? "parent" : "worker"}`,
-            handleCodeInApp: true,
-          };
+          const actionCodeSettings = buildAuthActionSettings(
+            values.email.trim().toLowerCase(),
+            values.role === "Parent" ? "parent" : "worker"
+          );
 
           await sendSignInLinkToEmail(auth, values.email.trim().toLowerCase(), actionCodeSettings);
           console.log("Invitation link sent to:", values.email);
