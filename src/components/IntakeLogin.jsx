@@ -5,6 +5,7 @@ import {
   isSignInWithEmailLink,
   signInWithEmailLink,
 } from "firebase/auth";
+import { buildAuthActionSettings } from "../config/authConfig";
 import { Mail, ArrowRight, ClipboardList, Shield, Heart } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -134,11 +135,7 @@ const IntakeLogin = () => {
       }
 
       // Send magic link
-      const encodedEmail = encodeURIComponent(loginEmail.trim().toLowerCase());
-      const actionCodeSettings = {
-        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
-        handleCodeInApp: true,
-      };
+      const actionCodeSettings = buildAuthActionSettings(loginEmail.trim().toLowerCase());
       await sendSignInLinkToEmail(auth, loginEmail.trim().toLowerCase(), actionCodeSettings);
       window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
 
@@ -231,11 +228,7 @@ const IntakeLogin = () => {
       await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
       // Send verification magic link
-      const encodedEmail = encodeURIComponent(email.trim().toLowerCase());
-      const actionCodeSettings = {
-        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
-        handleCodeInApp: true,
-      };
+      const actionCodeSettings = buildAuthActionSettings(email.trim().toLowerCase());
       await sendSignInLinkToEmail(auth, email.trim().toLowerCase(), actionCodeSettings);
       window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
 

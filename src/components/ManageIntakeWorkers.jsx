@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { sendSignInLinkToEmail } from "firebase/auth";
 import { db, auth } from "../firebase";
+import { buildAuthActionSettings } from "../config/authConfig";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X,
@@ -117,12 +118,7 @@ const ManageIntakeWorkers = () => {
 
     setInviting(true);
 
-    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
-    const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
-    const actionCodeSettings = {
-      url: `${continueBase}/intake-form/login?email=${encodedEmail}&role=worker`,
-      handleCodeInApp: true,
-    };
+    const actionCodeSettings = buildAuthActionSettings(inviteEmail.trim().toLowerCase(), "worker");
 
     try {
       await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
