@@ -1,6 +1,6 @@
 // Base URL for Firebase custom email action handler.
 // Override via VITE_CONTINUE_URL env var for non-production environments.
-const AUTH_BASE = import.meta.env.VITE_CONTINUE_URL || "https://familyforever.ca";
+const AUTH_BASE = import.meta.env.VITE_CONTINUE_URL || "https://ffadmin-prod.web.app";
 
 export const AUTH_ACTION_URL = `${AUTH_BASE}/auth/action`;
 
