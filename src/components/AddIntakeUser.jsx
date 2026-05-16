@@ -14,9 +14,8 @@ import { db } from "../firebase";
 import SuccessSlider from "../components/SuccessSlider";
 import { FaChevronDown } from "react-icons/fa6";
 import { useNavigate, useParams } from "react-router-dom";
-import { sendSignInLinkToEmail } from "firebase/auth";
-import { auth } from "../firebase";
-import { buildAuthActionSettings } from "../config/authConfig";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 
 const UPCS_EMAIL_OPTIONS = [
   "billing@upcs.com",
@@ -162,12 +161,11 @@ const AddIntakeUser = ({ mode = "add" }) => {
 
         // Send Invitation Link
         try {
-          const actionCodeSettings = buildAuthActionSettings(
-            values.email.trim().toLowerCase(),
-            values.role === "Parent" ? "parent" : "worker"
-          );
-
-          await sendSignInLinkToEmail(auth, values.email.trim().toLowerCase(), actionCodeSettings);
+          const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+          await sendSignInEmail({
+            email: values.email.trim().toLowerCase(),
+            role: values.role === "Parent" ? "parent" : "worker",
+          });
           console.log("Invitation link sent to:", values.email);
         } catch (authError) {
           console.error("Error sending invitation link:", authError);

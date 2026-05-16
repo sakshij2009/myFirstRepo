@@ -16,8 +16,8 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
-import { sendSignInLinkToEmail } from "firebase/auth";
-import { buildAuthActionSettings } from "../config/authConfig";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload, X, Calendar } from "lucide-react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
@@ -2738,9 +2738,9 @@ const handleSubmit = async (values, { resetForm }) => {
                   onClick={async () => {
                     if (!inviteEmail) { alert("Please enter an email address"); return; }
                     setInviting(true);
-                    const actionCodeSettings = buildAuthActionSettings(inviteEmail.trim().toLowerCase());
+                    const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
                     try {
-                      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+                      await sendSignInEmail({ email: inviteEmail.trim().toLowerCase() });
                       window.localStorage.setItem("emailForSignIn", inviteEmail.trim().toLowerCase());
                       alert(`Invitation link sent to ${inviteEmail}`);
                       setShowInviteModal(false);

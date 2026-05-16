@@ -1,11 +1,10 @@
 import React, { useState } from "react";
-import { db, auth } from "../firebase";
+import { db, auth, functions } from "../firebase";
 import {
-  sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
 } from "firebase/auth";
-import { buildAuthActionSettings } from "../config/authConfig";
+import { httpsCallable } from "firebase/functions";
 import { Mail, ArrowRight, ClipboardList, Shield, Heart } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -135,8 +134,8 @@ const IntakeLogin = () => {
       }
 
       // Send magic link
-      const actionCodeSettings = buildAuthActionSettings(loginEmail.trim().toLowerCase());
-      await sendSignInLinkToEmail(auth, loginEmail.trim().toLowerCase(), actionCodeSettings);
+      const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+      await sendSignInEmail({ email: loginEmail.trim().toLowerCase() });
       window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
 
       setMessage("Sign-in link sent! Please check your email and click the link to continue.");
@@ -228,8 +227,8 @@ const IntakeLogin = () => {
       await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
       // Send verification magic link
-      const actionCodeSettings = buildAuthActionSettings(email.trim().toLowerCase());
-      await sendSignInLinkToEmail(auth, email.trim().toLowerCase(), actionCodeSettings);
+      const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+      await sendSignInEmail({ email: email.trim().toLowerCase() });
       window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
 
       // Switch to Sign In tab and show success
