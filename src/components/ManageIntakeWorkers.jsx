@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
-import { sendSignInLinkToEmail } from "firebase/auth";
-import { db, auth } from "../firebase";
-import { buildAuthActionSettings } from "../config/authConfig";
+import { httpsCallable } from "firebase/functions";
+import { db } from "../firebase";
+import { functions } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X,
@@ -118,10 +118,10 @@ const ManageIntakeWorkers = () => {
 
     setInviting(true);
 
-    const actionCodeSettings = buildAuthActionSettings(inviteEmail.trim().toLowerCase(), "worker");
+    const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
 
     try {
-      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+      await sendSignInEmail({ email: inviteEmail.trim().toLowerCase(), role: "worker" });
 
       alert(`Invitation link sent to ${inviteEmail}`);
       setShowModal(false);

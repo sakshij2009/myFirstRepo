@@ -1,0 +1,189 @@
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
+const sgMail = require("@sendgrid/mail");
+
+initializeApp();
+
+const sendgridApiKey = defineSecret("SENDGRID_API_KEY");
+
+const APP_URL = "https://ffadmin-prod.web.app";
+const AUTH_ACTION_URL = `${APP_URL}/auth/action`;
+const FROM_EMAIL = "intakes@familyforever.ca";
+const FROM_NAME = "Family Forever Inc.";
+
+// ── HTML email template ───────────────────────────────────────────────────────
+function buildEmailHTML(signInLink, role) {
+  const isParent = role === "parent";
+  const portalLabel = isParent ? "Family Portal" : "Compliance Portal";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Your Family Forever sign-in link</title>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0"
+        style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(160deg,#1B5E37 0%,#14472A 100%);padding:36px 40px;text-align:center;">
+            <img src="${APP_URL}/images/logo.png" alt="Family Forever"
+              width="56" height="56"
+              style="border-radius:50%;display:block;margin:0 auto 16px;border:2px solid rgba(255,255,255,0.2);">
+            <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:700;">Family Forever</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0;font-size:13px;">${portalLabel}</p>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 40px 28px;">
+            <h2 style="color:#111827;font-size:18px;font-weight:700;margin:0 0 10px;">
+              Your sign-in link is ready
+            </h2>
+            <p style="color:#4B5563;font-size:14px;line-height:1.7;margin:0 0 28px;">
+              Click the button below to access your Family Forever ${portalLabel}.
+              This link is valid for <strong>24 hours</strong> and can only be used once.
+            </p>
+
+            <!-- CTA -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+              <tr><td align="center">
+                <a href="${signInLink}"
+                  style="display:inline-block;background:#1B5E37;color:#ffffff;text-decoration:none;
+                         font-size:15px;font-weight:700;padding:15px 40px;border-radius:10px;
+                         letter-spacing:0.2px;">
+                  Sign in to Family Forever &rarr;
+                </a>
+              </td></tr>
+            </table>
+
+            <!-- First-time instructions -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+              style="background:#F0FFF4;border-radius:12px;border:1px solid #D1FAE5;margin-bottom:28px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <p style="color:#1B5E37;font-size:12px;font-weight:700;margin:0 0 14px;
+                             text-transform:uppercase;letter-spacing:0.8px;">
+                    First time here? Here's what to do:
+                  </p>
+                  <table cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding:5px 0;">
+                        <span style="color:#1B5E37;font-weight:700;margin-right:10px;">1.</span>
+                        <span style="color:#374151;font-size:13px;line-height:1.5;">
+                          Click the button above to open the portal
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:5px 0;">
+                        <span style="color:#1B5E37;font-weight:700;margin-right:10px;">2.</span>
+                        <span style="color:#374151;font-size:13px;line-height:1.5;">
+                          Complete your sign-up with your name and details
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:5px 0;">
+                        <span style="color:#1B5E37;font-weight:700;margin-right:10px;">3.</span>
+                        <span style="color:#374151;font-size:13px;line-height:1.5;">
+                          Sign in to access your personal dashboard
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:5px 0;">
+                        <span style="color:#1B5E37;font-weight:700;margin-right:10px;">4.</span>
+                        <span style="color:#374151;font-size:13px;line-height:1.5;">
+                          Bookmark
+                          <a href="${APP_URL}" style="color:#1B5E37;font-weight:600;">${APP_URL}</a>
+                          for easy access in the future
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <p style="color:#9CA3AF;font-size:12px;line-height:1.7;margin:0;">
+              If you did not request this link, you can safely ignore this email.
+              <br>Need help? Reply to this email and our team will get back to you.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F9FAFB;padding:18px 40px;border-top:1px solid #E5E7EB;text-align:center;">
+            <p style="color:#9CA3AF;font-size:12px;margin:0 0 4px;">Family Forever Inc.</p>
+            <a href="mailto:${FROM_EMAIL}"
+              style="color:#1B5E37;font-size:12px;text-decoration:none;">${FROM_EMAIL}</a>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ── Cloud Function ────────────────────────────────────────────────────────────
+exports.sendSignInEmail = onCall(
+  { secrets: [sendgridApiKey] },
+  async (request) => {
+    const { email, role } = request.data;
+
+    if (!email || typeof email !== "string") {
+      throw new HttpsError("invalid-argument", "A valid email address is required.");
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Build continue URL with email (and optional role) pre-filled
+    const params = new URLSearchParams({ email: normalizedEmail });
+    if (role) params.set("role", role);
+
+    const actionCodeSettings = {
+      url: `${AUTH_ACTION_URL}?${params.toString()}`,
+      handleCodeInApp: true,
+    };
+
+    let signInLink;
+    try {
+      signInLink = await getAuth().generateSignInWithEmailLink(
+        normalizedEmail,
+        actionCodeSettings
+      );
+    } catch (err) {
+      console.error("generateSignInWithEmailLink error:", err);
+      throw new HttpsError("internal", "Failed to generate sign-in link.");
+    }
+
+    sgMail.setApiKey(sendgridApiKey.value());
+
+    try {
+      await sgMail.send({
+        to: normalizedEmail,
+        from: { email: FROM_EMAIL, name: FROM_NAME },
+        replyTo: FROM_EMAIL,
+        subject: "Your Family Forever sign-in link",
+        html: buildEmailHTML(signInLink, role),
+      });
+    } catch (err) {
+      console.error("SendGrid error:", err?.response?.body ?? err);
+      throw new HttpsError("internal", "Failed to send email.");
+    }
+
+    return { success: true };
+  }
+);
