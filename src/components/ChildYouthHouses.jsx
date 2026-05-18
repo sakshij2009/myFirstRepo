@@ -17,7 +17,7 @@ import {
 import { db } from "../firebase";
 import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
 
-const FamilyTreatmentHouses = () => {
+const ChildYouthHouses = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [houses, setHouses] = useState([]);
@@ -26,7 +26,7 @@ const FamilyTreatmentHouses = () => {
   useEffect(() => {
     const fetchHouses = async () => {
       try {
-        const q = query(collection(db, "houses"), where("programType", "==", "family-treatment"));
+        const q = query(collection(db, "houses"), where("programType", "==", "child-youth"));
         const querySnapshot = await getDocs(q);
         const houseList = [];
         querySnapshot.forEach((doc) => {
@@ -83,7 +83,7 @@ const FamilyTreatmentHouses = () => {
             Programs
           </span>
           <span className="text-[#94a3b8] font-normal">/</span>
-          <span className="text-[#0f172a]">Family Treatment Program</span>
+          <span className="text-[#0f172a]">Child & Youth Program Cycle</span>
         </div>
 
         {/* Title Section */}
@@ -93,18 +93,18 @@ const FamilyTreatmentHouses = () => {
               className="font-bold text-[#0f172a] mb-2" 
               style={{ fontSize: "32px", letterSpacing: "-0.02em" }}
             >
-              Family Treatment Program – Houses
+              Child & Youth – Houses
             </h1>
             <p 
               className="text-[#64748b]" 
               style={{ fontSize: "17px", fontWeight: 500 }}
             >
-              Manage and monitor houses under the Family Treatment Program
+              Manage and monitor houses under Child & Youth Program Cycle
             </p>
           </div>
 
           <button
-            onClick={() => navigate("/admin-dashboard/add/add-house?program=family-treatment")}
+            onClick={() => navigate("/admin-dashboard/add/add-house?program=child-youth")}
             className="flex items-center gap-2 px-5 py-3 rounded-xl text-white font-bold transition-all hover:opacity-90 shadow-sm shrink-0"
             style={{ 
               backgroundColor: "#1f7a3c", 
@@ -271,4 +271,4 @@ const FamilyTreatmentHouses = () => {
   );
 };
 
-export default FamilyTreatmentHouses;
+export default ChildYouthHouses;

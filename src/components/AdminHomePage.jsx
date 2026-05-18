@@ -22,6 +22,8 @@ import GSTReportingPage from "./GSTReportingPage";
 import ShiftCommandPage from "./ShiftCommandPage";
 import ServicesPage from "./ServicesPage";
 import FamilyTreatmentHouses from "./FamilyTreatmentHouses";
+import PDDHouses from "./PDDHouses";
+import ChildYouthHouses from "./ChildYouthHouses";
 
 
 
@@ -123,6 +125,8 @@ const AdminHomePage = ({ user, setUser }) => {
             {/* Under construction pages */}
             <Route path="services"         element={<ServicesPage />} />
             <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
+            <Route path="pdd-houses" element={<PDDHouses />} />
+            <Route path="child-youth-houses" element={<ChildYouthHouses />} />
             <Route path="reports"          element={<UnderConstruction title="Reports & Analytics" />} />
 
 

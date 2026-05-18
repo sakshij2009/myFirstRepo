@@ -1,4 +1,7 @@
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { collection, getDocs } from "firebase/firestore";
 import { 
   Building2, 
   Users, 
@@ -84,11 +87,44 @@ const ProgramCard = ({
 
 const ServicesPage = () => {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    "family-treatment": { houses: 0 },
+    "pdd": { houses: 0 },
+    "child-youth": { houses: 0 }
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "houses"));
+        const newStats = {
+          "family-treatment": { houses: 0 },
+          "pdd": { houses: 0 },
+          "child-youth": { houses: 0 }
+        };
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const type = data.programType || "family-treatment";
+          if (newStats[type]) {
+            newStats[type].houses += 1;
+          }
+        });
+
+        setStats(newStats);
+      } catch (error) {
+        console.error("Error fetching house stats:", error);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
   const programs = [
     {
       title: "Family Treatment Program",
       path: "/admin-dashboard/family-treatment-houses",
-      houses: 0,
+      houses: stats["family-treatment"].houses,
       clients: 0,
       staff: 0,
       compliance: "0%",
@@ -101,7 +137,8 @@ const ServicesPage = () => {
     },
     {
       title: "Person with Developmental Disability (PDD)",
-      houses: 0,
+      path: "/admin-dashboard/pdd-houses",
+      houses: stats["pdd"].houses,
       clients: 0,
       staff: 0,
       compliance: "0%",
@@ -114,7 +151,8 @@ const ServicesPage = () => {
     },
     {
       title: "Child & Youth Program Cycle",
-      houses: 0,
+      path: "/admin-dashboard/child-youth-houses",
+      houses: stats["child-youth"].houses,
       clients: 0,
       staff: 0,
       compliance: "0%",
