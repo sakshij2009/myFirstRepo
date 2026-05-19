@@ -511,14 +511,21 @@ const AddUserShift = ({ mode = "add", user }) => {
           .split(/\s+/)
           .filter((w) => w.length > 2 && w !== "family" && w !== "the");
 
+        // Use only the last meaningful word (surname) for partial matching to
+        // prevent false positives from short or common keywords matching unrelated clients.
+        const surnameKeyword = clientKeywords.length > 0
+          ? clientKeywords[clientKeywords.length - 1]
+          : null;
+
         sortedDocs.forEach((d) => {
           const data = d.id ? { id: d.id, ...d.data() } : d.data();
           const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
-          // Partial match: any keyword from client name appears in the given string
+          // Partial match: surname must appear as a complete word (not substring)
+          // e.g. "owens" matches "Craig Owens" but NOT "Rida Creed Glory"
           const partialMatch = (n) => {
-            if (!n) return false;
-            const nl = (n || "").toLowerCase();
-            return clientKeywords.some((kw) => nl.includes(kw));
+            if (!n || !surnameKeyword) return false;
+            const words = (n || "").toLowerCase().split(/[\s,]+/);
+            return words.includes(surnameKeyword);
           };
 
           let isMatch = false;
