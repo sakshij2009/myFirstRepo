@@ -417,7 +417,7 @@ const mapOldIntakeToInitialValues = (raw) => {
             email: raw.caseworkerEmail || raw.caseWorkerEmail || "",
           },
         ],
-    uploadDocs: raw.uploadedDocs || [],
+    uploadDocs: raw.uploadedDocs || raw.uploadDocs || [],
     status: raw.status || "Submitted",
     familyName: raw.familyName || raw.nameInClientTable || "",
   };
@@ -559,7 +559,7 @@ const mapDataToInitialValues = (data) => {
               email: data.caseworkerEmail || "",
             },
           ],
-      uploadDocs: data.uploadedDocs || [],
+      uploadDocs: data.uploadedDocs || data.uploadDocs || [],
       status: data.status,
       familyName: data.familyName || "",
       avatar: data.avatar || null,
@@ -1018,6 +1018,21 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
       const url = URL.createObjectURL(file);
       window.open(url, "_blank");
     }
+  };
+
+  // Get a human-readable display name from either a File object or a Firebase Storage URL
+  // URLs look like: https://.../intake_documents%2F1716000000_myfile.pdf?alt=media&token=...
+  const getDocDisplayName = (file) => {
+    if (typeof file === "string") {
+      try {
+        const decoded = decodeURIComponent(file.split("?")[0]); // strip query params
+        const segment = decoded.split("/").pop();                // last path segment
+        return segment.replace(/^\d+_/, "") || segment;         // strip timestamp prefix
+      } catch {
+        return "Document";
+      }
+    }
+    return file?.name || "Document";
   };
 
   // Utility to format date like "01 Dec 2025 12:53 PM"
@@ -2169,34 +2184,47 @@ const handleSubmit = async (values, { resetForm }) => {
                   <SectionTitle title="Upload Documents" />
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Documents</label>
-                    <div className="flex items-center gap-3">
-                      <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${touched.uploadDocs && errors.uploadDocs ? "border-red-400" : "border-[#e5e7eb]"} ${values.uploadDocs.length > 0 ? "text-gray-700" : "text-gray-400"}`}>
-                        {values.uploadDocs.length > 0 ? `${values.uploadDocs.length} file(s) selected` : "No files selected"}
+
+                    {/* Upload controls — hidden in view mode */}
+                    {isEditable && (
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${touched.uploadDocs && errors.uploadDocs ? "border-red-400" : "border-[#e5e7eb]"} ${values.uploadDocs.length > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                          {values.uploadDocs.length > 0 ? `${values.uploadDocs.length} file(s) selected` : "No files selected"}
+                        </div>
+                        <input type="file" ref={docInputRef} className="hidden" multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setFieldValue("uploadDocs", [...(values.uploadDocs || []), ...files]);
+                          }} />
+                        <button type="button" onClick={() => docInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold hover:bg-gray-50 transition-colors"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                          <Upload size={16} /> Browse Files
+                        </button>
                       </div>
-                      <input type="file" ref={docInputRef} className="hidden" multiple
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          setFieldValue("uploadDocs", [...(values.uploadDocs || []), ...files]);
-                        }} />
-                      <button type="button" onClick={() => docInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold hover:bg-gray-50 transition-colors"
-                        style={{ borderColor: "#e5e7eb", color: "#374151" }}>
-                        <Upload size={16} /> Browse Files
-                      </button>
-                    </div>
-                    {values.uploadDocs.length > 0 && (
-                      <div className="mt-3 flex flex-col gap-2">
+                    )}
+
+                    {/* Document list — always shown when docs exist */}
+                    {values.uploadDocs.length > 0 ? (
+                      <div className="flex flex-col gap-2">
                         {values.uploadDocs.map((file, i) => (
                           <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                             <button type="button" onClick={() => handleOpenDocument(file)}
-                              className="text-sm text-gray-700 truncate max-w-[80%] hover:text-green-700 hover:underline text-left">
-                              {file.name}
+                              className="text-sm text-gray-700 truncate max-w-[85%] hover:text-green-700 hover:underline text-left flex items-center gap-2">
+                              {/* file icon */}
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-400"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              {getDocDisplayName(file)}
                             </button>
-                            <button type="button" onClick={() => setFieldValue("uploadDocs", values.uploadDocs.filter((_, idx) => idx !== i))}
-                              className="text-gray-400 hover:text-red-500 transition-colors"><X size={16} /></button>
+                            {/* Remove button — hidden in view mode */}
+                            {isEditable && (
+                              <button type="button" onClick={() => setFieldValue("uploadDocs", values.uploadDocs.filter((_, idx) => idx !== i))}
+                                className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"><X size={16} /></button>
+                            )}
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">{isEditable ? "No files selected" : "No documents attached"}</p>
                     )}
                   </div>
                 </div>
