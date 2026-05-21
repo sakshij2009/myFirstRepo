@@ -365,51 +365,59 @@ const mapOldIntakeToInitialValues = (raw) => {
     name: primaryClient.name || raw.nameInClientTable || "",
     // your header field is text, so old DD-MM-YYYY is fine here
     dateOfIntake: raw.dateOfInTake || raw.date || "",
-    avatar: raw.photo || null,
+    avatar: raw.photo || raw.avatar || null,
     services: {
       ...base.services,
-      serviceType: [], // cannot reliably map to shiftCategories id
-      servicePhone: "",
-      serviceEmail: "",
-      serviceDesc: raw.serviceDetail || primaryClient.serviceDetail || "",
-      safetyPlan: raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
+      // Prefer new-style serviceType IDs if present (forms saved by web app also have inTakeClients)
+      serviceType: Array.isArray(raw.services?.serviceType) && raw.services.serviceType.length > 0
+        ? raw.services.serviceType
+        : [], // will be resolved via pendingServiceNamesRef for genuinely old name strings
+      servicePhone: raw.services?.servicePhone || "",
+      serviceEmail: raw.services?.serviceEmail || "",
+      serviceDates: Array.isArray(raw.services?.serviceDates)
+        ? raw.services.serviceDates.map(convertToISO)
+        : [],
+      serviceDesc: raw.services?.serviceDesc || raw.serviceDetail || primaryClient.serviceDetail || "",
+      safetyPlan: raw.services?.safetyPlan || raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
     },
     clients,
     billingInfo: {
-      invoiceEmail: raw.invoiceEmail || "",
+      invoiceEmail: raw.billingInfo?.invoiceEmail || raw.invoiceEmail || "",
     },
+    billingInfoList: Array.isArray(raw.billingInfoList) && raw.billingInfoList.length > 0
+      ? raw.billingInfoList
+      : [{ invoiceEmail: raw.billingInfo?.invoiceEmail || raw.invoiceEmail || "" }],
     parentInfoList,
     medicalInfoList,
     transportationInfoList,
     supervisedVisitations,
     workerInfo: {
-      workerName: raw.nameOfPerson || "",
+      workerName: raw.workerInfo?.workerName || raw.nameOfPerson || "",
       // this is a <input type="date"> so we convert to ISO
-      date: convertToISO(raw.dateOfInTake || raw.date || ""),
-      signature: raw.signature || "",
+      date: formatDateLocal(raw.workerInfo?.date) || convertToISO(raw.dateOfInTake || raw.date || ""),
+      signature: raw.workerInfo?.signature || raw.signature || "",
     },
-    // Intake worker fields (old key: inTakeWorker*)
-    intakeworkerName: raw.inTakeWorkerName || "",
-    agencyName: raw.inTakeWorkerAgencyName || "",
-    intakeworkerPhone: raw.inTakeWorkerPhone || "",
-    intakeworkerEmail: raw.inTakeWorkerEmail || "",
+    // Intake worker fields — check both new-style keys and old-style keys
+    intakeworkerName: raw.intakeworkerName || raw.inTakeWorkerName || "",
+    agencyName: raw.agencyName || raw.inTakeWorkerAgencyName || "",
+    intakeworkerPhone: raw.intakeworkerPhone || raw.inTakeWorkerPhone || "",
+    intakeworkerEmail: raw.intakeworkerEmail || raw.inTakeWorkerEmail || "",
     // Case worker fields (old key: caseWorker*)
-    caseworkerName: raw.caseWorkerName || "",
-    caseworkerAgencyName: raw.caseWorkerAgencyName || "",
-    caseworkerPhone: raw.caseWorkerPhone || "",
-    caseworkerEmail: raw.caseWorkerEmail || "",
-    caseworkers: Array.isArray(raw.caseworkers) && raw.caseworkers.length > 0 
-      ? raw.caseworkers 
+    caseworkerName: raw.caseworkerName || raw.caseWorkerName || "",
+    caseworkerAgencyName: raw.caseworkerAgencyName || raw.caseWorkerAgencyName || "",
+    caseworkerPhone: raw.caseworkerPhone || raw.caseWorkerPhone || "",
+    caseworkerEmail: raw.caseworkerEmail || raw.caseWorkerEmail || "",
+    caseworkers: Array.isArray(raw.caseworkers) && raw.caseworkers.length > 0
+      ? raw.caseworkers
       : [
           {
-            name: raw.caseWorkerName || "",
-            agency: raw.caseWorkerAgencyName || "",
-            phone: raw.caseWorkerPhone || "",
-            email: raw.caseWorkerEmail || "",
+            name: raw.caseworkerName || raw.caseWorkerName || "",
+            agency: raw.caseworkerAgencyName || raw.caseWorkerAgencyName || "",
+            phone: raw.caseworkerPhone || raw.caseWorkerPhone || "",
+            email: raw.caseworkerEmail || raw.caseWorkerEmail || "",
           },
         ],
-    uploadDocs: [],
-    uploadMedicalDocs: [],
+    uploadDocs: raw.uploadedDocs || [],
     status: raw.status || "Submitted",
     familyName: raw.familyName || raw.nameInClientTable || "",
   };
@@ -420,8 +428,9 @@ const mapDataToInitialValues = (data) => {
   if (!data) return createEmptyInitialValues();
   const base = createEmptyInitialValues();
 
-  // Detect structure
-  const isOldStructure = Array.isArray(data.inTakeClients);
+  // Detect structure: new web-app forms always save `clients` (object keyed by "client1" etc.)
+  // alongside the legacy `inTakeClients` array. Old Flutter-only forms have no `clients` key.
+  const isOldStructure = Array.isArray(data.inTakeClients) && !data.clients;
 
   if (!isOldStructure) {
     const normalizedClients = data.clients
@@ -436,6 +445,7 @@ const mapDataToInitialValues = (data) => {
             birthDate: convertToISO(c.birthDate),
             startDate: formatDateLocal(c.startDate),
             address: c.address || "",
+            apartmentUnit: c.apartmentUnit || "",
             latitude: c.latitude || "",
             longitude: c.longitude || c.longtitude || "",
             clientInfo: c.clientInfo || "",
@@ -628,10 +638,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
-        billingInfo: {
-          ...base.billingInfo,
-          invoiceEmail: user.invoiceEmail || "",
-        },
+        billingInfoList: [
+          { invoiceEmail: user.invoiceEmail || user.email || "" },
+        ],
         workerInfo: {
           ...base.workerInfo,
           workerName: user.name || "",
@@ -652,10 +661,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
-        billingInfo: {
-          ...prev.billingInfo,
-          invoiceEmail: user.invoiceEmail || "",
-        },
+        billingInfoList: prev.billingInfoList?.[0]?.invoiceEmail
+          ? prev.billingInfoList
+          : [{ invoiceEmail: user.invoiceEmail || user.email || "" }],
         workerInfo: {
           ...prev.workerInfo,
           workerName: user.name || "",
@@ -848,6 +856,16 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           }
 
           const nextVals = mapDataToInitialValues(data);
+
+          // If billing email is still empty after mapping, auto-fill from current user profile
+          if (!nextVals.billingInfoList?.[0]?.invoiceEmail && user) {
+            const autoEmail = user.invoiceEmail || user.email || "";
+            if (autoEmail) {
+              nextVals.billingInfoList = [{ ...nextVals.billingInfoList?.[0], invoiceEmail: autoEmail }];
+              nextVals.billingInfo = { invoiceEmail: autoEmail };
+            }
+          }
+
           setInitialValues(nextVals);
 
           // For old-structure forms, stash the human-readable service names so
@@ -861,8 +879,15 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
           if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
           if (data.photo) setAvatarPreview(data.photo);
-          
-          console.log("Prefilled intake values matched:", nextVals);
+
+          console.log("[IntakeForm] Prefilled values:", {
+            id: intakeFormId,
+            isOldStructure: Array.isArray(data.inTakeClients) && !data.clients,
+            serviceType: nextVals.services?.serviceType,
+            billingEmail: nextVals.billingInfoList?.[0]?.invoiceEmail,
+            intakeworkerName: nextVals.intakeworkerName,
+            clientsCount: nextVals.clients?.length,
+          });
         } catch (err) {
           console.error("Error fetching intake form:", err);
         } finally {
@@ -927,11 +952,13 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         })
       )
       .min(1, "At least one client is required"),
-    billingInfo: Yup.object().shape({
-      invoiceEmail: Yup.string()
-        .required("Invoice email is required")
-        .email("Invalid email"),
-    }),
+    billingInfoList: Yup.array()
+      .of(
+        Yup.object().shape({
+          invoiceEmail: Yup.string().email("Invalid email address"),
+        })
+      )
+      .min(1, "At least one billing entry is required"),
   });
 
   const validate = () => {
@@ -1516,21 +1543,84 @@ const handleSubmit = async (values, { resetForm }) => {
               if (values.clients?.[0]?.fullName) filled++;
               if ((values.services?.serviceType?.length ?? 0) > 0) filled++;
               if ((values.services?.serviceDates?.length ?? 0) > 0) filled++;
-              if (values.services?.serviceStartTime) filled++;
-              if (values.parentInfoList?.[0]?.parentName) filled++;
-              if (values.billingInfo?.invoiceEmail) filled++;
-              if (values.medicalInfoList?.[0]?.clientName) filled++;
+              if (values.parentInfoList?.[0]?.parentName || values.parentInfoList?.[0]?.parentPhone || values.parentInfoList?.[0]?.parentEmail) filled++;
+              if (values.billingInfoList?.[0]?.invoiceEmail || values.billingInfo?.invoiceEmail) filled++;
+              if (values.medicalInfoList?.[0]?.clientName || values.medicalInfoList?.[0]?.healthCareNo || values.medicalInfoList?.[0]?.diagnosis) filled++;
+              if (values.intakeworkerName || values.workerInfo?.workerName) filled++;
               if (values.workerInfo?.signature) filled++;
               return Math.round((filled / total) * 100);
             })();
 
             return (
               <Form>
-                <div className="flex gap-8 items-start">
+                <div className="flex flex-col gap-6">
 
+                  {/* ── Form Summary (status + sections) — above Intake Worker ── */}
+                  <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900" style={{ fontSize: 15 }}>Form Summary</h3>
+                      <div className="flex items-center gap-4 text-[13px] text-gray-500">
+                        <span>Status: <span className="font-semibold px-2 py-0.5 rounded-full text-[12px]" style={{ background: "#fef3c7", color: "#d97706" }}>
+                          {values.status || "Draft"}
+                        </span></span>
+                        <span>Completion: <strong style={{ color: "#145228" }}>{completionPct}%</strong></span>
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden mb-4">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, backgroundColor: "#145228" }} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 md:grid-cols-4 lg:grid-cols-5">
+                      {[
+                        { label: "Basic Info", filled: !!(values.clients?.[0]?.fullName) },
+                        { label: "Services", filled: (values.services?.serviceType?.length ?? 0) > 0 },
+                        { label: "Client Info", filled: !!(values.clients?.[0]?.fullName && values.clients?.[0]?.birthDate) },
+                        { label: "Billing Info", filled: !!(values.billingInfoList?.[0]?.invoiceEmail || values.billingInfo?.invoiceEmail) },
+                        { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName || values.parentInfoList?.[0]?.parentPhone || values.parentInfoList?.[0]?.parentEmail) },
+                        { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName || values.medicalInfoList?.[0]?.healthCareNo || values.medicalInfoList?.[0]?.diagnosis) },
+                        ...(showTransportSection || showCombinedSection ? [
+                          { label: "Transportation", filled: !!(values.transportationInfoList?.[0]?.pickupAddress || values.transportationInfoList?.[0]?.dropoffAddress || values.transportationInfoList?.[0]?.clientName) },
+                        ] : []),
+                        ...(showVisitSection || showCombinedSection ? [
+                          { label: "Visitation", filled: !!(values.supervisedVisitations?.[0]?.visitPurpose || values.supervisedVisitations?.[0]?.visitAddress || values.supervisedVisitations?.[0]?.clientName) },
+                        ] : []),
+                        ...(isCaseWorker ? [
+                          { label: "Intake Worker", filled: !!(values.intakeworkerName || values.workerInfo?.workerName) },
+                          { label: "Case Worker", filled: !!(values.caseworkers?.[0]?.name || values.caseworkerName) },
+                        ] : []),
+                        { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
+                      ].map(({ label, filled }) => (
+                        <div key={label} className="flex items-center gap-1.5 py-1">
+                          <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
+                            style={{ border: filled ? "none" : "1.5px solid #d1d5db", background: filled ? "#145228" : "white" }}>
+                            {filled && (
+                              <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                                <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-[12px]" style={{ color: filled ? "#145228" : "#6b7280", fontWeight: filled ? 600 : 400 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                  {/* ── LEFT: Main content ── */}
-                  <div className="flex-1 min-w-0 flex flex-col gap-6">
+                  {/* Status (update mode) — shown at the very top */}
+                  {mode === "update" && (
+                    <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                      <label className="font-semibold text-sm text-gray-700">Status</label>
+                      <div className="relative">
+                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
+                          <option value="Submitted">Submitted</option>
+                          <option value="Draft">Draft</option>
+                          <option value="Accepted">Accepted</option>
+                          <option value="Rejected">Rejected</option>
+                        </Field>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                 {/* ── Intake Worker Info ── */}
                 {isCaseWorker && (
@@ -1617,23 +1707,6 @@ const handleSubmit = async (values, { resetForm }) => {
                     </FieldArray>
                   </div>
                 )}
-
-                  {/* Status (update mode) */}
-                  {mode === "update" && (
-                    <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                      <label className="font-semibold text-sm text-gray-700">Status</label>
-                      <div className="relative">
-                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
-                          <option value="Submitted">Submitted</option>
-                          <option value="Accepted">Accepted</option>
-                          <option value="Rejected">Rejected</option>
-                        </Field>
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                 {/* ── Family Name Card ── */}
                 <div className="bg-white rounded-xl border p-8" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -2611,74 +2684,7 @@ const handleSubmit = async (values, { resetForm }) => {
                   </div>
                 </div>
 
-                  </div>{/* end left column */}
-
-                  {/* ── RIGHT: Form Summary sidebar ── */}
-                  <div className="w-[280px] flex-shrink-0 sticky top-4">
-                    <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                      <h3 className="font-bold text-gray-900 mb-4" style={{ fontSize: 15 }}>Form Summary</h3>
-
-                      <div className="space-y-3 pb-4 border-b" style={{ borderColor: "#f3f4f6" }}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Status</span>
-                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#fef3c7", color: "#d97706" }}>📄 Draft</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Created</span>
-                          <span className="text-[13px] font-semibold text-gray-700">Today</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Last Saved</span>
-                          <span className="text-[13px] font-semibold text-gray-700">Just now</span>
-                        </div>
-                      </div>
-
-                      <div className="py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">COMPLETION</p>
-                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, backgroundColor: "#145228" }} />
-                        </div>
-                        <p className="text-[12px] font-semibold text-gray-500 mt-1.5 text-right">{completionPct}%</p>
-                      </div>
-
-                      <div className="py-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">SECTIONS</p>
-                        <ul className="space-y-2.5">
-                          {[
-                            { label: "Basic Info", filled: !!(values.clients?.[0]?.fullName) },
-                            { label: "Services", filled: (values.services?.serviceType?.length ?? 0) > 0 },
-                            { label: "Client Info", filled: !!(values.clients?.[0]?.fullName) },
-                            { label: "Billing Info", filled: !!(values.billingInfo?.invoiceEmail) },
-                            { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName) },
-                            { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName) },
-                            ...(isCaseWorker ? [
-                              { label: "Case Worker Info", filled: !!(values.caseworkerName) },
-                              { label: "Intake Worker Info", filled: !!(values.intakeworkerName) },
-                            ] : []),
-                            { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
-                          ].map(({ label, filled }) => (
-                            <li key={label} className="flex items-center gap-2.5">
-                              <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
-                                style={{ border: filled ? "none" : "1.5px solid #d1d5db", background: filled ? "#145228" : "white" }}>
-                                {filled && (
-                                  <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                                    <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span className="text-[13px]" style={{ color: filled ? "#145228" : "#6b7280", fontWeight: filled ? 600 : 400 }}>{label}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <button type="button" className="w-full py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors mt-1" style={{ borderColor: "#e5e7eb" }}>
-                        Save Draft
-                      </button>
-                    </div>
-                  </div>
-
-                </div>{/* end flex gap-5 */}
+                </div>{/* end flex flex-col gap-6 */}
 
                 {/* ── Bottom Footer ── */}
                 <div className="sticky bottom-0 mt-4 bg-white border-t flex items-center justify-between px-6 py-4 -mx-6" style={{ borderColor: "#e5e7eb" }}>

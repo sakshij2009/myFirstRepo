@@ -911,8 +911,19 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
       if (!isShiftModalOpen || !selectedShiftFormId) return;
       setShiftLoading(true);
       try {
-        const qSnap = await getDocs(query(collection(db, "ShiftReports"), where("formId", "==", selectedShiftFormId), orderBy("createdAt", "desc")));
-        const rows = qSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Try multiple field names — different parts of the app may link shift reports differently
+        let rows = [];
+        const tryField = async (field) => {
+          try {
+            const q = query(collection(db, "ShiftReports"), where(field, "==", selectedShiftFormId), orderBy("createdAt", "desc"));
+            const snap = await getDocs(q);
+            return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          } catch { return []; }
+        };
+        rows = await tryField("formId");
+        if (!rows.length) rows = await tryField("intakeFormId");
+        if (!rows.length) rows = await tryField("inTakeFormId");
+        if (!rows.length) rows = await tryField("clientId");
         if (!cancelled) setShiftReports(rows);
       } catch (e) {
         console.error("Failed to load shift reports", e);
@@ -1084,7 +1095,17 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
                                   <td className="py-2 text-sm text-gray-700">{s.createdAt?.toDate ? s.createdAt.toDate().toLocaleString() : (s.createdAt ? new Date(s.createdAt).toLocaleString() : "—")}</td>
                                   <td className="py-2 text-sm text-gray-700">{s.workerName || s.author || "—"}</td>
                                   <td className="py-2 text-sm text-gray-700">{s.summary || s.notes || "—"}</td>
-                                  <td className="py-2 text-sm text-gray-700">{s.viewUrl ? (<a href={s.viewUrl} target="_blank" rel="noreferrer" className="text-emerald-600">Open</a>) : "—"}</td>
+                                  <td className="py-2 text-sm text-gray-700">
+                                    {s.viewUrl ? (
+                                      <a href={s.viewUrl} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline">Open Report</a>
+                                    ) : (
+                                      <button
+                                        onClick={() => { setIsShiftModalOpen(false); navigate(`/intake-form/view/${selectedShiftFormId}`); }}
+                                        className="text-emerald-600 hover:underline text-sm">
+                                        View Client Form
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
