@@ -165,6 +165,7 @@ const AddIntakeUser = ({ mode = "add" }) => {
           await sendSignInEmail({
             email: values.email.trim().toLowerCase(),
             role: values.role === "Parent" ? "parent" : "worker",
+            isInvitation: true,
           });
           console.log("Invitation link sent to:", values.email);
         } catch (authError) {

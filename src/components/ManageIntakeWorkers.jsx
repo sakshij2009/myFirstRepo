@@ -121,7 +121,7 @@ const ManageIntakeWorkers = () => {
     const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
 
     try {
-      await sendSignInEmail({ email: inviteEmail.trim().toLowerCase(), role: "worker" });
+      await sendSignInEmail({ email: inviteEmail.trim().toLowerCase(), role: "worker", isInvitation: true });
 
       alert(`Invitation link sent to ${inviteEmail}`);
       setShowModal(false);
