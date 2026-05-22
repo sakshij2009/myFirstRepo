@@ -476,13 +476,23 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
                         title="View">
                         <Eye size={15} style={{ color: "#6b7280" }} />
                       </button>
-                      {status !== "approved" && (
+                      {/* Edit button — only shown when admin has enabled Editing Assist (isEditable !== false) */}
+                      {status !== "approved" && row.isEditable !== false && (
                         <button
                           onClick={() => navigate(`/intake-form/edit/${row.id}`)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
                           title="Edit">
                           <Pencil size={15} style={{ color: "#6b7280" }} />
                         </button>
+                      )}
+                      {/* Show a locked indicator when admin has disabled editing */}
+                      {status !== "approved" && row.isEditable === false && (
+                        <span
+                          className="p-1.5 rounded-lg"
+                          title="Editing disabled by admin"
+                          style={{ cursor: "not-allowed", opacity: 0.4 }}>
+                          <Pencil size={15} style={{ color: "#6b7280" }} />
+                        </span>
                       )}
                       {status === "draft" && (
                         <button
