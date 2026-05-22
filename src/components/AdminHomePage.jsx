@@ -137,7 +137,7 @@ const AdminHomePage = ({ user, setUser }) => {
             </Route>
 
             {/* View intake form (read-only) */}
-            <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={true} />} />
+            <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={false} />} />
 
             <Route path="*" element={<Dashboard user={user} />} />
           </Routes>

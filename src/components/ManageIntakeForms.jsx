@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Users, Briefcase, FileText, Eye, Edit2, Trash2, Search,
   Baby, User, Heart, AlertCircle, Building2, CheckCircle2,
-  X, Plus, ChevronRight, Clock, MoreHorizontal,
+  X, Plus, ChevronRight, Clock,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -136,66 +136,42 @@ function FormTypeBadge({ type }) {
   );
 }
 
-// ─── View Detail Modal ────────────────────────────────────────────────────────
-function ViewFormModal({ record, onClose }) {
-  const svc = getServiceColor(record.serviceType);
-  const sts = getClientStatusColor(record.clientStatus);
-  const isPrivate = record.formType === "private-family";
+// ─── Editing Assist Toggle ────────────────────────────────────────────────────
+function EditingToggle({ enabled, onToggle }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.42)" }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl flex items-center justify-center" style={{ width: 36, height: 36, background: isPrivate ? "#f0fdf4" : "#eff6ff" }}>
-              {isPrivate ? <Users size={16} style={{ color: "#1f7a3c" }} /> : <Briefcase size={16} style={{ color: "#2563eb" }} />}
-            </div>
-            <div>
-              <p className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Intake Form Details</p>
-              <p style={{ fontSize: 11, color: "#9ca3af" }}>Submitted {formatDate(record.submittedAt)}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X size={16} style={{ color: "#6b7280" }} />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: "Client Name",  value: record.clientName },
-              { label: "Client Code",  value: record.clientCode },
-              { label: "Parent Email", value: record.parentEmail },
-              { label: "Agency",       value: record.agency },
-            ].map((row) => (
-              <div key={row.label}>
-                <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, marginBottom: 3 }}>{row.label}</p>
-                <p style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>{row.value || "—"}</p>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-3 gap-4 pt-1">
-            <div>
-              <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, marginBottom: 5 }}>Service Type</p>
-              <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: svc.bg, color: svc.text }}>{record.serviceType || "—"}</span>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, marginBottom: 5 }}>Client Status</p>
-              <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: sts.bg, color: sts.text }}>{record.clientStatus}</span>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, marginBottom: 5 }}>Form Type</p>
-              <FormTypeBadge type={record.formType} />
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 pb-5 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg font-semibold transition-all hover:opacity-90 text-white" style={{ background: "#145228", fontSize: 13 }}>
-            Close
-          </button>
-        </div>
+    <button
+      onClick={onToggle}
+      title={enabled ? "Editing allowed — click to revoke" : "Editing locked — click to allow"}
+      className="flex items-center gap-2 group"
+      style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+    >
+      {/* track */}
+      <div
+        className="relative flex-shrink-0 transition-colors duration-200"
+        style={{
+          width: 36, height: 20, borderRadius: 10,
+          background: enabled ? "#145228" : "#d1d5db",
+        }}
+      >
+        {/* thumb */}
+        <div
+          className="absolute top-1 transition-all duration-200"
+          style={{
+            width: 12, height: 12, borderRadius: "50%",
+            background: "#fff",
+            left: enabled ? 20 : 4,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+          }}
+        />
       </div>
-    </div>
+      <span style={{
+        fontSize: 11.5, fontWeight: 700,
+        color: enabled ? "#145228" : "#9ca3af",
+        minWidth: 20,
+      }}>
+        {enabled ? "Yes" : "No"}
+      </span>
+    </button>
   );
 }
 
@@ -219,7 +195,6 @@ export default function ManageIntakeForms() {
   const [serviceFilter, setServiceFilter]   = useState("All");
   const [agencyFilter, setAgencyFilter]     = useState("All");
   const [statusFilter, setStatusFilter]     = useState("All");
-const [viewRecord, setViewRecord]         = useState(null);
   const [successBanner, setSuccessBanner]   = useState(null);
 
   useEffect(() => {
@@ -605,7 +580,8 @@ const [viewRecord, setViewRecord]         = useState(null);
                     { label: "Form Type",        w: "145px" },
                     { label: "Submitted",        w: "115px" },
                     { label: "View Intake Form", w: "130px", center: true },
-                    { label: "Actions",          w: "150px", center: true },
+                    { label: "Editing Assist",   w: "115px", center: true },
+                    { label: "Actions",          w: "100px", center: true },
                   ].map((col) => (
                     <th
                       key={col.label}
@@ -625,7 +601,7 @@ const [viewRecord, setViewRecord]         = useState(null);
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="py-14 text-center">
+                    <td colSpan={11} className="py-14 text-center">
                       <div className="flex items-center justify-center gap-2" style={{ color: "#9ca3af" }}>
                         <div className="animate-spin w-5 h-5 rounded-full border-2 border-emerald-600 border-t-transparent" />
                         <span style={{ fontSize: 13 }}>Loading forms…</span>
@@ -634,7 +610,7 @@ const [viewRecord, setViewRecord]         = useState(null);
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-14 text-center">
+                    <td colSpan={11} className="py-14 text-center">
                       <FileText size={32} className="mx-auto mb-3" style={{ color: "#d1d5db" }} strokeWidth={1.5} />
                       <p style={{ fontSize: 13, color: "#9ca3af", fontWeight: 500 }}>No forms match your filters.</p>
                     </td>
@@ -700,10 +676,10 @@ const [viewRecord, setViewRecord]         = useState(null);
                           </div>
                         </td>
 
-                        {/* View Intake Form */}
+                        {/* View Intake Form — opens full form in view-only mode */}
                         <td className="px-4 py-3.5 text-center">
                           <button
-                            onClick={() => setViewRecord(record)}
+                            onClick={() => navigate(`/admin-dashboard/view-intake-form/${record.formId}`)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all hover:bg-gray-50 hover:border-gray-300"
                             style={{ fontSize: 11.5, fontWeight: 600, color: "#374151", borderColor: "#e5e7eb" }}
                           >
@@ -712,17 +688,19 @@ const [viewRecord, setViewRecord]         = useState(null);
                           </button>
                         </td>
 
-                        {/* Actions */}
+                        {/* Editing Assist toggle */}
+                        <td className="px-4 py-3.5 text-center">
+                          <div className="flex justify-center">
+                            <EditingToggle
+                              enabled={!!record.isEditable}
+                              onToggle={() => handleToggleEdit(record)}
+                            />
+                          </div>
+                        </td>
+
+                        {/* Actions — Edit + Delete only */}
                         <td className="px-4 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => setViewRecord(record)}
-                              className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
-                              style={{ width: 28, height: 28, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe" }}
-                              title="View"
-                            >
-                              <Eye size={13} strokeWidth={2} />
-                            </button>
                             <button
                               onClick={() => navigate(`/admin-dashboard/add/update-intake-form/${record.formId}?type=${record.formType}`)}
                               className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
@@ -738,14 +716,6 @@ const [viewRecord, setViewRecord]         = useState(null);
                               title="Delete"
                             >
                               <Trash2 size={13} strokeWidth={2} />
-                            </button>
-                            <button
-                              onClick={() => handleToggleEdit(record)}
-                              className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
-                              style={{ width: 28, height: 28, background: record.isEditable ? "#f0fdf4" : "#f3f4f6", color: record.isEditable ? "#1f7a3c" : "#374151", border: `1px solid ${record.isEditable ? "#bbf7d0" : "#e5e7eb"}` }}
-                              title={record.isEditable ? "Lock editing" : "Allow editing"}
-                            >
-                              <MoreHorizontal size={13} strokeWidth={2} />
                             </button>
                           </div>
                         </td>
@@ -774,8 +744,6 @@ const [viewRecord, setViewRecord]         = useState(null);
         </div>
       </div>
 
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      {viewRecord && <ViewFormModal record={viewRecord} onClose={() => setViewRecord(null)} />}
     </div>
   );
 }
