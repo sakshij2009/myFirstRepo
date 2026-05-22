@@ -10,20 +10,42 @@ const sendgridApiKey = defineSecret("SENDGRID_API_KEY");
 
 const APP_URL = "https://ffadmin-prod.web.app";
 const AUTH_ACTION_URL = `${APP_URL}/auth/action`;
+const INTAKE_LOGIN_URL = `${APP_URL}/intake-form/login`;
 const FROM_EMAIL = "intakes@familyforever.ca";
 const FROM_NAME = "Family Forever Inc.";
 
 // ── HTML email template ───────────────────────────────────────────────────────
-function buildEmailHTML(signInLink, role) {
+// isInvitation = true  → admin sent this; CTA links directly to signup page
+// isInvitation = false → user-requested magic link; CTA is the Firebase sign-in link
+function buildEmailHTML(ctaLink, role, isInvitation) {
   const isParent = role === "parent";
-  const portalLabel = isParent ? "Family Portal" : "Compliance Portal";
+
+  // Header tagline
+  const headerTagline = isParent
+    ? "Family Portal"
+    : "Caring for every family, every step of the way.";
+
+  // Body copy
+  const bodyHeading = isInvitation
+    ? "You've been invited to Family Forever Inc."
+    : "Your sign-in link is ready";
+
+  const bodyIntro = isInvitation
+    ? `You have been invited to join the <strong>Family Forever Inc.</strong> Intake Management Portal.
+       Click the button below to create your account and get started.`
+    : `Click the button below to access the Family Forever Inc. Intake Portal.
+       This link is valid for <strong>24 hours</strong> and can only be used once.`;
+
+  const ctaLabel = isInvitation
+    ? "Create Your Account &rarr;"
+    : "Sign in to Family Forever &rarr;";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Your Family Forever sign-in link</title>
+  <title>Family Forever Inc.</title>
 </head>
 <body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:40px 16px;">
@@ -34,11 +56,11 @@ function buildEmailHTML(signInLink, role) {
         <!-- Header -->
         <tr>
           <td style="background:linear-gradient(160deg,#1B5E37 0%,#14472A 100%);padding:36px 40px;text-align:center;">
-            <img src="${APP_URL}/images/logo.png" alt="Family Forever"
+            <img src="${APP_URL}/images/logo.png" alt="Family Forever Inc."
               width="56" height="56"
               style="border-radius:50%;display:block;margin:0 auto 16px;border:2px solid rgba(255,255,255,0.2);">
-            <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:700;">Family Forever</h1>
-            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0;font-size:13px;">${portalLabel}</p>
+            <h1 style="color:#ffffff;margin:0;font-size:22px;font-weight:700;">Family Forever Inc.</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0;font-size:13px;">${headerTagline}</p>
           </td>
         </tr>
 
@@ -46,21 +68,20 @@ function buildEmailHTML(signInLink, role) {
         <tr>
           <td style="padding:36px 40px 28px;">
             <h2 style="color:#111827;font-size:18px;font-weight:700;margin:0 0 10px;">
-              Your sign-in link is ready
+              ${bodyHeading}
             </h2>
             <p style="color:#4B5563;font-size:14px;line-height:1.7;margin:0 0 28px;">
-              Click the button below to access your Family Forever ${portalLabel}.
-              This link is valid for <strong>24 hours</strong> and can only be used once.
+              ${bodyIntro}
             </p>
 
             <!-- CTA -->
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
               <tr><td align="center">
-                <a href="${signInLink}"
+                <a href="${ctaLink}"
                   style="display:inline-block;background:#1B5E37;color:#ffffff;text-decoration:none;
                          font-size:15px;font-weight:700;padding:15px 40px;border-radius:10px;
                          letter-spacing:0.2px;">
-                  Sign in to Family Forever &rarr;
+                  ${ctaLabel}
                 </a>
               </td></tr>
             </table>
@@ -104,7 +125,7 @@ function buildEmailHTML(signInLink, role) {
                         <span style="color:#1B5E37;font-weight:700;margin-right:10px;">4.</span>
                         <span style="color:#374151;font-size:13px;line-height:1.5;">
                           Bookmark
-                          <a href="${APP_URL}" style="color:#1B5E37;font-weight:600;">${APP_URL}</a>
+                          <a href="${INTAKE_LOGIN_URL}" style="color:#1B5E37;font-weight:600;">${INTAKE_LOGIN_URL}</a>
                           for easy access in the future
                         </span>
                       </td>
@@ -141,7 +162,7 @@ function buildEmailHTML(signInLink, role) {
 exports.sendSignInEmail = onCall(
   { secrets: [sendgridApiKey] },
   async (request) => {
-    const { email, role } = request.data;
+    const { email, role, isInvitation } = request.data;
 
     if (!email || typeof email !== "string") {
       throw new HttpsError("invalid-argument", "A valid email address is required.");
@@ -149,7 +170,27 @@ exports.sendSignInEmail = onCall(
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Build continue URL with email (and optional role) pre-filled
+    sgMail.setApiKey(sendgridApiKey.value());
+
+    // ── Invitation emails (admin → new worker) ────────────────────────────────
+    // Use a direct link to the signup page — no Firebase magic link needed.
+    if (isInvitation) {
+      try {
+        await sgMail.send({
+          to: normalizedEmail,
+          from: { email: FROM_EMAIL, name: FROM_NAME },
+          replyTo: FROM_EMAIL,
+          subject: "You're invited to Family Forever Inc.",
+          html: buildEmailHTML(INTAKE_LOGIN_URL, role, true),
+        });
+      } catch (err) {
+        console.error("SendGrid error:", err?.response?.body ?? err);
+        throw new HttpsError("internal", "Failed to send email.");
+      }
+      return { success: true };
+    }
+
+    // ── Magic-link sign-in emails (user-requested from login page) ────────────
     const params = new URLSearchParams({ email: normalizedEmail });
     if (role) params.set("role", role);
 
@@ -169,15 +210,13 @@ exports.sendSignInEmail = onCall(
       throw new HttpsError("internal", "Failed to generate sign-in link.");
     }
 
-    sgMail.setApiKey(sendgridApiKey.value());
-
     try {
       await sgMail.send({
         to: normalizedEmail,
         from: { email: FROM_EMAIL, name: FROM_NAME },
         replyTo: FROM_EMAIL,
         subject: "Your Family Forever sign-in link",
-        html: buildEmailHTML(signInLink, role),
+        html: buildEmailHTML(signInLink, role, false),
       });
     } catch (err) {
       console.error("SendGrid error:", err?.response?.body ?? err);
