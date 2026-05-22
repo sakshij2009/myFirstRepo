@@ -160,7 +160,7 @@ function ShiftChip({ shift, navigate }) {
   const s = SERVICE_CFG[shift.serviceKey] || SERVICE_CFG.other;
   return (
     <div
-      onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
+      onClick={() => navigate && navigate(`/admin-dashboard/shift-report/${shift.id}`)}
       className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity"
       style={{ background: s.bg, border: `1px solid ${s.border}` }}
       title={`${shift.timeStart}–${shift.timeEnd} · ${shift.client} · P: ${shift.staff || "Unassigned"}${shift.secondaryStaff ? ` · S: ${shift.secondaryStaff}` : ""}`}
@@ -297,7 +297,7 @@ function ShiftCompactRow({ shift, navigate }) {
   const svc = SERVICE_CFG[shift.serviceKey] || SERVICE_CFG.other;
   return (
     <div
-      onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
+      onClick={() => navigate && navigate(`/admin-dashboard/shift-report/${shift.id}`)}
       className="rounded-lg p-3 cursor-pointer hover:bg-white transition-colors mb-1.5"
       style={{ background: "#fafafa", border: `1px solid #f0f0f0`, borderLeftWidth: 3, borderLeftColor: svc.color, borderLeftStyle: "solid" }}
     >
