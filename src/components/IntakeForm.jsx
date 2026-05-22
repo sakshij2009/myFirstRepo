@@ -855,6 +855,16 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
             return;
           }
 
+          // ── Admin editing lock guard ──────────────────────────────────────
+          // If admin has set isEditable=false and the intake worker is trying
+          // to open this form in edit/update mode, redirect to view-only mode.
+          if (mode === "update" && data.isEditable === false) {
+            alert("⛔ Editing has been disabled by the admin for this form. Opening in view mode.");
+            navigate(`/intake-form/view/${intakeFormId}`);
+            setLoading(false);
+            return;
+          }
+
           const nextVals = mapDataToInitialValues(data);
 
           // If billing email is still empty after mapping, auto-fill from current user profile
