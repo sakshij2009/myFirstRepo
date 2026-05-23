@@ -1,4 +1,4 @@
-import { View, Text, TextInput, Pressable, Image, Dimensions, KeyboardAvoidingView, ScrollView, Platform, StyleSheet, Animated } from "react-native";
+import { View, Text, TextInput, Pressable, Image, Dimensions, KeyboardAvoidingView, ScrollView, Platform, StyleSheet, Animated, Linking } from "react-native";
 import { useState, useEffect, useRef } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -302,7 +302,12 @@ export default function Login() {
             {/* Contact Admin */}
             <Text style={styles.contactText}>
               Don't have an account?{" "}
-              <Text style={styles.contactLink}>Contact your administrator.</Text>
+              <Text
+                style={styles.contactLink}
+                onPress={() => Linking.openURL("mailto:ops@familyforever.ca")}
+              >
+                Contact your administrator.
+              </Text>
             </Text>
           </Animated.View>
 
@@ -331,7 +336,7 @@ export default function Login() {
           </Animated.View>
 
           {/* Version */}
-          <Text style={styles.versionText}>v1.0.2 · Family Forever Inc.</Text>
+          <Text style={styles.versionText}>v1.0.2 · Family Forever Staff Platform</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

@@ -462,7 +462,7 @@ export default function Home() {
           <Text style={styles.headerWelcome}>
             Welcome back, <Text style={{ color: PRIMARY_GREEN }}>{firstName}</Text>
           </Text>
-          <Text style={styles.headerOrg}>Family Forever Inc.</Text>
+          <Text style={styles.headerOrg}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
         </View>
 
         {/* TODAY'S SHIFTS */}
