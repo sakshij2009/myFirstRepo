@@ -27,8 +27,16 @@ export default function InvoiceGenerator({ agency, groups = [], preselectedClien
 
   const activeGroups = groups.filter(g => selectedClients[g.id]);
   
-  // Flatten shifts
-  const allShifts = activeGroups.flatMap(g => g.shifts.map(s => ({...s, clientName: g.name})));
+  // Flatten shifts — normalize all numeric fields to actual numbers (Firestore may return strings)
+  const allShifts = activeGroups.flatMap(g => g.shifts.map(s => ({
+    ...s,
+    clientName: g.name,
+    hours: parseFloat(s.hours) || 0,
+    rate: parseFloat(s.rate) || 0,
+    transportKm: parseFloat(s.transportKm) || 0,
+    transportRate: parseFloat(s.transportRate) || 0,
+    transportAmount: parseFloat(s.transportAmount) || 0,
+  })));
 
   const totalAmount = allShifts.reduce((acc, s) => {
     const shiftTotal = (s.hours * s.rate) * 1.05; // 5% GST
