@@ -111,6 +111,10 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
   // Track the client ID that was originally loaded from the saved shift (update mode)
   const initialLoadedClientIdRef = useRef(null);
+  // Ref to Formik instance so we can call setFieldValue from outside the render
+  const formikRef = useRef(null);
+  // Description pulled from the matched intake form
+  const [intakeDescription, setIntakeDescription] = useState("");
 
   // ---------------- VALIDATION SCHEMA ----------------
   const validationSchema = Yup.object().shape({
@@ -441,6 +445,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           setShiftPoints([]);
           setRemovedShiftPoints([]);
           setIntakeDescription("");
+          formikRef.current?.setFieldValue("description", "");
         }
         return;
       }
@@ -511,8 +516,8 @@ const AddUserShift = ({ mode = "add", user }) => {
           .split(/\s+/)
           .filter((w) => w.length > 2 && w !== "family" && w !== "the");
 
-        // Use only the last meaningful word (surname) for partial matching to
-        // prevent false positives from short or common keywords matching unrelated clients.
+        // Require ALL client keywords to match — using only surname caused false positives
+        // when two clients share a surname (e.g. "Craig Owens" vs "Sandra Owens").
         const surnameKeyword = clientKeywords.length > 0
           ? clientKeywords[clientKeywords.length - 1]
           : null;
@@ -520,12 +525,13 @@ const AddUserShift = ({ mode = "add", user }) => {
         sortedDocs.forEach((d) => {
           const data = d.id ? { id: d.id, ...d.data() } : d.data();
           const nameMatch = (n) => (n || "").trim().toLowerCase() === clientNameCandidate.toLowerCase();
-          // Partial match: surname must appear as a complete word (not substring)
-          // e.g. "owens" matches "Craig Owens" but NOT "Rida Creed Glory"
+          // Partial match: ALL client keywords must appear as complete words in the name.
+          // e.g. "Craig Owens" (keywords: ["craig","owens"]) requires both words to match,
+          // preventing false positives when two clients share only a surname.
           const partialMatch = (n) => {
-            if (!n || !surnameKeyword) return false;
+            if (!n || clientKeywords.length === 0) return false;
             const words = (n || "").toLowerCase().split(/[\s,]+/);
-            return words.includes(surnameKeyword);
+            return clientKeywords.every(kw => words.includes(kw));
           };
 
           let isMatch = false;
@@ -662,6 +668,12 @@ const AddUserShift = ({ mode = "add", user }) => {
           setShiftPoints([]);
         }
         setRemovedShiftPoints([]);
+
+        // Auto-fill description from intake form service description (only in add mode)
+        if (mode !== "update" && foundDesc) {
+          setIntakeDescription(foundDesc);
+          formikRef.current?.setFieldValue("description", foundDesc);
+        }
 
       } catch (err) {
         console.error("Error loading data from intake:", err);
@@ -991,6 +1003,8 @@ const AddUserShift = ({ mode = "add", user }) => {
       setIntakeDescription("");
     } catch (error) {
       console.error("Error saving shift:", error);
+      alert("Failed to save shift: " + (error?.message || "Unknown error. Please try again."));
+      throw error;
     }
   };
 
@@ -1126,12 +1140,13 @@ const AddUserShift = ({ mode = "add", user }) => {
 
       <div>
         <Formik
+          innerRef={formikRef}
           enableReinitialize
           initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ touched, errors, values, setFieldValue }) => {
+          {({ touched, errors, values, setFieldValue, isSubmitting }) => {
             const handleDatesChange = (dates) => {
               const selected = dates || [];
               setFieldValue("shiftDates", selected);
@@ -1815,10 +1830,20 @@ const AddUserShift = ({ mode = "add", user }) => {
                       Cancel
                     </button>
                     <button type="submit"
-                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors"
+                      disabled={isSubmitting}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-semibold text-sm text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       style={{ backgroundColor: "#145228" }}>
-
-                      {mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`}
+                      {isSubmitting ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          {mode === "update" ? "Updating..." : `Creating ${values.shiftDates?.length > 1 ? `${values.shiftDates.length} Shifts` : "Shift"}...`}
+                        </>
+                      ) : (
+                        mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`
+                      )}
                     </button>
                   </div>
                 </div>
