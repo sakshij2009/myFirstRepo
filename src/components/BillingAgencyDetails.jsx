@@ -133,8 +133,8 @@ export default function BillingAgencyDetails({ agency, onBack }) {
 
             // 4) Inherit Exact Database Rates from Agency Settings
             const rawCatKey = (s.categoryName || s.shiftCategory || s.typeName || s.shiftType || "Emergency Care");
-            let matchedRate = liveAgency?.globalBillingRate || 55;
-            let matchedTransportRate = liveAgency?.globalKmRate || 0.60;
+            let matchedRate = parseFloat(liveAgency?.globalBillingRate) || 0;
+            let matchedTransportRate = parseFloat(liveAgency?.globalKmRate) || 0;
             
             if (Array.isArray(liveAgency?.rates)) {
               const found = liveAgency.rates.find(rt => (rt.name || "").toLowerCase() === rawCatKey.toLowerCase());
