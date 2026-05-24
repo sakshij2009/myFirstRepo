@@ -1069,9 +1069,82 @@ const generateClientCode = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const createClientsFromIntake = async (intake, intakeId, db) => {
-  for (const client of intake.clients) {
-    await createSingleClient(intake, intakeId, client, db);
+  const clients = Array.isArray(intake.clients)
+    ? intake.clients
+    : Object.values(intake.clients || {});
+
+  if (clients.length > 1 && intake.familyName) {
+    // Multiple clients with a family name → create ONE family client document
+    await createFamilyClient(intake, intakeId, clients, db);
+  } else {
+    for (const client of clients) {
+      await createSingleClient(intake, intakeId, client, db);
+    }
   }
+};
+
+const createFamilyClient = async (intake, intakeId, clients, db) => {
+  let agencyName = "Private";
+  let agencyId = "";
+  let agencyAddress = "";
+  let agencyType = "Private";
+  let clientRate = "";
+  let kmRate = "";
+  let rateList = [];
+
+  if (intake.isCaseWorker) {
+    agencyName = intake.agencyName || "";
+    const agencySnap = await getDocs(
+      query(collection(db, "agencies"), where("agencyName", "==", agencyName))
+    );
+    if (!agencySnap.empty) {
+      const agencyDoc = agencySnap.docs[0];
+      const agency = agencyDoc.data();
+      agencyId = agencyDoc.id;
+      agencyAddress = agency.address || "";
+      agencyType = agency.type || "";
+      rateList = agency.rateList || [];
+      const serviceId = intake.services?.serviceType?.[0];
+      const matchedRate = rateList.find((r) => r.id === serviceId);
+      clientRate = matchedRate?.rate ?? "";
+      kmRate = matchedRate?.kmRate ?? "";
+    }
+  }
+
+  const clientId = Date.now().toString();
+  await setDoc(doc(db, "clients", clientId), {
+    name: intake.familyName,
+    isFamily: true,
+    clientCount: clients.length,
+    individuals: clients.map((c) => ({
+      fullName: c.fullName || "",
+      dob: c.birthDate || null,
+      gender: c.gender || "",
+    })),
+    dob: null,
+    gender: "",
+    address: clients[0]?.address || "",
+    avatar: "",
+    clientCode: generateClientCode(),
+    clientStatus: "Active",
+    fileClosed: false,
+    description: intake.services?.serviceDesc || "",
+    parentEmail: intake.parentInfoList?.[0]?.parentEmail || "",
+    agencyName,
+    agencyId,
+    agencyAddress,
+    agencyType,
+    clientRate,
+    kmRate,
+    rateList: intake.isCaseWorker ? rateList : [],
+    medications: [],
+    pharmacy: {},
+    hospital: {},
+    astrologist: {},
+    createdAt: Timestamp.now(),
+    intakeId,
+    id: clientId,
+  });
 };
 
 const createSingleClient = async (intake, intakeId, client, db) => {
