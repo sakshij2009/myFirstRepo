@@ -226,15 +226,7 @@ const IntakeLogin = () => {
       };
       await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
-      // Send verification magic link
-      const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
-      await sendSignInEmail({ email: email.trim().toLowerCase() });
-      window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
-
-      // Switch to Sign In tab and show success
-      setIsSignUp(false);
-      setLoginEmail(email.trim().toLowerCase());
-      setMessage("Account created! A verification link has been sent to your email. Click it to sign in.");
+      setMessage("Account created successfully! Click \"Sign In\" below to receive your login link.");
     } catch (err) {
       setError("Sign up failed: " + err.message);
     } finally {
@@ -522,7 +514,7 @@ const IntakeLogin = () => {
                 <span
                   className="font-medium cursor-pointer hover:underline"
                   style={{ color: "#1B5E37" }}
-                  onClick={() => { setIsSignUp(false); setError(""); }}
+                  onClick={() => { setLoginEmail(email); setIsSignUp(false); setError(""); setMessage(""); }}
                 >
                   Sign In
                 </span>
