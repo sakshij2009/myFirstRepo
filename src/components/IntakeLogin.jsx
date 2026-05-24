@@ -112,7 +112,7 @@ const IntakeLogin = () => {
     }
   }, [searchParams]);
 
-  // ── Sign In — check email exists then send magic link ───────────────────────
+  // ── Sign In — look up email in Firestore and go straight to dashboard ───────
   const handleSignIn = async () => {
     setError("");
     setMessage("");
@@ -129,18 +129,15 @@ const IntakeLogin = () => {
 
       if (snap.empty) {
         setError("No account found with this email. Please sign up first.");
-        setIsLoading(false);
         return;
       }
 
-      // Send magic link
-      const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
-      await sendSignInEmail({ email: loginEmail.trim().toLowerCase() });
-      window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
-
-      setMessage("Sign-in link sent! Please check your email and click the link to continue.");
+      const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      localStorage.setItem("intakeUser", JSON.stringify(userData));
+      localStorage.setItem("user", JSON.stringify(userData));
+      navigate("/intake-form/dashboard");
     } catch (err) {
-      setError("Failed to send sign-in link: " + err.message);
+      setError("Sign in failed: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -571,13 +568,7 @@ const IntakeLogin = () => {
                 )}
               </button>
 
-              <div className="flex items-center" style={{ margin: "24px 0", gap: 16 }}>
-                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-                <span style={{ fontSize: 12, fontWeight: 500, color: "#9CA3AF" }}>or</span>
-                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-              </div>
-
-              <p className="text-center" style={{ fontSize: 13, color: "#6B7280" }}>
+              <p className="text-center mt-6" style={{ fontSize: 13, color: "#6B7280" }}>
                 Don't have an account?{" "}
                 <span
                   className="font-medium cursor-pointer hover:underline"
