@@ -27,6 +27,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../src/firebase/config";
 import { safeString, parseDate } from "../src/utils/date";
 
@@ -114,7 +115,7 @@ function buildStops(shiftPoints, shift) {
       if (sp.pickupLocation) {
         clients.push({
           id: sp.clientId || `sp_${i}`,
-          name: sp.clientName || safeString(shift?.clientName) || `Client ${i + 1}`,
+          name: sp.name || sp.clientName || `Client ${i + 1}`,
           seatType: sp.seatType || null,
           pickupAddr: sp.pickupLocation,
           pickupTime: sp.pickupTime || safeString(shift?.startTime) || "",
@@ -147,8 +148,8 @@ function buildStops(shiftPoints, shift) {
     }
   }
 
-  // Last fallback: demo
-  if (clients.length === 0) clients = DEMO_CLIENTS;
+  // No clients found — return empty (no demo data in production)
+  if (clients.length === 0) return [];
 
   const stops = [];
   const pickupGroups = {};
@@ -169,9 +170,9 @@ function buildStops(shiftPoints, shift) {
     stops.push({ type: "pickup", label: `Pickup ${letterLabel(i)}`, address: g.address, time: g.time, clients: g.clients });
   });
 
-  // Visit stop (use first client's visitAddr or demo)
-  const visitAddr = clients[0]?.visitAddr || DEMO_VISIT_ADDR;
-  const visitTime = clients[0]?.visitTime || DEMO_VISIT_TIME;
+  // Visit stop — only if at least one client has a real visitAddr
+  const visitAddr = clients.find(c => c.visitAddr)?.visitAddr;
+  const visitTime = clients.find(c => c.visitAddr)?.visitTime || "";
   if (visitAddr) {
     stops.push({ type: "visit", label: "Visit", address: visitAddr, time: visitTime, clients });
   }
@@ -340,7 +341,7 @@ const crStyles = StyleSheet.create({
 });
 
 // ── Completed Stop Row ────────────────────────────────────────────────────────
-function CompletedStop({ stop }) {
+function CompletedStop({ stop, completedTime }) {
   const clientNames = stop.clients.map((c) => c.name).join(", ");
   return (
     <View style={csStyles.row}>
@@ -351,6 +352,9 @@ function CompletedStop({ stop }) {
         <Text style={csStyles.label}>{stop.label} — {stop.address?.split(",")[0]}</Text>
         <Text style={csStyles.clients} numberOfLines={1}>{clientNames}</Text>
       </View>
+      {completedTime ? (
+        <Text style={{ fontSize: 12, fontWeight: "600", color: GREEN, fontFamily: "Inter-SemiBold" }}>{completedTime}</Text>
+      ) : null}
     </View>
   );
 }
@@ -376,10 +380,13 @@ export default function CompleteShift() {
   const [visitArrived, setVisitArrived] = useState(false);
   const [visitNotes, setVisitNotes] = useState("");
   const [totalKm, setTotalKm] = useState(0);
+  // completedTimes: { stopIndex → "HH:MM AM/PM" } — time each stop was finished
+  const [completedTimes, setCompletedTimes] = useState({});
   const locationSubRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const startTimeRef = useRef(Date.now());
   const kmRef = useRef(null); // fallback simulation
+  const progressRestoredRef = useRef(false); // prevent double-restore
 
   // GPS distance tracking
   useEffect(() => {
@@ -416,21 +423,45 @@ export default function CompleteShift() {
     };
   }, []);
 
-  // Load shift
+  // Load shift + restore saved progress
   useEffect(() => {
     if (!shiftId) { setLoading(false); return; }
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "shifts", shiftId), async (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setShift(data);
         const builtStops = buildStops(data.shiftPoints, data);
         setStops(builtStops);
-        // Init client statuses
-        const init = {};
-        builtStops.forEach((st, si) => {
-          st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
-        });
-        setClientStatus(init);
+
+        // Restore saved progress (only once on first load)
+        if (!progressRestoredRef.current) {
+          progressRestoredRef.current = true;
+          try {
+            const saved = await AsyncStorage.getItem(`transportProgress_${shiftId}`);
+            if (saved) {
+              const prog = JSON.parse(saved);
+              if (typeof prog.currentIdx === "number") setCurrentIdx(prog.currentIdx);
+              if (Array.isArray(prog.completedIdxs)) setCompletedIdxs(prog.completedIdxs);
+              if (prog.clientStatus) setClientStatus(prog.clientStatus);
+              if (typeof prog.totalKm === "number") setTotalKm(prog.totalKm);
+              if (prog.completedTimes) setCompletedTimes(prog.completedTimes);
+              if (prog.startedAt) startTimeRef.current = prog.startedAt;
+            } else {
+              // First time on this shift — init client statuses
+              const init = {};
+              builtStops.forEach((st, si) => {
+                st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
+              });
+              setClientStatus(init);
+            }
+          } catch {
+            const init = {};
+            builtStops.forEach((st, si) => {
+              st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
+            });
+            setClientStatus(init);
+          }
+        }
       }
       setLoading(false);
     });
@@ -474,6 +505,23 @@ export default function CompleteShift() {
     : [];
 
   const advanceStop = async () => {
+    // Record completion time for the current stop
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const newCompletedTimes = { ...completedTimes, [currentIdx]: timeStr };
+    setCompletedTimes(newCompletedTimes);
+
+    // Save pickup / drop completion time to Firestore for shift-detail display
+    if (shiftId && currentStop) {
+      try {
+        if (currentStop.type === "pickup") {
+          await updateDoc(doc(db, "shifts", shiftId), { pickupCompletedAt: timeStr });
+        } else if (currentStop.type === "drop") {
+          await updateDoc(doc(db, "shifts", shiftId), { dropCompletedAt: timeStr });
+        }
+      } catch (e) { console.warn("stop time save error:", e); }
+    }
+
     if (currentIdx >= stops.length - 1) {
       // All stops done — stop tracking
       locationSubRef.current?.remove();
@@ -498,9 +546,9 @@ export default function CompleteShift() {
               personalVehicleOfficeAddress: OFFICE_ADDRESS,
             }),
           });
+          await AsyncStorage.removeItem(`transportProgress_${shiftId}`);
         } catch (e) { console.warn("advanceStop save error:", e); }
       }
-      // Show success then navigate to shift detail for the report
       Alert.alert(
         "Shift Complete!",
         "Great work! Your transportation has been logged. You can now fill in the shift report.",
@@ -509,9 +557,26 @@ export default function CompleteShift() {
       );
       return;
     }
-    setCompletedIdxs((prev) => [...prev, currentIdx]);
-    setCurrentIdx((prev) => prev + 1);
+
+    const newCompletedIdxs = [...completedIdxs, currentIdx];
+    const newIdx = currentIdx + 1;
+    setCompletedIdxs(newCompletedIdxs);
+    setCurrentIdx(newIdx);
     setVisitArrived(false);
+
+    // Persist progress so the user can leave and resume
+    if (shiftId) {
+      try {
+        await AsyncStorage.setItem(`transportProgress_${shiftId}`, JSON.stringify({
+          currentIdx: newIdx,
+          completedIdxs: newCompletedIdxs,
+          clientStatus,
+          totalKm,
+          completedTimes: newCompletedTimes,
+          startedAt: startTimeRef.current,
+        }));
+      } catch (e) { console.warn("AsyncStorage save error:", e); }
+    }
   };
 
   const handleCancelShift = () => {
@@ -657,7 +722,7 @@ export default function CompleteShift() {
 
         {/* ── Completed stops (collapsed) ──────────────────────────────────── */}
         {completedIdxs.map((si) => (
-          <CompletedStop key={si} stop={stops[si]} />
+          <CompletedStop key={si} stop={stops[si]} completedTime={completedTimes[si]} />
         ))}
 
         {/* ── Current Stop ─────────────────────────────────────────────────── */}

@@ -171,7 +171,10 @@ export default function TransportationShiftDetail() {
     );
   }
 
-  const pt = Array.isArray(shift?.shiftPoints) && shift.shiftPoints[0];
+  const shiftPts = Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0
+    ? shift.shiftPoints
+    : null;
+  const pt = shiftPts?.[0] || null;
 
   const rawName = safeString(shift?.familyName || shift?.childName || shift?.clientName || shift?.name || shift?.client || shift?.clientDetails?.name);
   const intakeName = (() => {
@@ -197,8 +200,30 @@ export default function TransportationShiftDetail() {
   const rawServiceType =
     safeString(shift?.category || shift?.categoryName || shift?.serviceType) ||
     "Transportation";
-  const seatType = safeString(pt?.seatType || shift?.seatType);
   const shiftDescription = safeString(shift?.description || shift?.notes);
+
+  // Build per-client list from shiftPoints (multi-client support)
+  const clientsList = shiftPts
+    ? shiftPts.map((sp, i) => ({
+        name: sp.name || sp.clientName || `Client ${i + 1}`,
+        seatType: safeString(sp.seatType || ""),
+        pickupAddr: safeString(sp.pickupLocation || ""),
+        pickupTime: safeString(sp.pickupTime || shift?.startTime || ""),
+        dropAddr: safeString(sp.dropLocation || ""),
+        dropTime: safeString(sp.dropTime || shift?.endTime || ""),
+        visitAddr: safeString(sp.visitLocation || ""),
+        visitTime: safeString(sp.visitTime || ""),
+      }))
+    : [{
+        name: clientName,
+        seatType: safeString(shift?.seatType || ""),
+        pickupAddr: safeString(shift?.pickupLocation || ""),
+        pickupTime: safeString(shift?.startTime || ""),
+        dropAddr: safeString(shift?.dropLocation || ""),
+        dropTime: safeString(shift?.endTime || ""),
+        visitAddr: safeString(shift?.visitLocation || ""),
+        visitTime: "",
+      }];
 
   // Contacts
   const caseworkerName =
@@ -218,29 +243,41 @@ export default function TransportationShiftDetail() {
     shift?.weekendPhone2 || intake?.emergencyPhone2
   );
 
-  // Route stops
-  const stops = [
-    {
-      label: "Pickup",
-      address: safeString(pt?.pickupLocation || shift?.pickupLocation),
-      time: safeString(pt?.pickupTime || shift?.startTime),
-      color: GREEN,
-    },
-    pt?.visitLocation || shift?.visitLocation
-      ? {
-        label: "Visit Location",
-        address: safeString(pt?.visitLocation || shift?.visitLocation),
-        time: safeString(pt?.visitTime || ""),
-        color: "#1E5FA6",
+  // Route stops — grouped by address, supporting multiple clients
+  const stops = (() => {
+    if (clientsList.length <= 1) {
+      const c = clientsList[0];
+      return [
+        c?.pickupAddr ? { label: "Pickup", address: c.pickupAddr, time: c.pickupTime, color: GREEN, clients: c.name ? [c.name] : [] } : null,
+        c?.visitAddr ? { label: "Visit Location", address: c.visitAddr, time: c.visitTime, color: "#1E5FA6", clients: c.name ? [c.name] : [] } : null,
+        c?.dropAddr ? { label: "Drop-off", address: c.dropAddr, time: c.dropTime, color: "#DC2626", clients: c.name ? [c.name] : [] } : null,
+      ].filter(Boolean);
+    }
+    const pickupGroups = {}, dropGroups = {};
+    let visitAddr = null, visitTime = null;
+    clientsList.forEach(c => {
+      if (c.pickupAddr) {
+        if (!pickupGroups[c.pickupAddr]) pickupGroups[c.pickupAddr] = { address: c.pickupAddr, time: c.pickupTime, clients: [] };
+        pickupGroups[c.pickupAddr].clients.push(c.name);
       }
-      : null,
-    {
-      label: "Drop-off",
-      address: safeString(pt?.dropLocation || shift?.dropLocation),
-      time: safeString(pt?.dropTime || shift?.endTime),
-      color: "#DC2626",
-    },
-  ].filter(Boolean);
+      if (c.dropAddr) {
+        if (!dropGroups[c.dropAddr]) dropGroups[c.dropAddr] = { address: c.dropAddr, time: c.dropTime, clients: [] };
+        dropGroups[c.dropAddr].clients.push(c.name);
+      }
+      if (c.visitAddr && !visitAddr) { visitAddr = c.visitAddr; visitTime = c.visitTime; }
+    });
+    const result = [];
+    Object.values(pickupGroups).forEach((g, i) => {
+      result.push({ label: `Pickup ${String.fromCharCode(65 + i)}`, address: g.address, time: g.time, color: GREEN, clients: g.clients });
+    });
+    if (visitAddr) {
+      result.push({ label: "Visit Location", address: visitAddr, time: visitTime || "", color: "#1E5FA6", clients: clientsList.map(c => c.name) });
+    }
+    Object.values(dropGroups).forEach((g, i) => {
+      result.push({ label: `Drop-off ${String.fromCharCode(65 + i)}`, address: g.address, time: g.time, color: "#DC2626", clients: g.clients });
+    });
+    return result;
+  })();
 
   const hasContacts =
     caseworkerName || caseworkerPhone || intakeWorkerName || weekendPhone1;
@@ -293,65 +330,41 @@ export default function TransportationShiftDetail() {
       >
         {/* ── Client Card ─────────────────────────────────────────────────── */}
         <View style={styles.card}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-            }}
-          >
+          <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: clientsList.length > 1 ? 12 : 0 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, color: GRAY, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 2 }}>CLIENT</Text>
-              <Text
-                style={{
-                  fontSize: 22,
-                  fontWeight: "800",
-                  color: DARK,
-                  fontFamily: "Poppins-Bold",
-                  marginBottom: 4,
-                }}
-              >
-                {clientName}
+              <Text style={{ fontSize: 13, color: GRAY, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 2 }}>
+                {clientsList.length > 1 ? "CLIENTS" : "CLIENT"}
               </Text>
-              <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter-Medium", marginBottom: 8 }}>ID: {clientId}</Text>
-
-              {seatType ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    alignSelf: "flex-start",
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: 20,
-                    paddingHorizontal: 12,
-                    paddingVertical: 5,
-                  }}
-                >
-                  <Ionicons name="car-sport-outline" size={14} color={GRAY} />
-                  <Text
-                    style={{ fontSize: 13, color: DARK, fontWeight: "600", fontFamily: "Inter-SemiBold" }}
-                  >
-                    {seatType}
+              {clientsList.length <= 1 ? (
+                <>
+                  <Text style={{ fontSize: 22, fontWeight: "800", color: DARK, fontFamily: "Poppins-Bold", marginBottom: 4 }}>
+                    {clientsList[0]?.name || clientName}
                   </Text>
-                </View>
+                  <Text style={{ fontSize: 13, color: GRAY, fontFamily: "Inter-Medium", marginBottom: 8 }}>ID: {clientId}</Text>
+                  {clientsList[0]?.seatType ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", backgroundColor: "#F3F4F6", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 }}>
+                      <Ionicons name="car-sport-outline" size={14} color={GRAY} />
+                      <Text style={{ fontSize: 13, color: DARK, fontWeight: "600", fontFamily: "Inter-SemiBold" }}>{clientsList[0].seatType}</Text>
+                    </View>
+                  ) : null}
+                </>
               ) : null}
             </View>
-            <View
-              style={{
-                backgroundColor: "#FEF9C3",
-                borderRadius: 20,
-                paddingHorizontal: 12,
-                paddingVertical: 5,
-              }}
-            >
-              <Text
-                style={{ fontSize: 12, fontWeight: "700", color: "#854D0E", fontFamily: "Inter-Bold" }}
-              >
-                {rawServiceType}
-              </Text>
+            <View style={{ backgroundColor: "#FEF9C3", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#854D0E", fontFamily: "Inter-Bold" }}>{rawServiceType}</Text>
             </View>
           </View>
+          {clientsList.length > 1 && clientsList.map((c, i) => (
+            <View key={i} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, borderTopWidth: 1, borderTopColor: "#F3F4F6" }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" }}>{initials(c.name)}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" }}>{c.name}</Text>
+                {c.seatType ? <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter" }}>{c.seatType}</Text> : null}
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* ── Shift Description ──────────────────────────────────────────── */}
@@ -538,22 +551,18 @@ export default function TransportationShiftDetail() {
                       {stop.label}
                     </Text>
                     {stop.address ? (
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          color: "#374151",
-                          fontFamily: "Inter",
-                          marginBottom: 2,
-                        }}
-                      >
+                      <Text style={{ fontSize: 14, color: "#374151", fontFamily: "Inter", marginBottom: 2 }}>
                         {stop.address}
                       </Text>
                     ) : null}
                     {stop.time ? (
-                      <Text
-                        style={{ fontSize: 12, color: GRAY, fontFamily: "Inter", marginBottom: 6 }}
-                      >
+                      <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter", marginBottom: 4 }}>
                         {stop.time}
+                      </Text>
+                    ) : null}
+                    {stop.clients && stop.clients.length > 0 && clientsList.length > 1 ? (
+                      <Text style={{ fontSize: 12, color: stop.color, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 6 }}>
+                        {stop.clients.join(", ")}
                       </Text>
                     ) : null}
                     {stop.address ? (
