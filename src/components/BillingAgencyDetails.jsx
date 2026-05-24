@@ -195,17 +195,16 @@ export default function BillingAgencyDetails({ agency, onBack }) {
 
         setLiveClientGroups(mappedGroups.filter(g => g.shiftsCount > 0)); // Only show clients with shifts in range
 
-        // Mock invoices matching the group for now since standard invoice storage differs
         const mInvs = mappedGroups.filter(g => g.shiftsCount > 0).map(g => ({
           ...g,
           invoicesCount: 1,
           invoices: [{
-            id: `INV-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000)+1000}`,
+            id: `INV-${new Date().getFullYear()}-${g.id.slice(0, 6).toUpperCase()}`,
             period: `${dateRange.from} to ${dateRange.to}`,
             shiftsCount: g.shiftsCount,
             hours: g.hours,
             amount: g.grandTotal,
-            status: ["Pending", "Paid", "Draft"][Math.floor(Math.random()*3)],
+            status: "Pending",
             dueDate: dateRange.to
           }]
         }));
@@ -224,6 +223,19 @@ export default function BillingAgencyDetails({ agency, onBack }) {
   const toggleClient = (id) => {
     setExpandedClients(prev => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // Computed counts from live data
+  const allBillableShifts = liveClientGroups.flatMap(g => g.shifts);
+  const lockedCount = allBillableShifts.filter(s => s.status === "Locked").length;
+  const billableCount = allBillableShifts.filter(s => s.status === "Billable").length;
+  const invoicedCount = allBillableShifts.filter(s => s.status === "Invoiced").length;
+  const totalShiftsCount = allBillableShifts.length;
+
+  const allInvoices = liveInvoiceGroups.flatMap(g => g.invoices);
+  const paidCount = allInvoices.filter(i => i.status === "Paid").length;
+  const pendingInvCount = allInvoices.filter(i => i.status === "Pending").length;
+  const overdueCount = allInvoices.filter(i => i.status === "Overdue").length;
+  const draftCount = allInvoices.filter(i => i.status === "Draft").length;
 
   // Live KPIs based on current fetched data
   const kpis = [
@@ -350,8 +362,8 @@ export default function BillingAgencyDetails({ agency, onBack }) {
                   {tab === "Invoices" && <Receipt size={16} />}
                   {tab === "Pricing" && <DollarSign size={16} />}
                   {tab}
-                  {tab === "Billable Shifts" && <span className={`px-1.5 py-0.5 rounded text-[10px] ${isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>14</span>}
-                  {tab === "Invoices" && <span className={`px-1.5 py-0.5 rounded text-[10px] ${isActive ? "bg-gray-100 text-gray-900" : "bg-gray-100 text-gray-500"}`}>2</span>}
+                  {tab === "Billable Shifts" && <span className={`px-1.5 py-0.5 rounded text-[10px] ${isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>{totalShiftsCount}</span>}
+                  {tab === "Invoices" && <span className={`px-1.5 py-0.5 rounded text-[10px] ${isActive ? "bg-gray-100 text-gray-900" : "bg-gray-100 text-gray-500"}`}>{allInvoices.length}</span>}
                 </button>
               );
             })}
@@ -362,17 +374,28 @@ export default function BillingAgencyDetails({ agency, onBack }) {
             <div className="flex items-center gap-2 py-1 px-1 bg-white rounded-xl border border-gray-200 shadow-sm relative">
               <Filter size={14} className="absolute left-3 text-gray-400" />
               <div className="pl-8 flex items-center gap-1">
-                {activeTab === "invoices" 
-                  ? ["All", "Paid (3)", "Pending (2)", "Overdue (1)", "Draft (1)"].map(f => (
-                    <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${filter === f ? "bg-emerald-700 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
-                      {f}
-                    </button>
-                  ))
-                  : ["All", "Locked (5)", "Billable (5)", "Invoiced (4)"].map(f => (
-                    <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${filter === f ? "bg-emerald-700 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
-                      {f}
-                    </button>
-                  ))}
+                {activeTab === "invoices"
+                  ? [
+                      { label: "All", key: "All" },
+                      { label: `Paid (${paidCount})`, key: "Paid" },
+                      { label: `Pending (${pendingInvCount})`, key: "Pending" },
+                      { label: `Overdue (${overdueCount})`, key: "Overdue" },
+                      { label: `Draft (${draftCount})`, key: "Draft" },
+                    ].map(f => (
+                      <button key={f.key} onClick={() => setFilter(f.key)} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${filter === f.key ? "bg-emerald-700 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+                        {f.label}
+                      </button>
+                    ))
+                  : [
+                      { label: "All", key: "All" },
+                      { label: `Locked (${lockedCount})`, key: "Locked" },
+                      { label: `Billable (${billableCount})`, key: "Billable" },
+                      { label: `Invoiced (${invoicedCount})`, key: "Invoiced" },
+                    ].map(f => (
+                      <button key={f.key} onClick={() => setFilter(f.key)} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${filter === f.key ? "bg-emerald-700 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
+                        {f.label}
+                      </button>
+                    ))}
               </div>
             </div>
 
@@ -707,9 +730,9 @@ export default function BillingAgencyDetails({ agency, onBack }) {
           Showing {liveClientGroups.reduce((a,b)=>a+b.shiftsCount,0)} shifts across {liveClientGroups.length} clients
         </div>
         <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> Locked: 6</span>
-          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Billable: 5</span>
-          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-gray-500" /> Invoiced: 4</span>
+          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500" /> Locked: {lockedCount}</span>
+          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Billable: {billableCount}</span>
+          <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-gray-500" /> Invoiced: {invoicedCount}</span>
         </div>
         <div className="flex items-center gap-4 text-[12px] font-bold text-gray-500">
           <span className="text-gray-400">Total Hours: <span className="text-gray-900 ml-1">{liveClientGroups.reduce((a,b)=>a+b.hours,0)}h</span></span>
