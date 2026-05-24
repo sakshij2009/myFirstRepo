@@ -279,7 +279,7 @@ export default function ManageIntakeForms() {
             agency,
             formType,
             submittedAt: data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || data.submittedAt || "—",
-            isEditable: data.isEditable || false,
+            isEditable: data.isEditable !== false,
             filledBy: data.filledBy || data.inTakeWorkerName || data.parentName || data.staffName || "—",
             _source: sourceLabel,
           };

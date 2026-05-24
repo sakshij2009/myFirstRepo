@@ -598,6 +598,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const formikRef = useRef(null);
   // Holds old-form service name strings (e.g. ["Transportation"]) until shiftCategories loads
   const pendingServiceNamesRef = useRef([]);
+  // Preserves isEditable flag from Firestore so setDoc doesn't wipe it on update
+  const fetchedIsEditableRef = useRef(true);
 
   const handleSaveDraft = () => {
     if (formikRef.current) {
@@ -856,6 +858,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           }
 
           // ── Admin editing lock guard ──────────────────────────────────────
+          // Capture isEditable from Firestore so it is preserved in the save payload.
+          fetchedIsEditableRef.current = data.isEditable !== false;
+
           // If admin has set isEditable=false and the intake worker is trying
           // to open this form in edit/update mode, redirect to view-only mode.
           if (mode === "update" && data.isEditable === false) {
@@ -1376,6 +1381,9 @@ const handleSubmit = async (values, { resetForm }) => {
 
       // Flutter app filters forms by isActive == true — must be set so forms appear in old app
       isActive: true,
+
+      // Preserve the admin-controlled editing lock; new forms default to editable
+      isEditable: mode === "update" ? fetchedIsEditableRef.current : true,
 
       // submittedOn + createdAt set ONCE on creation (preserved on update)
       ...(mode !== "update" ? {
