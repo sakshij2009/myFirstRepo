@@ -652,6 +652,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
   const currentUser = storedUser;
   const workerName = currentUser?.name || currentUser?.workerName || "";
   const workerId = currentUser?.id || currentUser?.uid || "";
+  const workerEmail = (currentUser?.email || "").trim().toLowerCase();
 
   // ── Fetch category map ──
   useEffect(() => {
@@ -667,7 +668,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
 
   // ── Real-time intake forms listener (fetches from ALL 3 collections) ──
   useEffect(() => {
-    if (!workerId && !workerName) { setLoading(false); return; }
+    if (!workerId && !workerName && !workerEmail) { setLoading(false); return; }
     setLoading(true);
 
     let oldAppForms = [];
@@ -686,7 +687,15 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
       });
       const mine = unique.filter(f => {
         const fWorkerId = f.workerId || f.workerInfo?.workerId || "";
+        const fWorkerEmail = (f.intakeworkerEmail || f.workerEmail || f.workerInfo?.workerEmail || "").trim().toLowerCase();
         const fWorkerName = f.workerInfo?.workerName || f.intakeworkerName || f.nameOfPerson || f.staffName || "";
+
+        // If the form has an email field, match ONLY by email — prevents same-named
+        // workers from seeing each other's forms.
+        if (fWorkerEmail) {
+          return workerEmail && fWorkerEmail === workerEmail;
+        }
+        // Older forms without email: fall back to document ID then name.
         return (
           (workerId && fWorkerId === workerId) ||
           (workerName && fWorkerName.trim().toLowerCase() === workerName.trim().toLowerCase())

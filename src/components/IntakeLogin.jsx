@@ -245,7 +245,7 @@ const IntakeLogin = () => {
       };
       await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
-      setMessage("Account created successfully! Click \"Sign In\" below to receive your login link.");
+      setMessage("Account created successfully! Click \"Sign In\" below to access your dashboard.");
     } catch (err) {
       setError("Sign up failed: " + err.message);
     } finally {
