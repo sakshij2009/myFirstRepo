@@ -41,11 +41,33 @@ const IntakeLogin = () => {
 
   // ── On mount: redirect if already logged in, or handle magic link return ────
   React.useEffect(() => {
-    // If already logged in, go straight to dashboard
+    // If already logged in, redirect to dashboard UNLESS this is an invitation link
+    // for a different email — in that case clear the old session so the new account
+    // can be created / signed into.
     const existing = localStorage.getItem("intakeUser");
     if (existing) {
-      navigate("/intake-form/dashboard", { replace: true });
-      return;
+      const inviteEmail = new URLSearchParams(window.location.search).get("email");
+      if (inviteEmail) {
+        const invited = decodeURIComponent(inviteEmail).trim().toLowerCase();
+        try {
+          const storedEmail = (JSON.parse(existing)?.email || "").trim().toLowerCase();
+          if (storedEmail !== invited) {
+            // Different email in the invitation link — log out the old session
+            localStorage.removeItem("intakeUser");
+            localStorage.removeItem("user");
+            // Fall through so the second useEffect can pre-fill the sign-up form
+          } else {
+            navigate("/intake-form/dashboard", { replace: true });
+            return;
+          }
+        } catch {
+          localStorage.removeItem("intakeUser");
+          localStorage.removeItem("user");
+        }
+      } else {
+        navigate("/intake-form/dashboard", { replace: true });
+        return;
+      }
     }
 
     // Detect if user has returned from a magic link email
