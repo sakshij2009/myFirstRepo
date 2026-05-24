@@ -88,11 +88,12 @@ const IntakeLogin = () => {
             window.localStorage.removeItem("emailForSignIn");
             // Remove magic link params from URL so re-renders don't re-process it
             window.history.replaceState({}, document.title, "/intake-form/login");
-            const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
+            const { collection, query: fbQuery, where, getDocs, doc: fbDoc, updateDoc } = await import("firebase/firestore");
             const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
             const snap = await getDocs(q);
             if (!snap.empty) {
-              const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+              await updateDoc(fbDoc(db, "intakeUsers", snap.docs[0].id), { verified: true });
+              const userData = { id: snap.docs[0].id, ...snap.docs[0].data(), verified: true };
               localStorage.setItem("intakeUser", JSON.stringify(userData));
               localStorage.setItem("user", JSON.stringify(userData));
               navigate("/intake-form/dashboard");
@@ -134,7 +135,7 @@ const IntakeLogin = () => {
     }
   }, [searchParams]);
 
-  // ── Sign In — look up email in Firestore and go straight to dashboard ───────
+  // ── Sign In — first-time users get a magic link; returning users go straight to dashboard ──
   const handleSignIn = async () => {
     setError("");
     setMessage("");
@@ -154,7 +155,19 @@ const IntakeLogin = () => {
         return;
       }
 
-      const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      const docData = snap.docs[0].data();
+
+      // First-time sign-in: send a one-time magic link for verification
+      if (docData.verified === false) {
+        const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+        await sendSignInEmail({ email: loginEmail.trim().toLowerCase() });
+        window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
+        setMessage("A verification link has been sent to your email. Please click it to access your dashboard.");
+        return;
+      }
+
+      // Verified user: go straight to dashboard
+      const userData = { id: snap.docs[0].id, ...docData };
       localStorage.setItem("intakeUser", JSON.stringify(userData));
       localStorage.setItem("user", JSON.stringify(userData));
       navigate("/intake-form/dashboard");
@@ -241,6 +254,7 @@ const IntakeLogin = () => {
         showAssessmentLink,
         showIntakeFormLink,
         ...(linkedParentId ? { linkedParentId } : {}),
+        verified: false,
         createdAt: new Date(),
       };
       await addDoc(fbCollection(db, "intakeUsers"), newUser);

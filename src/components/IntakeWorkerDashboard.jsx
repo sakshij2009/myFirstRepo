@@ -289,6 +289,10 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
       return form.shared.children.map(c => c.fullName).join(", ");
     }
     const clients = form.clients ? Object.values(form.clients) : (Array.isArray(form.inTakeClients) ? form.inTakeClients : []);
+    // Family form: show "Family Name (N clients)"
+    if (form.familyName && clients.length > 1) {
+      return `${form.familyName} (${clients.length} clients)`;
+    }
     const names = clients.map(c => c?.fullName || c?.name || c?.clientName || c?.firstName || c?.displayName || null).filter(Boolean);
     if (names.length) return names.join(", ");
     return form.clientName || form.nameInClientTable || form.name || form.fullName || form.client?.name || form.otherInfo?.clientName || "Unnamed";
@@ -832,8 +836,10 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     const fallbackClient = form.clientName || form.nameInClientTable || form.name || form.fullName || form.client?.name || form.client?.fullName || form.otherInfo?.clientName || form.otherInfo?.name || null;
     const fallbackFamily = form.familyName || form.lastName || form.surname || form.family || form.family_name || null;
 
-    // Combine multiple clients into a single, comma-separated display — ensure at least one client name exists
-    const clientNames = (clients.length ? clients.map(pickClientName).filter(Boolean) : []).length ? (clients.map(pickClientName).filter(Boolean).join(", ")) : (fallbackClient || "Unnamed");
+    // Family form: show "Family Name (N clients)" in client name column
+    const clientNames = (form.familyName && clients.length > 1)
+      ? `${form.familyName} (${clients.length} clients)`
+      : ((clients.length ? clients.map(pickClientName).filter(Boolean) : []).length ? (clients.map(pickClientName).filter(Boolean).join(", ")) : (fallbackClient || "Unnamed"));
     const familyNames = (clients.length ? clients.map(pickFamilyName).filter(Boolean) : []).length ? clients.map(pickFamilyName).filter(Boolean).join(", ") : (fallbackFamily || "—");
 
     // Attempt to find any DOB available (kept for debugging/fallback; DOB column removed from table)

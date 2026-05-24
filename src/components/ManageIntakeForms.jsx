@@ -266,6 +266,16 @@ export default function ManageIntakeForms() {
             if (sourceLabel === "new" && data.clientName) agency = "—";
           }
 
+          // Family form: override with "Family Name (N clients)"
+          if (data.familyName) {
+            const clientsArr = data.clients && typeof data.clients === "object"
+              ? Object.values(data.clients)
+              : (Array.isArray(data.inTakeClients) ? data.inTakeClients : []);
+            if (clientsArr.length > 1) {
+              clientName = `${data.familyName} (${clientsArr.length} clients)`;
+            }
+          }
+
           const rawStatus = data.status || "Pending";
           return {
             id: d.id,
