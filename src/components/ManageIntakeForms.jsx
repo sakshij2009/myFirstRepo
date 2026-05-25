@@ -214,18 +214,24 @@ export default function ManageIntakeForms() {
 
         const processDoc = (d, sourceLabel) => {
           const data = d.data();
-          // Detect form type: Intake Worker if any worker/caseworker field is populated
-          // (old app uses inTakeWorkerInfo / caseWorkerInfo; new app uses intakeworkerName)
-          const hasWorkerInfo = !!(
-            (data.intakeworkerName   && String(data.intakeworkerName).trim())   ||
-            (data.intakeWorkerName   && String(data.intakeWorkerName).trim())   ||
-            (data.inTakeWorkerInfo   && String(data.inTakeWorkerInfo).trim())   ||
-            (data.caseWorkerInfo     && String(data.caseWorkerInfo).trim())     ||
-            (data.caseworkerName     && String(data.caseworkerName).trim())     ||
-            (data.caseWorkerName     && String(data.caseWorkerName).trim())
+          // Helper: truthy non-empty string check
+          const hasVal = (v) => !!(v && String(v).trim());
+
+          // Detect form type: Intake Worker if any worker/caseworker/agency field is populated.
+          // Old app uses inTakeWorkerInfo / caseWorkerInfo / agencyName.
+          // New app uses intakeworkerName. Also check top-level agencyName / agency.
+          const hasWorkerInfo = (d) => !!(
+            hasVal(d.intakeworkerName)  ||
+            hasVal(d.intakeWorkerName)  ||
+            hasVal(d.inTakeWorkerInfo)  ||
+            hasVal(d.caseWorkerInfo)    ||
+            hasVal(d.caseworkerName)    ||
+            hasVal(d.caseWorkerName)    ||
+            hasVal(d.agencyName)        ||
+            hasVal(d.agency)
           );
-          const rawFormType = data.formType || (hasWorkerInfo ? "Intake Worker" : "Private Family");
-          const formType = normalizeFormType(rawFormType);
+          const rawFormType = data.formType || (hasWorkerInfo(data) ? "Intake Worker" : "Private Family");
+          let formType = normalizeFormType(rawFormType);
 
           // Extract first client name
           let clientName = "—";
@@ -274,6 +280,12 @@ export default function ManageIntakeForms() {
             }
             
             if (sourceLabel === "new" && data.clientName) agency = "—";
+          }
+
+          // Re-evaluate formType now that agency is fully resolved from nested data.
+          // If no explicit formType was stored and a real agency was found, mark as Intake Worker.
+          if (!data.formType && formType === "private-family" && agency && agency !== "—") {
+            formType = "intake-worker";
           }
 
           // Family form: override with "Family Name (N clients)"
