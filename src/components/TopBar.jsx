@@ -31,8 +31,28 @@ const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, d
   const [isCardOpen, setIsCardOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  // Local pending state for custom date range — only committed on Apply
+  const [pendingFrom, setPendingFrom] = useState(dateRange?.from || "");
+  const [pendingTo, setPendingTo] = useState(dateRange?.to || "");
   const dropdownRef = useRef(null);
   const filterRef = useRef(null);
+
+  // Reset pending dates when switching away from Custom
+  const handleSetFilter = (opt) => {
+    setFilter?.(opt);
+    setShowFilterMenu(false);
+    if (opt !== "Custom") {
+      setPendingFrom("");
+      setPendingTo("");
+    }
+  };
+
+  // Commit the pending date range to the parent
+  const handleApply = () => {
+    if (pendingFrom && pendingTo) {
+      setDateRange?.({ from: pendingFrom, to: pendingTo });
+    }
+  };
 
   const userDocId = "familyforeverAdmin#1";
 
@@ -120,7 +140,7 @@ const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, d
                   {["Weekly", "Monthly", "Yearly", "Custom"].map((opt) => (
                     <button
                       key={opt}
-                      onClick={() => { setFilter?.(opt); setShowFilterMenu(false); }}
+                      onClick={() => handleSetFilter(opt)}
                       className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
                       style={{ color: filter === opt ? "#1f7a3c" : "#374151", fontWeight: filter === opt ? 600 : 400 }}
                     >
@@ -134,19 +154,32 @@ const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, d
               <div className="flex items-center gap-1.5">
                 <input
                   type="date"
-                  value={dateRange?.from || ""}
-                  onChange={(e) => setDateRange?.((p) => ({ ...p, from: e.target.value }))}
+                  value={pendingFrom}
+                  onChange={(e) => setPendingFrom(e.target.value)}
                   className="px-2 py-1.5 rounded-lg border text-xs focus:outline-none"
                   style={{ borderColor: "#e5e7eb", color: "#374151" }}
                 />
                 <span style={{ fontSize: 12, color: "#9ca3af" }}>–</span>
                 <input
                   type="date"
-                  value={dateRange?.to || ""}
-                  onChange={(e) => setDateRange?.((p) => ({ ...p, to: e.target.value }))}
+                  value={pendingTo}
+                  onChange={(e) => setPendingTo(e.target.value)}
                   className="px-2 py-1.5 rounded-lg border text-xs focus:outline-none"
                   style={{ borderColor: "#e5e7eb", color: "#374151" }}
                 />
+                <button
+                  onClick={handleApply}
+                  disabled={!pendingFrom || !pendingTo}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    backgroundColor: pendingFrom && pendingTo ? "#1f7a3c" : "#e5e7eb",
+                    color: pendingFrom && pendingTo ? "#fff" : "#9ca3af",
+                    cursor: pendingFrom && pendingTo ? "pointer" : "not-allowed",
+                    border: "none",
+                  }}
+                >
+                  Apply
+                </button>
               </div>
             )}
           </div>
