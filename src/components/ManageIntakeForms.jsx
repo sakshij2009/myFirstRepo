@@ -214,7 +214,17 @@ export default function ManageIntakeForms() {
 
         const processDoc = (d, sourceLabel) => {
           const data = d.data();
-          const rawFormType = data.formType || (data.intakeworkerName ? "Intake Worker" : "Private Family");
+          // Detect form type: Intake Worker if any worker/caseworker field is populated
+          // (old app uses inTakeWorkerInfo / caseWorkerInfo; new app uses intakeworkerName)
+          const hasWorkerInfo = !!(
+            (data.intakeworkerName   && String(data.intakeworkerName).trim())   ||
+            (data.intakeWorkerName   && String(data.intakeWorkerName).trim())   ||
+            (data.inTakeWorkerInfo   && String(data.inTakeWorkerInfo).trim())   ||
+            (data.caseWorkerInfo     && String(data.caseWorkerInfo).trim())     ||
+            (data.caseworkerName     && String(data.caseworkerName).trim())     ||
+            (data.caseWorkerName     && String(data.caseWorkerName).trim())
+          );
+          const rawFormType = data.formType || (hasWorkerInfo ? "Intake Worker" : "Private Family");
           const formType = normalizeFormType(rawFormType);
 
           // Extract first client name
