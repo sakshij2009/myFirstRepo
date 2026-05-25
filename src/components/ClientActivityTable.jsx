@@ -133,7 +133,9 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           const agency = s.agencyName || s.agency || "—";
           const service = normService(s.categoryName || s.shiftCategory);
           const shiftType = s.typeName || s.shiftType || "Regular";
-          const status = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
+          const resolvedClockIn  = s.clockIn  || s.clockInDate  || null;
+          const resolvedClockOut = s.clockOut || s.clockOutDate || null;
+          const status = resolvedClockIn && resolvedClockOut ? "Completed" : resolvedClockIn ? "Ongoing" : "Incomplete";
           const hoursWorked = s.hoursWorked || 8;
           return {
             id: s.id, clientName, clientId, staff, secondaryStaff, agency,
