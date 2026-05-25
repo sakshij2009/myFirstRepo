@@ -19,6 +19,8 @@ import {
   collection,
   getDocs,
   onSnapshot,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { safeString, parseDate, formatCanadaTime, formatShiftTimeUTCtoCanada } from "../src/utils/date";
@@ -595,8 +597,8 @@ export default function TransportationShiftDetail() {
         )}
       </ScrollView>
 
-      {/* ── Bottom: Choose Vehicle ─────────────────────────────────────────── */}
-      {shift?.shiftConfirmed && (shift?.clockInTime || shift?.clockIn) && (
+      {/* ── Bottom: Start Shift ────────────────────────────────────────────── */}
+      {shift?.shiftConfirmed && !shift?.transportationCompleted && (
         <View
           style={{
             position: "absolute",
@@ -610,12 +612,22 @@ export default function TransportationShiftDetail() {
           }}
         >
           <Pressable
-            onPress={() =>
+            onPress={async () => {
+              // Write clockIn only if not already set
+              if (shiftId && !shift?.clockIn && !shift?.clockInTime) {
+                try {
+                  await updateDoc(doc(db, "shifts", shiftId), {
+                    clockIn: serverTimestamp(),
+                  });
+                } catch (e) {
+                  console.warn("clockIn write error:", e);
+                }
+              }
               router.push({
                 pathname: "/vehicle-check",
                 params: { shiftId: shiftId },
-              })
-            }
+              });
+            }}
             style={({ pressed }) => ({
               backgroundColor: pressed ? "#185A37" : GREEN,
               borderRadius: 14,
@@ -632,7 +644,7 @@ export default function TransportationShiftDetail() {
                 fontFamily: "Poppins-SemiBold",
               }}
             >
-              Choose Vehicle
+              {shift?.clockIn || shift?.clockInTime ? "Continue Shift" : "Start Shift"}
             </Text>
           </Pressable>
         </View>

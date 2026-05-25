@@ -31,6 +31,7 @@ export default function VehicleCheck() {
   const { shiftId } = useLocalSearchParams();
 
   const [vehicleType, setVehicleType] = useState(null); // "office" | "personal"
+  const [preSelectedFromShift, setPreSelectedFromShift] = useState(false); // locked from Firestore
   const [photos, setPhotos] = useState([]); // array of ImagePicker asset objects
   const [meterStart, setMeterStart] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +42,10 @@ export default function VehicleCheck() {
     getDoc(doc(db, "shifts", shiftId)).then((snap) => {
       if (snap.exists()) {
         const vt = snap.data()?.vehicleType;
-        if (vt === "office" || vt === "personal") setVehicleType(vt);
+        if (vt === "office" || vt === "personal") {
+          setVehicleType(vt);
+          setPreSelectedFromShift(true); // lock the selection — don't show picker
+        }
       }
     }).catch(() => {});
   }, [shiftId]);
@@ -121,71 +125,64 @@ export default function VehicleCheck() {
         contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }}
       >
         {/* ── Vehicle Type Selection ──────────────────────────────────────── */}
-        <Text style={styles.sectionQuestion}>Which vehicle are you using?</Text>
-
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          {/* Office Vehicle */}
-          <Pressable
-            onPress={() => setVehicleType("office")}
-            style={[
-              styles.vehicleCard,
-              isOffice && styles.vehicleCardSelected,
-            ]}
-          >
-            <View
-              style={[
-                styles.vehicleIconWrap,
-                isOffice && { backgroundColor: "#F0FDF4" },
-              ]}
-            >
-              <Ionicons
-                name="business-outline"
-                size={28}
-                color={isOffice ? GREEN : GRAY}
-              />
+        {preSelectedFromShift ? (
+          /* Locked — type came from the shift assignment, staff cannot change it */
+          <View>
+            <Text style={[styles.sectionQuestion, { marginBottom: 4 }]}>Vehicle — from shift assignment</Text>
+            <View style={[styles.vehicleLockedCard]}>
+              <View style={[styles.vehicleIconWrap, { backgroundColor: "#F0FDF4" }]}>
+                <Ionicons
+                  name={isOffice ? "business-outline" : "car-outline"}
+                  size={28}
+                  color={GREEN}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.vehicleLabel, { color: GREEN }]}>
+                  {isOffice ? "Office vehicle" : "Personal vehicle"}
+                </Text>
+                <Text style={styles.vehicleSub}>
+                  {isOffice ? "Transport hours billed only" : "Shift + mileage paid"}
+                </Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={22} color={GREEN} />
             </View>
-            <Text
-              style={[
-                styles.vehicleLabel,
-                isOffice && { color: GREEN, fontWeight: "700" },
-              ]}
-            >
-              Office vehicle
-            </Text>
-            <Text style={styles.vehicleSub}>Mileage tracked in-app</Text>
-          </Pressable>
+          </View>
+        ) : (
+          /* Manual picker — no vehicle type set on the shift */
+          <View>
+            <Text style={styles.sectionQuestion}>Which vehicle are you using?</Text>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+              {/* Office Vehicle */}
+              <Pressable
+                onPress={() => setVehicleType("office")}
+                style={[styles.vehicleCard, isOffice && styles.vehicleCardSelected]}
+              >
+                <View style={[styles.vehicleIconWrap, isOffice && { backgroundColor: "#F0FDF4" }]}>
+                  <Ionicons name="business-outline" size={28} color={isOffice ? GREEN : GRAY} />
+                </View>
+                <Text style={[styles.vehicleLabel, isOffice && { color: GREEN, fontWeight: "700" }]}>
+                  Office vehicle
+                </Text>
+                <Text style={styles.vehicleSub}>Mileage tracked in-app</Text>
+              </Pressable>
 
-          {/* Personal Vehicle */}
-          <Pressable
-            onPress={() => setVehicleType("personal")}
-            style={[
-              styles.vehicleCard,
-              isPersonal && styles.vehicleCardSelected,
-            ]}
-          >
-            <View
-              style={[
-                styles.vehicleIconWrap,
-                isPersonal && { backgroundColor: "#F0FDF4" },
-              ]}
-            >
-              <Ionicons
-                name="car-outline"
-                size={28}
-                color={isPersonal ? GREEN : GRAY}
-              />
+              {/* Personal Vehicle */}
+              <Pressable
+                onPress={() => setVehicleType("personal")}
+                style={[styles.vehicleCard, isPersonal && styles.vehicleCardSelected]}
+              >
+                <View style={[styles.vehicleIconWrap, isPersonal && { backgroundColor: "#F0FDF4" }]}>
+                  <Ionicons name="car-outline" size={28} color={isPersonal ? GREEN : GRAY} />
+                </View>
+                <Text style={[styles.vehicleLabel, isPersonal && { color: GREEN, fontWeight: "700" }]}>
+                  Personal vehicle
+                </Text>
+                <Text style={styles.vehicleSub}>Shift + mileage paid</Text>
+              </Pressable>
             </View>
-            <Text
-              style={[
-                styles.vehicleLabel,
-                isPersonal && { color: GREEN, fontWeight: "700" },
-              ]}
-            >
-              Personal vehicle
-            </Text>
-            <Text style={styles.vehicleSub}>Shift + mileage paid</Text>
-          </Pressable>
-        </View>
+          </View>
+        )}
 
         {/* ── Info Banner ──────────────────────────────────────────────────── */}
         <View style={styles.infoBanner}>
@@ -352,6 +349,17 @@ const styles = StyleSheet.create({
   },
 
   // Vehicle type cards
+  vehicleLockedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: GREEN,
+    marginTop: 4,
+  },
   vehicleCard: {
     flex: 1,
     backgroundColor: "#fff",
