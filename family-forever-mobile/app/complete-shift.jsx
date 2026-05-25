@@ -273,7 +273,7 @@ const pbStyles = StyleSheet.create({
 });
 
 // ── Client Row ────────────────────────────────────────────────────────────────
-function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, confirmedLabel }) {
+function ClientStatusRow({ client, status, confirmedTime, onConfirm, onCancel, actionLabel, confirmedLabel }) {
   const isConfirmed = status === "confirmed";
   const isCancelled = status === "cancelled";
   const avatarColors = [
@@ -302,7 +302,12 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
         {isConfirmed && (
           <View style={crStyles.confirmedBadge}>
             <Ionicons name="checkmark-circle" size={16} color={GREEN} />
-            <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+            <View>
+              <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+              {confirmedTime ? (
+                <Text style={crStyles.confirmedTime}>{confirmedTime}</Text>
+              ) : null}
+            </View>
           </View>
         )}
         {isCancelled && (
@@ -342,6 +347,7 @@ const crStyles = StyleSheet.create({
   seat: { fontSize: 12, color: GRAY, fontFamily: "Inter", marginTop: 2 },
   confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   confirmedText: { fontSize: 12, color: GREEN, fontWeight: "600", fontFamily: "Inter-SemiBold" },
+  confirmedTime: { fontSize: 10, color: "#6B7280", fontFamily: "Inter", marginTop: 1 },
   cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   cancelledText: { fontSize: 12, color: RED, fontWeight: "600", fontFamily: "Inter-SemiBold" },
   confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#86EFAC", alignItems: "center" },
@@ -387,6 +393,8 @@ export default function CompleteShift() {
   const [completedIdxs, setCompletedIdxs] = useState([]);
   // stopClientStatus: { stopIndex_clientId → 'waiting'|'confirmed'|'cancelled' }
   const [clientStatus, setClientStatus] = useState({});
+  // clientConfirmedTimes: { stopIndex_clientId → "HH:MM AM/PM" }
+  const [clientConfirmedTimes, setClientConfirmedTimes] = useState({});
   const [visitArrived, setVisitArrived] = useState(false);
   const [visitNotes, setVisitNotes] = useState("");
   const [totalKm, setTotalKm] = useState(0);
@@ -480,6 +488,12 @@ export default function CompleteShift() {
 
   const setStatus = useCallback((stopIdx, clientId, status) => {
     setClientStatus((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: status }));
+    // Record the time when a client is confirmed (for display below "Picked up" / "Dropped off")
+    if (status === "confirmed") {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      setClientConfirmedTimes((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: timeStr }));
+    }
   }, []);
 
   const currentStop = stops[currentIdx];
@@ -547,6 +561,8 @@ export default function CompleteShift() {
             transportationCompleted: true,
             transportationKm: totalKm,
             transportationCompletedAt: serverTimestamp(),
+            // Write clockOut so home dashboard status updates to "Completed"
+            clockOut: serverTimestamp(),
             visitNotes: visitNotes.trim() || null,
             totalTimeMinutes,
             vehicleType: vehicleType || null,
@@ -796,6 +812,7 @@ export default function CompleteShift() {
                     key={c.id}
                     client={c}
                     status={clientStatus[`${currentIdx}_${c.id}`] || "waiting"}
+                    confirmedTime={clientConfirmedTimes[`${currentIdx}_${c.id}`] || null}
                     onConfirm={() => setStatus(currentIdx, c.id, "confirmed")}
                     onCancel={() => {
                       Alert.alert(
