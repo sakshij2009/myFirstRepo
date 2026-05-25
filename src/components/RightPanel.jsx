@@ -295,46 +295,7 @@ export default function RightPanel({ filter = "Weekly" }) {
         <RevenueTrendChart data={revenueTrend} />
       </div>
 
-      {/* Top Performers */}
-      <div className="bg-white rounded-xl p-5 border" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center rounded-lg" style={{ width: 32, height: 32, background: "#FEF3C7" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z" fill="#F59E0B"/><rect x="5" y="18" width="14" height="2" rx="1" fill="#F59E0B"/></svg>
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Top Performers</span>
-          </div>
-          <span className="px-2.5 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, color: "#16A34A", background: "#F0FDF4", border: "1px solid #DCFCE7" }}>{monthLabel}</span>
-        </div>
-        <div style={{ height: 1, background: "#F3F4F6", marginBottom: 12 }} />
-        {topPerformers.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-4">No staff data found</p>
-        ) : (
-          <div className="space-y-3">
-            {topPerformers.map((p, idx) => (
-              <div key={p.name} className="flex items-center gap-3 py-1">
-                <div className="flex items-center justify-center shrink-0" style={{ width: 20 }}>
-                  <svg width="16" height="14" viewBox="0 0 24 20" fill="none"><path d="M5 14L3 3l5.5 5L12 2l3.5 6L21 3l-2 11H5z" fill={idx === 0 ? "#F59E0B" : idx === 1 ? "#D1D5DB" : "#D97706"}/><rect x="5" y="16" width="14" height="2" rx="1" fill={idx === 0 ? "#F59E0B" : idx === 1 ? "#D1D5DB" : "#D97706"}/></svg>
-                </div>
-                {p.photo ? (
-                  <img src={p.photo} alt={p.name} className="w-9 h-9 rounded-full object-cover shrink-0 border-2" style={{ borderColor: idx === 0 ? "#F59E0B" : "#E5E7EB" }} />
-                ) : (
-                  <div className="w-9 h-9 rounded-full shrink-0 border-2 flex items-center justify-center text-white text-sm font-bold" style={{ borderColor: idx === 0 ? "#F59E0B" : "#E5E7EB", background: "#1B5E37" }}>{p.initials}</div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="truncate" style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.name}</p>
-                  <p className="truncate" style={{ fontSize: 11, color: "#9CA3AF" }}>{p.service}</p>
-                </div>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{p.rating}</span>
-                </div>
-                <div className="flex items-center justify-center rounded-md shrink-0" style={{ width: 34, height: 26, background: "#F0FDF4", border: "1px solid #DCFCE7", fontSize: 13, fontWeight: 700, color: "#16A34A" }}>{p.score}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Top Performers — hidden for now */}
     </div>
   );
 }
