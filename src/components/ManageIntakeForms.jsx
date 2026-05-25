@@ -282,9 +282,9 @@ export default function ManageIntakeForms() {
             if (sourceLabel === "new" && data.clientName) agency = "—";
           }
 
-          // Re-evaluate formType now that agency is fully resolved from nested data.
-          // If no explicit formType was stored and a real agency was found, mark as Intake Worker.
-          if (!data.formType && formType === "private-family" && agency && agency !== "—") {
+          // Final override: agency name always wins — any form with a real agency
+          // is an Intake Worker submission regardless of stored formType.
+          if (agency && agency !== "—") {
             formType = "intake-worker";
           }
 
