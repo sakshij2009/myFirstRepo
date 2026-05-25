@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { Search, Bell, ChevronDown, Settings, LogOut, CreditCard } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -51,6 +52,11 @@ const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, d
   const handleApply = () => {
     if (pendingFrom && pendingTo) {
       setDateRange?.({ from: pendingFrom, to: pendingTo });
+      toast.success("Filter applied", {
+        description: `${pendingFrom} → ${pendingTo}`,
+        position: "top-right",
+        duration: 3000,
+      });
     }
   };
 
