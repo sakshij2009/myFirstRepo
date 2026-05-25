@@ -36,15 +36,26 @@ export default function VehicleCheck() {
   const [meterStart, setMeterStart] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Pre-select vehicle type from shift data if already set
+  // Pre-select vehicle type from shift data if already set.
+  // Handles any string the admin might have stored ("office", "Office Vehicle", "Company Car", etc.)
   useEffect(() => {
     if (!shiftId) return;
     getDoc(doc(db, "shifts", shiftId)).then((snap) => {
       if (snap.exists()) {
-        const vt = snap.data()?.vehicleType;
-        if (vt === "office" || vt === "personal") {
-          setVehicleType(vt);
-          setPreSelectedFromShift(true); // lock the selection — don't show picker
+        const raw = snap.data()?.vehicleType;
+        if (!raw) return;
+        const lower = String(raw).toLowerCase().trim();
+        let resolved = null;
+        if (lower === "office" || lower === "personal") {
+          resolved = lower;
+        } else if (lower.includes("office") || lower.includes("company") || lower.includes("agency") || lower.includes("staff")) {
+          resolved = "office";
+        } else if (lower.includes("personal") || lower.includes("private") || lower.includes("own")) {
+          resolved = "personal";
+        }
+        if (resolved) {
+          setVehicleType(resolved);
+          setPreSelectedFromShift(true); // lock the card — don't show picker
         }
       }
     }).catch(() => {});
