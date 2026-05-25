@@ -16,8 +16,14 @@ const styleForCat = (name) => {
 };
 
 // Get date range for filter
-const getRange = (filter) => {
+const getRange = (filter, dateRange) => {
   const now = new Date();
+  if (filter === "Custom" && dateRange?.from && dateRange?.to) {
+    return {
+      start: new Date(dateRange.from + "T00:00:00"),
+      end:   new Date(dateRange.to   + "T23:59:59"),
+    };
+  }
   if (filter === "Weekly") {
     const day = now.getDay();
     const diffToMon = (day === 0 ? -6 : 1 - day);
@@ -47,14 +53,15 @@ const parseShiftDate = (s) => {
   return null;
 };
 
-export default function ServiceOverview({ filter = "Weekly" }) {
+export default function ServiceOverview({ filter = "Weekly", dateRange }) {
   const navigate = useNavigate();
   const [tiles, setTiles] = useState([]);
 
   useEffect(() => {
+    if (filter === "Custom" && (!dateRange?.from || !dateRange?.to)) return;
     const load = async () => {
       try {
-        const { start, end } = getRange(filter);
+        const { start, end } = getRange(filter, dateRange);
 
         const [catSnap, shiftSnap] = await Promise.all([
           getDocs(collection(db, "shiftCategories")),
@@ -102,7 +109,7 @@ export default function ServiceOverview({ filter = "Weekly" }) {
       }
     };
     load();
-  }, [filter]);
+  }, [filter, dateRange?.from, dateRange?.to]);
 
   if (!tiles.length) return null;
 
