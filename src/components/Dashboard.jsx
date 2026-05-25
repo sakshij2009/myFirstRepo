@@ -1,5 +1,4 @@
 import KPIStrip from "./KPIStrip";
-import ServiceOverview from "./ServiceOverview";
 import ClientActivityTable from "./ClientActivityTable";
 import RightPanel from "./RightPanel";
 
@@ -16,7 +15,6 @@ export default function Dashboard({ user, filter = "Weekly", dateRange }) {
 
         {/* Left column */}
         <div className="flex flex-col gap-[18px] min-w-0">
-          <ServiceOverview filter={filter} dateRange={dateRange} />
           <ClientActivityTable />
         </div>
 

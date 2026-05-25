@@ -20,6 +20,7 @@ import StaffEvaluationPage from "./StaffEvaluationPage";
 import BillingPage from "./BillingPage";
 import GSTReportingPage from "./GSTReportingPage";
 import ShiftCommandPage from "./ShiftCommandPage";
+import ServicesPage from "./ServicesPage";
 
 // Form Components
 import AddUserForm from "./AddUserForm";
@@ -115,7 +116,7 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="gst-reporting"    element={<GSTReportingPage />} />
 
             {/* Under construction pages */}
-            <Route path="services"         element={<UnderConstruction title="Services" />} />
+            <Route path="services"         element={<ServicesPage filter={filter} dateRange={dateRange} />} />
             <Route path="reports"          element={<UnderConstruction title="Reports & Analytics" />} />
             <Route path="settings"         element={<UnderConstruction title="Settings" />} />
 
