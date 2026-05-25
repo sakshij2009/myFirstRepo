@@ -286,34 +286,39 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
 
   return (
     <View style={[crStyles.row, isConfirmed && crStyles.rowConfirmed, isCancelled && crStyles.rowCancelled]}>
-      {/* Avatar */}
-      <View style={[crStyles.avatar, { backgroundColor: ac.bg }]}>
-        <Text style={[crStyles.avatarText, { color: ac.text }]}>{initials(client.name)}</Text>
-      </View>
-      {/* Info */}
-      <View style={{ flex: 1 }}>
-        <Text style={[crStyles.name, isCancelled && { textDecorationLine: "line-through", color: GRAY }]}>{client.name}</Text>
-        {client.seatType ? (
-          <Text style={crStyles.seat}>{client.seatType}</Text>
-        ) : null}
-      </View>
-      {/* Action */}
-      {isConfirmed ? (
-        <View style={crStyles.confirmedBadge}>
-          <Ionicons name="checkmark-circle" size={16} color={GREEN} />
-          <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+      {/* Top row: avatar + name/seat + status badge */}
+      <View style={crStyles.topRow}>
+        <View style={[crStyles.avatar, { backgroundColor: ac.bg }]}>
+          <Text style={[crStyles.avatarText, { color: ac.text }]}>{initials(client.name)}</Text>
         </View>
-      ) : isCancelled ? (
-        <View style={crStyles.cancelledBadge}>
-          <Ionicons name="close-circle" size={14} color={RED} />
-          <Text style={crStyles.cancelledText}>Not available</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[crStyles.name, isCancelled && { textDecorationLine: "line-through", color: GRAY }]}>
+            {client.name}
+          </Text>
+          {client.seatType ? (
+            <Text style={crStyles.seat}>{client.seatType}</Text>
+          ) : null}
         </View>
-      ) : (
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          <Pressable onPress={onConfirm} style={crStyles.confirmBtn}>
+        {isConfirmed && (
+          <View style={crStyles.confirmedBadge}>
+            <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+            <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+          </View>
+        )}
+        {isCancelled && (
+          <View style={crStyles.cancelledBadge}>
+            <Ionicons name="close-circle" size={14} color={RED} />
+            <Text style={crStyles.cancelledText}>Not available</Text>
+          </View>
+        )}
+      </View>
+      {/* Bottom row: action buttons (only when waiting) */}
+      {!isConfirmed && !isCancelled && (
+        <View style={crStyles.btnRow}>
+          <Pressable onPress={onConfirm} style={[crStyles.confirmBtn, { flex: 1 }]}>
             <Text style={crStyles.confirmBtnText}>{actionLabel}</Text>
           </Pressable>
-          <Pressable onPress={onCancel} style={crStyles.noShowBtn}>
+          <Pressable onPress={onCancel} style={[crStyles.noShowBtn, { flex: 1 }]}>
             <Text style={crStyles.noShowBtnText}>No-show</Text>
           </Pressable>
         </View>
@@ -323,20 +328,25 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
 }
 
 const crStyles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8, backgroundColor: "#fff" },
+  // Vertical card — name row on top, buttons row below
+  row: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8, backgroundColor: "#fff" },
   rowConfirmed: { backgroundColor: GREEN_LIGHT, borderColor: "#86EFAC" },
   rowCancelled: { backgroundColor: "#FEF2F2", borderColor: "#FECACA", opacity: 0.7 },
+  // Top row: avatar + name/seat side by side
+  topRow: { flexDirection: "row", alignItems: "center" },
+  // Bottom row: two equal-width buttons, indented to align under name
+  btnRow: { flexDirection: "row", gap: 8, marginTop: 10, marginLeft: 48 },
   avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", marginRight: 10 },
   avatarText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
   name: { fontSize: 14, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" },
-  seat: { fontSize: 12, color: GRAY, fontFamily: "Inter" },
-  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  seat: { fontSize: 12, color: GRAY, fontFamily: "Inter", marginTop: 2 },
+  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   confirmedText: { fontSize: 12, color: GREEN, fontWeight: "600", fontFamily: "Inter-SemiBold" },
-  cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   cancelledText: { fontSize: 12, color: RED, fontWeight: "600", fontFamily: "Inter-SemiBold" },
-  confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#86EFAC" },
+  confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#86EFAC", alignItems: "center" },
   confirmBtnText: { fontSize: 12, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" },
-  noShowBtn: { backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#FECACA" },
+  noShowBtn: { backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#FECACA", alignItems: "center" },
   noShowBtnText: { fontSize: 12, fontWeight: "700", color: RED, fontFamily: "Inter-Bold" },
 });
 
