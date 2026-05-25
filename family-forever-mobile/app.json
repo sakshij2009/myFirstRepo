@@ -1,0 +1,88 @@
+{
+  "expo": {
+    "name": "Family Forever App",
+    "slug": "family-forever-mobile",
+    "version": "1.0.4",
+    "orientation": "portrait",
+    "scheme": "familyforevermobile",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.familyforever.staffapp",
+      "buildNumber": "2",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "This app needs access to the camera to update your profile photo.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture.",
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to track driving distance for shift reports.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
+        "NSLocationAlwaysUsageDescription": "This app needs background location access to accurately track your mileage during transportation shifts.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
+    },
+    "android": {
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.famforever.admin",
+      "versionCode": 6
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/logo.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
+          "locationAlwaysPermission": "This app needs background location access to accurately track your mileage during transportation shifts.",
+          "locationWhenInUsePermission": "This app needs access to your location to track driving distance for shift reports."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photo library to select a profile picture.",
+          "cameraPermission": "This app needs access to the camera to update your profile photo."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "notification": {
+      "icon": "./assets/logo.png",
+      "color": "#1f5f3b"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6c407037-f5ca-4cd1-8746-b8bca799467d"
+      }
+    }
+  }
+}

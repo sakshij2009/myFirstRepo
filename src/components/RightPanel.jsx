@@ -1,0 +1,301 @@
+import { useEffect, useRef, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+
+// ── Service Usage Line Chart ───────────────────────────────────────────────
+
+function ServiceUsageChart({ data }) {
+  const containerRef = useRef(null);
+  const [tooltip, setTooltip] = useState(null);
+
+  const lines = [
+    { key: "Emergency",    color: "#f87171" },
+    { key: "Respite",      color: "#4ade80" },
+    { key: "Supervised",   color: "#c084fc" },
+    { key: "Transport",    color: "#fbbf24" },
+  ];
+
+  const pad = { top: 8, right: 8, bottom: 22, left: 30 };
+  const svgW = 300, svgH = 130;
+  const chartW = svgW - pad.left - pad.right;
+  const chartH = svgH - pad.top - pad.bottom;
+  const maxVal = Math.max(10, ...data.flatMap(d => lines.map(l => d[l.key] || 0)));
+  const xStep  = data.length > 1 ? chartW / (data.length - 1) : chartW;
+  const yScale = (v) => pad.top + chartH - (v / maxVal) * chartH;
+  const xScale = (i) => pad.left + i * xStep;
+  const buildPath = (key) => data.map((d, i) => `${i === 0 ? "M" : "L"}${xScale(i)},${yScale(d[key] || 0)}`).join(" ");
+
+  if (!data.length) return <div className="h-[130px] flex items-center justify-center text-xs text-gray-400">No data yet</div>;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <svg viewBox={`0 0 ${svgW} ${svgH}`} width="100%" height={130} style={{ overflow: "visible" }}>
+        {[0, Math.round(maxVal * 0.25), Math.round(maxVal * 0.5), Math.round(maxVal * 0.75), maxVal].map(v => (
+          <g key={v}>
+            <text x={pad.left - 6} y={yScale(v) + 3} textAnchor="end" style={{ fontSize: 9, fill: "#9ca3af" }}>{v}</text>
+            <line x1={pad.left} y1={yScale(v)} x2={svgW - pad.right} y2={yScale(v)} stroke="#f3f4f6" strokeWidth={0.5} />
+          </g>
+        ))}
+        <line x1={pad.left} y1={svgH - pad.bottom} x2={svgW - pad.right} y2={svgH - pad.bottom} stroke="#e5e7eb" strokeWidth={1} />
+        {data.map((d, i) => (
+          <text key={d.month} x={xScale(i)} y={svgH - 4} textAnchor="middle" style={{ fontSize: 9, fill: "#9ca3af" }}>{d.month}</text>
+        ))}
+        {lines.map(line => (
+          <g key={line.key}>
+            <path d={buildPath(line.key)} fill="none" stroke={line.color} strokeWidth={2} />
+            {data.map((d, i) => <circle key={i} cx={xScale(i)} cy={yScale(d[line.key] || 0)} r={2.5} fill={line.color} />)}
+          </g>
+        ))}
+        {data.map((d, i) => (
+          <rect key={i} x={xScale(i) - xStep / 2} y={pad.top} width={xStep} height={chartH} fill="transparent"
+            onMouseEnter={(e) => {
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (rect) setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, data: d });
+            }}
+            onMouseLeave={() => setTooltip(null)}
+          />
+        ))}
+      </svg>
+      {tooltip && (
+        <div className="absolute z-10 pointer-events-none bg-white rounded-lg border px-2.5 py-2 shadow-sm"
+          style={{ left: tooltip.x + 10, top: tooltip.y - 10, borderColor: "#e5e7eb", fontSize: 11, minWidth: 120 }}>
+          <div style={{ fontWeight: 600, color: "#374151", marginBottom: 3 }}>{tooltip.data.month}</div>
+          {lines.map(l => (
+            <div key={l.key} className="flex items-center justify-between gap-3" style={{ color: "#6b7280" }}>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: l.color }} />{l.key}
+              </div>
+              <span style={{ fontWeight: 600, color: "#374151" }}>{tooltip.data[l.key] || 0}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Revenue Bar Chart ──────────────────────────────────────────────────────
+
+function RevenueTrendChart({ data }) {
+  const containerRef = useRef(null);
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
+
+  const pad = { top: 8, right: 8, bottom: 22, left: 40 };
+  const svgW = 300, svgH = 110;
+  const chartW = svgW - pad.left - pad.right;
+  const chartH = svgH - pad.top - pad.bottom;
+  const maxVal = Math.max(1000, ...data.map(d => d.value));
+  const barGap = 6;
+  const barWidth = data.length ? (chartW - barGap * (data.length - 1)) / data.length : 30;
+  const radius = 4;
+  const yScale = (v) => chartH - (v / maxVal) * chartH;
+
+  if (!data.length) return <div className="h-[110px] flex items-center justify-center text-xs text-gray-400">No data yet</div>;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <svg viewBox={`0 0 ${svgW} ${svgH}`} width="100%" height={110} style={{ overflow: "visible" }}>
+        {[0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal].map((v, vi) => (
+          <g key={vi}>
+            <text x={pad.left - 6} y={pad.top + yScale(v) + 3} textAnchor="end" style={{ fontSize: 9, fill: "#9ca3af" }}>
+              {v === 0 ? "0" : `${(v / 1000).toFixed(1)}k`}
+            </text>
+            <line x1={pad.left} y1={pad.top + yScale(v)} x2={svgW - pad.right} y2={pad.top + yScale(v)} stroke="#f3f4f6" strokeWidth={0.5} />
+          </g>
+        ))}
+        <line x1={pad.left} y1={svgH - pad.bottom} x2={svgW - pad.right} y2={svgH - pad.bottom} stroke="#e5e7eb" strokeWidth={1} />
+        {data.map((d, i) => {
+          const x = pad.left + i * (barWidth + barGap);
+          const h = (d.value / maxVal) * chartH;
+          const y = pad.top + chartH - h;
+          const isLast = i === data.length - 1;
+          return (
+            <g key={d.month}>
+              <path d={`M${x},${y + radius} Q${x},${y} ${x + radius},${y} L${x + barWidth - radius},${y} Q${x + barWidth},${y} ${x + barWidth},${y + radius} L${x + barWidth},${y + h} L${x},${y + h} Z`}
+                fill={isLast ? "#27964a" : "#a8e6bc"}
+                style={{ opacity: hoveredIdx !== null && hoveredIdx !== i ? 0.5 : 1, transition: "opacity 0.15s" }}
+                onMouseEnter={(e) => {
+                  const rect = containerRef.current?.getBoundingClientRect();
+                  if (rect) { setHoveredIdx(i); setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top }); }
+                }}
+                onMouseLeave={() => { setHoveredIdx(null); setTooltipPos(null); }}
+              />
+              <text x={x + barWidth / 2} y={svgH - 4} textAnchor="middle" style={{ fontSize: 9, fill: "#9ca3af" }}>{d.month}</text>
+            </g>
+          );
+        })}
+      </svg>
+      {hoveredIdx !== null && tooltipPos && (
+        <div className="absolute z-10 pointer-events-none bg-white rounded-lg border px-2.5 py-1.5 shadow-sm"
+          style={{ left: tooltipPos.x + 10, top: tooltipPos.y - 10, borderColor: "#e5e7eb", fontSize: 11 }}>
+          <span style={{ fontWeight: 600, color: "#374151" }}>${data[hoveredIdx].value.toLocaleString()}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main RightPanel ────────────────────────────────────────────────────────
+
+const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// Build usage data points based on filter
+function buildUsageData(shifts, filter) {
+  const now = new Date();
+  const cat = (s) => (s.categoryName || s.shiftCategory || "").toLowerCase();
+  const shiftDay = (s) => {
+    const d = s.startDate?.toDate ? s.startDate.toDate()
+            : s.startDate instanceof Date ? s.startDate
+            : typeof s.startDate === "string" ? new Date(s.startDate.replace(/,/g,"").trim())
+            : null;
+    return d && !isNaN(d) ? d : null;
+  };
+  const bucket = (s) => {
+    const emergency  = cat(s).includes("emergent") ? 1 : 0;
+    const respite    = cat(s).includes("respite")  ? 1 : 0;
+    const supervised = cat(s).includes("supervised") ? 1 : 0;
+    const transport  = cat(s).includes("transport")  ? 1 : 0;
+    return { emergency, respite, supervised, transport };
+  };
+
+  if (filter === "Weekly") {
+    // Last 7 days, one point per day
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + i);
+      const inDay = shifts.filter(s => {
+        const sd = shiftDay(s);
+        return sd && sd.getFullYear() === d.getFullYear() && sd.getMonth() === d.getMonth() && sd.getDate() === d.getDate();
+      });
+      const totals = inDay.reduce((acc, s) => {
+        const b = bucket(s);
+        return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+      }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+      return { month: DAYS_SHORT[(d.getDay() + 6) % 7], ...totals };
+    });
+  }
+
+  if (filter === "Monthly") {
+    // Last 4 weeks
+    return Array.from({ length: 4 }, (_, i) => {
+      const weekEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (3 - i) * 7);
+      const weekStart = new Date(weekEnd); weekStart.setDate(weekStart.getDate() - 6);
+      const inWeek = shifts.filter(s => { const sd = shiftDay(s); return sd && sd >= weekStart && sd <= weekEnd; });
+      const totals = inWeek.reduce((acc, s) => {
+        const b = bucket(s);
+        return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+      }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+      return { month: `W${i + 1}`, ...totals };
+    });
+  }
+
+  // Yearly — last 6 months
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const mIdx = d.getMonth(); const yr = d.getFullYear();
+    const inMonth = shifts.filter(s => { const sd = shiftDay(s); return sd && sd.getMonth() === mIdx && sd.getFullYear() === yr; });
+    const totals = inMonth.reduce((acc, s) => {
+      const b = bucket(s);
+      return { Emergency: acc.Emergency + b.emergency, Respite: acc.Respite + b.respite, Supervised: acc.Supervised + b.supervised, Transport: acc.Transport + b.transport };
+    }, { Emergency: 0, Respite: 0, Supervised: 0, Transport: 0 });
+    return { month: MONTHS_SHORT[mIdx], ...totals };
+  });
+}
+
+function buildRevenueData(revDocs, filter) {
+  const now = new Date();
+  const revDate = (r) => r.createdAt?.toDate ? r.createdAt.toDate() : null;
+
+  if (filter === "Weekly") {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + i);
+      const total = revDocs.filter(r => {
+        const rd = revDate(r);
+        return rd && rd.getFullYear() === d.getFullYear() && rd.getMonth() === d.getMonth() && rd.getDate() === d.getDate();
+      }).reduce((s, r) => s + (r.amount || 0), 0);
+      return { month: DAYS_SHORT[(d.getDay() + 6) % 7], value: total };
+    });
+  }
+  if (filter === "Monthly") {
+    return Array.from({ length: 4 }, (_, i) => {
+      const weekEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (3 - i) * 7);
+      const weekStart = new Date(weekEnd); weekStart.setDate(weekStart.getDate() - 6);
+      const total = revDocs.filter(r => { const rd = revDate(r); return rd && rd >= weekStart && rd <= weekEnd; }).reduce((s, r) => s + (r.amount || 0), 0);
+      return { month: `W${i + 1}`, value: total };
+    });
+  }
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+    const mIdx = d.getMonth(); const yr = d.getFullYear();
+    const total = revDocs.filter(r => { const rd = revDate(r); return rd && rd.getMonth() === mIdx && rd.getFullYear() === yr; }).reduce((s, r) => s + (r.amount || 0), 0);
+    return { month: MONTHS_SHORT[mIdx], value: total };
+  });
+}
+
+export default function RightPanel({ filter = "Weekly" }) {
+  const [serviceUsage, setServiceUsage] = useState([]);
+  const [revenueTrend, setRevenueTrend] = useState([]);
+  const [topPerformers, setTopPerformers] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [shiftSnap, revSnap, userSnap] = await Promise.all([
+          getDocs(collection(db, "shifts")),
+          getDocs(collection(db, "revenue")),
+          getDocs(query(collection(db, "users"), where("role", "==", "user"))),
+        ]);
+
+        const shifts  = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const revDocs = revSnap.docs.map(d => d.data());
+        const users   = userSnap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 3);
+
+        setServiceUsage(buildUsageData(shifts, filter));
+        setRevenueTrend(buildRevenueData(revDocs, filter));
+
+        setTopPerformers(users.map((u, i) => ({
+          name:     u.name || "Staff Member",
+          service:  u.serviceType || ["Emergency Care","Respite Care","Supervised Visits"][i % 3],
+          rating:   [5, 4.9, 4.8][i],
+          score:    [98, 96, 92][i],
+          initials: (u.name || "SM").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2),
+          photo:    u.profilePhotoUrl || null,
+        })));
+      } catch (err) {
+        console.error("RightPanel fetch error:", err);
+      }
+    };
+    load();
+  }, [filter]);
+
+  const now = new Date();
+  const monthLabel = now.toLocaleString("default", { month: "long" }) + " " + now.getFullYear();
+
+  return (
+    <div className="flex flex-col gap-[18px]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+
+      {/* Service Usage Chart */}
+      <div className="bg-white rounded-xl p-5 border" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+        <h2 className="mb-4 uppercase tracking-wider" style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>Service Usage</h2>
+        <ServiceUsageChart data={serviceUsage} />
+        <div className="flex items-center justify-center gap-4 mt-3">
+          {[{ label: "Emergency", color: "#f87171" }, { label: "Respite", color: "#4ade80" }, { label: "Supervised", color: "#c084fc" }, { label: "Transport", color: "#fbbf24" }].map(item => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+              <span style={{ fontSize: 11, color: "#6b7280" }}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Revenue Trend */}
+      <div className="bg-white rounded-xl p-5 border" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+        <h2 className="mb-4 uppercase tracking-wider" style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>Revenue Trend</h2>
+        <RevenueTrendChart data={revenueTrend} />
+      </div>
+
+      {/* Top Performers — hidden for now */}
+    </div>
+  );
+}

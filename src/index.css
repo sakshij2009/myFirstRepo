@@ -1,0 +1,116 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@import 'tailwind-scrollbar-hide/v4';
+
+
+
+/* Ensures form fields render correctly in PDF */
+.pdf-safe {
+  --tw-text-opacity: 1 !important;
+  --tw-border-opacity: 1 !important;
+
+  /* FORCE all Tailwind-generated colors to RGB instead of OKLCH */
+  --tw-prose-body: rgb(0 0 0) !important;
+  --tw-prose-headings: rgb(0 0 0) !important;
+
+  /* MAIN OVERRIDE — This neutralizes all OKLCH values */
+  --tw-color-scheme: hsl !important;
+}
+
+.pdf-safe * {
+  color: rgb(0 0 0) !important;
+  border-color: rgb(120 120 120) !important;
+  background-color: white !important;
+}
+
+
+
+/* Make containers expand fully to avoid clipped content */
+
+
+
+
+@theme {
+  /* Your custom theme settings */
+  --font-display: "roboto", sans-serif;
+
+  --color-dark-green:var(--Grenn2-0-06, #1D5F33);
+  --color-green: #154C28;
+  --color-light-green: #39A75E;
+  --color-parrot-green:#A3EE67;
+  --color-lime:#D2FBB6;
+  --color-gray:#C5C5C5;
+  --color-fonts:#2D8C0C;
+  --color-light-black:#3d3d3d;
+  --color-white:#FFFFFF;
+  --color-light-gray:#E6E6E6;
+}
+
+html {
+  font-family: var(--font-display);
+  background-color: #EEEEEE;
+}
+
+/* React DatePicker: force white and remove dividers */
+.react-datepicker,
+.react-datepicker__month-container,
+.react-datepicker__header,
+.react-datepicker__day-names,
+.react-datepicker__month,
+.react-datepicker__week,
+.react-datepicker__day {
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.react-datepicker__header,
+.react-datepicker__day-names,
+.react-datepicker__month {
+  border: 0 !important; /* kills the grey bars */
+}
+
+.react-datepicker__triangle {
+  display: none !important;
+}
+
+/* global CSS */
+.react-datepicker__day,
+.react-datepicker__day-name {
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ---- GREEN THEME FOR DAY PICKER ---- */
+
+/* Selected Date */
+.custom-daypicker-green .rdp-day_selected {
+  background-color: #1B5E20 !important; /* dark green */
+  color: white !important;
+  border-radius: 5px !important;
+}
+
+/* Hover color on days */
+.custom-daypicker-green .rdp-day:hover {
+  background-color: #C8E6C9 !important; /* light green */
+}
+
+/* Navigation arrows */
+.custom-daypicker-green .rdp-nav_button {
+  color: #1B5E20 !important;
+}
+
+/* Month Title */
+.custom-daypicker-green .rdp-caption_label {
+  color: #1B5E20 !important;
+  font-weight: bold !important;
+}
+
+/* Today ring color */
+.custom-daypicker-green .rdp-day_today {
+  border: 1px solid #1B5E20 !important;
+}
+
+
+

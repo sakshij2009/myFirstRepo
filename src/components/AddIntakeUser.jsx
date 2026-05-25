@@ -1,0 +1,404 @@
+import React, { useEffect, useState } from "react";
+import { Formik, Form, Field, ErrorMessage } from "formik";
+import * as Yup from "yup";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
+import { db } from "../firebase";
+import SuccessSlider from "../components/SuccessSlider";
+import { FaChevronDown } from "react-icons/fa6";
+import { useNavigate, useParams } from "react-router-dom";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
+
+const UPCS_EMAIL_OPTIONS = [
+  "billing@upcs.com",
+  "accounts@upcs.com",
+  "invoicewest@upcs.org",
+];
+
+const AGENCY_OPTIONS = [
+  "UPCS",
+  "Unlimited Potential Community Services",
+];
+
+const isUPCSLikeAgency = (agencyVal) => {
+  const lower = (agencyVal || "").trim().toLowerCase();
+  return (
+    lower.startsWith("upcs") ||
+    lower.includes("unlimited potential")
+  );
+};
+
+const AddIntakeUser = ({ mode = "add" }) => {
+  const navigate = useNavigate();
+  const { id } = useParams();
+
+  const [slider, setSlider] = useState({
+    show: false,
+    title: "",
+    subtitle: "",
+    viewText: "",
+  });
+
+  const [useCustomInvoice, setUseCustomInvoice] = useState(false);
+
+  const [initialValues, setInitialValues] = useState({
+    name: "",
+    role: "",
+    agency: "",
+    phone: "",
+    email: "",
+    invoiceEmail: "",
+  });
+
+  // Validation Schema
+  const validationSchema = Yup.object({
+    name: Yup.string().required("Name is required"),
+    role: Yup.string().required("Role is required"),
+    agency: Yup.string().when("role", {
+      is: "Intake Worker",
+      then: (schema) => schema.required("Agency name is required"),
+      otherwise: (schema) => schema.notRequired(),
+    }),
+    phone: Yup.string()
+      .matches(/^[0-9]{10}$/, "Must be 10 digits")
+      .required("Phone number is required"),
+    email: Yup.string().email("Invalid email").required("Email is required"),
+    invoiceEmail: Yup.string()
+      .email("Invalid email")
+      .required("Invoice email is required"),
+  });
+
+  // Fetch intake user in update mode
+  useEffect(() => {
+    const fetchIntakeUser = async () => {
+      if (mode === "update" && id) {
+        try {
+          const q = query(collection(db, "intakeUsers"), where("email", "==", id));
+          const snap = await getDocs(q);
+
+          if (!snap.empty) {
+            const docData = snap.docs[0].data();
+            const agency = docData.agency || "";
+            const invoiceEmail = docData.invoiceEmail || "";
+            // If the saved invoice email is not in the UPCS preset list, use custom mode
+            if (isUPCSLikeAgency(agency) && invoiceEmail && !UPCS_EMAIL_OPTIONS.includes(invoiceEmail)) {
+              setUseCustomInvoice(true);
+            }
+            setInitialValues({
+              name: docData.name || "",
+             role:
+                docData.role?.toLowerCase().includes("intake")
+                ? "Intake Worker"
+                : docData.role?.toLowerCase().includes("parent")
+                ? "Parent"
+                : "",
+              agency,
+              phone: docData.phone || "",
+              email: docData.email || "",
+              invoiceEmail,
+            });
+          } else {
+            console.warn("⚠ No intake user found with id:", id);
+          }
+        } catch (err) {
+          console.error("Error fetching intake user:", err);
+        }
+      }
+    };
+
+    fetchIntakeUser();
+  }, [mode, id]);
+
+  // Handle Add or Update
+  const handleSubmit = async (values, { resetForm }) => {
+    if (mode === "add") {
+      const confirmSend = window.confirm(
+        `Are you sure you want to send an invitation email to ${values.email}? \n\nPlease double check the email address before proceeding.`
+      );
+      if (!confirmSend) return;
+    }
+    try {
+      if (mode === "update") {
+        const q = query(collection(db, "intakeUsers"), where("email", "==", id));
+        const snap = await getDocs(q);
+
+        if (!snap.empty) {
+          const docRef = doc(db, "intakeUsers", snap.docs[0].id);
+          await updateDoc(docRef, {
+            ...values,
+            updatedAt: new Date(),
+          });
+
+          setSlider({
+            show: true,
+            title: "Intake User Updated Successfully!",
+            subtitle: `${values.name} (${values.role})`,
+            viewText: "View Users",
+          });
+        } else {
+          alert("No matching intake user found to update!");
+        }
+      } else {
+        const q = query(collection(db, "intakeUsers"), where("email", "==", values.email));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          alert("User already exists!");
+          return;
+        }
+
+        await addDoc(collection(db, "intakeUsers"), {
+          ...values,
+          createdAt: new Date(),
+        });
+
+        // Send Invitation Link
+        try {
+          const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+          await sendSignInEmail({
+            email: values.email.trim().toLowerCase(),
+            role: values.role === "Parent" ? "parent" : "worker",
+            isInvitation: true,
+          });
+          console.log("Invitation link sent to:", values.email);
+        } catch (authError) {
+          console.error("Error sending invitation link:", authError);
+          // We don't want to fail the whole process if only the email fails, 
+          // but we should probably inform the admin.
+        }
+
+        setSlider({
+          show: true,
+          title: "Intake User Added & Invitation Sent!",
+          subtitle: `${values.name} (${values.role}) - Invitation sent to ${values.email}`,
+          viewText: "View Users",
+        });
+
+        resetForm();
+      }
+    } catch (error) {
+      console.error(error);
+      setSlider({
+        show: true,
+        title: "Error Saving Intake User!",
+        subtitle: "Please try again.",
+        viewText: "",
+      });
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div>
+        <p className="font-bold text-2xl leading-7 text-light-black">
+          {mode === "update" ? `Update ${initialValues.role || 'User'}` : "Add User"}
+        </p>
+      </div>
+      <hr className="border-t border-gray" />
+
+      {/* Formik Form */}
+      <Formik
+        enableReinitialize
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ touched, errors, values, setFieldValue }) => {
+          const isUPCSAgency = isUPCSLikeAgency(values.agency);
+
+          return (
+            <Form className="flex flex-col gap-4 ">
+              <div className="grid grid-cols-2 gap-x-16 gap-y-4 bg-white p-4 border border-light-gray rounded-sm  ">
+
+                {/* Name */}
+                <div>
+                  <label className="font-bold text-sm text-light-black">Full Name</label>
+                  <Field
+                    name="name"
+                    type="text"
+                    placeholder="Enter full name"
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                      touched.name && errors.name ? "border-red-500" : "border-light-gray"
+                    }`}
+                  />
+                  <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
+                </div>
+
+                {/* Role */}
+                <div className="relative">
+                  <label className="font-bold text-sm text-light-black">Role</label>
+                  <Field
+                    as="select"
+                    name="role"
+                    className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${
+                      touched.role && errors.role ? "border-red-500" : "border-light-gray"
+                    }`}
+                  >
+                    <option value="">Select Role</option>
+                    <option value="Intake Worker">Intake Worker</option>
+                    <option value="Parent">Parent</option>
+                  </Field>
+                  <span className="absolute right-3 top-[65%] -translate-y-1/2 pointer-events-none">
+                    <FaChevronDown className="text-light-green w-4 h-4" />
+                  </span>
+                  <ErrorMessage name="role" component="div" className="text-red-500 text-xs mt-1" />
+                </div>
+
+                {/* Agency (conditional) */}
+                {values.role === "Intake Worker" && (
+                  <div>
+                    <label className="font-bold text-sm text-light-black">
+                      Name of Agency / Organisation
+                    </label>
+                    <Field
+                      name="agency"
+                      type="text"
+                      placeholder="Enter agency name"
+                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                        touched.agency && errors.agency
+                          ? "border-red-500"
+                          : "border-light-gray"
+                      }`}
+                    />
+                    <ErrorMessage
+                      name="agency"
+                      component="div"
+                      className="text-red-500 text-xs mt-1"
+                    />
+                  </div>
+                )}
+
+                {/* Phone */}
+                <div>
+                  <label className="font-bold text-sm text-light-black">Phone Number</label>
+                  <Field
+                    name="phone"
+                    type="text"
+                    placeholder="Enter phone number"
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                      touched.phone && errors.phone ? "border-red-500" : "border-light-gray"
+                    }`}
+                  />
+                  <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="font-bold text-sm text-light-black">E-mail</label>
+                  <Field
+                    name="email"
+                    type="email"
+                    placeholder="Enter email address"
+                    className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                      touched.email && errors.email ? "border-red-500" : "border-light-gray"
+                    }`}
+                    disabled={mode === "update"} // Prevent changing email in update
+                  />
+                  <ErrorMessage name="email" component="div" className="text-red-500 text-xs mt-1" />
+                </div>
+
+                {/* Invoice Email */}
+                <div>
+                  <label className="font-bold text-sm text-light-black">Invoice Email</label>
+
+                  {isUPCSAgency ? (
+                    <>
+                      <div className="relative">
+                        <select
+                          name="invoiceEmail"
+                          value={useCustomInvoice ? "__other__" : (values.invoiceEmail || "")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "__other__") {
+                              setUseCustomInvoice(true);
+                              setFieldValue("invoiceEmail", "");
+                            } else {
+                              setUseCustomInvoice(false);
+                              setFieldValue("invoiceEmail", val);
+                            }
+                          }}
+                          className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${
+                            touched.invoiceEmail && errors.invoiceEmail
+                              ? "border-red-500"
+                              : "border-light-gray"
+                          }`}
+                        >
+                          <option value="">Select Invoice Email</option>
+                          {UPCS_EMAIL_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                          <option value="__other__">Other (enter manually)</option>
+                        </select>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-light-green w-4 h-4" />
+                        </span>
+                      </div>
+                      {useCustomInvoice && (
+                        <input
+                          type="email"
+                          placeholder="Enter custom invoice email"
+                          value={values.invoiceEmail}
+                          onChange={(e) => setFieldValue("invoiceEmail", e.target.value)}
+                          className={`mt-2 w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                            touched.invoiceEmail && errors.invoiceEmail
+                              ? "border-red-500"
+                              : "border-light-gray"
+                          }`}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <Field
+                      name="invoiceEmail"
+                      type="email"
+                      placeholder="Enter invoice email"
+                      className={`w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                        touched.invoiceEmail && errors.invoiceEmail
+                          ? "border-red-500"
+                          : "border-light-gray"
+                      }`}
+                    />
+                  )}
+                  <ErrorMessage
+                    name="invoiceEmail"
+                    component="div"
+                    className="text-red-500 text-xs mt-1"
+                  />
+                </div>
+
+                {/* Submit */}
+                <div className="col-span-2 flex justify-center">
+                  <button
+                    type="submit"
+                    className="bg-dark-green text-white px-6 py-2  mt-10 rounded cursor-pointer"
+                  >
+                    {mode === "update" ? `Update ${values.role || 'User'}` : "Send Invitation"}
+                  </button>
+                </div>
+              </div>
+            </Form>
+          );
+        }}
+      </Formik>
+
+      <SuccessSlider
+        show={slider.show}
+        title={slider.title}
+        subtitle={slider.subtitle}
+        viewText={slider.viewText}
+        onView={() => setSlider({ ...slider, show: false })}
+        onDismiss={() => setSlider({ ...slider, show: false })}
+      />
+    </div>
+  );
+};
+
+export default AddIntakeUser;
