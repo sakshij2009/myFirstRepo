@@ -9,6 +9,7 @@
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "ios": {
+      "projectName": "FamilyForeverApp",
       "supportsTablet": false,
       "bundleIdentifier": "com.familyforever.staffapp",
       "buildNumber": "4",
