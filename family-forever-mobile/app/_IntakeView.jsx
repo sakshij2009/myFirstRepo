@@ -42,13 +42,20 @@ const IntakeView = ({ intakeData }) => {
           anyDiagnosis: med?.diagnosis || c.diagnosis || c.anyDiagnosis || "",
           diagnosisType: med?.diagnosisType || c.diagnosisType || "",
           healthCareNumber: med?.healthCareNo || c.healthCareNumber || "",
-          
+
+          // transport mapping
+          pickupAddress: trans?.pickupAddress || trans?.pickup || c.pickupAddress || "",
+          pickupTime: trans?.pickupTime || c.pickupTime || "",
+          dropAddress: trans?.dropAddress || trans?.dropLocation || c.dropAddress || "",
+          dropTime: trans?.dropTime || c.dropTime || "",
+          seatType: trans?.seatType || c.seatType || "",
+
           // visit mapping
           visitDuration: visit?.visitDuration || "",
           purposeOfVisit: visit?.visitPurpose || "",
           visitAddress: visit?.visitAddress || "",
           visitOverView: visit?.visitOverview || "",
-          
+
           // parent mapping for newer forms
           parentName: parent?.parentName || c.parentName || "",
           relationship: parent?.relationShip || c.relationship || "",
@@ -179,7 +186,12 @@ const IntakeView = ({ intakeData }) => {
           <Empty text="No visit/transport info available." />
         ) : (
           clients.map((client, index) => (
-            <SubCard key={`visit-${index}`} title={`Visit (Client ${index + 1})`}>
+            <SubCard key={`visit-${index}`} title={`Transport / Visit (Client ${index + 1})`}>
+              {client.pickupAddress ? <Field label="Pickup Address" value={client.pickupAddress} multiline /> : null}
+              {client.pickupTime ? <Field label="Pickup Time" value={client.pickupTime} /> : null}
+              {client.dropAddress ? <Field label="Drop Address" value={client.dropAddress} multiline /> : null}
+              {client.dropTime ? <Field label="Drop Time" value={client.dropTime} /> : null}
+              {client.seatType ? <Field label="Seat Type" value={client.seatType} /> : null}
               <Field label="Visit Duration" value={client.visitDuration} />
               <Field label="Purpose of Visit" value={client.purposeOfVisit} multiline />
               <Field label="Visit Address" value={client.visitAddress} multiline />
@@ -196,10 +208,10 @@ const IntakeView = ({ intakeData }) => {
 
         <View style={{ marginTop: 10 }}>
           <Text style={styles.label}>Work Signature</Text>
-          {intakeData.signature ? (
+          {(intakeData.signature || intakeData.workerInfo?.signature) ? (
             <View style={styles.signatureWrap}>
               <Image
-                source={{ uri: intakeData.signature }}
+                source={{ uri: intakeData.signature || intakeData.workerInfo?.signature }}
                 style={styles.signature}
                 resizeMode="contain"
               />

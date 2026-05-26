@@ -120,6 +120,7 @@ export default function BillingAgencyDetails({ agency, onBack }) {
             };
 
             let h = parseFloat(s.hoursWorked || s.duration || 0);
+            // Try clockIn / clockOut first
             if (!h && s.clockIn && s.clockOut) {
               const ci = parseClockTime(s.clockIn);
               const co = parseClockTime(s.clockOut);
@@ -128,34 +129,56 @@ export default function BillingAgencyDetails({ agency, onBack }) {
                 if (diffMs > 0) h = diffMs / 3600000;
               }
             }
+            // Fall back to scheduled startTime / endTime (covers shifts not yet clocked)
+            if (!h && s.startTime && s.endTime) {
+              const [sh, sm] = String(s.startTime).split(":").map(Number);
+              const [eh, em] = String(s.endTime).split(":").map(Number);
+              if (!isNaN(sh) && !isNaN(eh)) {
+                const startMins = sh * 60 + (sm || 0);
+                const endMins   = eh * 60 + (em || 0);
+                const diff = endMins >= startMins
+                  ? endMins - startMins
+                  : 24 * 60 - startMins + endMins; // overnight
+                h = diff / 60;
+              }
+            }
             if (!h) h = 0;
-            h = Math.round(h * 100) / 100; // round to 2 decimals
+            h = Math.round(h * 100) / 100;
 
-            // 4) Inherit Exact Database Rates from Agency Settings
+            // 4) Look up rate from agency rateList (field is rateList, NOT rates)
             const rawCatKey = (s.categoryName || s.shiftCategory || s.typeName || s.shiftType || "Emergency Care");
-            let matchedRate = parseFloat(liveAgency?.globalBillingRate) || 0;
-            let matchedTransportRate = parseFloat(liveAgency?.globalKmRate) || 0;
-            
-            if (Array.isArray(liveAgency?.rates)) {
-              const found = liveAgency.rates.find(rt => (rt.name || "").toLowerCase() === rawCatKey.toLowerCase());
+            let matchedRate          = parseFloat(liveAgency?.globalBillingRate) || 0;
+            let matchedTransportRate = parseFloat(liveAgency?.globalKmRate)      || 0.60;
+
+            // rateList is the correct field name on agency documents
+            if (Array.isArray(liveAgency?.rateList) && liveAgency.rateList.length > 0) {
+              const found = liveAgency.rateList.find(rt =>
+                (rt.name || "").toLowerCase().includes(rawCatKey.toLowerCase().split(" ")[0]) ||
+                rawCatKey.toLowerCase().includes((rt.name || "").toLowerCase().split(" ")[0])
+              );
               if (found) {
-                if (found.billingRate) matchedRate = parseFloat(found.billingRate);
-                if (found.kmRate) matchedTransportRate = parseFloat(found.kmRate);
+                if (found.billingRate) matchedRate          = parseFloat(found.billingRate);
+                if (found.kmRate)      matchedTransportRate = parseFloat(found.kmRate);
               }
             }
 
-            const r = parseFloat(s.rate || s.hourlyRate) || matchedRate;
+            // Priority: shift-stored rate → client rate at creation → agency rate
+            const r = parseFloat(s.rate || s.hourlyRate || s.clientRate) || matchedRate;
             const amt = h * r;
-            
-            // 5) Transport KM check from `extraShiftPoints` if standard km missing
-            let tkms = parseFloat(s.approvedKms || s.approvedKM || s.kilometers || 0);
+
+            // 5) Transport KM — check all known fields and shiftPoints totals
+            let tkms = parseFloat(s.approvedKms || s.approvedKM || s.kms || s.kilometers || 0);
+            if (!tkms && Array.isArray(s.shiftPoints) && s.shiftPoints.length > 0) {
+              tkms = s.shiftPoints.reduce((sum, p) => sum + (parseFloat(p.totalKilometers || p.totalKM || 0)), 0);
+            }
             if (!tkms && Array.isArray(s.extraShiftPoints) && s.extraShiftPoints.length > 0) {
               const last = s.extraShiftPoints[s.extraShiftPoints.length - 1];
               tkms = parseFloat(last.approvedKM || last.approvedKm || last.totalKilometer || last.totalKM || 0);
             }
 
-            const trate = parseFloat(s.kmRate || s.mileageRate) || matchedTransportRate;
-            const tamt = tkms * trate;
+            // Priority: shift-stored km rate → client km rate at creation → agency km rate
+            const trate = parseFloat(s.kmRate || s.mileageRate || s.clientKMRate) || matchedTransportRate;
+            const tamt  = tkms * trate;
 
             hours += h;
             shiftTotal += amt;

@@ -61,6 +61,12 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
   
 
   // Helper functions
+
+  // Resolve the effective clockIn value, checking both the current field name
+  // and the legacy field name (clockInDate) written by older mobile app versions.
+  const resolveClockIn  = (shift) => shift.clockIn  || shift.clockInDate  || null;
+  const resolveClockOut = (shift) => shift.clockOut || shift.clockOutDate || null;
+
   const getShiftStatus = (clockIn, clockOut) => {
     if (clockIn && clockOut) return "Completed";
     if (clockIn && !clockOut) return "InProgress";
@@ -108,7 +114,7 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
 
 
 const filteredShifts = shifts.filter((shift) => {
-  const status = getShiftStatus(shift.clockIn, shift.clockOut);
+  const status = getShiftStatus(resolveClockIn(shift), resolveClockOut(shift));
   const rawCategory =
   shift.categoryName || shift.shiftCategory || "";
 

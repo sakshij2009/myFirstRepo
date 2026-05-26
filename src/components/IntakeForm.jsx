@@ -1111,6 +1111,41 @@ const createFamilyClient = async (intake, intakeId, clients, db) => {
     }
   }
 
+  // ── Build shiftPoints: one per sibling with their individual + transport + parent info ──
+  const shiftPoints = clients.map((c) => {
+    // Match transport entry for this sibling by clientName
+    const transport = (intake.transportationInfoList || []).find(
+      (t) => t.clientName === c.fullName
+    ) || {};
+    // Match parent entry for this sibling (fall back to first parent)
+    const parent = (intake.parentInfoList || []).find(
+      (p) => p.clientName === c.fullName
+    ) || intake.parentInfoList?.[0] || {};
+
+    return {
+      name:                  c.fullName || "",
+      gender:                c.gender   || "",
+      dob:                   c.birthDate || "",
+      cyimId:                c.cyimId   || "",
+      seatType:              transport.carSeatType    || "",
+      carSeatRequired:       transport.carSeatRequired || "",
+      pickupLocation:        transport.pickupAddress   || c.address || "",
+      dropLocation:          transport.dropoffAddress  || "",
+      pickupTime:            transport.pickupTime      || "",
+      dropTime:              transport.dropOffTime     || "",
+      transportationOverview: transport.transportationOverview || "",
+      clientInfo:            c.clientInfo  || "",
+      cfsStatus:             c.cfsStatus   || "",
+      startDate:             c.startDate   || "",
+      // Parent / guardian info for this sibling
+      parentName:            parent.parentName  || "",
+      parentPhone:           parent.parentPhone || "",
+      parentEmail:           parent.parentEmail || "",
+      parentAddress:         parent.parentAddress || "",
+      relationship:          parent.relationShip || "",
+    };
+  });
+
   const clientId = Date.now().toString();
   await setDoc(doc(db, "clients", clientId), {
     name: intake.familyName,
@@ -1121,6 +1156,7 @@ const createFamilyClient = async (intake, intakeId, clients, db) => {
       dob: c.birthDate || null,
       gender: c.gender || "",
     })),
+    shiftPoints,                              // ← siblings now stored as shift points
     dob: null,
     gender: "",
     address: clients[0]?.address || "",
@@ -2189,6 +2225,25 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
                               )}
                             </div>
+
+                            {/* Copy from Parent 1 (shown for index > 0) */}
+                            {index > 0 && (
+                              <label className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg border-2 cursor-pointer w-fit"
+                                style={{ borderColor: "#145228", background: "#f0fdf4" }}>
+                                <input type="checkbox" className="h-4 w-4 accent-green-800"
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      const src = values.parentInfoList[0];
+                                      setFieldValue(`parentInfoList.${index}.parentName`, src.parentName);
+                                      setFieldValue(`parentInfoList.${index}.relationShip`, src.relationShip);
+                                      setFieldValue(`parentInfoList.${index}.parentPhone`, src.parentPhone);
+                                      setFieldValue(`parentInfoList.${index}.parentEmail`, src.parentEmail);
+                                      setFieldValue(`parentInfoList.${index}.parentAddress`, src.parentAddress);
+                                    }
+                                  }} />
+                                <span className="text-sm font-semibold" style={{ color: "#145228" }}>Copy info from Parent 1</span>
+                              </label>
+                            )}
                             <div className="grid grid-cols-3 gap-5">
                               <div className="relative">
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
@@ -2409,18 +2464,38 @@ const handleSubmit = async (values, { resetForm }) => {
                                   
                                   {values.medicalInfoList[index].marDocs?.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
-                                      {values.medicalInfoList[index].marDocs.map((file, fIdx) => (
-                                        <div key={fIdx} className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg text-xs text-gray-600" style={{ borderColor: "#e5e7eb" }}>
-                                          <span className="truncate max-w-[150px]">{typeof file === "string" ? "Stored File" : file.name}</span>
-                                          <button type="button" onClick={() => {
-                                            const updated = [...values.medicalInfoList[index].marDocs];
-                                            updated.splice(fIdx, 1);
-                                            setFieldValue(`medicalInfoList.${index}.marDocs`, updated);
-                                          }} className="text-red-500 hover:text-red-700">
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                      ))}
+                                      {values.medicalInfoList[index].marDocs.map((file, fIdx) => {
+                                        const isUrl = typeof file === "string";
+                                        const displayName = isUrl
+                                          ? (decodeURIComponent(file.split("/").pop().split("?")[0]).replace(/%20/g, " ") || `MAR File ${fIdx + 1}`)
+                                          : file.name;
+                                        return (
+                                          <div key={fIdx} className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg text-xs" style={{ borderColor: "#e5e7eb" }}>
+                                            {isUrl ? (
+                                              <a
+                                                href={file}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="truncate max-w-[200px] font-medium hover:underline flex items-center gap-1"
+                                                style={{ color: "#145228" }}
+                                                title={displayName}
+                                              >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                                {displayName}
+                                              </a>
+                                            ) : (
+                                              <span className="truncate max-w-[200px] text-gray-600">{displayName}</span>
+                                            )}
+                                            <button type="button" onClick={() => {
+                                              const updated = [...values.medicalInfoList[index].marDocs];
+                                              updated.splice(fIdx, 1);
+                                              setFieldValue(`medicalInfoList.${index}.marDocs`, updated);
+                                            }} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -2466,6 +2541,28 @@ const handleSubmit = async (values, { resetForm }) => {
                                   <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
                                 )}
                               </div>
+
+                              {/* Copy from Transportation 1 (shown for index > 0) */}
+                              {index > 0 && (
+                                <label className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg border-2 cursor-pointer w-fit"
+                                  style={{ borderColor: "#145228", background: "#f0fdf4" }}>
+                                  <input type="checkbox" className="h-4 w-4 accent-green-800"
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const src = values.transportationInfoList[0];
+                                        setFieldValue(`transportationInfoList.${index}.pickupAddress`, src.pickupAddress);
+                                        setFieldValue(`transportationInfoList.${index}.dropoffAddress`, src.dropoffAddress);
+                                        setFieldValue(`transportationInfoList.${index}.pickupTime`, src.pickupTime);
+                                        setFieldValue(`transportationInfoList.${index}.dropOffTime`, src.dropOffTime);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatRequired`, src.carSeatRequired);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatType`, src.carSeatType);
+                                        setFieldValue(`transportationInfoList.${index}.transportationOverview`, src.transportationOverview);
+                                      }
+                                    }} />
+                                  <span className="text-sm font-semibold" style={{ color: "#145228" }}>Copy info from Transportation 1</span>
+                                </label>
+                              )}
+
                               <div className="grid grid-cols-3 gap-5">
                                 <div className="relative">
                                   <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>

@@ -54,6 +54,140 @@ const calculateTotalDistance = async (shiftPoint) => {
 };
 
 
+// ── Avatar colour helper ──────────────────────────────────────────────────
+const AVATAR_COLORS = ['#145228','#1d4ed8','#7c3aed','#be123c','#b45309','#0e7490','#0f766e'];
+const getAvatarColor = (name) => {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = (name.charCodeAt(i) + h * 31) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+};
+
+// ── Staff Dropdown with availability badges ───────────────────────────────
+function StaffDropdown({ label, sublabel, placeholder, value, onChange, users, allShifts, selectedDates, startTime, endTime, error, touched }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedUser = users.find(u => u.id === value);
+
+  // Returns { count, hasConflict } for a given user across all selected dates
+  const getAvailability = (userId) => {
+    if (!selectedDates || selectedDates.length === 0) return null;
+    let count = 0;
+    let hasConflict = false;
+
+    for (const d of selectedDates) {
+      const dateISO = (d instanceof Date ? d : new Date(d)).toISOString().split('T')[0];
+      const dayShifts = allShifts.filter(s => {
+        const isUser =
+          s.primaryUserId === userId ||
+          s.userId === userId ||
+          s.secondaryUserDocId === userId;
+        if (!isUser) return false;
+        try {
+          let iso = s.dateKey_iso;
+          if (!iso && s.dateKey) {
+            const p = s.dateKey.split('-');
+            if (p.length === 3) iso = `${p[2]}-${p[1]}-${p[0]}`;
+          }
+          if (!iso) {
+            const sd = s.startDate?.toDate ? s.startDate.toDate() : new Date((s.startDate || '').replace(/,/g, '').trim());
+            if (!isNaN(sd)) iso = sd.toISOString().split('T')[0];
+          }
+          return iso === dateISO;
+        } catch { return false; }
+      });
+      count += dayShifts.length;
+      if (startTime && endTime) {
+        dayShifts.forEach(s => {
+          if (s.startTime && s.endTime && s.startTime < endTime && startTime < s.endTime) hasConflict = true;
+        });
+      }
+    }
+    return { count, hasConflict };
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: '#374151' }}>
+        {label}{sublabel && <span style={{ fontWeight: 400, color: '#9ca3af' }}> {sublabel}</span>}
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen(p => !p)}
+        className={`w-full px-3 py-2.5 rounded-lg border text-left flex items-center justify-between transition-all focus:outline-none text-sm ${error && touched ? 'border-red-400' : 'border-[#e5e7eb]'}`}
+        style={{ color: value ? '#374151' : '#9ca3af' }}
+      >
+        <span className="truncate">{selectedUser ? selectedUser.name : placeholder}</span>
+        <FaChevronDown className="text-gray-400 w-3.5 h-3.5 shrink-0 ml-2" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl border shadow-lg" style={{ borderColor: '#e5e7eb', maxHeight: 300, overflowY: 'auto' }}>
+          {/* Clear / none option for optional fields */}
+          {sublabel && (
+            <button type="button" onClick={() => { onChange(''); setOpen(false); }}
+              className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors"
+              style={{ color: '#9ca3af', borderBottom: '1px solid #f3f4f6' }}>
+              — None (optional)
+            </button>
+          )}
+          {users.map((u, i) => {
+            const avail = getAvailability(u.id);
+            const isSelected = u.id === value;
+            return (
+              <button key={u.id} type="button"
+                onClick={() => { onChange(u.id); setOpen(false); }}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                style={{ background: isSelected ? '#f0fdf4' : undefined, borderBottom: i < users.length - 1 ? '1px solid #f3f4f6' : undefined }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                    style={{ background: getAvatarColor(u.name) }}>
+                    {(u.name || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-left min-w-0">
+                    <p className="font-semibold text-gray-900 truncate" style={{ fontSize: 13 }}>{u.name}</p>
+                    {u.role && <p className="capitalize" style={{ fontSize: 11, color: '#9ca3af' }}>{u.role}</p>}
+                  </div>
+                </div>
+                {avail !== null && (
+                  avail.hasConflict ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ml-2"
+                      style={{ background: '#fef2f2', color: '#ef4444' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                      Conflict
+                    </span>
+                  ) : avail.count > 0 ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ml-2"
+                      style={{ background: '#fffbeb', color: '#d97706' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      {avail.count} shift{avail.count > 1 ? 's' : ''} assigned
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ml-2"
+                      style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      Available
+                    </span>
+                  )
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {error && touched && <div className="text-red-500 text-xs mt-1">{error}</div>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 const AddUserShift = ({ mode = "add", user }) => {
   const { id } = useParams();
 
@@ -1268,34 +1402,35 @@ const AddUserShift = ({ mode = "add", user }) => {
                       </div>
 
                       {/* Select Primary User (Staff) */}
-                      <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Primary User (Staff)</label>
-                        <Field as="select" name="primaryUser" className={selectCls(touched.primaryUser && errors.primaryUser, !values.primaryUser)}>
-                          <option value="">Select primary staff</option>
-                          {users.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
-                          ))}
-                        </Field>
-                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                        <ErrorMessage name="primaryUser" component="div" className="text-red-500 text-xs mt-1" />
-                      </div>
+                      <StaffDropdown
+                        label="Primary User (Staff)"
+                        placeholder="Select primary staff"
+                        value={values.primaryUser}
+                        onChange={(id) => setFieldValue('primaryUser', id)}
+                        users={users}
+                        allShifts={monthShifts}
+                        selectedDates={values.shiftDates}
+                        startTime={values.startTime}
+                        endTime={values.endTime}
+                        error={errors.primaryUser}
+                        touched={touched.primaryUser}
+                      />
 
                       {/* Select Secondary User (Staff) */}
-                      <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Secondary User (Staff) <span style={{ fontWeight: 400, color: "#9ca3af" }}>(Optional)</span></label>
-                        <Field as="select" name="secondaryUser" className={selectCls(touched.secondaryUser && errors.secondaryUser, !values.secondaryUser)}>
-                          <option value="">Select secondary staff (optional)</option>
-                          {users.map((item) => (
-                            <option key={item.id} value={item.id}>{item.name}</option>
-                          ))}
-                        </Field>
-                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                        <ErrorMessage name="secondaryUser" component="div" className="text-red-500 text-xs mt-1" />
-                      </div>
+                      <StaffDropdown
+                        label="Secondary User (Staff)"
+                        sublabel="(Optional)"
+                        placeholder="Select secondary staff (optional)"
+                        value={values.secondaryUser}
+                        onChange={(id) => setFieldValue('secondaryUser', id)}
+                        users={users}
+                        allShifts={monthShifts}
+                        selectedDates={values.shiftDates}
+                        startTime={values.startTime}
+                        endTime={values.endTime}
+                        error={errors.secondaryUser}
+                        touched={touched.secondaryUser}
+                      />
 
                       {/* Vehicle Type */}
                       <div className="relative">

@@ -134,8 +134,8 @@ const ManageIntakeWorkers = () => {
     }
   };
 
-  const filtered = activeTab === "Workers" 
-    ? intakeWorkers.filter(w => !search || w.name?.toLowerCase().includes(search.toLowerCase()) || w.email?.toLowerCase().includes(search.toLowerCase()))
+  const filtered = activeTab === "Workers"
+    ? intakeWorkers.filter(w => !search || w.name?.toLowerCase().includes(search.toLowerCase()) || w.email?.toLowerCase().includes(search.toLowerCase()) || w.agency?.toLowerCase().includes(search.toLowerCase()))
     : requests.filter(r => !search || r.displayClientNames?.toLowerCase().includes(search.toLowerCase()) || r.displayFamilyName?.toLowerCase().includes(search.toLowerCase()) || r.intakeworkerName?.toLowerCase().includes(search.toLowerCase()));
 
   const ITEMS_PER_PAGE = 10;
@@ -237,7 +237,7 @@ const ManageIntakeWorkers = () => {
             <thead>
               <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
                 {activeTab === "Workers" ? (
-                  ["Name", "Email", "Phone", "Actions"].map((h) => (
+                  ["Name", "Email", "Phone", "Agency", "Actions"].map((h) => (
                     <th key={h} className="text-left px-4 py-4 font-bold text-[10px] uppercase tracking-wider text-gray-500">{h}</th>
                   ))
                 ) : (
@@ -277,6 +277,16 @@ const ManageIntakeWorkers = () => {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-gray-600">{item.phone || "—"}</td>
+                        <td className="px-4 py-4">
+                          {item.agency ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border"
+                              style={{ backgroundColor: "#f0fdf4", color: "#16a34a", borderColor: "#bbf7d0" }}>
+                              {item.agency}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-1">
                             <button
