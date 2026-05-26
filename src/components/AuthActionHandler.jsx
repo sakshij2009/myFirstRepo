@@ -9,7 +9,7 @@ import {
   signInWithEmailLink,
   verifyPasswordResetCode,
 } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { CheckCircle, AlertCircle, Loader2, Eye, EyeOff, ArrowRight } from "lucide-react";
 
 // ─── Design tokens (match Login.jsx / existing dashboard) ────────────────────
@@ -134,19 +134,24 @@ export default function AuthActionHandler() {
       await signInWithEmailLink(auth, email.trim().toLowerCase(), href);
       window.localStorage.removeItem("emailForSignIn");
 
+      const normalizedEmail = email.trim().toLowerCase();
       const q = query(
         collection(db, "intakeUsers"),
-        where("email", "==", email.trim().toLowerCase())
+        where("email", "==", normalizedEmail)
       );
       const snap = await getDocs(q);
 
       if (!snap.empty) {
-        const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        // Mark account as verified in Firestore (first-time magic-link sign-in)
+        const docRef = doc(db, "intakeUsers", snap.docs[0].id);
+        await updateDoc(docRef, { verified: true });
+
+        const userData = { id: snap.docs[0].id, ...snap.docs[0].data(), verified: true };
         localStorage.setItem("intakeUser", JSON.stringify(userData));
         localStorage.setItem("user", JSON.stringify(userData));
-        setStatusMsg("Signed in successfully! Redirecting…");
+        setStatusMsg("Signed in successfully! Redirecting to dashboard…");
         setPhase("success");
-        setTimeout(() => navigate("/intake-form/dashboard", { replace: true }), 1500);
+        setTimeout(() => navigate("/intake-form/dashboard", { replace: true }), 1200);
       } else {
         setErrorMsg("No account found for this email. Please sign up at the portal.");
         setPhase("error");
@@ -321,8 +326,8 @@ export default function AuthActionHandler() {
               <CheckCircle size={52} color={GREEN} style={{ margin: "0 auto 16px", display: "block" }} />
               <p style={{ fontSize: 16, fontWeight: 600, color: "#111827", margin: "0 0 8px" }}>{statusMsg}</p>
             </div>
-            <button style={{ ...btnPrimary, background: GREEN }} onClick={() => navigate("/intake-form/login", { replace: true })}>
-              Continue to sign in <ArrowRight size={16} />
+            <button style={{ ...btnPrimary, background: GREEN }} onClick={() => navigate("/intake-form/dashboard", { replace: true })}>
+              Go to Dashboard <ArrowRight size={16} />
             </button>
           </>
         )}
