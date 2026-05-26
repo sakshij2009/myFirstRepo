@@ -27,6 +27,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../src/firebase/config";
 import { safeString, parseDate } from "../src/utils/date";
 
@@ -114,7 +115,7 @@ function buildStops(shiftPoints, shift) {
       if (sp.pickupLocation) {
         clients.push({
           id: sp.clientId || `sp_${i}`,
-          name: sp.clientName || safeString(shift?.clientName) || `Client ${i + 1}`,
+          name: sp.name || sp.clientName || `Client ${i + 1}`,
           seatType: sp.seatType || null,
           pickupAddr: sp.pickupLocation,
           pickupTime: sp.pickupTime || safeString(shift?.startTime) || "",
@@ -147,8 +148,8 @@ function buildStops(shiftPoints, shift) {
     }
   }
 
-  // Last fallback: demo
-  if (clients.length === 0) clients = DEMO_CLIENTS;
+  // No clients found — return empty (no demo data in production)
+  if (clients.length === 0) return [];
 
   const stops = [];
   const pickupGroups = {};
@@ -169,9 +170,9 @@ function buildStops(shiftPoints, shift) {
     stops.push({ type: "pickup", label: `Pickup ${letterLabel(i)}`, address: g.address, time: g.time, clients: g.clients });
   });
 
-  // Visit stop (use first client's visitAddr or demo)
-  const visitAddr = clients[0]?.visitAddr || DEMO_VISIT_ADDR;
-  const visitTime = clients[0]?.visitTime || DEMO_VISIT_TIME;
+  // Visit stop — only if at least one client has a real visitAddr
+  const visitAddr = clients.find(c => c.visitAddr)?.visitAddr;
+  const visitTime = clients.find(c => c.visitAddr)?.visitTime || "";
   if (visitAddr) {
     stops.push({ type: "visit", label: "Visit", address: visitAddr, time: visitTime, clients });
   }
@@ -272,7 +273,7 @@ const pbStyles = StyleSheet.create({
 });
 
 // ── Client Row ────────────────────────────────────────────────────────────────
-function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, confirmedLabel }) {
+function ClientStatusRow({ client, status, confirmedTime, onConfirm, onCancel, actionLabel, confirmedLabel }) {
   const isConfirmed = status === "confirmed";
   const isCancelled = status === "cancelled";
   const avatarColors = [
@@ -285,34 +286,44 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
 
   return (
     <View style={[crStyles.row, isConfirmed && crStyles.rowConfirmed, isCancelled && crStyles.rowCancelled]}>
-      {/* Avatar */}
-      <View style={[crStyles.avatar, { backgroundColor: ac.bg }]}>
-        <Text style={[crStyles.avatarText, { color: ac.text }]}>{initials(client.name)}</Text>
-      </View>
-      {/* Info */}
-      <View style={{ flex: 1 }}>
-        <Text style={[crStyles.name, isCancelled && { textDecorationLine: "line-through", color: GRAY }]}>{client.name}</Text>
-        {client.seatType ? (
-          <Text style={crStyles.seat}>{client.seatType}</Text>
-        ) : null}
-      </View>
-      {/* Action */}
-      {isConfirmed ? (
-        <View style={crStyles.confirmedBadge}>
-          <Ionicons name="checkmark-circle" size={16} color={GREEN} />
-          <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+      {/* Top row: avatar + name/seat + status badge */}
+      <View style={crStyles.topRow}>
+        <View style={[crStyles.avatar, { backgroundColor: ac.bg }]}>
+          <Text style={[crStyles.avatarText, { color: ac.text }]}>{initials(client.name)}</Text>
         </View>
-      ) : isCancelled ? (
-        <View style={crStyles.cancelledBadge}>
-          <Ionicons name="close-circle" size={14} color={RED} />
-          <Text style={crStyles.cancelledText}>Not available</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[crStyles.name, isCancelled && { textDecorationLine: "line-through", color: GRAY }]}>
+            {client.name}
+          </Text>
+          {client.seatType ? (
+            <Text style={crStyles.seat}>{client.seatType}</Text>
+          ) : null}
         </View>
-      ) : (
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          <Pressable onPress={onConfirm} style={crStyles.confirmBtn}>
+        {isConfirmed && (
+          <View style={crStyles.confirmedBadge}>
+            <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+            <View>
+              <Text style={crStyles.confirmedText}>{confirmedLabel}</Text>
+              {confirmedTime ? (
+                <Text style={crStyles.confirmedTime}>{confirmedTime}</Text>
+              ) : null}
+            </View>
+          </View>
+        )}
+        {isCancelled && (
+          <View style={crStyles.cancelledBadge}>
+            <Ionicons name="close-circle" size={14} color={RED} />
+            <Text style={crStyles.cancelledText}>Not available</Text>
+          </View>
+        )}
+      </View>
+      {/* Bottom row: action buttons (only when waiting) */}
+      {!isConfirmed && !isCancelled && (
+        <View style={crStyles.btnRow}>
+          <Pressable onPress={onConfirm} style={[crStyles.confirmBtn, { flex: 1 }]}>
             <Text style={crStyles.confirmBtnText}>{actionLabel}</Text>
           </Pressable>
-          <Pressable onPress={onCancel} style={crStyles.noShowBtn}>
+          <Pressable onPress={onCancel} style={[crStyles.noShowBtn, { flex: 1 }]}>
             <Text style={crStyles.noShowBtnText}>No-show</Text>
           </Pressable>
         </View>
@@ -322,25 +333,31 @@ function ClientStatusRow({ client, status, onConfirm, onCancel, actionLabel, con
 }
 
 const crStyles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8, backgroundColor: "#fff" },
+  // Vertical card — name row on top, buttons row below
+  row: { padding: 12, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8, backgroundColor: "#fff" },
   rowConfirmed: { backgroundColor: GREEN_LIGHT, borderColor: "#86EFAC" },
   rowCancelled: { backgroundColor: "#FEF2F2", borderColor: "#FECACA", opacity: 0.7 },
+  // Top row: avatar + name/seat side by side
+  topRow: { flexDirection: "row", alignItems: "center" },
+  // Bottom row: two equal-width buttons, indented to align under name
+  btnRow: { flexDirection: "row", gap: 8, marginTop: 10, marginLeft: 48 },
   avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", marginRight: 10 },
   avatarText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold" },
   name: { fontSize: 14, fontWeight: "600", color: DARK, fontFamily: "Inter-SemiBold" },
-  seat: { fontSize: 12, color: GRAY, fontFamily: "Inter" },
-  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  seat: { fontSize: 12, color: GRAY, fontFamily: "Inter", marginTop: 2 },
+  confirmedBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   confirmedText: { fontSize: 12, color: GREEN, fontWeight: "600", fontFamily: "Inter-SemiBold" },
-  cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  confirmedTime: { fontSize: 10, color: "#6B7280", fontFamily: "Inter", marginTop: 1 },
+  cancelledBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   cancelledText: { fontSize: 12, color: RED, fontWeight: "600", fontFamily: "Inter-SemiBold" },
-  confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#86EFAC" },
+  confirmBtn: { backgroundColor: GREEN_LIGHT, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#86EFAC", alignItems: "center" },
   confirmBtnText: { fontSize: 12, fontWeight: "700", color: GREEN, fontFamily: "Inter-Bold" },
-  noShowBtn: { backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "#FECACA" },
+  noShowBtn: { backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#FECACA", alignItems: "center" },
   noShowBtnText: { fontSize: 12, fontWeight: "700", color: RED, fontFamily: "Inter-Bold" },
 });
 
 // ── Completed Stop Row ────────────────────────────────────────────────────────
-function CompletedStop({ stop }) {
+function CompletedStop({ stop, completedTime }) {
   const clientNames = stop.clients.map((c) => c.name).join(", ");
   return (
     <View style={csStyles.row}>
@@ -351,6 +368,9 @@ function CompletedStop({ stop }) {
         <Text style={csStyles.label}>{stop.label} — {stop.address?.split(",")[0]}</Text>
         <Text style={csStyles.clients} numberOfLines={1}>{clientNames}</Text>
       </View>
+      {completedTime ? (
+        <Text style={{ fontSize: 12, fontWeight: "600", color: GREEN, fontFamily: "Inter-SemiBold" }}>{completedTime}</Text>
+      ) : null}
     </View>
   );
 }
@@ -373,13 +393,18 @@ export default function CompleteShift() {
   const [completedIdxs, setCompletedIdxs] = useState([]);
   // stopClientStatus: { stopIndex_clientId → 'waiting'|'confirmed'|'cancelled' }
   const [clientStatus, setClientStatus] = useState({});
+  // clientConfirmedTimes: { stopIndex_clientId → "HH:MM AM/PM" }
+  const [clientConfirmedTimes, setClientConfirmedTimes] = useState({});
   const [visitArrived, setVisitArrived] = useState(false);
   const [visitNotes, setVisitNotes] = useState("");
   const [totalKm, setTotalKm] = useState(0);
+  // completedTimes: { stopIndex → "HH:MM AM/PM" } — time each stop was finished
+  const [completedTimes, setCompletedTimes] = useState({});
   const locationSubRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const startTimeRef = useRef(Date.now());
   const kmRef = useRef(null); // fallback simulation
+  const progressRestoredRef = useRef(false); // prevent double-restore
 
   // GPS distance tracking
   useEffect(() => {
@@ -416,21 +441,45 @@ export default function CompleteShift() {
     };
   }, []);
 
-  // Load shift
+  // Load shift + restore saved progress
   useEffect(() => {
     if (!shiftId) { setLoading(false); return; }
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "shifts", shiftId), async (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setShift(data);
         const builtStops = buildStops(data.shiftPoints, data);
         setStops(builtStops);
-        // Init client statuses
-        const init = {};
-        builtStops.forEach((st, si) => {
-          st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
-        });
-        setClientStatus(init);
+
+        // Restore saved progress (only once on first load)
+        if (!progressRestoredRef.current) {
+          progressRestoredRef.current = true;
+          try {
+            const saved = await AsyncStorage.getItem(`transportProgress_${shiftId}`);
+            if (saved) {
+              const prog = JSON.parse(saved);
+              if (typeof prog.currentIdx === "number") setCurrentIdx(prog.currentIdx);
+              if (Array.isArray(prog.completedIdxs)) setCompletedIdxs(prog.completedIdxs);
+              if (prog.clientStatus) setClientStatus(prog.clientStatus);
+              if (typeof prog.totalKm === "number") setTotalKm(prog.totalKm);
+              if (prog.completedTimes) setCompletedTimes(prog.completedTimes);
+              if (prog.startedAt) startTimeRef.current = prog.startedAt;
+            } else {
+              // First time on this shift — init client statuses
+              const init = {};
+              builtStops.forEach((st, si) => {
+                st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
+              });
+              setClientStatus(init);
+            }
+          } catch {
+            const init = {};
+            builtStops.forEach((st, si) => {
+              st.clients.forEach((c) => { init[`${si}_${c.id}`] = "waiting"; });
+            });
+            setClientStatus(init);
+          }
+        }
       }
       setLoading(false);
     });
@@ -439,6 +488,12 @@ export default function CompleteShift() {
 
   const setStatus = useCallback((stopIdx, clientId, status) => {
     setClientStatus((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: status }));
+    // Record the time when a client is confirmed (for display below "Picked up" / "Dropped off")
+    if (status === "confirmed") {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      setClientConfirmedTimes((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: timeStr }));
+    }
   }, []);
 
   const currentStop = stops[currentIdx];
@@ -474,6 +529,83 @@ export default function CompleteShift() {
     : [];
 
   const advanceStop = async () => {
+    // Record completion time for the current stop
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const newCompletedTimes = { ...completedTimes, [currentIdx]: timeStr };
+    setCompletedTimes(newCompletedTimes);
+
+    // Save per-client pickup / drop times to Firestore (shown in shift-detail)
+    if (shiftId && currentStop && (currentStop.type === "pickup" || currentStop.type === "drop")) {
+      try {
+        // 1. Flat shiftClientTimes map (used by shift-detail per-client display)
+        const clientUpdates = {};
+        currentStop.clients.forEach((c) => {
+          const safeId = String(c.id).replace(/[.\\/[\]]/g, "_");
+          const confirmedStatus = clientStatus[`${currentIdx}_${c.id}`];
+          if (confirmedStatus === "confirmed") {
+            const confirmedAt = clientConfirmedTimes[`${currentIdx}_${c.id}`] || timeStr;
+            clientUpdates[`shiftClientTimes.${safeId}.name`] = c.name;
+            if (currentStop.type === "pickup") {
+              clientUpdates[`shiftClientTimes.${safeId}.pickupAt`] = confirmedAt;
+            } else {
+              clientUpdates[`shiftClientTimes.${safeId}.dropAt`] = confirmedAt;
+            }
+          }
+        });
+
+        // 2. Also update shiftPoints array entries with pickedUpTime / droppedTime
+        //    (admin reads shiftPoints[n].pickedUpTime and pickedUpLocation)
+        const currentCoords = lastCoordsRef.current;
+        const locationAddr = currentStop.address || "";
+        const currentShiftPoints = Array.isArray(shift?.shiftPoints) ? shift.shiftPoints : [];
+        if (currentShiftPoints.length > 0) {
+          const updatedPoints = currentShiftPoints.map((sp, spIdx) => {
+            // Match by clientId or fallback id `sp_N`
+            const matchId = sp.clientId || `sp_${spIdx}`;
+            const matchingClient = currentStop.clients.find(
+              c => c.id === matchId || (c.name && sp.name && c.name === sp.name)
+            );
+            if (!matchingClient) return sp;
+            const cs = clientStatus[`${currentIdx}_${matchingClient.id}`];
+            if (cs !== "confirmed") return sp;
+            const confirmedAt = clientConfirmedTimes[`${currentIdx}_${matchingClient.id}`] || timeStr;
+            if (currentStop.type === "pickup") {
+              return {
+                ...sp,
+                pickedUpTime: confirmedAt,
+                pickedUpLocation: locationAddr,
+                ...(currentCoords ? { pickedUpCoords: { lat: currentCoords.latitude, lng: currentCoords.longitude } } : {}),
+              };
+            } else {
+              return {
+                ...sp,
+                droppedTime: confirmedAt,
+                droppedLocation: locationAddr,
+                ...(currentCoords ? { droppedCoords: { lat: currentCoords.latitude, lng: currentCoords.longitude } } : {}),
+              };
+            }
+          });
+          clientUpdates.shiftPoints = updatedPoints;
+        } else {
+          // Single-client fallback — write directly on shift document
+          if (currentStop.type === "pickup") {
+            clientUpdates.pickedUpTime = timeStr;
+            clientUpdates.pickedUpLocation = locationAddr;
+            if (currentCoords) clientUpdates.pickedUpCoords = { lat: currentCoords.latitude, lng: currentCoords.longitude };
+          } else {
+            clientUpdates.droppedTime = timeStr;
+            clientUpdates.droppedLocation = locationAddr;
+            if (currentCoords) clientUpdates.droppedCoords = { lat: currentCoords.latitude, lng: currentCoords.longitude };
+          }
+        }
+
+        if (Object.keys(clientUpdates).length > 0) {
+          await updateDoc(doc(db, "shifts", shiftId), clientUpdates);
+        }
+      } catch (e) { console.warn("stop time save error:", e); }
+    }
+
     if (currentIdx >= stops.length - 1) {
       // All stops done — stop tracking
       locationSubRef.current?.remove();
@@ -489,6 +621,8 @@ export default function CompleteShift() {
             transportationCompleted: true,
             transportationKm: totalKm,
             transportationCompletedAt: serverTimestamp(),
+            // clockOut is NOT written here — user must tap Clock Out on shift-detail
+            // to officially end the shift after filling reports.
             visitNotes: visitNotes.trim() || null,
             totalTimeMinutes,
             vehicleType: vehicleType || null,
@@ -498,9 +632,9 @@ export default function CompleteShift() {
               personalVehicleOfficeAddress: OFFICE_ADDRESS,
             }),
           });
+          await AsyncStorage.removeItem(`transportProgress_${shiftId}`);
         } catch (e) { console.warn("advanceStop save error:", e); }
       }
-      // Show success then navigate to shift detail for the report
       Alert.alert(
         "Shift Complete!",
         "Great work! Your transportation has been logged. You can now fill in the shift report.",
@@ -509,9 +643,26 @@ export default function CompleteShift() {
       );
       return;
     }
-    setCompletedIdxs((prev) => [...prev, currentIdx]);
-    setCurrentIdx((prev) => prev + 1);
+
+    const newCompletedIdxs = [...completedIdxs, currentIdx];
+    const newIdx = currentIdx + 1;
+    setCompletedIdxs(newCompletedIdxs);
+    setCurrentIdx(newIdx);
     setVisitArrived(false);
+
+    // Persist progress so the user can leave and resume
+    if (shiftId) {
+      try {
+        await AsyncStorage.setItem(`transportProgress_${shiftId}`, JSON.stringify({
+          currentIdx: newIdx,
+          completedIdxs: newCompletedIdxs,
+          clientStatus,
+          totalKm,
+          completedTimes: newCompletedTimes,
+          startedAt: startTimeRef.current,
+        }));
+      } catch (e) { console.warn("AsyncStorage save error:", e); }
+    }
   };
 
   const handleCancelShift = () => {
@@ -657,7 +808,7 @@ export default function CompleteShift() {
 
         {/* ── Completed stops (collapsed) ──────────────────────────────────── */}
         {completedIdxs.map((si) => (
-          <CompletedStop key={si} stop={stops[si]} />
+          <CompletedStop key={si} stop={stops[si]} completedTime={completedTimes[si]} />
         ))}
 
         {/* ── Current Stop ─────────────────────────────────────────────────── */}
@@ -721,6 +872,7 @@ export default function CompleteShift() {
                     key={c.id}
                     client={c}
                     status={clientStatus[`${currentIdx}_${c.id}`] || "waiting"}
+                    confirmedTime={clientConfirmedTimes[`${currentIdx}_${c.id}`] || null}
                     onConfirm={() => setStatus(currentIdx, c.id, "confirmed")}
                     onCancel={() => {
                       Alert.alert(

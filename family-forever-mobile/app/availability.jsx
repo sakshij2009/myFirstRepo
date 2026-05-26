@@ -316,8 +316,11 @@ export default function Availability() {
       const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const mine = all.filter(
         (s) =>
-          s.userId === uid ||
-          (s.name && user.name && s.name.toLowerCase() === user.name.toLowerCase())
+          s.userId === uid || s.staffId === uid ||
+          (s.name && user.name && s.name.toLowerCase() === user.name.toLowerCase()) ||
+          s.secondaryUserId === uid ||
+          (s.secondaryUserName && user.name && s.secondaryUserName.toLowerCase() === user.name.toLowerCase()) ||
+          (s.secondaryUser && user.name && s.secondaryUser.toLowerCase() === user.name.toLowerCase())
       );
       const weekShifts = mine.filter((s) => {
         const d = parseShiftDate(s);

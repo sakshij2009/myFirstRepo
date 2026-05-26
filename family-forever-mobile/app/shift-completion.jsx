@@ -444,30 +444,6 @@ export default function ShiftCompletion() {
           ))}
         </View>
 
-        {/* ── Rate Your Shift ─────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Rate Your Shift</Text>
-          <Text style={{ fontSize: 12, color: MUTED, marginBottom: 16, fontFamily: "Inter" }}>
-            Optional — helps us improve scheduling
-          </Text>
-          <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Pressable key={star} onPress={() => setRating(star)} activeOpacity={0.7}>
-                <Ionicons
-                  name={star <= rating ? "star" : "star-outline"}
-                  size={36}
-                  color={star <= rating ? "#F59E0B" : BORDER}
-                />
-              </Pressable>
-            ))}
-          </View>
-          {rating > 0 && (
-            <Text style={{ textAlign: "center", fontSize: 14, fontWeight: "600", color: GRAY, fontFamily: "Inter-SemiBold" }}>
-              {RATINGS[rating]}
-            </Text>
-          )}
-        </View>
-
         {/* ── Final Notes ─────────────────────────────────────────────────── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Final Notes</Text>

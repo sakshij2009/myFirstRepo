@@ -15,18 +15,41 @@ const IntakeFormMainPage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // ΓöÇΓöÇ Load user from localStorage synchronously on mount ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Load user from localStorage and validate against Firestore ──────────
   useEffect(() => {
-    const stored = localStorage.getItem("intakeUser");
-    if (stored) {
-      try {
-        const data = JSON.parse(stored);
-        setUserData(data);
-      } catch {
+    const validateSession = async () => {
+      const stored = localStorage.getItem("intakeUser");
+      if (!stored) { setLoading(false); return; }
+
+      let parsed = null;
+      try { parsed = JSON.parse(stored); } catch {
         localStorage.removeItem("intakeUser");
+        setLoading(false);
+        return;
       }
-    }
-    setLoading(false);
+
+      // Validate the stored email still exists and is active in Firestore
+      try {
+        const email = (parsed.email || parsed.intakeworkerEmail || "").trim().toLowerCase();
+        if (!email) throw new Error("no email in session");
+        const snap = await getDocs(
+          query(collection(db, "intakeUsers"), where("email", "==", email))
+        );
+        if (snap.empty) throw new Error("user not found in Firestore");
+        const docData = snap.docs[0].data();
+        // Reject unverified or disabled accounts
+        if (docData.verified === false) throw new Error("account not verified");
+        if (docData.disabled === true) throw new Error("account disabled");
+        // Valid — refresh local copy with latest Firestore data
+        setUserData({ ...parsed, ...docData });
+      } catch (e) {
+        console.warn("IntakeFormMainPage: invalid session —", e.message);
+        localStorage.removeItem("intakeUser");
+        setUserData(null);
+      }
+      setLoading(false);
+    };
+    validateSession();
   }, []);
 
   const handleLogout = () => {

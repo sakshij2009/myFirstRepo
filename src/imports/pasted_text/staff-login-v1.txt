@@ -1,0 +1,140 @@
+You want the very first version — the one with the dark green full background, floating white card in the center, and trust badges at the bottom. Here's the prompt:
+
+---
+
+**Figma Make Prompt — Staff Mobile Login Screen (V1)**
+
+---
+
+Design a premium mobile login screen for "Family Forever" — a child services management platform. This is the staff-only login screen with email and password authentication. Frame size: 390×844 (iPhone 14/15 Pro). The screen uses a full dark green background with the brand at the top, a floating white login card in the center, and trust badges at the bottom.
+
+**Design System:**
+- Primary green: #1F6F43
+- Headings: Poppins — bold/semibold
+- Body: Inter — regular/medium/semibold
+
+---
+
+**FULL SCREEN DARK GREEN BACKGROUND:**
+
+- Entire screen background: Rich layered green gradient — linear-gradient from #0E3D20 (top) through #0A2A16, #071D0F to #0B2E18 (bottom). Not a flat color — has atmospheric depth.
+- Soft light orb (top area): Large radial gradient (600px diameter) positioned top-left offset, rgba(34,120,60,0.18) center fading to transparent at 65%. Subtle slow drift animation moving 20px over 22 seconds.
+- Soft light orb (bottom area): Second radial gradient (500px diameter) positioned bottom-right, rgba(31,111,67,0.12) center fading to transparent at 60%. Slow drift animation opposite direction, 28 second cycle.
+- Accent light beam: Centered horizontally at the very top, 200px wide × 350px tall, rgba(52,168,95,0.08) fading downward to transparent, with 40px blur. Creates a soft overhead spotlight effect.
+- Three decorative ring circles (barely visible atmospheric depth):
+  - Ring 1: 420px diameter, top-left area, 1px border rgba(255,255,255,0.025)
+  - Ring 2: 320px diameter, top-right area, 1px border rgba(255,255,255,0.018)
+  - Ring 3: 260px diameter, bottom-left area, 1px border rgba(255,255,255,0.015)
+- Subtle noise texture overlay: Covering the entire screen, 20% opacity, mix-blend-mode overlay — adds a premium grain texture
+
+---
+
+**BRAND HEADER (centered, starting 70px from top):**
+
+- **Logo container:**
+  - 80px × 80px circle (border-radius 50%)
+  - Background: linear-gradient 145deg from rgba(255,255,255,0.1) to rgba(255,255,255,0.03) — frosted glass
+  - Border: 1.5px solid rgba(255,255,255,0.1)
+  - Backdrop blur: 12px
+  - Centered horizontally
+  - Inside: Family Forever brand icon — people/family icon in white strokes (rgba 255,255,255,0.85), stroke-width 1.3, approximately 38px. Should match the circular badge logo from the owner desktop login.
+  - Outer pulse ring: 8px larger than the logo circle (96px total), 1px border rgba(255,255,255,0.06), centered on the logo. Gentle pulse animation — opacity fading between 50% and 100% over 4 second cycle.
+
+- **Brand name (24px below logo):**
+  - "Family Forever" in Poppins 32px semibold, color #FFFFFF, letter-spacing -0.8px, centered
+
+- **Tagline (8px below brand name):**
+  - "Caring for every family, every step of the way." in Inter 13px regular, color rgba(255,255,255,0.35), centered, max-width 240px, line-height 1.5
+
+---
+
+**FLOATING WHITE LOGIN CARD (centered vertically in remaining space):**
+
+The card floats in the center of the screen between the brand header and the trust badges. It is a contained, elevated card — not a bottom sheet.
+
+**Card Container:**
+- Background: #FFFFFF
+- Border-radius: 24px (all four corners)
+- Padding: 32px horizontal 24px, 34px top, 28px bottom
+- Shadow: Dramatic elevation — 0 20px 60px rgba(0,0,0,0.25) outer shadow, plus 0 1px 3px rgba(0,0,0,0.08) tight shadow for crisp edge. A subtle green glow behind the top edge: radial gradient 200px wide × 80px tall, rgba(31,111,67,0.1) centered above the card top, fading to transparent.
+- Margin: Auto vertical centering between brand and trust badges, 24px horizontal padding from screen edges
+
+**Card Header (top of card):**
+- "STAFF PORTAL" in Poppins 11px bold, letter-spacing 1.5px, color #1F6F43, uppercase. Margin-bottom 6px.
+- "Welcome back" in Poppins 26px semibold, color #111111, letter-spacing -0.3px. Margin-bottom 4px.
+- "Sign in to manage your shifts" in Inter 14px regular, color #9CA3AF. Margin-bottom 30px.
+
+**Email Field (30px below subtitle):**
+- Field label: "Email Address" in Inter 12.5px semibold, color #374151, letter-spacing 0.1px. Margin-bottom 8px.
+- Input wrapper: Relative positioned container
+  - Left icon: Mail/envelope outlined icon (17px, color #CBD5E1) positioned absolutely 15px from left edge
+  - Input: Width 100%, height 52px, padding-left 44px, padding-right 48px. Background #F7F8F9, border 1.5px solid #EAECEF, border-radius 14px. Font: Inter 15px regular, color #111111. Placeholder "you@familyforever.com" in color #C4C8CE.
+  - Focus state: Background #FAFFFE, border 1.5px solid #1F6F43, box-shadow 0 0 0 4px rgba(31,111,67,0.06) plus 0 2px 8px rgba(31,111,67,0.04). Left icon color transitions to #1F6F43.
+  - Error state: Border #EF4444, background #FEF7F7, box-shadow 0 0 0 4px rgba(239,68,68,0.06). Error message below: "Please enter a valid email address" in Inter 11.5px medium #EF4444, 6px margin-top.
+
+**Password Field (22px below email field):**
+- Same structure and sizing as email field
+- Left icon: Lock outlined icon (17px, #CBD5E1) with small keyhole circle detail
+- Placeholder: "Enter your password"
+- Right icon button: Eye/visibility toggle — 36px × 36px touch target, positioned absolutely right 12px, border-radius 8px. Eye icon 17px, color #CBD5E1. On hover: background #F3F4F6, icon color #6B7280. Tapping toggles password visibility.
+- Same focus and error states
+
+**Remember Me + Forgot Password Row (22px below password field):**
+- Flexbox row, space-between
+- Left: Checkbox (17px × 17px, border 1.5px solid #D1D5DB, border-radius 5px, background #F9FAFB). Checked: #1F6F43 fill with white checkmark. Label: "Remember me" in Inter 13px regular #6B7280, 8px gap.
+- Right: "Forgot password?" in Inter 13px semibold #1F6F43. Hover: opacity 0.75.
+- Margin-bottom 28px.
+
+**Sign In Button (28px below remember row):**
+- Full width inside card, height 54px, border-radius 16px
+- Background: linear-gradient 135deg from #1F6F43 through #175C37 to #1A6B3A — subtle gradient for depth, not flat
+- Text: "Sign In" in Poppins 16px semibold white, centered
+- Shadow: 0 6px 20px rgba(31,111,67,0.3) outer, plus inset 0 1px 0 rgba(255,255,255,0.08) — the inset highlight on the top edge adds a polished 3D quality
+- Hover: translateY -2px, shadow expands to 0 10px 32px rgba(31,111,67,0.4)
+- Active: translateY 0, scale 0.98, shadow reduces
+- Subtle shine sweep animation: A faint white gradient (7% opacity, 60% width of button, skewed -20deg) sweeps across the button from left to right. Runs every 5 seconds with a 2.5 second initial delay. Very subtle premium detail.
+- Loading state: Text fades out, white spinner appears (22px, 2.5px border, top white, rest 25% white). Button becomes non-interactive.
+- Success state: Background transitions to linear-gradient #22C55E to #16A34A, shadow changes to green tint. Text changes to checkmark icon + "Welcome, Sarah!"
+
+**Contact Administrator (20px below button, inside card):**
+- "Don't have an account?" in Inter 13px regular #9CA3AF. "Contact your administrator." on same line in Inter 13px semibold #1F6F43, tappable link. Hover: underline.
+- Center-aligned. Line-height 1.5.
+
+---
+
+**TRUST BADGES (below the card, on the dark green background):**
+
+Positioned 20px below the floating card, centered horizontally. Three small trust indicators in a horizontal row with 20px gap between each.
+
+- Badge 1: Small shield outline icon (12px, stroke rgba(255,255,255,0.18)) + "Encrypted" in Inter 10.5px medium, color rgba(255,255,255,0.22), letter-spacing 0.2px
+- Badge 2: Small checkmark-circle icon (12px) + "WCAG AA"
+- Badge 3: Small heart icon (12px) + "Care-first"
+
+**App Version (10px below trust badges):**
+- "v1.0.2 · Family Forever Inc." in Inter 9.5px regular, color rgba(255,255,255,0.08), centered. Barely visible — for reference only.
+
+---
+
+**ANIMATION ON SCREEN LOAD:**
+- Brand area (logo + name + tagline): Fades in with slight downward slide (translateY -24px to 0, opacity 0 to 1), 0.9 seconds, cubic-bezier(0.16, 1, 0.3, 1). Starts immediately.
+- Login card: Fades in with slight upward slide (translateY 32px to 0, opacity 0 to 1), 0.9 seconds, same easing. 0.12 second delay.
+- Trust badges: Fade in with slight upward slide (translateY 32px to 0), 0.9 seconds, same easing. 0.3 second delay.
+- Version text: Same animation, 0.4 second delay.
+- The staggered timing creates a cinematic reveal — brand appears first, card rises into place, badges fade in last.
+
+---
+
+**Overall Design Notes:**
+- The floating card on the dark green background creates a premium, app-launch feel — like opening a luxury application for the first time
+- The green background should feel rich and deep with atmospheric layers — not flat or lifeless. The radial glows, decorative rings, noise texture, and light beam all contribute to depth without cluttering
+- The card's dramatic shadow and subtle green glow behind the top edge make it feel truly elevated above the background — floating, not sitting
+- The gradient on the Sign In button with the inset highlight gives it a polished, tactile quality — it looks pressable
+- The frosted glass logo container with the pulsing ring is the signature decorative element — it draws the eye to the brand identity
+- Typography is strictly Poppins for headings and Inter for body — matching the entire Family Forever design system exactly
+- The noise texture overlay is the secret ingredient — it adds a premium tactile quality to the green background that separates it from a generic gradient
+- All animations use the same cubic-bezier easing (0.16, 1, 0.3, 1) — this is a "spring" curve that starts fast and settles gently, feeling natural and premium
+- The trust badges are deliberately understated — they communicate security and care without demanding attention
+
+---
+
+Want me to now compile all the staff mobile prompts into a final summary document?

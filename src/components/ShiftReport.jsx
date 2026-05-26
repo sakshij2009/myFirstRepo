@@ -9,6 +9,7 @@ import CriticalIncidentForm from "./CriticalIncidentForm";
 import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
 import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
+import ServicePlanForm from "./ServicePlanForm";
 import {
   ArrowLeft, Calendar, Clock, User, MapPin, Phone, Mail,
   FileText, Download, CheckCircle, AlertCircle, Edit,
@@ -221,6 +222,10 @@ const ShiftReport = ({ user }) => {
   const [intakeData, setIntakeData] = useState(null);
   const [clientData, setClientData] = useState(null);
   const [recentReports, setRecentReports] = useState([]);
+
+  // ── Access to Shift Report toggle ──
+  const [shiftReportAccess, setShiftReportAccess] = useState(false);
+  const [accessToggling, setAccessToggling] = useState(false);
   const [primaryStaff, setPrimaryStaff] = useState(null);
   const [showFullReport, setShowFullReport] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // 'critical'|'medical'|'noteworthy'|'followthrough'
@@ -301,11 +306,33 @@ const ShiftReport = ({ user }) => {
     (async () => {
       try {
         const snap = await getDoc(doc(db, "shifts", shiftId));
-        if (snap.exists()) setShiftData(snap.data());
+        if (snap.exists()) {
+          const data = snap.data();
+          setShiftData(data);
+          setShiftReportAccess(!!data.accessToShiftReport);
+        }
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
   }, [shiftId]);
+
+  // ── Toggle access to shift report ──
+  const handleToggleShiftReportAccess = async () => {
+    if (accessToggling) return;
+    const newVal = !shiftReportAccess;
+    setShiftReportAccess(newVal);           // optimistic update
+    setAccessToggling(true);
+    try {
+      await updateDoc(doc(db, "shifts", shiftId), { accessToShiftReport: newVal });
+      toast.success(newVal ? "Shift report access enabled for intake worker" : "Shift report access disabled");
+    } catch (e) {
+      console.error("Failed to update shift report access:", e);
+      setShiftReportAccess(!newVal);        // revert on error
+      toast.error("Failed to update access setting");
+    } finally {
+      setAccessToggling(false);
+    }
+  };
 
   // ── Fetch intake ──
   useEffect(() => {
@@ -692,24 +719,47 @@ const ShiftReport = ({ user }) => {
   const initials = normalized.clientName.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?";
   const staffInitials = (primaryStaff?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
-  // Parse clockIn/Out — handles ISO timestamps and HH:mm strings
+  // Parse clockIn/Out — handles ISO timestamps, "HH:MM AM/PM", and "HH:mm" strings
   const parseClockTime = (val) => {
     if (!val) return null;
+    if (typeof val !== "string") return null;
+    const s = val.trim();
     // ISO timestamp
-    if (val.includes("T") || val.includes("Z")) {
-      const d = new Date(val);
+    if (s.includes("T") || s.includes("Z")) {
+      const d = new Date(s);
       return isNaN(d) ? null : d;
     }
-    // HH:mm string
-    const [h, m] = val.split(":").map(Number);
+    // 12-hour format: "09:30 AM" or "9:30 PM" (stored by mobile app)
+    const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (ampmMatch) {
+      let h = parseInt(ampmMatch[1], 10);
+      const m = parseInt(ampmMatch[2], 10);
+      const isPM = ampmMatch[3].toUpperCase() === "PM";
+      if (isPM && h !== 12) h += 12;
+      if (!isPM && h === 12) h = 0;
+      const d = new Date(); d.setHours(h, m, 0, 0);
+      return d;
+    }
+    // 24-hour HH:mm string
+    const [h, m] = s.split(":").map(Number);
     if (isNaN(h)) return null;
     const d = new Date(); d.setHours(h, m || 0, 0, 0);
     return d;
   };
 
   const formatClockDisplay = (val) => {
+    if (!val) return "—";
+    // Already a formatted "HH:MM AM/PM" string — return as-is
+    if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
     const d = parseClockTime(val);
     if (!d) return "—";
+    // ISO timestamps: display in Edmonton timezone
+    if (typeof val === "string" && (val.includes("T") || val.includes("Z"))) {
+      return d.toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", hour12: true,
+        timeZone: "America/Edmonton",
+      });
+    }
     return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
@@ -749,6 +799,7 @@ const ShiftReport = ({ user }) => {
     { key: "reports", label: "Reports" },
     ...(hasMedication ? [{ key: "medications", label: "Medications" }] : []),
     ...(hasTransportation ? [{ key: "transportation", label: "Transportation" }] : []),
+    { key: "serviceplan", label: "Service Plan" },
   ];
 
   const actBg = { success: "#f0fdf4", info: "#eff6ff", warning: "#fef3c7" };
@@ -835,15 +886,25 @@ const ShiftReport = ({ user }) => {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50" style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}><Phone size={13} style={{ color: "#6b7280" }} /></button>
           <button className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50" style={{ width: 30, height: 30, borderColor: "#e5e7eb" }}><Mail size={13} style={{ color: "#6b7280" }} /></button>
-          <button
-            onClick={() => {
-              const targetId = intakeData?.id || shiftData?.intakeId || shiftData?.clientId || shiftData?.clientDetails?.id;
-              navigate(`/admin-dashboard/view-intake-form/${targetId || 'unknown'}`);
-            }}
-            className="px-3 py-1.5 rounded-lg border font-semibold text-white transition-all hover:opacity-90 flex items-center gap-1.5"
-            style={{ fontSize: 12, background: "#145228", borderColor: "#145228", color: "#fff" }}>
-            <FileText size={12} /> View Intake Form
-          </button>
+          {(() => {
+            const targetId = intakeData?.id || shiftData?.intakeId || shiftData?.clientId || shiftData?.clientDetails?.id;
+            return targetId ? (
+              <button
+                onClick={() => navigate(`/admin-dashboard/view-intake-form/${targetId}`)}
+                className="px-3 py-1.5 rounded-lg border font-semibold text-white transition-all hover:opacity-90 flex items-center gap-1.5"
+                style={{ fontSize: 12, background: "#145228", borderColor: "#145228", color: "#fff" }}>
+                <FileText size={12} /> View Intake Form
+              </button>
+            ) : (
+              <button
+                disabled
+                className="px-3 py-1.5 rounded-lg border font-semibold flex items-center gap-1.5 opacity-40 cursor-not-allowed"
+                style={{ fontSize: 12, background: "#f3f4f6", borderColor: "#e5e7eb", color: "#9ca3af" }}
+                title="No intake form linked to this shift">
+                <FileText size={12} /> View Intake Form
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -1415,6 +1476,13 @@ const ShiftReport = ({ user }) => {
                 </div>
               );
             })()}
+
+            {/* ── Service Plan Tab ── */}
+            {activeTab === "serviceplan" && (
+              <div className="px-5 py-4">
+                <ServicePlanForm shiftId={shiftId} shiftData={shiftData} />
+              </div>
+            )}
           </div>
 
           {/* ── Shift History Table ── */}
@@ -1450,8 +1518,8 @@ const ShiftReport = ({ user }) => {
                         <td className="px-4 py-2.5"><p className="font-semibold" style={{ fontSize: 12, color: "#111827" }}>{row.date?.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) || "—"}</p></td>
                         <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151", fontWeight: 500 }}>{row.staffName}</span></td>
                         <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full font-semibold" style={{ fontSize: 10, background: "#f0fdf4", color: "#15803d" }}>{row.service}</span></td>
-                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{row.clockIn || "—"}</span></td>
-                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{row.clockOut || "—"}</span></td>
+                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{formatClockDisplay(row.clockIn)}</span></td>
+                        <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{formatClockDisplay(row.clockOut)}</span></td>
                         <td className="px-4 py-2.5">
                           {row.shiftReport
                             ? <span className="inline-flex items-center gap-1" style={{ fontSize: 11, color: "#15803d" }}><CheckCircle size={11} /> Filed</span>
@@ -1733,6 +1801,60 @@ const ShiftReport = ({ user }) => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Access to Shift Report */}
+          <div className="bg-white rounded-xl border" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "#f3f4f6" }}>
+              <Shield size={13} style={{ color: "#145228" }} />
+              <h3 className="font-bold" style={{ fontSize: 13, color: "#111827" }}>Access to Shift Report</h3>
+            </div>
+            <div className="px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p style={{ fontSize: 12, color: "#374151", fontWeight: 600, marginBottom: 2 }}>
+                    Intake Worker Access
+                  </p>
+                  <p style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.4 }}>
+                    Allow intake worker to view this shift report from their dashboard
+                  </p>
+                </div>
+                {/* Toggle */}
+                <button
+                  onClick={handleToggleShiftReportAccess}
+                  disabled={accessToggling}
+                  title={shiftReportAccess ? "Click to revoke access" : "Click to grant access"}
+                  className="flex-shrink-0 flex items-center gap-2"
+                  style={{ background: "none", border: "none", padding: 0, cursor: accessToggling ? "wait" : "pointer", opacity: accessToggling ? 0.6 : 1 }}
+                >
+                  <div
+                    className="relative transition-colors duration-200"
+                    style={{ width: 40, height: 22, borderRadius: 11, background: shiftReportAccess ? "#145228" : "#d1d5db" }}
+                  >
+                    <div
+                      className="absolute top-1 transition-all duration-200"
+                      style={{
+                        width: 14, height: 14, borderRadius: "50%",
+                        background: "#fff",
+                        left: shiftReportAccess ? 22 : 4,
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: shiftReportAccess ? "#145228" : "#9ca3af", minWidth: 22 }}>
+                    {shiftReportAccess ? "Yes" : "No"}
+                  </span>
+                </button>
+              </div>
+              {/* Status badge */}
+              <div className="mt-3 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"
+                style={{ background: shiftReportAccess ? "#f0fdf4" : "#f9fafb", border: `1px solid ${shiftReportAccess ? "#bbf7d0" : "#e5e7eb"}` }}>
+                <div className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, background: shiftReportAccess ? "#16a34a" : "#9ca3af" }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: shiftReportAccess ? "#16a34a" : "#6b7280" }}>
+                  {shiftReportAccess ? "Accessible to intake worker" : "Hidden from intake worker"}
+                </span>
+              </div>
             </div>
           </div>
 

@@ -159,7 +159,6 @@ export default function ShiftDetails() {
   const [showIntakeModal, setShowIntakeModal] = useState(false);
 
   // ── Transport report fields (shown after transportationCompleted) ──
-  const [approvedBy, setApprovedBy] = useState("");
   const [transComments, setTransComments] = useState("");
   const [receiptImage, setReceiptImage] = useState(null);
   const [receiptUrl, setReceiptUrl] = useState("");
@@ -291,7 +290,6 @@ export default function ShiftDetails() {
         setShiftLocked(data.shiftLocked || false);
         if (data.shiftReport && !reportText) setReportText(data.shiftReport);
         // Pre-fill transport report fields if already saved
-        if (data.approvedBy) setApprovedBy(data.approvedBy);
         if (data.transComments) setTransComments(data.transComments);
         if (data.receiptUrl) setReceiptUrl(data.receiptUrl);
         if (data.officeToPickupKm) setOfficeToPickup(String(data.officeToPickupKm));
@@ -322,84 +320,18 @@ export default function ShiftDetails() {
     loadClient();
   }, [shift?.clientId]);
 
-  // Fetch intake data for shift description fallback
+  // Lightweight intake fetch — only when clientName looks like a numeric ID,
+  // do a single targeted getDoc by clientId (no full collection scan).
   useEffect(() => {
     if (!shift) return;
-    const fetchIntake = async () => {
-      try {
-        const clientId = shift.clientId || shift.clientDetails?.id;
-        const intakeId = shift.id || shift.intakeId || shift.InTakeFormId;
-        const clientName = shift.clientName || shift.name || shift.clientDetails?.name || shift.familyName || shift.childName;
-
-        let matched = null;
-
-        // 1. Direct ID Resolve
-        if (intakeId) {
-          const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
-          if (snap.exists()) matched = { ...snap.data(), id: snap.id };
-          if (!matched) {
-            const snap2 = await getDoc(doc(db, "clients", String(intakeId)));
-            if (snap2.exists()) matched = { ...snap2.data(), id: snap2.id };
-          }
-        }
-
-        // 2. Comprehensive search across InTakeForms and clients
-        if (!matched) {
-          const collections = ["InTakeForms", "clients"];
-          const cleanName = clientName ? clientName.toString().trim().toLowerCase() : null;
-
-          for (const collName of collections) {
-            if (matched) break;
-            const snapshot = await getDocs(collection(db, collName));
-
-            snapshot.docs.some((docSnap) => {
-              const data = docSnap.data();
-              const docId = docSnap.id;
-
-              // ID Match
-              const possibleIds = new Set([docId, data.clientId, data.formId, data.id, data.InTakeFormId, data.intakeId].filter(Boolean).map(id => String(id)));
-              const targetIds = [clientId, intakeId].filter(Boolean).map(id => String(id));
-
-              if (targetIds.some(tid => possibleIds.has(tid))) {
-                matched = { ...data, id: docId };
-                return true;
-              }
-
-              // Name Match
-              if (cleanName) {
-                const possibleNames = new Set();
-                [data.clientName, data.name, data.nameInClientTable, data.familyName, data.nameOfPerson, data.childName]
-                  .forEach(n => n && possibleNames.add(n?.toString().toLowerCase().trim()));
-
-                if (data.clients && typeof data.clients === "object" && !Array.isArray(data.clients)) {
-                  Object.values(data.clients).forEach(c => {
-                    if (c.fullName) possibleNames.add(c.fullName.toLowerCase().trim());
-                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
-                  });
-                }
-                if (Array.isArray(data.inTakeClients)) {
-                  data.inTakeClients.forEach(c => {
-                    if (c.name) possibleNames.add(c.name.toLowerCase().trim());
-                  });
-                }
-
-                if (Array.from(possibleNames).some(fn => fn && (fn.includes(cleanName) || cleanName.includes(fn)))) {
-                  matched = { ...data, id: docId };
-                  return true;
-                }
-              }
-              return false;
-            });
-          }
-        }
-
-        if (matched) setIntakeData(matched);
-      } catch (e) {
-        console.error("Auto intake fetch error:", e);
-      }
-    };
-    fetchIntake();
-  }, [shift]);
+    const raw = safeString(shift?.familyName || shift?.childName || shift?.clientName || shift?.name || shift?.client || shift?.clientDetails?.name);
+    if (!isNumericId(raw)) return; // name is fine as-is
+    const clientId = shift.clientId || shift.clientDetails?.id;
+    if (!clientId) return;
+    getDoc(doc(db, "clients", String(clientId)))
+      .then((snap) => { if (snap.exists()) setIntakeData({ ...snap.data(), id: snap.id }); })
+      .catch(() => {});
+  }, [shift?.clientId]);
 
   const intakeDescription = intakeData?.services?.serviceDesc ||
     intakeData?.serviceDesc ||
@@ -450,7 +382,8 @@ export default function ShiftDetails() {
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
-          clockInTime: roundedTime,
+          clockIn: serverTimestamp(),      // admin app reads this field
+          clockInTime: roundedTime,        // mobile app display
           clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
@@ -470,7 +403,8 @@ export default function ShiftDetails() {
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
-          clockOutTime: roundedTime,
+          clockOut: serverTimestamp(),     // admin app reads this field
+          clockOutTime: roundedTime,       // mobile app display
           clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
@@ -548,9 +482,10 @@ export default function ShiftDetails() {
       const routeKm = shift?.transportationKm || 0;
       const totalKm = routeKm + officePickupNum + dropOfficeNum;
       await updateDoc(doc(db, "shifts", shiftId), {
-        approvedBy: approvedBy.trim() || null,
         transComments: transComments.trim() || null,
         receiptUrl: uploadedUrl || null,
+        // Also save as expenseReceiptUrls[] — field the admin app reads
+        ...(uploadedUrl ? { expenseReceiptUrls: [uploadedUrl] } : {}),
         officeToPickupKm: officePickupNum,
         dropToOfficeKm: dropOfficeNum,
         totalKmWithOffice: totalKm,
@@ -785,23 +720,6 @@ export default function ShiftDetails() {
           </Text>
         </View>
 
-        {/* ── Shift Lock ─────────────────────────────────────────────────── */}
-        <View style={styles.lockRow}>
-          <View style={styles.lockLabelBox}>
-            <Ionicons name="lock-closed-outline" size={18} color={GRAY_TEXT} />
-            <View>
-              <Text style={styles.lockTitle}>Shift Lock</Text>
-              <Text style={styles.lockSubtitle}>Prevents accidental modifications</Text>
-            </View>
-          </View>
-          <Switch
-            trackColor={{ false: "#E5E7EB", true: LIGHT_GREEN }}
-            thumbColor={shiftLocked ? PRIMARY_GREEN : "#FFF"}
-            onValueChange={handleLockToggle}
-            value={shiftLocked}
-          />
-        </View>
-
         {/* ── Timeline ───────────────────────────────────────────────────── */}
         <View style={[styles.sectionCard, { marginTop: 15 }]}>
           <Text style={styles.sectionTitle}>Shift Timeline</Text>
@@ -831,6 +749,51 @@ export default function ShiftDetails() {
             isLast
           />
         </View>
+
+        {/* ── Per-Client Pickup / Drop-off Times ──────────────────────── */}
+        {shift?.shiftClientTimes && Object.keys(shift.shiftClientTimes).length > 0 && (
+          <View style={[styles.sectionCard, { marginTop: 15 }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 }}>
+              <Ionicons name="time-outline" size={18} color={PRIMARY_GREEN} />
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Client Pickup / Drop-off Times</Text>
+            </View>
+            {Object.values(shift.shiftClientTimes).map((ct, idx, arr) => (
+              <View key={idx} style={{ marginBottom: idx < arr.length - 1 ? 14 : 0 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: PRIMARY_GREEN }}>
+                      {(ct.name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" }}>
+                    {ct.name || `Client ${idx + 1}`}
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: "#F9FAFB", borderRadius: 10, overflow: "hidden" }}>
+                  {ct.pickupAt ? (
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: ct.dropAt ? 1 : 0, borderBottomColor: GRAY_BORDER }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Ionicons name="arrow-up-circle-outline" size={15} color={PRIMARY_GREEN} />
+                        <Text style={{ fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter" }}>Pickup</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" }}>{ct.pickupAt}</Text>
+                    </View>
+                  ) : null}
+                  {ct.dropAt ? (
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Ionicons name="arrow-down-circle-outline" size={15} color={ERROR_RED} />
+                        <Text style={{ fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter" }}>Drop-off</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" }}>{ct.dropAt}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {idx < arr.length - 1 && <View style={{ height: 1, backgroundColor: GRAY_BORDER, marginTop: 10 }} />}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── Daily Shift Report Card ─────────────────────────────────────── */}
         <View style={styles.sectionCard}>
@@ -956,15 +919,6 @@ export default function ShiftDetails() {
                   </View>
                 </View>
               )}
-
-              {/* Approved By */}
-              <Text style={{ fontSize: 13, fontWeight: "600", color: DARK_TEXT, marginBottom: 6 }}>Approved By</Text>
-              <TextInput
-                value={approvedBy}
-                onChangeText={setApprovedBy}
-                placeholder="Supervisor name or employee ID"
-                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 14 }}
-              />
 
               {/* Receipt Upload */}
               <Text style={{ fontSize: 13, fontWeight: "600", color: DARK_TEXT, marginBottom: 8 }}>Upload Receipt / Authorization</Text>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Family Forever App",
     "slug": "family-forever-mobile",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "scheme": "familyforevermobile",
     "userInterfaceStyle": "automatic",
@@ -11,28 +11,26 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.familyforever.staffapp",
-      "buildNumber": "1",
+      "buildNumber": "4",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app needs access to the camera to update your profile photo.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select a profile picture.",
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to track driving distance for shift reports.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
-        "NSLocationAlwaysUsageDescription": "This app needs background location access to accurately track your mileage during transportation shifts.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location only while the app is open and you are actively clocked in to a shift, to record your clock-in and clock-out location for payroll accuracy.",
         "UIBackgroundModes": [
-          "location",
           "fetch"
         ]
       }
     },
     "android": {
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.famforever.admin",
-      "versionCode": 4
+      "versionCode": 6
     },
     "web": {
       "output": "static",
@@ -56,9 +54,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "This app needs background location access to accurately track your mileage even when the screen is off during a shift.",
-          "locationAlwaysPermission": "This app needs background location access to accurately track your mileage during transportation shifts.",
-          "locationWhenInUsePermission": "This app needs access to your location to track driving distance for shift reports."
+          "locationWhenInUsePermission": "This app uses your location only while the app is open and you are actively clocked in to a shift, to record your clock-in and clock-out location for payroll accuracy."
         }
       ],
       [
@@ -67,7 +63,9 @@
           "photosPermission": "This app needs access to your photo library to select a profile picture.",
           "cameraPermission": "This app needs access to the camera to update your profile photo."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

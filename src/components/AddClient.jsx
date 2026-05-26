@@ -12,7 +12,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db, storage, COLLECTION_NEW_INTAKES } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
 import { Upload } from "lucide-react";
 import SuccessSlider from "../components/SuccessSlider";
@@ -34,16 +34,8 @@ const emptyShiftPoint = {
   seatType: "Forward Facing Seat",
   gender: "Male",
   dob: "",
-  cyimId: "",
-  pickupDate: "",
   pickupTime: "",
-  dropDate: "",
   dropTime: "",
-  visitDate: "",
-  visitStartTime: "",
-  visitEndTime: "",
-  visitDuration: "",
-  visitLocation: "",
   pickupLocation: "",
   dropLocation: "",
 };
@@ -64,6 +56,8 @@ const AddClient = ({ mode = "add", user }) => {
   const [openShiftPoints, setOpenShiftPoints] = useState({});
   const [showMedications, setShowMedications] = useState(false);
   const [showPharmacy, setShowPharmacy] = useState(false);
+  const [intakeId, setIntakeId] = useState(null);
+  const [resyncing, setResyncing] = useState(false);
 
   const toggleShiftPoint = (index) =>
     setOpenShiftPoints((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -78,6 +72,7 @@ const AddClient = ({ mode = "add", user }) => {
     address: "",
     dob: "",
     kmRate: "",
+    isFamily: false,
     clientRate: "",
     description: "",
     avatar: null,
@@ -91,18 +86,22 @@ const AddClient = ({ mode = "add", user }) => {
     },
   });
 
+  const isFamily = initialValues.isFamily === true;
+
   const validationSchema = Yup.object({
     name: Yup.string().required("Name is required").min(3, "Min 3 chars"),
-    clientCode: Yup.string()
-      .required("Client Code is required")
-      .matches(/^[A-Za-z0-9]+$/, "Only alphanumeric allowed"),
-    clientStatus: Yup.string().required("Select client status"),
-    parentEmail: Yup.string()
-      .required("Parent email is required")
-      .email("Invalid email"),
+    clientCode: isFamily
+      ? Yup.string()
+      : Yup.string()
+          .required("Client Code is required")
+          .matches(/^[A-Za-z0-9]+$/, "Only alphanumeric allowed"),
+    clientStatus: isFamily
+      ? Yup.string()
+      : Yup.string().required("Select client status"),
+    parentEmail: Yup.string().email("Invalid email"),
     agency: Yup.string().required("Agency required"),
     address: Yup.string().required("Address required"),
-    dob: Yup.date().required("Date of Birth required"),
+    dob: isFamily ? Yup.date() : Yup.date().required("Date of Birth required"),
     description: Yup.string(),
   });
 
@@ -124,6 +123,7 @@ const AddClient = ({ mode = "add", user }) => {
               kmRate: data.kmRate || "",
               clientRate: data.clientRate || "",
               description: data.description || "",
+              isFamily: data.isFamily === true,
               avatar: null,
               shiftPoints: Array.isArray(data.shiftPoints) ? data.shiftPoints : [],
               medications:
@@ -138,6 +138,7 @@ const AddClient = ({ mode = "add", user }) => {
               },
             });
             if (data.avatar) setAvatarPreview(data.avatar);
+            setIntakeId(data.intakeId || data.InTakeId || null);
             if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
               setOpenShiftPoints({ 0: true });
             }
@@ -157,6 +158,66 @@ const AddClient = ({ mode = "add", user }) => {
     };
     fetchClient();
   }, [mode, id]);
+
+  // ── Re-sync siblings from the original intake form ─────────────────────────
+  const handleResyncSiblings = async (setFieldValue) => {
+    if (!intakeId) return;
+    setResyncing(true);
+    try {
+      const intakeSnap = await getDoc(doc(db, COLLECTION_NEW_INTAKES, String(intakeId)));
+      if (!intakeSnap.exists()) {
+        alert("Intake form not found. Cannot re-sync siblings.");
+        return;
+      }
+      const intake = intakeSnap.data();
+
+      // Normalise clients list (array or object-map)
+      const clients = Array.isArray(intake.clients)
+        ? intake.clients
+        : Object.values(intake.clients || {});
+
+      if (!clients.length) {
+        alert("No siblings found in the intake form.");
+        return;
+      }
+
+      const builtShiftPoints = clients.map((c) => {
+        const transport = (intake.transportationInfoList || []).find(
+          (t) => t.clientName === c.fullName
+        ) || {};
+        const parent = (intake.parentInfoList || []).find(
+          (p) => p.clientName === c.fullName
+        ) || intake.parentInfoList?.[0] || {};
+        return {
+          name:          c.fullName || "",
+          gender:        c.gender || "Male",
+          dob:           c.birthDate || "",
+          seatType:      transport.carSeatType || "No Seat Required",
+          pickupLocation: transport.pickupAddress || c.address || "",
+          dropLocation:  transport.dropoffAddress || "",
+          pickupTime:    transport.pickupTime || "",
+          dropTime:      transport.dropOffTime || "",
+          clientInfo:    c.clientInfo || "",
+          parentName:    parent.parentName || "",
+          parentPhone:   parent.parentPhone || "",
+          parentEmail:   parent.parentEmail || "",
+          parentAddress: parent.parentAddress || "",
+          relationship:  parent.relationShip || "",
+        };
+      });
+
+      setFieldValue("shiftPoints", builtShiftPoints);
+      // Expand all newly loaded shift points
+      const openMap = {};
+      builtShiftPoints.forEach((_, i) => { openMap[i] = true; });
+      setOpenShiftPoints(openMap);
+    } catch (err) {
+      console.error("Error re-syncing siblings:", err);
+      alert("Failed to load intake form. Please try again.");
+    } finally {
+      setResyncing(false);
+    }
+  };
 
   const handleAvatarChange = (event, setFieldValue) => {
     const file = event.target.files[0];
@@ -327,61 +388,83 @@ const AddClient = ({ mode = "add", user }) => {
                   </div>
                 </div>
 
+                {/* ── Family badge ── */}
+                {values.isFamily && (
+                  <div className="mb-5 flex items-center gap-2 px-4 py-2.5 rounded-lg border"
+                    style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#16a34a" }}>
+                      Family Client — individual sibling details are managed in Shift Points below
+                    </span>
+                  </div>
+                )}
+
                 {/* ── Basic Information ── */}
                 <div className="grid grid-cols-2 gap-5 mb-6">
-                  {/* Name */}
+                  {/* Name (Family Name for family clients) */}
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
+                      {values.isFamily ? "Family Name" : "Name"}
+                    </label>
                     <Field
                       name="name"
-                      placeholder="Please enter the name of user"
+                      placeholder={values.isFamily ? "Please enter the family name" : "Please enter the name of user"}
                       className={inputCls(touched.name && errors.name)}
                     />
                     <ErrorMessage name="name" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
 
-                  {/* Client Code */}
-                  <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Code</label>
-                    <Field
-                      name="clientCode"
-                      placeholder="Please enter a specific ID"
-                      className={inputCls(touched.clientCode && errors.clientCode)}
-                    />
-                    <ErrorMessage name="clientCode" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Client Code — hidden for family */}
+                  {!values.isFamily && (
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Code</label>
+                      <Field
+                        name="clientCode"
+                        placeholder="Please enter a specific ID"
+                        className={inputCls(touched.clientCode && errors.clientCode)}
+                      />
+                      <ErrorMessage name="clientCode" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
-                  {/* Client Status */}
-                  <div className="relative">
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Status</label>
-                    <Field
-                      as="select"
-                      name="clientStatus"
-                      className={`${inputCls(touched.clientStatus && errors.clientStatus)} appearance-none pr-9 ${values.clientStatus === "" ? "text-gray-400" : "text-gray-700"}`}
-                    >
-                      <option value="">Select client status</option>
-                      <option value="Active">Active</option>
-                      <option value="InActive">InActive</option>
-                    </Field>
-                    <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                      <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                    </span>
-                    <ErrorMessage name="clientStatus" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Client Status — hidden for family */}
+                  {!values.isFamily && (
+                    <div className="relative">
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Status</label>
+                      <Field
+                        as="select"
+                        name="clientStatus"
+                        className={`${inputCls(touched.clientStatus && errors.clientStatus)} appearance-none pr-9 ${values.clientStatus === "" ? "text-gray-400" : "text-gray-700"}`}
+                      >
+                        <option value="">Select client status</option>
+                        <option value="Active">Active</option>
+                        <option value="InActive">InActive</option>
+                      </Field>
+                      <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                        <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                      </span>
+                      <ErrorMessage name="clientStatus" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
-                  {/* Password */}
-                  <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
-                    <Field
-                      name="password"
-                      type="password"
-                      placeholder="Please enter a specific password"
-                      className={inputCls(touched.password && errors.password)}
-                    />
-                    <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Password — hidden for family */}
+                  {!values.isFamily && (
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Password</label>
+                      <Field
+                        name="password"
+                        type="password"
+                        placeholder="Please enter a specific password"
+                        className={inputCls(touched.password && errors.password)}
+                      />
+                      <ErrorMessage name="password" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
-                  {/* Parent Email */}
+                  {/* Parent E-Mail */}
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent E-Mail</label>
                     <Field
@@ -416,38 +499,44 @@ const AddClient = ({ mode = "add", user }) => {
                     <ErrorMessage name="address" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
 
-                  {/* Date of Birth */}
-                  <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
-                    <Field
-                      name="dob"
-                      type="date"
-                      className={inputCls(touched.dob && errors.dob)}
-                    />
-                    <ErrorMessage name="dob" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Date of Birth — hidden for family (lives in each shift point) */}
+                  {!values.isFamily && (
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                      <Field
+                        name="dob"
+                        type="date"
+                        className={inputCls(touched.dob && errors.dob)}
+                      />
+                      <ErrorMessage name="dob" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
-                  {/* Client KM Rate */}
-                  <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client KM Rate</label>
-                    <Field
-                      name="kmRate"
-                      placeholder="Please enter the KM Rate"
-                      className={inputCls(touched.kmRate && errors.kmRate)}
-                    />
-                    <ErrorMessage name="kmRate" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Client KM Rate — hidden for family */}
+                  {!values.isFamily && (
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client KM Rate</label>
+                      <Field
+                        name="kmRate"
+                        placeholder="Please enter the KM Rate"
+                        className={inputCls(touched.kmRate && errors.kmRate)}
+                      />
+                      <ErrorMessage name="kmRate" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
-                  {/* Client Rate */}
-                  <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Rate</label>
-                    <Field
-                      name="clientRate"
-                      placeholder="Please enter the Rate"
-                      className={inputCls(touched.clientRate && errors.clientRate)}
-                    />
-                    <ErrorMessage name="clientRate" component="div" className="text-red-500 text-xs mt-1" />
-                  </div>
+                  {/* Client Rate — hidden for family */}
+                  {!values.isFamily && (
+                    <div>
+                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Rate</label>
+                      <Field
+                        name="clientRate"
+                        placeholder="Please enter the Rate"
+                        className={inputCls(touched.clientRate && errors.clientRate)}
+                      />
+                      <ErrorMessage name="clientRate" component="div" className="text-red-500 text-xs mt-1" />
+                    </div>
+                  )}
 
                   {/* Description – full width */}
                   <div className="col-span-2">
@@ -470,28 +559,82 @@ const AddClient = ({ mode = "add", user }) => {
                       <div>
                         <div className="flex items-center justify-between mb-5">
                           <div>
-                            <h3 className="font-bold text-gray-900" style={{ fontSize: 17 }}>Shift Points</h3>
-                            <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Family clients — each entry is a sibling or member.</p>
+                            <h3 className="font-bold text-gray-900" style={{ fontSize: 17 }}>
+                              {values.isFamily ? "Siblings / Family Members" : "Shift Points"}
+                            </h3>
+                            <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
+                              {values.isFamily
+                                ? "Each entry is a sibling — includes their individual info, transport, and parent details."
+                                : "Family clients — each entry is a sibling or member."}
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const nextIndex = values.shiftPoints?.length || 0;
-                              arrayHelpers.push({ ...emptyShiftPoint });
-                              setOpenShiftPoints((prev) => ({ ...prev, [nextIndex]: true }));
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all"
-                            style={{ border: "1px solid #1f7a3c", color: "#1f7a3c" }}
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#1f7a3c"; e.currentTarget.style.color = "#fff"; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#1f7a3c"; }}
-                          >
-                            <span className="text-base leading-none">+</span> Add Shift Point
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {values.isFamily && intakeId && values.shiftPoints && values.shiftPoints.length > 0 && (
+                              <button
+                                type="button"
+                                disabled={resyncing}
+                                onClick={() => handleResyncSiblings(setFieldValue)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all"
+                                style={{ border: "1px solid #6b7280", color: "#6b7280", opacity: resyncing ? 0.6 : 1 }}
+                                title="Re-load siblings from original intake form"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                </svg>
+                                {resyncing ? "Syncing…" : "Re-sync"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextIndex = values.shiftPoints?.length || 0;
+                                arrayHelpers.push({ ...emptyShiftPoint });
+                                setOpenShiftPoints((prev) => ({ ...prev, [nextIndex]: true }));
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all"
+                              style={{ border: "1px solid #1f7a3c", color: "#1f7a3c" }}
+                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#1f7a3c"; e.currentTarget.style.color = "#fff"; }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#1f7a3c"; }}
+                            >
+                              <span className="text-base leading-none">+</span> Add Shift Point
+                            </button>
+                          </div>
                         </div>
 
                         {(!values.shiftPoints || values.shiftPoints.length === 0) && (
-                          <div className="rounded-lg border p-4 text-sm" style={{ borderColor: "#e5e7eb", color: "#9ca3af" }}>
-                            No shift points added yet. Click <b>+ Add Shift Point</b> to add one.
+                          <div className="rounded-lg border p-4" style={{ borderColor: "#e5e7eb" }}>
+                            {values.isFamily && intakeId ? (
+                              <div className="flex flex-col items-start gap-3">
+                                <p className="text-sm" style={{ color: "#9ca3af" }}>
+                                  No siblings loaded yet. Re-sync to pull sibling data from the original intake form.
+                                </p>
+                                <button
+                                  type="button"
+                                  disabled={resyncing}
+                                  onClick={() => handleResyncSiblings(setFieldValue)}
+                                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all text-white"
+                                  style={{ backgroundColor: resyncing ? "#9ca3af" : "#1f7a3c", cursor: resyncing ? "not-allowed" : "pointer" }}
+                                >
+                                  {resyncing ? (
+                                    <>
+                                      <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeOpacity="1"/></svg>
+                                      Loading siblings…
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                      </svg>
+                                      Re-sync Siblings from Intake Form
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-sm" style={{ color: "#9ca3af" }}>
+                                No shift points added yet. Click <b>+ Add Shift Point</b> to add one.
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -503,12 +646,6 @@ const AddClient = ({ mode = "add", user }) => {
                               <div className="flex items-center justify-between px-4 py-3" style={{ background: "#fafafa" }}>
                                 <div>
                                   <p className="font-semibold text-sm" style={{ color: "#111827" }}>{headerTitle}</p>
-                                  {(sp?.pickupDate || sp?.dropDate) && (
-                                    <p className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>
-                                      {sp?.pickupDate ? `Pickup: ${sp.pickupDate}` : ""}
-                                      {sp?.dropDate ? ` • Drop: ${sp.dropDate}` : ""}
-                                    </p>
-                                  )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button type="button" onClick={() => toggleShiftPoint(index)}
@@ -565,64 +702,16 @@ const AddClient = ({ mode = "add", user }) => {
                                     <Field type="date" name={`shiftPoints[${index}].dob`} className={inputCls(false)} />
                                   </div>
 
-                                  {/* CYIM ID */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>CYIM ID</label>
-                                    <Field name={`shiftPoints[${index}].cyimId`} placeholder="Enter CYIM ID" className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Pickup Date */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Date</label>
-                                    <Field type="date" name={`shiftPoints[${index}].pickupDate`} className={inputCls(false)} />
-                                  </div>
-
                                   {/* Pickup Time */}
                                   <div>
                                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Pickup Time</label>
                                     <Field type="time" name={`shiftPoints[${index}].pickupTime`} className={inputCls(false)} />
                                   </div>
 
-                                  {/* Drop Date */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Drop Date</label>
-                                    <Field type="date" name={`shiftPoints[${index}].dropDate`} className={inputCls(false)} />
-                                  </div>
-
                                   {/* Drop Time */}
                                   <div>
                                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Drop Time</label>
                                     <Field type="time" name={`shiftPoints[${index}].dropTime`} className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Visit Date */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Date</label>
-                                    <Field type="date" name={`shiftPoints[${index}].visitDate`} className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Visit Start Time */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Start Time</label>
-                                    <Field type="time" name={`shiftPoints[${index}].visitStartTime`} className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Visit End Time */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit End Time</label>
-                                    <Field type="time" name={`shiftPoints[${index}].visitEndTime`} className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Visit Duration */}
-                                  <div>
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Duration</label>
-                                    <Field name={`shiftPoints[${index}].visitDuration`} placeholder="e.g. 2 hours" className={inputCls(false)} />
-                                  </div>
-
-                                  {/* Visit Location */}
-                                  <div className="col-span-2">
-                                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Visit Location</label>
-                                    <Field as="textarea" rows={2} name={`shiftPoints[${index}].visitLocation`} placeholder="Enter visit location" className={`${inputCls(false)} resize-none`} />
                                   </div>
 
                                   {/* Pickup Location */}
@@ -636,6 +725,44 @@ const AddClient = ({ mode = "add", user }) => {
                                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Drop Location</label>
                                     <Field as="textarea" rows={2} name={`shiftPoints[${index}].dropLocation`} placeholder="Enter drop location" className={`${inputCls(false)} resize-none`} />
                                   </div>
+
+                                  {/* ── Family-only fields ── */}
+                                  {values.isFamily && (
+                                    <>
+                                      {/* Client Info / Service Notes */}
+                                      <div className="col-span-2">
+                                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Info / Service Notes</label>
+                                        <Field as="textarea" rows={2} name={`shiftPoints[${index}].clientInfo`} placeholder="Individual client notes" className={`${inputCls(false)} resize-none`} />
+                                      </div>
+
+                                      {/* Parent / Guardian section */}
+                                      <div className="col-span-2 pt-3 border-t mt-2" style={{ borderColor: "#f3f4f6" }}>
+                                        <p className="font-bold text-xs uppercase tracking-wider mb-3" style={{ color: "#6b7280" }}>Parent / Guardian</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                          <div>
+                                            <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Name</label>
+                                            <Field name={`shiftPoints[${index}].parentName`} placeholder="Parent name" className={inputCls(false)} />
+                                          </div>
+                                          <div>
+                                            <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Relationship</label>
+                                            <Field name={`shiftPoints[${index}].relationship`} placeholder="e.g. Mother, Father" className={inputCls(false)} />
+                                          </div>
+                                          <div>
+                                            <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Phone</label>
+                                            <Field name={`shiftPoints[${index}].parentPhone`} placeholder="Parent phone" className={inputCls(false)} />
+                                          </div>
+                                          <div>
+                                            <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Email</label>
+                                            <Field type="email" name={`shiftPoints[${index}].parentEmail`} placeholder="Parent email" className={inputCls(false)} />
+                                          </div>
+                                          <div className="col-span-2">
+                                            <label className="block font-semibold mb-1.5" style={{ fontSize: 12, color: "#374151" }}>Address</label>
+                                            <Field name={`shiftPoints[${index}].parentAddress`} placeholder="Parent address" className={inputCls(false)} />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
 
                                   <div className="col-span-2 flex justify-end">
                                     <button type="button" onClick={() => toggleShiftPoint(index)}
