@@ -535,13 +535,73 @@ export default function CompleteShift() {
     const newCompletedTimes = { ...completedTimes, [currentIdx]: timeStr };
     setCompletedTimes(newCompletedTimes);
 
-    // Save pickup / drop completion time to Firestore for shift-detail display
-    if (shiftId && currentStop) {
+    // Save per-client pickup / drop times to Firestore (shown in shift-detail)
+    if (shiftId && currentStop && (currentStop.type === "pickup" || currentStop.type === "drop")) {
       try {
-        if (currentStop.type === "pickup") {
-          await updateDoc(doc(db, "shifts", shiftId), { pickupCompletedAt: timeStr });
-        } else if (currentStop.type === "drop") {
-          await updateDoc(doc(db, "shifts", shiftId), { dropCompletedAt: timeStr });
+        // 1. Flat shiftClientTimes map (used by shift-detail per-client display)
+        const clientUpdates = {};
+        currentStop.clients.forEach((c) => {
+          const safeId = String(c.id).replace(/[.\\/[\]]/g, "_");
+          const confirmedStatus = clientStatus[`${currentIdx}_${c.id}`];
+          if (confirmedStatus === "confirmed") {
+            const confirmedAt = clientConfirmedTimes[`${currentIdx}_${c.id}`] || timeStr;
+            clientUpdates[`shiftClientTimes.${safeId}.name`] = c.name;
+            if (currentStop.type === "pickup") {
+              clientUpdates[`shiftClientTimes.${safeId}.pickupAt`] = confirmedAt;
+            } else {
+              clientUpdates[`shiftClientTimes.${safeId}.dropAt`] = confirmedAt;
+            }
+          }
+        });
+
+        // 2. Also update shiftPoints array entries with pickedUpTime / droppedTime
+        //    (admin reads shiftPoints[n].pickedUpTime and pickedUpLocation)
+        const currentCoords = lastCoordsRef.current;
+        const locationAddr = currentStop.address || "";
+        const currentShiftPoints = Array.isArray(shift?.shiftPoints) ? shift.shiftPoints : [];
+        if (currentShiftPoints.length > 0) {
+          const updatedPoints = currentShiftPoints.map((sp, spIdx) => {
+            // Match by clientId or fallback id `sp_N`
+            const matchId = sp.clientId || `sp_${spIdx}`;
+            const matchingClient = currentStop.clients.find(
+              c => c.id === matchId || (c.name && sp.name && c.name === sp.name)
+            );
+            if (!matchingClient) return sp;
+            const cs = clientStatus[`${currentIdx}_${matchingClient.id}`];
+            if (cs !== "confirmed") return sp;
+            const confirmedAt = clientConfirmedTimes[`${currentIdx}_${matchingClient.id}`] || timeStr;
+            if (currentStop.type === "pickup") {
+              return {
+                ...sp,
+                pickedUpTime: confirmedAt,
+                pickedUpLocation: locationAddr,
+                ...(currentCoords ? { pickedUpCoords: { lat: currentCoords.latitude, lng: currentCoords.longitude } } : {}),
+              };
+            } else {
+              return {
+                ...sp,
+                droppedTime: confirmedAt,
+                droppedLocation: locationAddr,
+                ...(currentCoords ? { droppedCoords: { lat: currentCoords.latitude, lng: currentCoords.longitude } } : {}),
+              };
+            }
+          });
+          clientUpdates.shiftPoints = updatedPoints;
+        } else {
+          // Single-client fallback — write directly on shift document
+          if (currentStop.type === "pickup") {
+            clientUpdates.pickedUpTime = timeStr;
+            clientUpdates.pickedUpLocation = locationAddr;
+            if (currentCoords) clientUpdates.pickedUpCoords = { lat: currentCoords.latitude, lng: currentCoords.longitude };
+          } else {
+            clientUpdates.droppedTime = timeStr;
+            clientUpdates.droppedLocation = locationAddr;
+            if (currentCoords) clientUpdates.droppedCoords = { lat: currentCoords.latitude, lng: currentCoords.longitude };
+          }
+        }
+
+        if (Object.keys(clientUpdates).length > 0) {
+          await updateDoc(doc(db, "shifts", shiftId), clientUpdates);
         }
       } catch (e) { console.warn("stop time save error:", e); }
     }
@@ -561,8 +621,8 @@ export default function CompleteShift() {
             transportationCompleted: true,
             transportationKm: totalKm,
             transportationCompletedAt: serverTimestamp(),
-            // Write clockOut so home dashboard status updates to "Completed"
-            clockOut: serverTimestamp(),
+            // clockOut is NOT written here — user must tap Clock Out on shift-detail
+            // to officially end the shift after filling reports.
             visitNotes: visitNotes.trim() || null,
             totalTimeMinutes,
             vehicleType: vehicleType || null,

@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { doc, getDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../src/firebase/config";
 
@@ -95,6 +95,7 @@ export default function VehicleCheck() {
         }
       }
 
+      // 1. Log to vehicleChecks collection (audit trail)
       await addDoc(collection(db, "vehicleChecks"), {
         shiftId: shiftId || null,
         vehicleType,
@@ -102,6 +103,15 @@ export default function VehicleCheck() {
         photoUrls,
         submittedAt: serverTimestamp(),
       });
+
+      // 2. Also save photos + meter directly on the shift document so admin can see them
+      if (shiftId) {
+        await updateDoc(doc(db, "shifts", shiftId), {
+          vehicleCheckPhotoUrls: photoUrls,
+          vehicleCheckMeterStart: meterStart ? Number(meterStart) : null,
+          vehicleCheckSubmittedAt: serverTimestamp(),
+        });
+      }
 
       router.push({ pathname: "/complete-shift", params: { shiftId, vehicleType } });
     } catch (e) {

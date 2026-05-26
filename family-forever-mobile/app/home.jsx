@@ -15,7 +15,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   limit,
   onSnapshot,
   getDocs,
@@ -209,8 +208,8 @@ export default function Home() {
     const userId = user?.userId;
     const userDocId = user?.username; // Firestore doc ID stored as username field
     const userName = user?.name;
-    // Primary uses orderBy+limit; secondary queries use only where+limit (no composite index needed)
-    const primaryConstraints = [orderBy("startDate", "desc"), limit(100)];
+    // No orderBy — avoids composite index requirement; sorted client-side after merge
+    const primaryConstraints = [limit(100)];
     const secondaryConstraints = [limit(100)];
 
     let primaryShifts = [];
@@ -235,6 +234,14 @@ export default function Home() {
         seen.add(s.id);
         const category = s?.category || s?.categoryName || s?.serviceType;
         return !category || ALLOWED_CATEGORIES.includes(category);
+      }).sort((a, b) => {
+        // Newest first — sort by startDate descending (client-side; no composite index needed)
+        const da = parseDateFn(a.startDate);
+        const db = parseDateFn(b.startDate);
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return db - da;
       });
       setShifts(combined);
     };
@@ -440,7 +447,8 @@ export default function Home() {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
-          clockInTime: roundedTime,
+          clockIn: serverTimestamp(),      // admin app reads this field
+          clockInTime: roundedTime,        // mobile app display
           clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
@@ -466,7 +474,8 @@ export default function Home() {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
-          clockOutTime: roundedTime,
+          clockOut: serverTimestamp(),     // admin app reads this field
+          clockOutTime: roundedTime,       // mobile app display
           clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
