@@ -63,7 +63,9 @@
           "photosPermission": "This app needs access to your photo library to select a profile picture.",
           "cameraPermission": "This app needs access to the camera to update your profile photo."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

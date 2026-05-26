@@ -541,7 +541,6 @@ const AddUserShift = ({ mode = "add", user }) => {
             description: data.jobdescription || data.description || "",
             accessToShiftReport: data.accessToShiftReport || false,
             shiftDates: calendarDates,
-            vehicleType: data.vehicleType || "",
           }));
 
           setOriginalClockIn(data.clockIn || "");
@@ -869,8 +868,6 @@ const AddUserShift = ({ mode = "add", user }) => {
 
           await updateDoc(docRef, {
             ...restValues,
-            startDate: Timestamp.fromDate(primaryDate),
-            endDate: Timestamp.fromDate(endDateObj),
             clientDetails: selectedClient,
             clientId: selectedClient?.id || values.client || "",
             clientName: selectedClient?.name || "",
@@ -926,7 +923,6 @@ const AddUserShift = ({ mode = "add", user }) => {
             dateKey_iso: formatLocalISO(primaryDate),       // "2025-01-04"
             startDate:   formatFlutterDate(primaryDate),    // "04 Jan 2025"
             endDate:     formatFlutterDate(endDateObj),
-            userId:      primaryStaff?.userId ?? primaryStaff?.id ?? "",
             username:    primaryStaff?.username || primaryStaff?.name || "",
             phone:       primaryStaff?.phone    || "",
             email:       primaryStaff?.email    || "",
@@ -947,6 +943,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         }
         return;
       }
+
 
       // ---------- ADD MODE ----------
       for (const date of selectedDates) {
