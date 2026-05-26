@@ -104,55 +104,55 @@ const AdminHomePage = ({ user, setUser }) => {
         {/* Page area */}
         <main className="flex-1 overflow-auto" style={{ padding: "20px 24px" }}>
           <Routes>
-            <Route path="dashboard"        element={<Dashboard user={user} filter={filter} dateRange={dateRange} />} />
-            <Route path="shifts"           element={<ShiftCommandPage />} />
-            <Route path="transportation"   element={<Transportation />} />
-            <Route path="clients"          element={<ManageClients />} />
-            <Route path="users"            element={<ManageUser />} />
-            <Route path="agency"           element={<ManageAgency />} />
-            <Route path="intake-workers"   element={<ManageIntakeWorkers />} />
+            <Route path="dashboard" element={<Dashboard user={user} filter={filter} dateRange={dateRange} />} />
+            <Route path="shifts" element={<ShiftCommandPage />} />
+            <Route path="transportation" element={<Transportation />} />
+            <Route path="clients" element={<ManageClients />} />
+            <Route path="users" element={<ManageUser />} />
+            <Route path="agency" element={<ManageAgency />} />
+            <Route path="intake-workers" element={<ManageIntakeWorkers />} />
             <Route path="private-families" element={<ManagePrivateFamilies />} />
-            <Route path="intake-forms"     element={<ManageIntakeForms />} />
-            <Route path="payroll"          element={<Payroll />} />
+            <Route path="intake-forms" element={<ManageIntakeForms />} />
+            <Route path="payroll" element={<Payroll />} />
             <Route path="shift-report/:id" element={<ShiftReport user={user} />} />
             <Route path="critical-incident" element={<CriticalIncidentForm />} />
 
             {/* Built pages */}
             <Route path="staff-evaluation" element={<StaffEvaluationPage />} />
-            <Route path="billing"          element={<BillingPage />} />
-            <Route path="gst-reporting"    element={<GSTReportingPage />} />
+            <Route path="billing" element={<BillingPage />} />
+            <Route path="gst-reporting" element={<GSTReportingPage />} />
 
             {/* Under construction pages */}
-            <Route path="services"         element={<ServicesPage />} />
+            <Route path="services" element={<ServicesPage />} />
             <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
             <Route path="pdd-houses" element={<PDDHouses />} />
             <Route path="child-youth-houses" element={<ChildYouthHouses />} />
-            <Route path="reports"          element={<UnderConstruction title="Reports & Analytics" />} />
+            <Route path="reports" element={<UnderConstruction title="Reports & Analytics" />} />
 
 
-            <Route path="settings"         element={<UnderConstruction title="Settings" />} />
+            <Route path="settings" element={<UnderConstruction title="Settings" />} />
 
             {/* Add/Edit forms */}
             <Route path="add" element={<AddingPage user={user} />}>
-              <Route path="add-user"              element={<AddUserForm mode="add" user={user} />} />
-              <Route path="update-user/:id"       element={<AddUserForm mode="update" user={user} />} />
-              <Route path="add-user-shift"        element={<AddUserShift mode="add" user={user} />} />
+              <Route path="add-user" element={<AddUserForm mode="add" user={user} />} />
+              <Route path="update-user/:id" element={<AddUserForm mode="update" user={user} />} />
+              <Route path="add-user-shift" element={<AddUserShift mode="add" user={user} />} />
               <Route path="update-user-shift/:id" element={<AddUserShift mode="update" user={user} />} />
-              <Route path="add-agency"            element={<AddAgency mode="add" user={user} />} />
-              <Route path="update-agency/:id"     element={<AddAgency mode="update" user={user} />} />
-              <Route path="add-client"            element={<AddClient mode="add" user={user} />} />
-              <Route path="update-client/:id"     element={<AddClient mode="update" user={user} />} />
-              <Route path="add-intake-form"       element={<IntakeForm mode="add" user={user} />} />
-              <Route path="private-family-form"   element={<PrivateFamilyIntakeForm user={user} onSubmitSuccess={() => navigate("/admin-dashboard/intake-forms")} />} />
+              <Route path="add-agency" element={<AddAgency mode="add" user={user} />} />
+              <Route path="update-agency/:id" element={<AddAgency mode="update" user={user} />} />
+              <Route path="add-client" element={<AddClient mode="add" user={user} />} />
+              <Route path="update-client/:id" element={<AddClient mode="update" user={user} />} />
+              <Route path="add-intake-form" element={<IntakeForm mode="add" user={user} />} />
+              <Route path="private-family-form" element={<PrivateFamilyIntakeForm user={user} onSubmitSuccess={() => navigate("/admin-dashboard/intake-forms")} />} />
               <Route path="update-intake-form/:id" element={<IntakeForm mode="update" user={user} />} />
-              <Route path="add-intakeworker"      element={<AddIntakeUser mode="add" user={user} />} />
+              <Route path="add-intakeworker" element={<AddIntakeUser mode="add" user={user} />} />
               <Route path="update-intakeworker/:id" element={<AddIntakeUser mode="update" user={user} />} />
-              <Route path="add-house"             element={<AddHouse mode="add" user={user} />} />
+              <Route path="add-house" element={<AddHouse mode="add" user={user} />} />
             </Route>
 
 
             {/* View intake form (read-only) */}
-            <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={true} />} />
+            <Route path="view-intake-form/:id" element={<IntakeForm mode="view" user={user} isEditable={false} />} />
 
             <Route path="*" element={<Dashboard user={user} />} />
           </Routes>

@@ -109,6 +109,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     setActiveTab(tabId);
   };
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
   const [lockTarget, setLockTarget] = useState(null);
   const [unlockTarget, setUnlockTarget] = useState(null);
@@ -132,7 +133,9 @@ export default function ClientActivityTable({ onNavigateToReport }) {
           const agency = s.agencyName || s.agency || "—";
           const service = normService(s.categoryName || s.shiftCategory);
           const shiftType = s.typeName || s.shiftType || "Regular";
-          const status = s.clockIn && s.clockOut ? "Completed" : s.clockIn ? "Ongoing" : "Incomplete";
+          const resolvedClockIn  = s.clockIn  || s.clockInDate  || null;
+          const resolvedClockOut = s.clockOut || s.clockOutDate || null;
+          const status = resolvedClockIn && resolvedClockOut ? "Completed" : resolvedClockIn ? "Ongoing" : "Incomplete";
           const hoursWorked = s.hoursWorked || 8;
           return {
             id: s.id, clientName, clientId, staff, secondaryStaff, agency,
@@ -147,6 +150,8 @@ export default function ClientActivityTable({ onNavigateToReport }) {
         setRows(enriched);
       } catch (err) {
         console.error("ClientActivityTable fetch error:", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetch();
@@ -328,7 +333,9 @@ export default function ClientActivityTable({ onNavigateToReport }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">Loading activity…</td></tr>
+            ) : filtered.length === 0 ? (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">No records found</td></tr>
             ) : filtered.slice(0, rowsToShow).map(row => {
               const bCfg = BILLING_CFG[row.billingStatus] || BILLING_CFG["Pending Review"];

@@ -9,6 +9,7 @@ import IntakeFormMainPage from "./components/IntakeFormMainPage";
 import IntakeLogin from "./components/IntakeLogin";
 import UserHomePage from "./components/UserHomePage";
 import MigrateIntakeForms from "./components/MigrateIntakeForms";
+import AuthActionHandler from "./components/AuthActionHandler";
 
 // ✅ Protected Route – Main App Only (Admin + User)
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -53,6 +54,9 @@ function App() {
       <Routes>
         {/* 🌐 Main Public Login (Admin/Owner) */}
         <Route path="/" element={<Login setUser={setUser} />} />
+
+        {/* 🌐 Firebase custom email action handler — public, no auth required */}
+        <Route path="/auth/action" element={<AuthActionHandler />} />
 
         {/* 🌐 Intake Form Application (with its own internal routes) */}
         <Route path="/intake-form/*" element={<IntakeFormMainPage />} />

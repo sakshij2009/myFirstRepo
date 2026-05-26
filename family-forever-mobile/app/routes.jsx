@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { collection, query, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { safeString } from "../src/utils/date";
 
@@ -43,18 +43,91 @@ export default function Routes() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const transportShifts = data.filter(
-        (s) =>
-          (s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase()) &&
-          (s.serviceType === "Transportation" || s.category === "Transportation")
-      );
-      setShifts(transportShifts);
+    const userId = user?.userId;
+    const userDocId = user?.username; // Firestore doc ID stored as username field
+    const userName = user?.name;
+    // Primary uses orderBy+limit; secondary queries use only where+limit (no composite index needed)
+    const primaryConstraints = [orderBy("startDate", "desc"), limit(100)];
+    const secondaryConstraints = [limit(100)];
+    const isTransport = (s) =>
+      s.serviceType === "Transportation" || s.category === "Transportation" ||
+      s.categoryName === "Transportation";
+
+    let primaryShifts = [];
+    let secondaryByIdShifts = [];
+    let secondaryByDocIdShifts = [];
+    let secondaryByNameShifts = [];
+    let primaryLoaded = false;
+    let secondaryByIdLoaded = false;
+    let secondaryByDocIdLoaded = false;
+    let secondaryByNameLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
+      const seen = new Set();
+      const combined = [
+        ...primaryShifts,
+        ...secondaryByIdShifts,
+        ...secondaryByDocIdShifts,
+        ...secondaryByNameShifts,
+      ].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return isTransport(s);
+      });
+      setShifts(combined);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "shifts"), ...primaryConstraints);
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
+    }, (err) => { console.warn("primary routes query error:", err?.message); primaryLoaded = true; merge(); });
+
+    // Secondary query by custom userId
+    let unsubSecondaryById = () => {};
+    if (userId) {
+      const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...secondaryConstraints);
+      unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
+        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryById routes query error:", err?.message); secondaryByIdLoaded = true; merge(); });
+    } else {
+      secondaryByIdLoaded = true;
+    }
+
+    // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
+    let unsubSecondaryByDocId = () => {};
+    if (userDocId && userDocId !== userId) {
+      const qSecondaryByDocId = query(collection(db, "shifts"), where("secondaryUserId", "==", userDocId), ...secondaryConstraints);
+      unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
+        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByDocId routes query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
+    } else {
+      secondaryByDocIdLoaded = true;
+    }
+
+    // Secondary fallback query by name
+    let unsubSecondaryByName = () => {};
+    if (userName) {
+      const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...secondaryConstraints);
+      unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
+        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByName routes query error:", err?.message); secondaryByNameLoaded = true; merge(); });
+    } else {
+      secondaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
   const filteredShifts = shifts.filter((s) => {

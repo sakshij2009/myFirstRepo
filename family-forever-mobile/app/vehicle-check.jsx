@@ -10,11 +10,11 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { doc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../src/firebase/config";
 
@@ -31,26 +31,50 @@ export default function VehicleCheck() {
   const { shiftId } = useLocalSearchParams();
 
   const [vehicleType, setVehicleType] = useState(null); // "office" | "personal"
-  const [photo, setPhoto] = useState(null);
+  const [preSelectedFromShift, setPreSelectedFromShift] = useState(false); // locked from Firestore
+  const [photos, setPhotos] = useState([]); // array of ImagePicker asset objects
   const [meterStart, setMeterStart] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Pre-select vehicle type from shift data if already set.
+  // Handles any string the admin might have stored ("office", "Office Vehicle", "Company Car", etc.)
+  useEffect(() => {
+    if (!shiftId) return;
+    getDoc(doc(db, "shifts", shiftId)).then((snap) => {
+      if (snap.exists()) {
+        const raw = snap.data()?.vehicleType;
+        if (!raw) return;
+        const lower = String(raw).toLowerCase().trim();
+        let resolved = null;
+        if (lower === "office" || lower === "personal") {
+          resolved = lower;
+        } else if (lower.includes("office") || lower.includes("company") || lower.includes("agency") || lower.includes("staff")) {
+          resolved = "office";
+        } else if (lower.includes("personal") || lower.includes("private") || lower.includes("own")) {
+          resolved = "personal";
+        }
+        if (resolved) {
+          setVehicleType(resolved);
+          setPreSelectedFromShift(true); // lock the card — don't show picker
+        }
+      }
+    }).catch(() => {});
+  }, [shiftId]);
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
-        "Camera Required",
-        "Camera permission is needed to take a vehicle photo."
-      );
+      Alert.alert("Camera Required", "Camera permission is needed to take a vehicle photo.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 0.7,
-    });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.7 });
     if (!result.canceled && result.assets?.[0]) {
-      setPhoto(result.assets[0]);
+      setPhotos((prev) => [...prev, result.assets[0]]);
     }
+  };
+
+  const removePhoto = (index) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleConfirm = async () => {
@@ -61,30 +85,35 @@ export default function VehicleCheck() {
 
     setSubmitting(true);
     try {
-      let photoUrl = null;
-      if (photo?.uri) {
-        const blob = await (await fetch(photo.uri)).blob();
-        const storageRef = ref(
-          storage,
-          `vehiclePhotos/${shiftId}/${Date.now()}.jpg`
-        );
-        await uploadBytes(storageRef, blob);
-        photoUrl = await getDownloadURL(storageRef);
+      const photoUrls = [];
+      for (const photo of photos) {
+        if (photo?.uri) {
+          const blob = await (await fetch(photo.uri)).blob();
+          const storageRef = ref(storage, `vehiclePhotos/${shiftId}/${Date.now()}.jpg`);
+          await uploadBytes(storageRef, blob);
+          photoUrls.push(await getDownloadURL(storageRef));
+        }
       }
 
+      // 1. Log to vehicleChecks collection (audit trail)
       await addDoc(collection(db, "vehicleChecks"), {
         shiftId: shiftId || null,
         vehicleType,
         meterStart: meterStart ? Number(meterStart) : null,
-        photoUrl,
+        photoUrls,
         submittedAt: serverTimestamp(),
       });
 
-      // Navigate to the active route execution screen, pass vehicleType
-      router.push({
-        pathname: "/complete-shift",
-        params: { shiftId, vehicleType },
-      });
+      // 2. Also save photos + meter directly on the shift document so admin can see them
+      if (shiftId) {
+        await updateDoc(doc(db, "shifts", shiftId), {
+          vehicleCheckPhotoUrls: photoUrls,
+          vehicleCheckMeterStart: meterStart ? Number(meterStart) : null,
+          vehicleCheckSubmittedAt: serverTimestamp(),
+        });
+      }
+
+      router.push({ pathname: "/complete-shift", params: { shiftId, vehicleType } });
     } catch (e) {
       console.error("VehicleCheck submit error:", e);
       Alert.alert("Error", "Failed to save. Please try again.");
@@ -117,71 +146,64 @@ export default function VehicleCheck() {
         contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 16 }}
       >
         {/* ── Vehicle Type Selection ──────────────────────────────────────── */}
-        <Text style={styles.sectionQuestion}>Which vehicle are you using?</Text>
-
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          {/* Office Vehicle */}
-          <Pressable
-            onPress={() => setVehicleType("office")}
-            style={[
-              styles.vehicleCard,
-              isOffice && styles.vehicleCardSelected,
-            ]}
-          >
-            <View
-              style={[
-                styles.vehicleIconWrap,
-                isOffice && { backgroundColor: "#F0FDF4" },
-              ]}
-            >
-              <Ionicons
-                name="business-outline"
-                size={28}
-                color={isOffice ? GREEN : GRAY}
-              />
+        {preSelectedFromShift ? (
+          /* Locked — type came from the shift assignment, staff cannot change it */
+          <View>
+            <Text style={[styles.sectionQuestion, { marginBottom: 4 }]}>Vehicle — from shift assignment</Text>
+            <View style={[styles.vehicleLockedCard]}>
+              <View style={[styles.vehicleIconWrap, { backgroundColor: "#F0FDF4" }]}>
+                <Ionicons
+                  name={isOffice ? "business-outline" : "car-outline"}
+                  size={28}
+                  color={GREEN}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.vehicleLabel, { color: GREEN }]}>
+                  {isOffice ? "Office vehicle" : "Personal vehicle"}
+                </Text>
+                <Text style={styles.vehicleSub}>
+                  {isOffice ? "Transport hours billed only" : "Shift + mileage paid"}
+                </Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={22} color={GREEN} />
             </View>
-            <Text
-              style={[
-                styles.vehicleLabel,
-                isOffice && { color: GREEN, fontWeight: "700" },
-              ]}
-            >
-              Office vehicle
-            </Text>
-            <Text style={styles.vehicleSub}>Mileage tracked in-app</Text>
-          </Pressable>
+          </View>
+        ) : (
+          /* Manual picker — no vehicle type set on the shift */
+          <View>
+            <Text style={styles.sectionQuestion}>Which vehicle are you using?</Text>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+              {/* Office Vehicle */}
+              <Pressable
+                onPress={() => setVehicleType("office")}
+                style={[styles.vehicleCard, isOffice && styles.vehicleCardSelected]}
+              >
+                <View style={[styles.vehicleIconWrap, isOffice && { backgroundColor: "#F0FDF4" }]}>
+                  <Ionicons name="business-outline" size={28} color={isOffice ? GREEN : GRAY} />
+                </View>
+                <Text style={[styles.vehicleLabel, isOffice && { color: GREEN, fontWeight: "700" }]}>
+                  Office vehicle
+                </Text>
+                <Text style={styles.vehicleSub}>Mileage tracked in-app</Text>
+              </Pressable>
 
-          {/* Personal Vehicle */}
-          <Pressable
-            onPress={() => setVehicleType("personal")}
-            style={[
-              styles.vehicleCard,
-              isPersonal && styles.vehicleCardSelected,
-            ]}
-          >
-            <View
-              style={[
-                styles.vehicleIconWrap,
-                isPersonal && { backgroundColor: "#F0FDF4" },
-              ]}
-            >
-              <Ionicons
-                name="car-outline"
-                size={28}
-                color={isPersonal ? GREEN : GRAY}
-              />
+              {/* Personal Vehicle */}
+              <Pressable
+                onPress={() => setVehicleType("personal")}
+                style={[styles.vehicleCard, isPersonal && styles.vehicleCardSelected]}
+              >
+                <View style={[styles.vehicleIconWrap, isPersonal && { backgroundColor: "#F0FDF4" }]}>
+                  <Ionicons name="car-outline" size={28} color={isPersonal ? GREEN : GRAY} />
+                </View>
+                <Text style={[styles.vehicleLabel, isPersonal && { color: GREEN, fontWeight: "700" }]}>
+                  Personal vehicle
+                </Text>
+                <Text style={styles.vehicleSub}>Shift + mileage paid</Text>
+              </Pressable>
             </View>
-            <Text
-              style={[
-                styles.vehicleLabel,
-                isPersonal && { color: GREEN, fontWeight: "700" },
-              ]}
-            >
-              Personal vehicle
-            </Text>
-            <Text style={styles.vehicleSub}>Shift + mileage paid</Text>
-          </Pressable>
-        </View>
+          </View>
+        )}
 
         {/* ── Info Banner ──────────────────────────────────────────────────── */}
         <View style={styles.infoBanner}>
@@ -246,35 +268,33 @@ export default function VehicleCheck() {
               </View>
             </View>
 
-            {/* Photo area */}
-            {photo ? (
-              <View style={{ marginTop: 12 }}>
-                <Image
-                  source={{ uri: photo.uri }}
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    borderRadius: 12,
-                    marginBottom: 10,
-                  }}
-                  resizeMode="cover"
-                />
-                <Pressable onPress={() => setPhoto(null)} style={styles.retakeBtn}>
-                  <Ionicons name="refresh-outline" size={16} color={GREEN} style={{ marginRight: 6 }} />
-                  <Text style={styles.retakeBtnText}>Retake Photo</Text>
-                </Pressable>
+            {/* Photo grid */}
+            {photos.length > 0 && (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+                {photos.map((p, idx) => (
+                  <View key={idx} style={{ position: "relative" }}>
+                    <Image
+                      source={{ uri: p.uri }}
+                      style={{ width: 100, height: 90, borderRadius: 10 }}
+                      resizeMode="cover"
+                    />
+                    <Pressable
+                      onPress={() => removePhoto(idx)}
+                      style={{ position: "absolute", top: -6, right: -6, backgroundColor: "#EF4444", borderRadius: 10, width: 20, height: 20, alignItems: "center", justifyContent: "center" }}
+                    >
+                      <Ionicons name="close" size={12} color="#fff" />
+                    </Pressable>
+                  </View>
+                ))}
               </View>
-            ) : (
-              <Pressable onPress={takePhoto} style={styles.photoBox}>
-                <View style={styles.photoIconWrap}>
-                  <Ionicons name="camera-outline" size={28} color="#9CA3AF" />
-                </View>
-                <Text style={styles.photoBoxLabel}>Take live photo</Text>
-                <Text style={styles.photoBoxHint}>
-                  Gallery not permitted — live camera only
-                </Text>
-              </Pressable>
             )}
+            <Pressable onPress={takePhoto} style={[styles.photoBox, photos.length > 0 && { marginTop: 10, paddingVertical: 16 }]}>
+              <View style={styles.photoIconWrap}>
+                <Ionicons name="camera-outline" size={28} color="#9CA3AF" />
+              </View>
+              <Text style={styles.photoBoxLabel}>{photos.length > 0 ? "Add Another Photo" : "Take live photo"}</Text>
+              <Text style={styles.photoBoxHint}>Gallery not permitted — live camera only</Text>
+            </Pressable>
           </View>
         )}
 
@@ -350,6 +370,17 @@ const styles = StyleSheet.create({
   },
 
   // Vehicle type cards
+  vehicleLockedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: GREEN,
+    marginTop: 4,
+  },
   vehicleCard: {
     flex: 1,
     backgroundColor: "#fff",

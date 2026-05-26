@@ -15,6 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   collection,
   query,
+  where,
+  orderBy,
+  limit,
   onSnapshot,
   doc,
   updateDoc,
@@ -345,18 +348,105 @@ export default function Shifts() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const mine = data.filter(s => {
-        const isUser = s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase();
+    const userId = user?.userId;
+    const userDocId = user?.username; // Firestore doc ID stored as username field
+    const userName = user?.name;
+
+    let primaryShifts = [];
+    let secondaryByIdShifts = [];
+    let secondaryByDocIdShifts = [];
+    let secondaryByNameShifts = [];
+    let primaryLoaded = false;
+    let secondaryByIdLoaded = false;
+    let secondaryByDocIdLoaded = false;
+    let secondaryByNameLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
+      const seen = new Set();
+      const combined = [
+        ...primaryShifts,
+        ...secondaryByIdShifts,
+        ...secondaryByDocIdShifts,
+        ...secondaryByNameShifts,
+      ].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
         const cat = s?.category || s?.categoryName || s?.serviceType;
-        return isUser && (!cat || ALLOWED_CATEGORIES.includes(cat));
+        return !cat || ALLOWED_CATEGORIES.includes(cat);
       });
-      setShifts(mine);
+      setShifts(combined);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    // Primary uses orderBy+limit (index likely exists from prior usage)
+    const primaryConstraints = [orderBy("startDate", "desc"), limit(150)];
+    // Secondary queries use only where+limit — no composite index needed
+    const secondaryConstraints = [limit(150)];
+
+    // Primary user query
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "shifts"), ...primaryConstraints);
+
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
+    }, (err) => { console.warn("primary shifts query error:", err?.message); primaryLoaded = true; merge(); });
+
+    // Secondary query by custom userId
+    let unsubSecondaryById = () => {};
+    if (userId) {
+      const qSecondaryById = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userId),
+        ...secondaryConstraints
+      );
+      unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
+        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryById query error:", err?.message); secondaryByIdLoaded = true; merge(); });
+    } else {
+      secondaryByIdLoaded = true;
+    }
+
+    // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
+    let unsubSecondaryByDocId = () => {};
+    if (userDocId && userDocId !== userId) {
+      const qSecondaryByDocId = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userDocId),
+        ...secondaryConstraints
+      );
+      unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
+        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByDocId query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
+    } else {
+      secondaryByDocIdLoaded = true;
+    }
+
+    // Secondary fallback query by name
+    let unsubSecondaryByName = () => {};
+    if (userName) {
+      const qSecondaryByName = query(
+        collection(db, "shifts"),
+        where("secondaryUserName", "==", userName),
+        ...secondaryConstraints
+      );
+      unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
+        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByName query error:", err?.message); secondaryByNameLoaded = true; merge(); });
+    } else {
+      secondaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
   // Live tab filtering

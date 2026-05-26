@@ -91,23 +91,6 @@ function AgencyCard({ agency, onEdit, onDelete, onView }) {
            </div>
         </div>
 
-        {/* Avg Service Rate */}
-        <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "#f9fafb" }}>
-           <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Avg Service Rate</span>
-              <span className="text-lg font-extrabold text-gray-900 mt-0.5">${agency.avgRate || "50.99"}</span>
-           </div>
-           <ChevronRight size={16} className="text-gray-300" />
-        </div>
-
-        {/* Monthly Revenue */}
-        <div className="rounded-xl p-3 flex items-center justify-between mb-5" style={{ backgroundColor: "#fffbeb" }}>
-           <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Monthly Revenue</span>
-              <span className="text-lg font-extrabold text-amber-700 mt-0.5">${agency.revenue || "12,500"}</span>
-           </div>
-           <DollarSign size={20} className="text-amber-500 opacity-60" />
-        </div>
       </div>
 
       {/* Actions */}

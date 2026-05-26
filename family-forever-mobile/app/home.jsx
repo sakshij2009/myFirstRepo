@@ -14,9 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   collection,
   query,
+  where,
+  limit,
   onSnapshot,
   getDocs,
-  where,
   updateDoc,
   doc,
   addDoc,
@@ -188,6 +189,8 @@ export default function Home() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState({ total: 0, hours: 0, completed: 0 });
+  const [statPeriod, setStatPeriod] = useState("month"); // "week" | "month" | "year"
+  const [showPeriodPicker, setShowPeriodPicker] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -202,19 +205,110 @@ export default function Home() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const userShifts = data.filter((s) => {
-        const nameMatch = s?.name?.toLowerCase() === user?.name?.toLowerCase();
-        const userMatch = s?.userId === user?.userId || s?.staffId === user?.userId;
+    const userId = user?.userId;
+    const userDocId = user?.username; // Firestore doc ID stored as username field
+    const userName = user?.name;
+    // No orderBy — avoids composite index requirement; sorted client-side after merge
+    const primaryConstraints = [limit(100)];
+    const secondaryConstraints = [limit(100)];
+
+    let primaryShifts = [];
+    let secondaryByIdShifts = [];
+    let secondaryByDocIdShifts = [];
+    let secondaryByNameShifts = [];
+    let primaryLoaded = false;
+    let secondaryByIdLoaded = false;
+    let secondaryByDocIdLoaded = false;
+    let secondaryByNameLoaded = false;
+
+    const merge = () => {
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
+      const seen = new Set();
+      const combined = [
+        ...primaryShifts,
+        ...secondaryByIdShifts,
+        ...secondaryByDocIdShifts,
+        ...secondaryByNameShifts,
+      ].filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
         const category = s?.category || s?.categoryName || s?.serviceType;
-        const isValidCategory = !category || ALLOWED_CATEGORIES.includes(category);
-        return (nameMatch || userMatch) && isValidCategory;
+        return !category || ALLOWED_CATEGORIES.includes(category);
+      }).sort((a, b) => {
+        // Newest first — sort by startDate descending (client-side; no composite index needed)
+        const da = parseDateFn(a.startDate);
+        const db = parseDateFn(b.startDate);
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return db - da;
       });
-      setShifts(userShifts);
-    });
-    return () => unsub();
+      setShifts(combined);
+    };
+
+    // Primary user query
+    const qPrimary = userId
+      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "shifts"), ...primaryConstraints);
+
+    const unsubPrimary = onSnapshot(qPrimary, (snap) => {
+      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryLoaded = true;
+      merge();
+    }, (err) => { console.warn("primary shifts query error:", err?.message); primaryLoaded = true; merge(); });
+
+    // Secondary query by custom userId
+    let unsubSecondaryById = () => {};
+    if (userId) {
+      const qSecondaryById = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userId),
+        ...secondaryConstraints
+      );
+      unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
+        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryById query error:", err?.message); secondaryByIdLoaded = true; merge(); });
+    } else {
+      secondaryByIdLoaded = true;
+    }
+
+    // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
+    let unsubSecondaryByDocId = () => {};
+    if (userDocId && userDocId !== userId) {
+      const qSecondaryByDocId = query(
+        collection(db, "shifts"),
+        where("secondaryUserId", "==", userDocId),
+        ...secondaryConstraints
+      );
+      unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
+        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByDocId query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
+    } else {
+      secondaryByDocIdLoaded = true;
+    }
+
+    // Secondary fallback query by name
+    let unsubSecondaryByName = () => {};
+    if (userName) {
+      const qSecondaryByName = query(
+        collection(db, "shifts"),
+        where("secondaryUserName", "==", userName),
+        ...secondaryConstraints
+      );
+      unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
+        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameLoaded = true;
+        merge();
+      }, (err) => { console.warn("secondaryByName query error:", err?.message); secondaryByNameLoaded = true; merge(); });
+    } else {
+      secondaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
   const todayKey = formatEdmontonISO(new Date());
@@ -261,20 +355,70 @@ export default function Home() {
 
   useEffect(() => {
     const now = new Date();
-    const currentMonthShifts = shifts.filter((s) => {
-      const d = parseDateFn(s.startDate);
-      if (!d) return false;
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    let filtered = [];
+
+    if (statPeriod === "week") {
+      // Sunday-to-Saturday week containing today
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+      filtered = shifts.filter((s) => {
+        const d = parseDateFn(s.startDate);
+        return d && d >= startOfWeek && d <= endOfWeek;
+      });
+    } else if (statPeriod === "month") {
+      filtered = shifts.filter((s) => {
+        const d = parseDateFn(s.startDate);
+        return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+    } else {
+      // year
+      filtered = shifts.filter((s) => {
+        const d = parseDateFn(s.startDate);
+        return d && d.getFullYear() === now.getFullYear();
+      });
+    }
+
+    // Count completed: use all known completion signals
+    const countCompleted = filtered.filter(
+      (s) => s.clockOutTime || s.clockOut || s.clockout || s.transportationCompleted || s.status === "completed"
+    ).length;
+
+    // Hours: prefer totalTimeMinutes (actual logged time) → fall back to scheduled start/end
+    let totalHours = 0;
+    filtered.forEach((s) => {
+      try {
+        if (s.totalTimeMinutes && s.totalTimeMinutes > 0) {
+          totalHours += s.totalTimeMinutes / 60;
+        } else {
+          const parseT = (t) => {
+            if (!t) return null;
+            const str = String(t).trim();
+            const [time, period] = str.split(" ");
+            let [h, m] = time.split(":").map(Number);
+            if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+            if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+            return h + (m || 0) / 60;
+          };
+          const s1 = parseT(s.startTime);
+          const e1 = parseT(s.endTime);
+          if (s1 !== null && e1 !== null) {
+            const diff = e1 - s1;
+            totalHours += diff > 0 ? diff : diff + 24;
+          }
+        }
+      } catch {}
     });
-    
-    const countCompleted = currentMonthShifts.filter((s) => s.clockOutTime || s.clockOut || s.status === "completed").length;
-    
+
     setStats({
-      total: currentMonthShifts.length,
-      hours: calcTotalHours(currentMonthShifts),
+      total: filtered.length,
+      hours: Math.round(totalHours * 10) / 10,
       completed: countCompleted,
     });
-  }, [shifts]);
+  }, [shifts, statPeriod]);
 
   const handleConfirmAction = async () => {
     if (!confirmAction || !confirmAction.shift) return;
@@ -303,7 +447,8 @@ export default function Home() {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
-          clockInTime: roundedTime,
+          clockIn: serverTimestamp(),      // admin app reads this field
+          clockInTime: roundedTime,        // mobile app display
           clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
@@ -329,7 +474,8 @@ export default function Home() {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
-          clockOutTime: roundedTime,
+          clockOut: serverTimestamp(),     // admin app reads this field
+          clockOutTime: roundedTime,       // mobile app display
           clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
@@ -377,7 +523,7 @@ export default function Home() {
           <Text style={styles.headerWelcome}>
             Welcome back, <Text style={{ color: PRIMARY_GREEN }}>{firstName}</Text>
           </Text>
-          <Text style={styles.headerOrg}>Family Forever Inc.</Text>
+          <Text style={styles.headerOrg}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
         </View>
 
         {/* TODAY'S SHIFTS */}
@@ -419,21 +565,39 @@ export default function Home() {
 
         {/* STATS STRIP */}
         <View style={styles.statsCard}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>This month</Text>
-            <Text style={styles.statValue}>{stats.total} shifts</Text>
+          {/* Period selector header */}
+          <View style={styles.statsPeriodRow}>
+            <Text style={styles.statsPeriodTitle}>My Performance</Text>
+            <Pressable
+              onPress={() => setShowPeriodPicker(true)}
+              style={styles.periodDropdown}
+            >
+              <Text style={styles.periodDropdownText}>
+                {statPeriod === "week" ? "This Week" : statPeriod === "month" ? "This Month" : "This Year"}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color={PRIMARY_GREEN} />
+            </Pressable>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Hours</Text>
-            <Text style={styles.statValue}>{stats.hours} hrs</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Completed</Text>
-            <Text style={[styles.statValue, { fontWeight: "700" }]}>
-              <Text style={{ color: PRIMARY_GREEN }}>{stats.completed}</Text> of {stats.total}
-            </Text>
+
+          {/* Numbers row */}
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Shifts</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stats.hours}</Text>
+              <Text style={styles.statLabel}>Hrs Worked</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>
+                <Text style={{ color: PRIMARY_GREEN }}>{stats.completed}</Text>
+                <Text style={{ color: GRAY_TEXT, fontSize: 14 }}>/{stats.total}</Text>
+              </Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </View>
           </View>
         </View>
 
@@ -489,6 +653,46 @@ export default function Home() {
           )}
         </View>
       </ScrollView>
+
+      {/* PERIOD PICKER MODAL */}
+      {showPeriodPicker && (
+        <Modal transparent visible animationType="slide" onRequestClose={() => setShowPeriodPicker(false)}>
+          <Pressable style={styles.modalOverlay} onPress={() => setShowPeriodPicker(false)}>
+            <Pressable style={[styles.modalContent, { alignItems: "stretch" }]} onPress={() => {}}>
+              <Text style={[styles.modalTitle, { textAlign: "left", fontSize: 18, marginBottom: 20 }]}>
+                View Period
+              </Text>
+              {[
+                { key: "week",  label: "This Week",  sub: "Shifts in the current Sun–Sat week" },
+                { key: "month", label: "This Month", sub: "Shifts in the current calendar month" },
+                { key: "year",  label: "This Year",  sub: "All shifts in the current year" },
+              ].map((opt) => (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => { setStatPeriod(opt.key); setShowPeriodPicker(false); }}
+                  style={[
+                    styles.periodOption,
+                    statPeriod === opt.key && styles.periodOptionActive,
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.periodOptionText, statPeriod === opt.key && { color: PRIMARY_GREEN }]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.periodOptionSub}>{opt.sub}</Text>
+                  </View>
+                  {statPeriod === opt.key && (
+                    <Ionicons name="checkmark-circle" size={22} color={PRIMARY_GREEN} />
+                  )}
+                </Pressable>
+              ))}
+              <Pressable onPress={() => setShowPeriodPicker(false)} style={[styles.modalCancelBtn, { marginTop: 8 }]}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
 
       {confirmAction && (
         <Modal transparent visible animationType="slide">
@@ -801,15 +1005,48 @@ const styles = StyleSheet.create({
   statsCard: {
     backgroundColor: "#F0FDF4",
     borderRadius: 16,
-    paddingVertical: 24,
+    paddingVertical: 18,
     paddingHorizontal: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     marginHorizontal: 20,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "rgba(31, 111, 67, 0.08)",
+    borderColor: "rgba(31, 111, 67, 0.12)",
+  },
+  statsPeriodRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  statsPeriodTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4B5563",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    fontFamily: "Inter-Bold",
+  },
+  periodDropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(31, 111, 67, 0.25)",
+  },
+  periodDropdownText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: PRIMARY_GREEN,
+    fontFamily: "Inter-Bold",
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   statItem: {
     flex: 1,
@@ -818,22 +1055,49 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#4B5563",
-    marginBottom: 8,
+    color: "#6B7280",
+    marginTop: 5,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     fontFamily: "Inter-Bold",
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
     color: DARK_TEXT,
     fontFamily: "Poppins-Bold",
   },
   statDivider: {
     width: 1,
-    height: 32,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    height: 36,
+    backgroundColor: "rgba(0, 0, 0, 0.07)",
+  },
+  // Period picker options
+  periodOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: "#F9FAFB",
+  },
+  periodOptionActive: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1.5,
+    borderColor: "rgba(31, 111, 67, 0.25)",
+  },
+  periodOptionText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: DARK_TEXT,
+    fontFamily: "Inter-Bold",
+    marginBottom: 2,
+  },
+  periodOptionSub: {
+    fontSize: 12,
+    color: GRAY_TEXT,
+    fontFamily: "Inter",
   },
   // Upcoming rows
   upcomingRow: {

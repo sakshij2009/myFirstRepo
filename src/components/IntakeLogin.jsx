@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { db, auth } from "../firebase";
+import { db, auth, functions } from "../firebase";
 import {
-  sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
 } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { Mail, ArrowRight, ClipboardList, Shield, Heart } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -29,17 +29,46 @@ const IntakeLogin = () => {
     "invoiceparkland@upcs.org",
   ];
 
-  const isUPCSAgency = agency.trim().toLowerCase().startsWith("upcs");
+  const normalizedAgency = agency.trim().toLowerCase();
+  const isUPCSAgency =
+    normalizedAgency.startsWith("upcs") ||
+    normalizedAgency.includes("unlimited potential");
 
   // UI state
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // ── On mount: clear stale session & detect magic link return ──────────────
+  // ── On mount: redirect if already logged in, or handle magic link return ────
   React.useEffect(() => {
-    // Clear stale session so login page always appears fresh
-    localStorage.removeItem("intakeUser");
+    // If already logged in, redirect to dashboard UNLESS this is an invitation link
+    // for a different email — in that case clear the old session so the new account
+    // can be created / signed into.
+    const existing = localStorage.getItem("intakeUser");
+    if (existing) {
+      const inviteEmail = new URLSearchParams(window.location.search).get("email");
+      if (inviteEmail) {
+        const invited = decodeURIComponent(inviteEmail).trim().toLowerCase();
+        try {
+          const storedEmail = (JSON.parse(existing)?.email || "").trim().toLowerCase();
+          if (storedEmail !== invited) {
+            // Different email in the invitation link — log out the old session
+            localStorage.removeItem("intakeUser");
+            localStorage.removeItem("user");
+            // Fall through so the second useEffect can pre-fill the sign-up form
+          } else {
+            navigate("/intake-form/dashboard", { replace: true });
+            return;
+          }
+        } catch {
+          localStorage.removeItem("intakeUser");
+          localStorage.removeItem("user");
+        }
+      } else {
+        navigate("/intake-form/dashboard", { replace: true });
+        return;
+      }
+    }
 
     // Detect if user has returned from a magic link email
     if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -57,11 +86,14 @@ const IntakeLogin = () => {
         signInWithEmailLink(auth, emailForSignIn.trim().toLowerCase(), window.location.href)
           .then(async () => {
             window.localStorage.removeItem("emailForSignIn");
-            const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
+            // Remove magic link params from URL so re-renders don't re-process it
+            window.history.replaceState({}, document.title, "/intake-form/login");
+            const { collection, query: fbQuery, where, getDocs, doc: fbDoc, updateDoc } = await import("firebase/firestore");
             const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
             const snap = await getDocs(q);
             if (!snap.empty) {
-              const userData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+              await updateDoc(fbDoc(db, "intakeUsers", snap.docs[0].id), { verified: true });
+              const userData = { id: snap.docs[0].id, ...snap.docs[0].data(), verified: true };
               localStorage.setItem("intakeUser", JSON.stringify(userData));
               localStorage.setItem("user", JSON.stringify(userData));
               navigate("/intake-form/dashboard");
@@ -72,6 +104,8 @@ const IntakeLogin = () => {
           })
           .catch((err) => {
             console.error("Magic link error:", err);
+            // Remove the bad/expired magic link params so the page stops trying to process them
+            window.history.replaceState({}, document.title, "/intake-form/login");
             setError("The link may have expired or already been used. Please request a new one.");
             setIsLoading(false);
           });
@@ -101,7 +135,7 @@ const IntakeLogin = () => {
     }
   }, [searchParams]);
 
-  // ── Sign In — check email exists then send magic link ───────────────────────
+  // ── Sign In — first-time users get a magic link; returning users go straight to dashboard ──
   const handleSignIn = async () => {
     setError("");
     setMessage("");
@@ -118,22 +152,27 @@ const IntakeLogin = () => {
 
       if (snap.empty) {
         setError("No account found with this email. Please sign up first.");
-        setIsLoading(false);
         return;
       }
 
-      // Send magic link
-      const encodedEmail = encodeURIComponent(loginEmail.trim().toLowerCase());
-      const actionCodeSettings = {
-        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
-        handleCodeInApp: true,
-      };
-      await sendSignInLinkToEmail(auth, loginEmail.trim().toLowerCase(), actionCodeSettings);
-      window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
+      const docData = snap.docs[0].data();
 
-      setMessage("Sign-in link sent! Please check your email and click the link to continue.");
+      // First-time sign-in: send a one-time magic link for verification
+      if (docData.verified === false) {
+        const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+        await sendSignInEmail({ email: loginEmail.trim().toLowerCase() });
+        window.localStorage.setItem("emailForSignIn", loginEmail.trim().toLowerCase());
+        setMessage("A verification link has been sent to your email. Please click it to access your dashboard.");
+        return;
+      }
+
+      // Verified user: go straight to dashboard
+      const userData = { id: snap.docs[0].id, ...docData };
+      localStorage.setItem("intakeUser", JSON.stringify(userData));
+      localStorage.setItem("user", JSON.stringify(userData));
+      navigate("/intake-form/dashboard");
     } catch (err) {
-      setError("Failed to send sign-in link: " + err.message);
+      setError("Sign in failed: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -169,39 +208,39 @@ const IntakeLogin = () => {
       let showAssessmentLink = false;
       let showIntakeFormLink = role !== "Parent"; // Default true if not parent, but parents need explicit logic
       let linkedParentId = "";
-      
-      if (role === "Parent" || role.toLowerCase() === "parent") {
-         const userEmail = email.trim().toLowerCase();
-         // Check if they are primary email
-         let invQ = fbQuery(fbCollection(db, "parentInvites"), where("primaryEmail", "==", userEmail));
-         let invSnap = await getDocs(invQ);
-         
-         if (!invSnap.empty) {
-            const latestInvite = invSnap.docs.sort((a,b) => b.data().createdAt - a.data().createdAt)[0].data();
-            showAssessmentLink = !!latestInvite.primaryShowAssessmentLink;
-            showIntakeFormLink = !!latestInvite.primaryShowIntakeFormLink;
-         } else {
-            // Check if they are secondary email
-            const secondQ = fbQuery(fbCollection(db, "parentInvites"), where("secondParentEmail", "==", userEmail));
-            const secondSnap = await getDocs(secondQ);
-            
-            if (!secondSnap.empty) {
-               const latestInvite = secondSnap.docs.sort((a,b) => b.data().createdAt - a.data().createdAt)[0].data();
-               showAssessmentLink = !!latestInvite.secondShowAssessmentLink;
-               showIntakeFormLink = !!latestInvite.secondShowIntakeFormLink;
 
-               // Link to primary parent if they exist
-               if (latestInvite.primaryEmail) {
-                  const pQuery = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", latestInvite.primaryEmail));
-                  const pSnap = await getDocs(pQuery);
-                  if (!pSnap.empty) {
-                     linkedParentId = pSnap.docs[0].id;
-                  }
-               }
-            } else {
-               showIntakeFormLink = true; // Fallback
+      if (role === "Parent" || role.toLowerCase() === "parent") {
+        const userEmail = email.trim().toLowerCase();
+        // Check if they are primary email
+        let invQ = fbQuery(fbCollection(db, "parentInvites"), where("primaryEmail", "==", userEmail));
+        let invSnap = await getDocs(invQ);
+
+        if (!invSnap.empty) {
+          const latestInvite = invSnap.docs.sort((a, b) => b.data().createdAt - a.data().createdAt)[0].data();
+          showAssessmentLink = !!latestInvite.primaryShowAssessmentLink;
+          showIntakeFormLink = !!latestInvite.primaryShowIntakeFormLink;
+        } else {
+          // Check if they are secondary email
+          const secondQ = fbQuery(fbCollection(db, "parentInvites"), where("secondParentEmail", "==", userEmail));
+          const secondSnap = await getDocs(secondQ);
+
+          if (!secondSnap.empty) {
+            const latestInvite = secondSnap.docs.sort((a, b) => b.data().createdAt - a.data().createdAt)[0].data();
+            showAssessmentLink = !!latestInvite.secondShowAssessmentLink;
+            showIntakeFormLink = !!latestInvite.secondShowIntakeFormLink;
+
+            // Link to primary parent if they exist
+            if (latestInvite.primaryEmail) {
+              const pQuery = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", latestInvite.primaryEmail));
+              const pSnap = await getDocs(pQuery);
+              if (!pSnap.empty) {
+                linkedParentId = pSnap.docs[0].id;
+              }
             }
-         }
+          } else {
+            showIntakeFormLink = true; // Fallback
+          }
+        }
       }
 
       // Add to Firestore
@@ -215,23 +254,12 @@ const IntakeLogin = () => {
         showAssessmentLink,
         showIntakeFormLink,
         ...(linkedParentId ? { linkedParentId } : {}),
+        verified: false,
         createdAt: new Date(),
       };
       await addDoc(fbCollection(db, "intakeUsers"), newUser);
 
-      // Send verification magic link
-      const encodedEmail = encodeURIComponent(email.trim().toLowerCase());
-      const actionCodeSettings = {
-        url: `${window.location.origin}/intake-form/login?email=${encodedEmail}`,
-        handleCodeInApp: true,
-      };
-      await sendSignInLinkToEmail(auth, email.trim().toLowerCase(), actionCodeSettings);
-      window.localStorage.setItem("emailForSignIn", email.trim().toLowerCase());
-
-      // Switch to Sign In tab and show success
-      setIsSignUp(false);
-      setLoginEmail(email.trim().toLowerCase());
-      setMessage("Account created! A verification link has been sent to your email. Click it to sign in.");
+      setMessage("Account created successfully! Click \"Sign In\" below to access your dashboard.");
     } catch (err) {
       setError("Sign up failed: " + err.message);
     } finally {
@@ -519,7 +547,7 @@ const IntakeLogin = () => {
                 <span
                   className="font-medium cursor-pointer hover:underline"
                   style={{ color: "#1B5E37" }}
-                  onClick={() => { setIsSignUp(false); setError(""); }}
+                  onClick={() => { setLoginEmail(email); setIsSignUp(false); setError(""); setMessage(""); }}
                 >
                   Sign In
                 </span>
@@ -576,13 +604,7 @@ const IntakeLogin = () => {
                 )}
               </button>
 
-              <div className="flex items-center" style={{ margin: "24px 0", gap: 16 }}>
-                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-                <span style={{ fontSize: 12, fontWeight: 500, color: "#9CA3AF" }}>or</span>
-                <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-              </div>
-
-              <p className="text-center" style={{ fontSize: 13, color: "#6B7280" }}>
+              <p className="text-center mt-6" style={{ fontSize: 13, color: "#6B7280" }}>
                 Don't have an account?{" "}
                 <span
                   className="font-medium cursor-pointer hover:underline"

@@ -9,12 +9,21 @@ const CARDS = [
   { key: "shifts",   label: "Total Shifts",   icon: <Calendar size={17} strokeWidth={1.7} />,    iconBg: "#fefce8", iconColor: "#facc15" },
   { key: "services", label: "Services",       icon: <CheckCircle size={17} strokeWidth={1.7} />, iconBg: "#f5f3ff", iconColor: "#a78bfa" },
   { key: "revenue",  label: "Revenue",        icon: <DollarSign size={17} strokeWidth={1.7} />,  iconBg: "#f0fdf4", iconColor: "#34d399", prefix: "$" },
-  { key: "pending",  label: "Pending",        icon: <Clock size={17} strokeWidth={1.7} />,       iconBg: "#fff7ed", iconColor: "#fb923c" },
+  { key: "pending",  label: "Pending Shifts",  icon: <Clock size={17} strokeWidth={1.7} />,       iconBg: "#fff7ed", iconColor: "#fb923c" },
 ];
 
 // Returns { start, end, prevStart, prevEnd } for the given filter
-const getRange = (filter) => {
+const getRange = (filter, dateRange) => {
   const now = new Date();
+  if (filter === "Custom" && dateRange?.from && dateRange?.to) {
+    const start = new Date(dateRange.from + "T00:00:00");
+    const end   = new Date(dateRange.to   + "T23:59:59");
+    // prev period = same duration immediately before start
+    const duration  = end - start;
+    const prevEnd   = new Date(start.getTime() - 1);
+    const prevStart = new Date(start.getTime() - duration);
+    return { start, end, prevStart, prevEnd };
+  }
   if (filter === "Weekly") {
     const day = now.getDay();
     const diffToMon = (day === 0 ? -6 : 1 - day);
@@ -52,14 +61,16 @@ const shiftDate = (s) => {
 
 const inRange = (date, start, end) => date && date >= start && date <= end;
 
-export default function KPIStrip({ filter = "Weekly" }) {
+export default function KPIStrip({ filter = "Weekly", dateRange }) {
   const [data,   setData]   = useState({ clients: 0, staff: 0, shifts: 0, services: 0, revenue: 0, pending: 0 });
   const [trends, setTrends] = useState({ clients: 0, staff: 0, shifts: 0, services: 0, revenue: 0, pending: 0 });
 
   useEffect(() => {
+    // Skip Custom fetch until both dates are set
+    if (filter === "Custom" && (!dateRange?.from || !dateRange?.to)) return;
     const load = async () => {
       try {
-        const { start, end, prevStart, prevEnd } = getRange(filter);
+        const { start, end, prevStart, prevEnd } = getRange(filter, dateRange);
 
         const [clientsSnap, usersSnap, shiftsSnap, revenueSnap] = await Promise.all([
           getDocs(collection(db, "clients")),
@@ -124,7 +135,7 @@ export default function KPIStrip({ filter = "Weekly" }) {
       }
     };
     load();
-  }, [filter]);
+  }, [filter, dateRange?.from, dateRange?.to]);
 
   const fmt = (key, val) => {
     const card = CARDS.find(c => c.key === key);

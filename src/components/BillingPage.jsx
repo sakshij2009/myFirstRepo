@@ -30,11 +30,10 @@ export default function BillingPage() {
           return {
             id: d.id,
             ...item,
-            // Mocking these fields smoothly to match the premium UI requirement if data is missing
-            totalBilled: item.totalBilled || Math.floor(Math.random() * 40000) + 10000,
-            pending: item.pending || Math.floor(Math.random() * 10000),
-            activeClients: item.activeClients || Math.floor(Math.random() * 15) + 2,
-            lastInvoice: item.lastInvoice || "Feb 28, 2026",
+            totalBilled: item.totalBilled || 0,
+            pending: item.pending || 0,
+            activeClients: item.activeClients || 0,
+            lastInvoice: item.lastInvoice || "—",
             status: item.inactive ? "Inactive" : "Active"
           };
         });
@@ -66,8 +65,8 @@ export default function BillingPage() {
   const sumPending = (list) => list.reduce((a, b) => a + (b.pending || 0), 0);
 
   // Overall sums
-  const totalMonthBilled = sumBilled(agencies) || 192200;
-  const totalPending = sumPending(agencies) || 45600;
+  const totalMonthBilled = sumBilled(agencies);
+  const totalPending = sumPending(agencies);
 
   if (selectedAgency) {
     return <BillingAgencyDetails agency={selectedAgency} onBack={() => setSelectedAgency(null)} />;
@@ -99,9 +98,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <DollarSign size={14} className="text-emerald-500" /> Total Billed This Month
               </div>
-              <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <TrendingUp size={10} strokeWidth={3} /> +12.4%
-              </span>
+              <span className="text-[11px] font-bold text-gray-400">—</span>
             </div>
             <p className="text-[28px] font-black tracking-tight" style={{ color: "#111827" }}>{fmtC(totalMonthBilled)}</p>
             <p className="text-xs font-bold text-gray-400 mt-1">vs last month</p>
@@ -112,7 +109,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <Calendar size={14} className="text-amber-500" /> Pending Invoices
               </div>
-              <span className="text-[11px] font-bold text-gray-400">8 invoices</span>
+              <span className="text-[11px] font-bold text-gray-400">0 invoices</span>
             </div>
             <p className="text-[28px] font-black tracking-tight" style={{ color: "#111827" }}>{fmtC(totalPending)}</p>
             <p className="text-xs font-bold text-amber-600 mt-1">awaiting payment</p>
@@ -123,9 +120,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <Building2 size={14} className="text-blue-500" /> Active Agencies
               </div>
-              <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <TrendingUp size={10} strokeWidth={3} /> +2 new
-              </span>
+              <span className="text-[11px] font-bold text-gray-400">—</span>
             </div>
             <p className="text-[28px] font-black tracking-tight" style={{ color: "#111827" }}>
               {String(govAccounts.length + npAccounts.length).padStart(2, "0")}
@@ -138,9 +133,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
                 <Heart size={14} className="text-purple-500" /> Active Private Families
               </div>
-              <span className="text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <TrendingUp size={10} strokeWidth={3} /> +1 new
-              </span>
+              <span className="text-[11px] font-bold text-gray-400">—</span>
             </div>
             <p className="text-[28px] font-black tracking-tight" style={{ color: "#111827" }}>
               {String(privAccounts.length).padStart(2, "0")}

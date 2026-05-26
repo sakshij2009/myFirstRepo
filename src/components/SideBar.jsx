@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutGrid, Users, UserPlus, Calendar, CheckCircle, Car, FileText, Building,
-  BarChart3, Settings, ChevronLeft, ChevronRight, Inbox, UserCheck, ClipboardCheck,
+  BarChart3, ChevronLeft, ChevronRight, ChevronDown, Inbox, UserCheck, ClipboardCheck,
   Receipt, Wallet, Landmark, LogOut,
 } from "lucide-react";
-import { collection, getCountFromServer } from "firebase/firestore";
+import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 
 const SideBar = ({ user, onLogout, onWidthChange }) => {
-  const [collapsed, setCollapsed] = useState(true); // Default to collapsed
+  const [collapsed, setCollapsed] = useState(true);
   const [badges, setBadges] = useState({ clients: null, shifts: null, intakeWorkers: null, privateFamilies: null });
+  const [openSections, setOpenSections] = useState({ "Intake Section": false, "Accounting": false, "Reports": false });
   const navigate = useNavigate();
 
   const handleMouseEnter = () => {
@@ -21,6 +22,11 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
   const handleMouseLeave = () => {
     setCollapsed(true);
     if (onWidthChange) onWidthChange(64);
+  };
+
+  const toggleSection = (e, group) => {
+    e.stopPropagation();
+    setOpenSections((prev) => ({ ...prev, [group]: !prev[group] }));
   };
 
   const initials = user?.name
@@ -34,19 +40,17 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [clients, shifts, intakeUsersSnap] = await Promise.all([
+        const [clients, shifts, intakeWorkers, privateFamilies] = await Promise.all([
           getCountFromServer(collection(db, "clients")),
           getCountFromServer(collection(db, "shifts")),
-          getDocs(collection(db, "intakeUsers")),
+          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Intake Worker"))),
+          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Parent"))),
         ]);
-        
-        const intakeUsers = intakeUsersSnap.docs.map(doc => doc.data());
-        
         setBadges({
           clients: clients.data().count || null,
           shifts: shifts.data().count || null,
-          intakeWorkers: intakeUsers.filter(u => u.role?.toLowerCase() === "intake worker").length || null,
-          privateFamilies: intakeUsers.filter(u => u.role?.toLowerCase() === "parent").length || null,
+          intakeWorkers: intakeWorkers.data().count || null,
+          privateFamilies: privateFamilies.data().count || null,
         });
       } catch (e) { /* silently ignore */ }
     };
@@ -56,33 +60,42 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
   const NAV_GROUPS = [
     {
       group: "Main",
+      collapsible: false,
       items: [
-        { label: "Dashboard",  path: "/admin-dashboard/dashboard",      icon: <LayoutGrid size={16} strokeWidth={1.7} /> },
-        { label: "Clients",    path: "/admin-dashboard/clients",         icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.clients },
-        { label: "Staff",      path: "/admin-dashboard/users",           icon: <UserPlus size={16} strokeWidth={1.7} /> },
-        { label: "Shifts",     path: "/admin-dashboard/shifts",          icon: <Calendar size={16} strokeWidth={1.7} />,   badge: badges.shifts },
+        { label: "Dashboard",       path: "/admin-dashboard/dashboard",       icon: <LayoutGrid size={16} strokeWidth={1.7} /> },
+        { label: "Clients",         path: "/admin-dashboard/clients",          icon: <Users size={16} strokeWidth={1.7} />,         badge: badges.clients },
+        { label: "Staff",           path: "/admin-dashboard/users",            icon: <UserPlus size={16} strokeWidth={1.7} /> },
+        { label: "Shifts",          path: "/admin-dashboard/shifts",           icon: <Calendar size={16} strokeWidth={1.7} />,      badge: badges.shifts },
+        { label: "Transportations", path: "/admin-dashboard/transportation",   icon: <Car size={16} strokeWidth={1.7} /> },
+        { label: "Services",        path: "/admin-dashboard/services",         icon: <CheckCircle size={16} strokeWidth={1.7} /> },
       ],
     },
     {
-      group: "Services",
+      group: "Intake Section",
+      collapsible: true,
       items: [
-        { label: "Services",        path: "/admin-dashboard/services",        icon: <CheckCircle size={16} strokeWidth={1.7} /> },
-        { label: "Transportations", path: "/admin-dashboard/transportation",  icon: <Car size={16} strokeWidth={1.7} /> },
-        { label: "Intake Workers",  path: "/admin-dashboard/intake-workers",  icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
-        { label: "Private Families", path: "/admin-dashboard/private-families", icon: <Users size={16} strokeWidth={1.7} />,      badge: badges.privateFamilies },
-        { label: "Intake Forms",    path: "/admin-dashboard/intake-forms",    icon: <FileText size={16} strokeWidth={1.7} /> },
+        { label: "Intake Forms",     path: "/admin-dashboard/intake-forms",     icon: <FileText size={16} strokeWidth={1.7} /> },
+        { label: "Private Families", path: "/admin-dashboard/private-families", icon: <Users size={16} strokeWidth={1.7} />,    badge: badges.privateFamilies },
+        { label: "Intake Workers",   path: "/admin-dashboard/intake-workers",   icon: <UserCheck size={16} strokeWidth={1.7} />, badge: badges.intakeWorkers },
       ],
     },
     {
-      group: "Admin",
+      group: "Accounting",
+      collapsible: true,
       items: [
-        { label: "Agencies",         path: "/admin-dashboard/agency",           icon: <Building size={16} strokeWidth={1.7} /> },
+        { label: "Billing",       path: "/admin-dashboard/billing",       icon: <Receipt size={16} strokeWidth={1.7} /> },
+        { label: "Payroll",       path: "/admin-dashboard/payroll",       icon: <Wallet size={16} strokeWidth={1.7} /> },
+        { label: "GST Reporting", path: "/admin-dashboard/gst-reporting", icon: <Landmark size={16} strokeWidth={1.7} /> },
+        { label: "Agencies",      path: "/admin-dashboard/agency",        icon: <Building size={16} strokeWidth={1.7} /> },
+      ],
+    },
+    {
+      group: "Reports",
+      collapsible: true,
+      items: [
         { label: "Staff Evaluation", path: "/admin-dashboard/staff-evaluation", icon: <ClipboardCheck size={16} strokeWidth={1.7} /> },
-        { label: "Billing",          path: "/admin-dashboard/billing",          icon: <Receipt size={16} strokeWidth={1.7} /> },
-        { label: "Payroll",          path: "/admin-dashboard/payroll",          icon: <Wallet size={16} strokeWidth={1.7} /> },
-        { label: "GST Reporting",    path: "/admin-dashboard/gst-reporting",    icon: <Landmark size={16} strokeWidth={1.7} /> },
-        { label: "Reports",          path: "/admin-dashboard/reports",          icon: <BarChart3 size={16} strokeWidth={1.7} /> },
-        { label: "Settings",         path: "/admin-dashboard/settings",         icon: <Settings size={16} strokeWidth={1.7} /> },
+        { label: "Top Performers",   path: "/admin-dashboard/top-performers",   icon: <BarChart3 size={16} strokeWidth={1.7} /> },
+        { label: "One on One",       path: "/admin-dashboard/one-on-one",       icon: <Inbox size={16} strokeWidth={1.7} /> },
       ],
     },
   ];
@@ -106,67 +119,93 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-2 overflow-y-auto overflow-x-hidden sidebar-nav"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+      <nav
+        className="flex-1 px-3 py-2 overflow-y-auto overflow-x-hidden sidebar-nav"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
         <style>{`.sidebar-nav::-webkit-scrollbar{display:none!important}`}</style>
-        {NAV_GROUPS.map(({ group, items }, gi) => (
-          <div key={group}>
-            {!collapsed && gi > 0 && group !== "Admin" && (
-              <div
-                className="px-3 pt-4 pb-2 text-[10px] uppercase font-semibold tracking-wider"
-                style={{ color: "rgba(255,255,255,0.35)" }}
-              >
-                {group}
-              </div>
-            )}
-            {items.map((item) => (
-              <NavLink
-                key={item.label}
-                to={item.path}
-                end={item.label === "Dashboard"}
-                className={({ isActive }) =>
-                  `w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all relative group ${
-                    isActive ? "bg-white/[0.11] text-white" : "text-white/50 hover:text-white hover:bg-white/10"
-                  }`
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r"
-                        style={{ backgroundColor: "#5ccf80" }}
-                      />
-                    )}
-                    <div className="shrink-0" style={{ opacity: isActive ? 1 : 0.6 }}>
-                      {item.icon}
-                    </div>
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1 text-left text-sm font-medium truncate">{item.label}</span>
-                        {item.badge != null && item.badge > 0 && (
-                          <span
-                            className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none"
-                            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)" }}
-                          >
-                            {item.badge}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        ))}
+
+        {NAV_GROUPS.map(({ group, collapsible, items }, gi) => {
+          const isOpen = !collapsible || collapsed || openSections[group];
+
+          return (
+            <div key={group}>
+              {/* Section header — only shown when sidebar is expanded and it's not the Main group */}
+              {!collapsed && gi > 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => collapsible && toggleSection(e, group)}
+                  className="w-full flex items-center justify-between px-3 pt-4 pb-2"
+                  style={{ cursor: collapsible ? "pointer" : "default" }}
+                >
+                  <span
+                    className="text-[10px] uppercase font-semibold tracking-wider"
+                    style={{ color: "rgba(255,255,255,0.35)" }}
+                  >
+                    {group}
+                  </span>
+                  {collapsible && (
+                    <ChevronDown
+                      size={13}
+                      strokeWidth={2}
+                      style={{
+                        color: "rgba(255,255,255,0.35)",
+                        transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                        transition: "transform 0.2s ease",
+                      }}
+                    />
+                  )}
+                </button>
+              )}
+
+              {/* Items — always visible when sidebar is collapsed (icon-only), toggled when expanded */}
+              {isOpen && items.map((item) => (
+                <NavLink
+                  key={item.label}
+                  to={item.path}
+                  end={item.label === "Dashboard"}
+                  className={({ isActive }) =>
+                    `w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all relative group ${
+                      isActive ? "bg-white/[0.11] text-white" : "text-white/50 hover:text-white hover:bg-white/10"
+                    }`
+                  }
+                  title={collapsed ? item.label : undefined}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <div
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r"
+                          style={{ backgroundColor: "#5ccf80" }}
+                        />
+                      )}
+                      <div className="shrink-0" style={{ opacity: isActive ? 1 : 0.6 }}>
+                        {item.icon}
+                      </div>
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left text-sm font-medium truncate">{item.label}</span>
+                          {item.badge != null && item.badge > 0 && (
+                            <span
+                              className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none"
+                              style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)" }}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Bottom */}
       <div className="p-3 shrink-0 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-
-        {/* Logout */}
         {!collapsed ? (
           <button
             onClick={onLogout}
@@ -186,7 +225,6 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
           </button>
         )}
 
-        {/* User profile (only info, no toggle) */}
         {!collapsed && (
           <div className="flex items-center gap-3 p-2">
             <div className="w-9 h-9 rounded-full bg-emerald-400 flex items-center justify-center text-white font-semibold text-sm shrink-0">

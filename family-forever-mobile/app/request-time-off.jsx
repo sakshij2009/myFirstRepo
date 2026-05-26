@@ -101,8 +101,11 @@ export default function RequestTimeOff() {
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter(
           (s) =>
-            s.userId === uid ||
-            (s.name && user.name && s.name.toLowerCase() === user.name.toLowerCase())
+            s.userId === uid || s.staffId === uid ||
+            (s.name && user.name && s.name.toLowerCase() === user.name.toLowerCase()) ||
+            s.secondaryUserId === uid ||
+            (s.secondaryUserName && user.name && s.secondaryUserName.toLowerCase() === user.name.toLowerCase()) ||
+            (s.secondaryUser && user.name && s.secondaryUser.toLowerCase() === user.name.toLowerCase())
         );
       setAllShifts(mine);
       setLoadingShifts(false);

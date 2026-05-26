@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, getDocs, addDoc, query, where, updateDoc } from "firebase/firestore";
-import { sendSignInLinkToEmail } from "firebase/auth";
-import { db, auth } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { db } from "../firebase";
+import { functions } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Plus, Eye, Edit2, Trash2, ChevronLeft, ChevronRight, Mail, X, Users,
@@ -109,12 +110,7 @@ const ManagePrivateFamilies = () => {
     setInviting(true);
 
     const primaryEmail = inviteEmail.trim().toLowerCase();
-    const encodedEmail = encodeURIComponent(primaryEmail);
-    const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
-    const actionCodeSettings = {
-      url: `${continueBase}/intake-form/login?email=${encodedEmail}&role=parent`,
-      handleCodeInApp: true,
-    };
+    const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
 
     try {
       // Save per-parent settings to Firestore before sending invite
@@ -128,17 +124,12 @@ const ManagePrivateFamilies = () => {
         createdAt: getEdmontonToday(),
       });
 
-      await sendSignInLinkToEmail(auth, primaryEmail, actionCodeSettings);
+      await sendSignInEmail({ email: primaryEmail, role: "parent" });
 
       // Also send invite to second parent if provided
       if (secondParentEmail.trim()) {
         const secondEmail = secondParentEmail.trim().toLowerCase();
-        const encodedSecond = encodeURIComponent(secondEmail);
-        const secondActionCodeSettings = {
-          url: `${continueBase}/intake-form/login?email=${encodedSecond}&role=parent`,
-          handleCodeInApp: true,
-        };
-        await sendSignInLinkToEmail(auth, secondEmail, secondActionCodeSettings);
+        await sendSignInEmail({ email: secondEmail, role: "parent" });
       }
 
       const sentTo = secondParentEmail.trim()

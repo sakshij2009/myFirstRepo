@@ -289,6 +289,10 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
       return form.shared.children.map(c => c.fullName).join(", ");
     }
     const clients = form.clients ? Object.values(form.clients) : (Array.isArray(form.inTakeClients) ? form.inTakeClients : []);
+    // Family form: show "Family Name (N clients)"
+    if (form.familyName && clients.length > 1) {
+      return `${form.familyName} (${clients.length} clients)`;
+    }
     const names = clients.map(c => c?.fullName || c?.name || c?.clientName || c?.firstName || c?.displayName || null).filter(Boolean);
     if (names.length) return names.join(", ");
     return form.clientName || form.nameInClientTable || form.name || form.fullName || form.client?.name || form.otherInfo?.clientName || "Unnamed";
@@ -476,13 +480,23 @@ function FormsTable({ forms, loading, searchTerm, setSearchTerm, activeFilter, s
                         title="View">
                         <Eye size={15} style={{ color: "#6b7280" }} />
                       </button>
-                      {status !== "approved" && (
+                      {/* Edit button — only shown when admin has enabled Editing Assist (isEditable !== false) */}
+                      {status !== "approved" && row.isEditable !== false && (
                         <button
                           onClick={() => navigate(`/intake-form/edit/${row.id}`)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
                           title="Edit">
                           <Pencil size={15} style={{ color: "#6b7280" }} />
                         </button>
+                      )}
+                      {/* Show a locked indicator when admin has disabled editing */}
+                      {status !== "approved" && row.isEditable === false && (
+                        <span
+                          className="p-1.5 rounded-lg"
+                          title="Editing disabled by admin"
+                          style={{ cursor: "not-allowed", opacity: 0.4 }}>
+                          <Pencil size={15} style={{ color: "#6b7280" }} />
+                        </span>
                       )}
                       {status === "draft" && (
                         <button
@@ -642,6 +656,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
   const currentUser = storedUser;
   const workerName = currentUser?.name || currentUser?.workerName || "";
   const workerId = currentUser?.id || currentUser?.uid || "";
+  const workerEmail = (currentUser?.email || "").trim().toLowerCase();
 
   // ── Fetch category map ──
   useEffect(() => {
@@ -657,7 +672,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
 
   // ── Real-time intake forms listener (fetches from ALL 3 collections) ──
   useEffect(() => {
-    if (!workerId && !workerName) { setLoading(false); return; }
+    if (!workerId && !workerName && !workerEmail) { setLoading(false); return; }
     setLoading(true);
 
     let oldAppForms = [];
@@ -676,7 +691,15 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
       });
       const mine = unique.filter(f => {
         const fWorkerId = f.workerId || f.workerInfo?.workerId || "";
+        const fWorkerEmail = (f.intakeworkerEmail || f.workerEmail || f.workerInfo?.workerEmail || "").trim().toLowerCase();
         const fWorkerName = f.workerInfo?.workerName || f.intakeworkerName || f.nameOfPerson || f.staffName || "";
+
+        // If the form has an email field, match ONLY by email — prevents same-named
+        // workers from seeing each other's forms.
+        if (fWorkerEmail) {
+          return workerEmail && fWorkerEmail === workerEmail;
+        }
+        // Older forms without email: fall back to document ID then name.
         return (
           (workerId && fWorkerId === workerId) ||
           (workerName && fWorkerName.trim().toLowerCase() === workerName.trim().toLowerCase())
@@ -813,8 +836,10 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     const fallbackClient = form.clientName || form.nameInClientTable || form.name || form.fullName || form.client?.name || form.client?.fullName || form.otherInfo?.clientName || form.otherInfo?.name || null;
     const fallbackFamily = form.familyName || form.lastName || form.surname || form.family || form.family_name || null;
 
-    // Combine multiple clients into a single, comma-separated display — ensure at least one client name exists
-    const clientNames = (clients.length ? clients.map(pickClientName).filter(Boolean) : []).length ? (clients.map(pickClientName).filter(Boolean).join(", ")) : (fallbackClient || "Unnamed");
+    // Family form: show "Family Name (N clients)" in client name column
+    const clientNames = (form.familyName && clients.length > 1)
+      ? `${form.familyName} (${clients.length} clients)`
+      : ((clients.length ? clients.map(pickClientName).filter(Boolean) : []).length ? (clients.map(pickClientName).filter(Boolean).join(", ")) : (fallbackClient || "Unnamed"));
     const familyNames = (clients.length ? clients.map(pickFamilyName).filter(Boolean) : []).length ? clients.map(pickFamilyName).filter(Boolean).join(", ") : (fallbackFamily || "—");
 
     // Attempt to find any DOB available (kept for debugging/fallback; DOB column removed from table)
@@ -911,8 +936,19 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
       if (!isShiftModalOpen || !selectedShiftFormId) return;
       setShiftLoading(true);
       try {
-        const qSnap = await getDocs(query(collection(db, "ShiftReports"), where("formId", "==", selectedShiftFormId), orderBy("createdAt", "desc")));
-        const rows = qSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Try multiple field names — different parts of the app may link shift reports differently
+        let rows = [];
+        const tryField = async (field) => {
+          try {
+            const q = query(collection(db, "ShiftReports"), where(field, "==", selectedShiftFormId), orderBy("createdAt", "desc"));
+            const snap = await getDocs(q);
+            return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          } catch { return []; }
+        };
+        rows = await tryField("formId");
+        if (!rows.length) rows = await tryField("intakeFormId");
+        if (!rows.length) rows = await tryField("inTakeFormId");
+        if (!rows.length) rows = await tryField("clientId");
         if (!cancelled) setShiftReports(rows);
       } catch (e) {
         console.error("Failed to load shift reports", e);
@@ -1084,7 +1120,17 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
                                   <td className="py-2 text-sm text-gray-700">{s.createdAt?.toDate ? s.createdAt.toDate().toLocaleString() : (s.createdAt ? new Date(s.createdAt).toLocaleString() : "—")}</td>
                                   <td className="py-2 text-sm text-gray-700">{s.workerName || s.author || "—"}</td>
                                   <td className="py-2 text-sm text-gray-700">{s.summary || s.notes || "—"}</td>
-                                  <td className="py-2 text-sm text-gray-700">{s.viewUrl ? (<a href={s.viewUrl} target="_blank" rel="noreferrer" className="text-emerald-600">Open</a>) : "—"}</td>
+                                  <td className="py-2 text-sm text-gray-700">
+                                    {s.viewUrl ? (
+                                      <a href={s.viewUrl} target="_blank" rel="noreferrer" className="text-emerald-600 hover:underline">Open Report</a>
+                                    ) : (
+                                      <button
+                                        onClick={() => { setIsShiftModalOpen(false); navigate(`/intake-form/view/${selectedShiftFormId}`); }}
+                                        className="text-emerald-600 hover:underline text-sm">
+                                        View Client Form
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>

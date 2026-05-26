@@ -2,31 +2,31 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { collection, getDocs } from "firebase/firestore";
-import { 
-  Building2, 
-  Users, 
-  UserCheck, 
-  Clock, 
-  AlertCircle, 
-  ArrowRight 
+import {
+  Building2,
+  Users,
+  UserCheck,
+  Clock,
+  AlertCircle,
+  ArrowRight
 } from "lucide-react";
 
-const ProgramCard = ({ 
-  title, 
-  houses, 
-  clients, 
-  staff, 
-  compliance, 
-  complianceColor, 
-  pending, 
-  critical, 
-  icon: Icon, 
-  iconBg, 
+const ProgramCard = ({
+  title,
+  houses,
+  clients,
+  staff,
+  compliance,
+  complianceColor,
+  pending,
+  critical,
+  icon: Icon,
+  iconBg,
   iconColor,
   onClick
 }) => {
   return (
-    <div 
+    <div
       onClick={onClick}
       className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all duration-200 group cursor-pointer"
     >
@@ -77,7 +77,7 @@ const ProgramCard = ({
       {/* Action Button */}
       <div className="flex justify-center">
         <button className="flex items-center gap-2 text-[#64748b] font-bold text-[13px] group-hover:text-[#0f172a] transition-colors">
-          View Houses 
+          View Houses
           <ArrowRight size={14} strokeWidth={3} className="transition-transform group-hover:translate-x-0.5" />
         </button>
       </div>
@@ -169,21 +169,21 @@ const ServicesPage = () => {
     <div className="flex flex-col min-h-screen bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Header Section */}
       <div className="px-8 py-10">
-        <h1 
-          className="font-bold text-[#0f172a] mb-1.5" 
+        <h1
+          className="font-bold text-[#0f172a] mb-1.5"
           style={{ fontSize: "30px", letterSpacing: "-0.02em" }}
         >
           Services
         </h1>
-        <p 
-          className="text-[#64748b] mb-12" 
+        <p
+          className="text-[#64748b] mb-12"
           style={{ fontSize: "15px", fontWeight: 500 }}
         >
           Manage programs, houses, and compliance across all facilities
         </p>
-        
-        <h2 
-          className="font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-8" 
+
+        <h2
+          className="font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-8"
           style={{ fontSize: "11px" }}
         >
           PROGRAM OVERVIEW
@@ -192,15 +192,15 @@ const ServicesPage = () => {
         {/* Programs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-[1200px]">
           {programs.map((program, index) => (
-            <ProgramCard 
-              key={index} 
-              {...program} 
+            <ProgramCard
+              key={index}
+              {...program}
               onClick={() => program.path && navigate(program.path)}
             />
           ))}
         </div>
       </div>
-      
+
       <div className="flex-1"></div>
     </div>
   );

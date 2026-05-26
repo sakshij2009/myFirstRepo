@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,7 +16,8 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState, useMemo } from "react";
 import { doc, onSnapshot, updateDoc, collection, query, where } from "firebase/firestore";
-import { db } from "../src/firebase/config";
+import { db, auth } from "../src/firebase/config";
+import { sendPasswordResetEmail } from "firebase/auth";
 import * as ImagePicker from "expo-image-picker";
 import { uploadProfilePhoto } from "../src/utils/uploadProfilePhoto";
 
@@ -63,7 +65,8 @@ export default function Profile() {
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const mine = data.filter(s =>
-        s?.userId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase()
+        s?.userId === user?.userId || s?.staffId === user?.userId || s?.name?.toLowerCase() === user?.name?.toLowerCase() ||
+        s?.secondaryUserId === user?.userId || s?.secondaryUserName?.toLowerCase() === user?.name?.toLowerCase() || s?.secondaryUser?.toLowerCase() === user?.name?.toLowerCase()
       );
       setShifts(mine);
     });
@@ -130,6 +133,51 @@ export default function Profile() {
     }
   };
 
+  const handleQuickAction = (action) => {
+    switch (action) {
+      case "Change Password":
+        Alert.alert(
+          "Change Password",
+          `A reset link will be sent to ${user?.email || "your email address"}.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Send Link",
+              onPress: async () => {
+                try {
+                  await sendPasswordResetEmail(auth, user?.email);
+                  Alert.alert("Email Sent", "Check your inbox for a password reset link.");
+                } catch {
+                  Alert.alert("Error", "Could not send reset email. Please try again.");
+                }
+              },
+            },
+          ]
+        );
+        break;
+      case "Notification Preferences":
+        Linking.openSettings();
+        break;
+      case "Privacy & Security":
+        Linking.openURL("https://familyforever.ca/privacy").catch(() => {
+          Alert.alert("Privacy Policy", "Visit familyforever.ca for our full privacy policy.");
+        });
+        break;
+      case "Help & Support":
+        Linking.openURL("mailto:familyforeverca@gmail.com?subject=App Support").catch(() => {
+          Alert.alert("Help & Support", "Email us at familyforeverca@gmail.com for assistance.");
+        });
+        break;
+      case "Terms & Policies":
+        Linking.openURL("https://familyforever.ca/terms").catch(() => {
+          Alert.alert("Terms & Policies", "Visit familyforever.ca for our terms of service.");
+        });
+        break;
+      default:
+        break;
+    }
+  };
+
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color={PRIMARY_GREEN} />;
 
   return (
@@ -159,7 +207,7 @@ export default function Profile() {
           </View>
           <Text style={styles.nameText}>{user?.name || "Sarah Johnson"}</Text>
           <Text style={styles.roleText}>{user?.designation || "Staff - Intake Worker"}</Text>
-          <Text style={styles.orgText}>Family Forever Inc.</Text>
+          <Text style={styles.orgText}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
           <View style={styles.badgeRow}>
             <View style={styles.badge}><Text style={styles.badgeText}>CYIM: {user?.cyimId || "1432569"}</Text></View>
             <View style={[styles.badge, { backgroundColor: "#F0FDF4" }]}><Text style={[styles.badgeText, { color: "#10B981" }]}>Active</Text></View>
@@ -182,7 +230,7 @@ export default function Profile() {
         </View>
         <View style={styles.idCardPreview}>
           <View style={styles.idCardHeader}>
-            <Text style={styles.idCardOrg}>Family Forever Inc.</Text>
+            <Text style={styles.idCardOrg}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
             <Text style={styles.idCardNum}>Employee ID {user?.employeeId || "27"}</Text>
           </View>
           <View style={styles.idCardBody}>
@@ -226,11 +274,11 @@ export default function Profile() {
         {/* Quick Actions */}
         <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Quick Actions</Text>
         <View style={styles.actionsBox}>
-          <ActionItem icon="lock-closed-outline" label="Change Password" />
-          <ActionItem icon="notifications-outline" label="Notification Preferences" />
-          <ActionItem icon="shield-checkmark-outline" label="Privacy & Security" />
-          <ActionItem icon="help-circle-outline" label="Help & Support" />
-          <ActionItem icon="document-text-outline" label="Terms & Policies" isLast />
+          <ActionItem icon="lock-closed-outline" label="Change Password" onPress={() => handleQuickAction("Change Password")} />
+          <ActionItem icon="notifications-outline" label="Notification Preferences" onPress={() => handleQuickAction("Notification Preferences")} />
+          <ActionItem icon="shield-checkmark-outline" label="Privacy & Security" onPress={() => handleQuickAction("Privacy & Security")} />
+          <ActionItem icon="help-circle-outline" label="Help & Support" onPress={() => handleQuickAction("Help & Support")} />
+          <ActionItem icon="document-text-outline" label="Terms & Policies" isLast onPress={() => handleQuickAction("Terms & Policies")} />
         </View>
 
         {/* Sign Out */}
@@ -283,9 +331,9 @@ function DetailItem({ label, value, isEmail, isPhone, isLast }) {
 
 
 
-function ActionItem({ icon, label, isLast }) {
+function ActionItem({ icon, label, isLast, onPress }) {
   return (
-    <Pressable style={[styles.actionItem, isLast && { borderBottomWidth: 0 }]}>
+    <Pressable onPress={onPress} style={[styles.actionItem, isLast && { borderBottomWidth: 0 }]}>
       <Ionicons name={icon} size={20} color={GRAY_TEXT} />
       <Text style={styles.actionLabel}>{label}</Text>
       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />

@@ -16,9 +16,10 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
-import { sendSignInLinkToEmail } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Calendar } from "lucide-react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
@@ -364,51 +365,59 @@ const mapOldIntakeToInitialValues = (raw) => {
     name: primaryClient.name || raw.nameInClientTable || "",
     // your header field is text, so old DD-MM-YYYY is fine here
     dateOfIntake: raw.dateOfInTake || raw.date || "",
-    avatar: raw.photo || null,
+    avatar: raw.photo || raw.avatar || null,
     services: {
       ...base.services,
-      serviceType: [], // cannot reliably map to shiftCategories id
-      servicePhone: "",
-      serviceEmail: "",
-      serviceDesc: raw.serviceDetail || primaryClient.serviceDetail || "",
-      safetyPlan: raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
+      // Prefer new-style serviceType IDs if present (forms saved by web app also have inTakeClients)
+      serviceType: Array.isArray(raw.services?.serviceType) && raw.services.serviceType.length > 0
+        ? raw.services.serviceType
+        : [], // will be resolved via pendingServiceNamesRef for genuinely old name strings
+      servicePhone: raw.services?.servicePhone || "",
+      serviceEmail: raw.services?.serviceEmail || "",
+      serviceDates: Array.isArray(raw.services?.serviceDates)
+        ? raw.services.serviceDates.map(convertToISO)
+        : [],
+      serviceDesc: raw.services?.serviceDesc || raw.serviceDetail || primaryClient.serviceDetail || "",
+      safetyPlan: raw.services?.safetyPlan || raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
     },
     clients,
     billingInfo: {
-      invoiceEmail: raw.invoiceEmail || "",
+      invoiceEmail: raw.billingInfo?.invoiceEmail || raw.invoiceEmail || "",
     },
+    billingInfoList: Array.isArray(raw.billingInfoList) && raw.billingInfoList.length > 0
+      ? raw.billingInfoList
+      : [{ invoiceEmail: raw.billingInfo?.invoiceEmail || raw.invoiceEmail || "" }],
     parentInfoList,
     medicalInfoList,
     transportationInfoList,
     supervisedVisitations,
     workerInfo: {
-      workerName: raw.nameOfPerson || "",
+      workerName: raw.workerInfo?.workerName || raw.nameOfPerson || "",
       // this is a <input type="date"> so we convert to ISO
-      date: convertToISO(raw.dateOfInTake || raw.date || ""),
-      signature: raw.signature || "",
+      date: formatDateLocal(raw.workerInfo?.date) || convertToISO(raw.dateOfInTake || raw.date || ""),
+      signature: raw.workerInfo?.signature || raw.signature || "",
     },
-    // Intake worker fields (old key: inTakeWorker*)
-    intakeworkerName: raw.inTakeWorkerName || "",
-    agencyName: raw.inTakeWorkerAgencyName || "",
-    intakeworkerPhone: raw.inTakeWorkerPhone || "",
-    intakeworkerEmail: raw.inTakeWorkerEmail || "",
+    // Intake worker fields — check both new-style keys and old-style keys
+    intakeworkerName: raw.intakeworkerName || raw.inTakeWorkerName || "",
+    agencyName: raw.agencyName || raw.inTakeWorkerAgencyName || "",
+    intakeworkerPhone: raw.intakeworkerPhone || raw.inTakeWorkerPhone || "",
+    intakeworkerEmail: raw.intakeworkerEmail || raw.inTakeWorkerEmail || "",
     // Case worker fields (old key: caseWorker*)
-    caseworkerName: raw.caseWorkerName || "",
-    caseworkerAgencyName: raw.caseWorkerAgencyName || "",
-    caseworkerPhone: raw.caseWorkerPhone || "",
-    caseworkerEmail: raw.caseWorkerEmail || "",
-    caseworkers: Array.isArray(raw.caseworkers) && raw.caseworkers.length > 0 
-      ? raw.caseworkers 
+    caseworkerName: raw.caseworkerName || raw.caseWorkerName || "",
+    caseworkerAgencyName: raw.caseworkerAgencyName || raw.caseWorkerAgencyName || "",
+    caseworkerPhone: raw.caseworkerPhone || raw.caseWorkerPhone || "",
+    caseworkerEmail: raw.caseworkerEmail || raw.caseWorkerEmail || "",
+    caseworkers: Array.isArray(raw.caseworkers) && raw.caseworkers.length > 0
+      ? raw.caseworkers
       : [
           {
-            name: raw.caseWorkerName || "",
-            agency: raw.caseWorkerAgencyName || "",
-            phone: raw.caseWorkerPhone || "",
-            email: raw.caseWorkerEmail || "",
+            name: raw.caseworkerName || raw.caseWorkerName || "",
+            agency: raw.caseworkerAgencyName || raw.caseWorkerAgencyName || "",
+            phone: raw.caseworkerPhone || raw.caseWorkerPhone || "",
+            email: raw.caseworkerEmail || raw.caseWorkerEmail || "",
           },
         ],
-    uploadDocs: [],
-    uploadMedicalDocs: [],
+    uploadDocs: raw.uploadedDocs || raw.uploadDocs || [],
     status: raw.status || "Submitted",
     familyName: raw.familyName || raw.nameInClientTable || "",
   };
@@ -419,8 +428,9 @@ const mapDataToInitialValues = (data) => {
   if (!data) return createEmptyInitialValues();
   const base = createEmptyInitialValues();
 
-  // Detect structure
-  const isOldStructure = Array.isArray(data.inTakeClients);
+  // Detect structure: new web-app forms always save `clients` (object keyed by "client1" etc.)
+  // alongside the legacy `inTakeClients` array. Old Flutter-only forms have no `clients` key.
+  const isOldStructure = Array.isArray(data.inTakeClients) && !data.clients;
 
   if (!isOldStructure) {
     const normalizedClients = data.clients
@@ -435,6 +445,7 @@ const mapDataToInitialValues = (data) => {
             birthDate: convertToISO(c.birthDate),
             startDate: formatDateLocal(c.startDate),
             address: c.address || "",
+            apartmentUnit: c.apartmentUnit || "",
             latitude: c.latitude || "",
             longitude: c.longitude || c.longtitude || "",
             clientInfo: c.clientInfo || "",
@@ -548,7 +559,7 @@ const mapDataToInitialValues = (data) => {
               email: data.caseworkerEmail || "",
             },
           ],
-      uploadDocs: data.uploadedDocs || [],
+      uploadDocs: data.uploadedDocs || data.uploadDocs || [],
       status: data.status,
       familyName: data.familyName || "",
       avatar: data.avatar || null,
@@ -587,6 +598,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const formikRef = useRef(null);
   // Holds old-form service name strings (e.g. ["Transportation"]) until shiftCategories loads
   const pendingServiceNamesRef = useRef([]);
+  // Preserves isEditable flag from Firestore so setDoc doesn't wipe it on update
+  const fetchedIsEditableRef = useRef(true);
 
   const handleSaveDraft = () => {
     if (formikRef.current) {
@@ -627,10 +640,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
-        billingInfo: {
-          ...base.billingInfo,
-          invoiceEmail: user.invoiceEmail || "",
-        },
+        billingInfoList: [
+          { invoiceEmail: user.invoiceEmail || user.email || "" },
+        ],
         workerInfo: {
           ...base.workerInfo,
           workerName: user.name || "",
@@ -651,10 +663,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         caseworkerAgencyName: user.agency || "",
         intakeworkerPhone: user.phone || "",
         intakeworkerEmail: user.email || "",
-        billingInfo: {
-          ...prev.billingInfo,
-          invoiceEmail: user.invoiceEmail || "",
-        },
+        billingInfoList: prev.billingInfoList?.[0]?.invoiceEmail
+          ? prev.billingInfoList
+          : [{ invoiceEmail: user.invoiceEmail || user.email || "" }],
         workerInfo: {
           ...prev.workerInfo,
           workerName: user.name || "",
@@ -846,7 +857,30 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
             return;
           }
 
+          // ── Admin editing lock guard ──────────────────────────────────────
+          // Capture isEditable from Firestore so it is preserved in the save payload.
+          fetchedIsEditableRef.current = data.isEditable !== false;
+
+          // If admin has set isEditable=false and the intake worker is trying
+          // to open this form in edit/update mode, redirect to view-only mode.
+          if (mode === "update" && data.isEditable === false) {
+            alert("⛔ Editing has been disabled by the admin for this form. Opening in view mode.");
+            navigate(`/intake-form/view/${intakeFormId}`);
+            setLoading(false);
+            return;
+          }
+
           const nextVals = mapDataToInitialValues(data);
+
+          // If billing email is still empty after mapping, auto-fill from current user profile
+          if (!nextVals.billingInfoList?.[0]?.invoiceEmail && user) {
+            const autoEmail = user.invoiceEmail || user.email || "";
+            if (autoEmail) {
+              nextVals.billingInfoList = [{ ...nextVals.billingInfoList?.[0], invoiceEmail: autoEmail }];
+              nextVals.billingInfo = { invoiceEmail: autoEmail };
+            }
+          }
+
           setInitialValues(nextVals);
 
           // For old-structure forms, stash the human-readable service names so
@@ -860,8 +894,15 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
           if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
           if (data.photo) setAvatarPreview(data.photo);
-          
-          console.log("Prefilled intake values matched:", nextVals);
+
+          console.log("[IntakeForm] Prefilled values:", {
+            id: intakeFormId,
+            isOldStructure: Array.isArray(data.inTakeClients) && !data.clients,
+            serviceType: nextVals.services?.serviceType,
+            billingEmail: nextVals.billingInfoList?.[0]?.invoiceEmail,
+            intakeworkerName: nextVals.intakeworkerName,
+            clientsCount: nextVals.clients?.length,
+          });
         } catch (err) {
           console.error("Error fetching intake form:", err);
         } finally {
@@ -893,7 +934,13 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
   // Validation
   const validationSchema = Yup.object().shape({
-  
+
+    familyName: Yup.string().when('clients', {
+      is: (clients) => Array.isArray(clients) && clients.length > 1,
+      then: (schema) => schema.required("Family name is required when there are multiple clients"),
+      otherwise: (schema) => schema.optional(),
+    }),
+
     services: Yup.object().shape({
       serviceType: Yup.array()
         .of(Yup.string())
@@ -920,11 +967,13 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
         })
       )
       .min(1, "At least one client is required"),
-    billingInfo: Yup.object().shape({
-      invoiceEmail: Yup.string()
-        .required("Invoice email is required")
-        .email("Invalid email"),
-    }),
+    billingInfoList: Yup.array()
+      .of(
+        Yup.object().shape({
+          invoiceEmail: Yup.string().email("Invalid email address"),
+        })
+      )
+      .min(1, "At least one billing entry is required"),
   });
 
   const validate = () => {
@@ -986,6 +1035,21 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     }
   };
 
+  // Get a human-readable display name from either a File object or a Firebase Storage URL
+  // URLs look like: https://.../intake_documents%2F1716000000_myfile.pdf?alt=media&token=...
+  const getDocDisplayName = (file) => {
+    if (typeof file === "string") {
+      try {
+        const decoded = decodeURIComponent(file.split("?")[0]); // strip query params
+        const segment = decoded.split("/").pop();                // last path segment
+        return segment.replace(/^\d+_/, "") || segment;         // strip timestamp prefix
+      } catch {
+        return "Document";
+      }
+    }
+    return file?.name || "Document";
+  };
+
   // Utility to format date like "01 Dec 2025 12:53 PM"
 const formatReadableDate = (date) => {
   const d = new Date(date);
@@ -1005,9 +1069,118 @@ const generateClientCode = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const createClientsFromIntake = async (intake, intakeId, db) => {
-  for (const client of intake.clients) {
-    await createSingleClient(intake, intakeId, client, db);
+  const clients = Array.isArray(intake.clients)
+    ? intake.clients
+    : Object.values(intake.clients || {});
+
+  if (clients.length > 1 && intake.familyName) {
+    // Multiple clients with a family name → create ONE family client document
+    await createFamilyClient(intake, intakeId, clients, db);
+  } else {
+    for (const client of clients) {
+      await createSingleClient(intake, intakeId, client, db);
+    }
   }
+};
+
+const createFamilyClient = async (intake, intakeId, clients, db) => {
+  let agencyName = "Private";
+  let agencyId = "";
+  let agencyAddress = "";
+  let agencyType = "Private";
+  let clientRate = "";
+  let kmRate = "";
+  let rateList = [];
+
+  if (intake.isCaseWorker) {
+    agencyName = intake.agencyName || "";
+    const agencySnap = await getDocs(
+      query(collection(db, "agencies"), where("agencyName", "==", agencyName))
+    );
+    if (!agencySnap.empty) {
+      const agencyDoc = agencySnap.docs[0];
+      const agency = agencyDoc.data();
+      agencyId = agencyDoc.id;
+      agencyAddress = agency.address || "";
+      agencyType = agency.type || "";
+      rateList = agency.rateList || [];
+      const serviceId = intake.services?.serviceType?.[0];
+      const matchedRate = rateList.find((r) => r.id === serviceId);
+      clientRate = matchedRate?.rate ?? "";
+      kmRate = matchedRate?.kmRate ?? "";
+    }
+  }
+
+  // ── Build shiftPoints: one per sibling with their individual + transport + parent info ──
+  const shiftPoints = clients.map((c) => {
+    // Match transport entry for this sibling by clientName
+    const transport = (intake.transportationInfoList || []).find(
+      (t) => t.clientName === c.fullName
+    ) || {};
+    // Match parent entry for this sibling (fall back to first parent)
+    const parent = (intake.parentInfoList || []).find(
+      (p) => p.clientName === c.fullName
+    ) || intake.parentInfoList?.[0] || {};
+
+    return {
+      name:                  c.fullName || "",
+      gender:                c.gender   || "",
+      dob:                   c.birthDate || "",
+      cyimId:                c.cyimId   || "",
+      seatType:              transport.carSeatType    || "",
+      carSeatRequired:       transport.carSeatRequired || "",
+      pickupLocation:        transport.pickupAddress   || c.address || "",
+      dropLocation:          transport.dropoffAddress  || "",
+      pickupTime:            transport.pickupTime      || "",
+      dropTime:              transport.dropOffTime     || "",
+      transportationOverview: transport.transportationOverview || "",
+      clientInfo:            c.clientInfo  || "",
+      cfsStatus:             c.cfsStatus   || "",
+      startDate:             c.startDate   || "",
+      // Parent / guardian info for this sibling
+      parentName:            parent.parentName  || "",
+      parentPhone:           parent.parentPhone || "",
+      parentEmail:           parent.parentEmail || "",
+      parentAddress:         parent.parentAddress || "",
+      relationship:          parent.relationShip || "",
+    };
+  });
+
+  const clientId = Date.now().toString();
+  await setDoc(doc(db, "clients", clientId), {
+    name: intake.familyName,
+    isFamily: true,
+    clientCount: clients.length,
+    individuals: clients.map((c) => ({
+      fullName: c.fullName || "",
+      dob: c.birthDate || null,
+      gender: c.gender || "",
+    })),
+    shiftPoints,                              // ← siblings now stored as shift points
+    dob: null,
+    gender: "",
+    address: clients[0]?.address || "",
+    avatar: "",
+    clientCode: generateClientCode(),
+    clientStatus: "Active",
+    fileClosed: false,
+    description: intake.services?.serviceDesc || "",
+    parentEmail: intake.parentInfoList?.[0]?.parentEmail || "",
+    agencyName,
+    agencyId,
+    agencyAddress,
+    agencyType,
+    clientRate,
+    kmRate,
+    rateList: intake.isCaseWorker ? rateList : [],
+    medications: [],
+    pharmacy: {},
+    hospital: {},
+    astrologist: {},
+    createdAt: Timestamp.now(),
+    intakeId,
+    id: clientId,
+  });
 };
 
 const createSingleClient = async (intake, intakeId, client, db) => {
@@ -1318,6 +1491,9 @@ const handleSubmit = async (values, { resetForm }) => {
       // Flutter app filters forms by isActive == true — must be set so forms appear in old app
       isActive: true,
 
+      // Preserve the admin-controlled editing lock; new forms default to editable
+      isEditable: mode === "update" ? fetchedIsEditableRef.current : true,
+
       // submittedOn + createdAt set ONCE on creation (preserved on update)
       ...(mode !== "update" ? {
         submittedOn: formatReadableDate(new Date()),
@@ -1509,30 +1685,125 @@ const handleSubmit = async (values, { resetForm }) => {
               if (values.clients?.[0]?.fullName) filled++;
               if ((values.services?.serviceType?.length ?? 0) > 0) filled++;
               if ((values.services?.serviceDates?.length ?? 0) > 0) filled++;
-              if (values.services?.serviceStartTime) filled++;
-              if (values.parentInfoList?.[0]?.parentName) filled++;
-              if (values.billingInfo?.invoiceEmail) filled++;
-              if (values.medicalInfoList?.[0]?.clientName) filled++;
+              if (values.parentInfoList?.[0]?.parentName || values.parentInfoList?.[0]?.parentPhone || values.parentInfoList?.[0]?.parentEmail) filled++;
+              if (values.billingInfoList?.[0]?.invoiceEmail || values.billingInfo?.invoiceEmail) filled++;
+              if (values.medicalInfoList?.[0]?.clientName || values.medicalInfoList?.[0]?.healthCareNo || values.medicalInfoList?.[0]?.diagnosis) filled++;
+              if (values.intakeworkerName || values.workerInfo?.workerName) filled++;
               if (values.workerInfo?.signature) filled++;
               return Math.round((filled / total) * 100);
             })();
 
             return (
               <Form>
-                <div className="flex gap-8 items-start">
+                <div className="flex flex-col gap-6">
 
+                  {/* ── Form Summary (status + sections) — above Intake Worker ── */}
+                  <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900" style={{ fontSize: 15 }}>Form Summary</h3>
+                      <div className="flex items-center gap-4 text-[13px] text-gray-500">
+                        <span>Status: <span className="font-semibold px-2 py-0.5 rounded-full text-[12px]" style={{ background: "#fef3c7", color: "#d97706" }}>
+                          {values.status || "Draft"}
+                        </span></span>
+                        <span>Completion: <strong style={{ color: "#145228" }}>{completionPct}%</strong></span>
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden mb-4">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, backgroundColor: "#145228" }} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 md:grid-cols-4 lg:grid-cols-5">
+                      {[
+                        { label: "Basic Info", filled: !!(values.clients?.[0]?.fullName) },
+                        { label: "Services", filled: (values.services?.serviceType?.length ?? 0) > 0 },
+                        { label: "Client Info", filled: !!(values.clients?.[0]?.fullName && values.clients?.[0]?.birthDate) },
+                        { label: "Billing Info", filled: !!(values.billingInfoList?.[0]?.invoiceEmail || values.billingInfo?.invoiceEmail) },
+                        { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName || values.parentInfoList?.[0]?.parentPhone || values.parentInfoList?.[0]?.parentEmail) },
+                        { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName || values.medicalInfoList?.[0]?.healthCareNo || values.medicalInfoList?.[0]?.diagnosis) },
+                        ...(showTransportSection || showCombinedSection ? [
+                          { label: "Transportation", filled: !!(values.transportationInfoList?.[0]?.pickupAddress || values.transportationInfoList?.[0]?.dropoffAddress || values.transportationInfoList?.[0]?.clientName) },
+                        ] : []),
+                        ...(showVisitSection || showCombinedSection ? [
+                          { label: "Visitation", filled: !!(values.supervisedVisitations?.[0]?.visitPurpose || values.supervisedVisitations?.[0]?.visitAddress || values.supervisedVisitations?.[0]?.clientName) },
+                        ] : []),
+                        ...(isCaseWorker ? [
+                          { label: "Intake Worker", filled: !!(values.intakeworkerName || values.workerInfo?.workerName) },
+                          { label: "Case Worker", filled: !!(values.caseworkers?.[0]?.name || values.caseworkerName) },
+                        ] : []),
+                        { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
+                      ].map(({ label, filled }) => (
+                        <div key={label} className="flex items-center gap-1.5 py-1">
+                          <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
+                            style={{ border: filled ? "none" : "1.5px solid #d1d5db", background: filled ? "#145228" : "white" }}>
+                            {filled && (
+                              <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                                <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-[12px]" style={{ color: filled ? "#145228" : "#6b7280", fontWeight: filled ? 600 : 400 }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                  {/* ── LEFT: Main content ── */}
-                  <div className="flex-1 min-w-0 flex flex-col gap-6">
+                  {/* Status (update mode) — shown at the very top */}
+                  {mode === "update" && (
+                    <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                      <label className="font-semibold text-sm text-gray-700">Status</label>
+                      <div className="relative">
+                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
+                          <option value="Submitted">Submitted</option>
+                          <option value="Draft">Draft</option>
+                          <option value="Accepted">Accepted</option>
+                          <option value="Rejected">Rejected</option>
+                        </Field>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
-                {/* ── Case Worker Info ── */}
+                {/* ── Intake Worker Info ── */}
+                {isCaseWorker && (
+                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div className="flex items-center justify-between mb-6">
+                      <SectionTitle title="Intake Worker Information" />
+                      <button type="button" onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: "#145228" }}>
+                        + Add Intake Worker
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-5">
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
+                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
+                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
+                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
+                      </div>
+                      <div>
+                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
+                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Case Worker Info (CFS) ── */}
                 {isCaseWorker && (
                   <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                     <FieldArray name="caseworkers">
                       {({ push, remove }) => (
                         <div className="flex flex-col gap-8">
                           <div className="flex items-center justify-between mb-2">
-                            <SectionTitle title="Case Worker Information" />
+                            <SectionTitle title="Case Worker Information (CFS)" />
                             <button
                               type="button"
                               onClick={() => push({ name: "", agency: "", phone: "", email: "" })}
@@ -1579,62 +1850,18 @@ const handleSubmit = async (values, { resetForm }) => {
                   </div>
                 )}
 
-                {/* ── Intake Worker Info ── */}
-                {isCaseWorker && (
-                  <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                    <div className="flex items-center justify-between mb-6">
-                      <SectionTitle title="Intake Worker Information" />
-                      <button type="button" onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                        style={{ backgroundColor: "#145228" }}>
-                        + Add Intake Worker
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-5">
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Name</label>
-                        <Field name="intakeworkerName" type="text" placeholder="Intake worker name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Agency / Organisation</label>
-                        <Field name="agencyName" type="text" placeholder="Agency name" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
-                      </div>
-                      <div>
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                        <Field name="intakeworkerEmail" type="text" placeholder="Intake worker email" className={iCls(false)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                  {/* Status (update mode) */}
-                  {mode === "update" && (
-                    <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                      <label className="font-semibold text-sm text-gray-700">Status</label>
-                      <div className="relative">
-                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
-                          <option value="Submitted">Submitted</option>
-                          <option value="Accepted">Accepted</option>
-                          <option value="Rejected">Rejected</option>
-                        </Field>
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
                 {/* ── Family Name Card ── */}
                 <div className="bg-white rounded-xl border p-8" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <SectionTitle title="Family Name" />
                   <div className="w-full">
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Family Name <span className="text-red-500">*</span></label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>
+                      Family Name {values.clients?.length > 1 && <span className="text-red-500">*</span>}
+                    </label>
                     <Field name="familyName" type="text" placeholder="Enter family / client name"
-                      className="w-full px-3 py-2.5 rounded-lg border text-sm border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                      className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${touched.familyName && errors.familyName ? "border-red-400" : "border-[#e5e7eb]"}`} />
+                    {touched.familyName && errors.familyName && (
+                      <div className="text-red-500 text-xs mt-1">{errors.familyName}</div>
+                    )}
                     <p className="text-xs font-bold text-gray-500 mt-1">All siblings added below will be grouped under this name.</p>
                   </div>
                 </div>
@@ -1696,15 +1923,19 @@ const handleSubmit = async (values, { resetForm }) => {
 
                     {/* Service Dates */}
                     <div>
-                      <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Service Dates</label>
+                      <label className="block font-semibold mb-2 flex items-center gap-1.5" style={{ fontSize: 13, color: "#374151" }}>
+                        <Calendar className="w-3.5 h-3.5" style={{ color: "#145228" }} />
+                        Service Dates
+                      </label>
                       <button type="button"
                         onClick={() => setShowServiceCalendar(true)}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-all flex items-center gap-2 ${
                           touched.services?.serviceDates && errors.services?.serviceDates ? "border-red-400" : "border-[#e5e7eb]"
                         } ${(values.services?.serviceDates?.length ?? 0) > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                        <Calendar className="w-4 h-4 flex-shrink-0" />
                         {(values.services?.serviceDates?.length ?? 0) > 0
                           ? values.services.serviceDates.join(", ")
-                          : "Select multiple service dates"}
+                          : "Select service date (you can select multiple dates)"}
                       </button>
                       {touched.services?.serviceDates && errors.services?.serviceDates && (
                         <div className="text-red-500 text-xs mt-1">{errors.services.serviceDates}</div>
@@ -1862,7 +2093,7 @@ const handleSubmit = async (values, { resetForm }) => {
 
                           <div className="grid grid-cols-3 gap-5">
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Full Name</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Full Name <span className="text-red-500">*</span></label>
                               <Field name={`clients.${idx}.fullName`} type="text" placeholder="Enter client name"
                                 className={iCls(touched.clients?.[idx]?.fullName && errors.clients?.[idx]?.fullName)} />
                               {touched.clients?.[idx]?.fullName && errors.clients?.[idx]?.fullName && (
@@ -1871,7 +2102,7 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div className="relative">
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Gender <span className="text-red-500">*</span></label>
                               <Field as="select" name={`clients.${idx}.gender`}
                                 className={sCls(touched.clients?.[idx]?.gender && errors.clients?.[idx]?.gender, !values.clients[idx].gender)}>
                                 <option value="">Select gender</option>
@@ -1885,14 +2116,14 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Date of Birth <span className="text-red-500">*</span></label>
                               <Field name={`clients.${idx}.birthDate`} type="date"
                                 className={iCls(touched.clients?.[idx]?.birthDate && errors.clients?.[idx]?.birthDate)} />
                               {(() => { const age = calculateAgeDisplay(values.clients?.[idx]?.birthDate); return age ? <p className="text-xs text-gray-500 mt-1">Age: {age}</p> : null; })()}
                             </div>
 
                             <div>
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone (Guardian)</label>
                               <Field name={`clients.${idx}.phone`} type="text" placeholder="10-digit phone number"
                                 className={iCls(touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone)} />
                               {touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone && (
@@ -1916,7 +2147,7 @@ const handleSubmit = async (values, { resetForm }) => {
                             </div>
 
                             <div className="col-span-2">
-                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address <span className="text-red-500">*</span></label>
                               <PlacesAutocomplete
                                 value={values.clients[idx].address}
                                 placeholder="Enter client address"
@@ -1974,13 +2205,13 @@ const handleSubmit = async (values, { resetForm }) => {
                 {/* ── Parent Info Card ── */}
                 <div className="bg-white rounded-xl border p-7" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                   <div className="flex items-center justify-between mb-6">
-                    <SectionTitle title="Parents Info" />
+                    <SectionTitle title="Parents / Guardians Info" />
                     <button type="button"
                       onClick={() => setFieldValue("parentInfoList", [...values.parentInfoList, { clientName: "", parentName: "", relationShip: "", parentPhone: "", parentEmail: "", parentAddress: "" }])}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
                       style={{ backgroundColor: "#145228" }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                      Add Parent Info
+                      Add Parent / Guardian Info
                     </button>
                   </div>
                   <FieldArray name="parentInfoList">
@@ -1989,11 +2220,30 @@ const handleSubmit = async (values, { resetForm }) => {
                         {values.parentInfoList.map((parent, index) => (
                           <div key={index} className="rounded-xl border p-5" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                             <div className="flex items-center justify-between mb-4">
-                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Parent {index + 1}</p>
+                              <p className="font-bold text-gray-800" style={{ fontSize: 14 }}>Parent / Guardian {index + 1}</p>
                               {values.parentInfoList.length > 1 && (
                                 <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
                               )}
                             </div>
+
+                            {/* Copy from Parent 1 (shown for index > 0) */}
+                            {index > 0 && (
+                              <label className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg border-2 cursor-pointer w-fit"
+                                style={{ borderColor: "#145228", background: "#f0fdf4" }}>
+                                <input type="checkbox" className="h-4 w-4 accent-green-800"
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      const src = values.parentInfoList[0];
+                                      setFieldValue(`parentInfoList.${index}.parentName`, src.parentName);
+                                      setFieldValue(`parentInfoList.${index}.relationShip`, src.relationShip);
+                                      setFieldValue(`parentInfoList.${index}.parentPhone`, src.parentPhone);
+                                      setFieldValue(`parentInfoList.${index}.parentEmail`, src.parentEmail);
+                                      setFieldValue(`parentInfoList.${index}.parentAddress`, src.parentAddress);
+                                    }
+                                  }} />
+                                <span className="text-sm font-semibold" style={{ color: "#145228" }}>Copy info from Parent 1</span>
+                              </label>
+                            )}
                             <div className="grid grid-cols-3 gap-5">
                               <div className="relative">
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
@@ -2005,8 +2255,8 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
                               </div>
                               <div>
-                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent Name</label>
-                                <Field name={`parentInfoList.${index}.parentName`} type="text" placeholder="Parent name" className={iCls(false)} />
+                                <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Parent / Guardian Name</label>
+                                <Field name={`parentInfoList.${index}.parentName`} type="text" placeholder="Parent / Guardian name" className={iCls(false)} />
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Relationship</label>
@@ -2014,11 +2264,11 @@ const handleSubmit = async (values, { resetForm }) => {
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
-                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent phone" className={iCls(false)} />
+                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent / Guardian phone" className={iCls(false)} />
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
-                                <Field name={`parentInfoList.${index}.parentEmail`} type="email" placeholder="Parent email" className={iCls(false)} />
+                                <Field name={`parentInfoList.${index}.parentEmail`} type="email" placeholder="Parent / Guardian email" className={iCls(false)} />
                               </div>
                               <div className="col-span-3">
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Address</label>
@@ -2080,34 +2330,47 @@ const handleSubmit = async (values, { resetForm }) => {
                   <SectionTitle title="Upload Documents" />
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Documents</label>
-                    <div className="flex items-center gap-3">
-                      <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${touched.uploadDocs && errors.uploadDocs ? "border-red-400" : "border-[#e5e7eb]"} ${values.uploadDocs.length > 0 ? "text-gray-700" : "text-gray-400"}`}>
-                        {values.uploadDocs.length > 0 ? `${values.uploadDocs.length} file(s) selected` : "No files selected"}
+
+                    {/* Upload controls — hidden in view mode */}
+                    {isEditable && (
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`flex-1 px-3 py-2.5 rounded-lg border text-sm ${touched.uploadDocs && errors.uploadDocs ? "border-red-400" : "border-[#e5e7eb]"} ${values.uploadDocs.length > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                          {values.uploadDocs.length > 0 ? `${values.uploadDocs.length} file(s) selected` : "No files selected"}
+                        </div>
+                        <input type="file" ref={docInputRef} className="hidden" multiple
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setFieldValue("uploadDocs", [...(values.uploadDocs || []), ...files]);
+                          }} />
+                        <button type="button" onClick={() => docInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold hover:bg-gray-50 transition-colors"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                          <Upload size={16} /> Browse Files
+                        </button>
                       </div>
-                      <input type="file" ref={docInputRef} className="hidden" multiple
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          setFieldValue("uploadDocs", [...(values.uploadDocs || []), ...files]);
-                        }} />
-                      <button type="button" onClick={() => docInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-semibold hover:bg-gray-50 transition-colors"
-                        style={{ borderColor: "#e5e7eb", color: "#374151" }}>
-                        <Upload size={16} /> Browse Files
-                      </button>
-                    </div>
-                    {values.uploadDocs.length > 0 && (
-                      <div className="mt-3 flex flex-col gap-2">
+                    )}
+
+                    {/* Document list — always shown when docs exist */}
+                    {values.uploadDocs.length > 0 ? (
+                      <div className="flex flex-col gap-2">
                         {values.uploadDocs.map((file, i) => (
                           <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg border" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                             <button type="button" onClick={() => handleOpenDocument(file)}
-                              className="text-sm text-gray-700 truncate max-w-[80%] hover:text-green-700 hover:underline text-left">
-                              {file.name}
+                              className="text-sm text-gray-700 truncate max-w-[85%] hover:text-green-700 hover:underline text-left flex items-center gap-2">
+                              {/* file icon */}
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-gray-400"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                              {getDocDisplayName(file)}
                             </button>
-                            <button type="button" onClick={() => setFieldValue("uploadDocs", values.uploadDocs.filter((_, idx) => idx !== i))}
-                              className="text-gray-400 hover:text-red-500 transition-colors"><X size={16} /></button>
+                            {/* Remove button — hidden in view mode */}
+                            {isEditable && (
+                              <button type="button" onClick={() => setFieldValue("uploadDocs", values.uploadDocs.filter((_, idx) => idx !== i))}
+                                className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"><X size={16} /></button>
+                            )}
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">{isEditable ? "No files selected" : "No documents attached"}</p>
                     )}
                   </div>
                 </div>
@@ -2201,18 +2464,38 @@ const handleSubmit = async (values, { resetForm }) => {
                                   
                                   {values.medicalInfoList[index].marDocs?.length > 0 && (
                                     <div className="flex flex-wrap gap-2">
-                                      {values.medicalInfoList[index].marDocs.map((file, fIdx) => (
-                                        <div key={fIdx} className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg text-xs text-gray-600" style={{ borderColor: "#e5e7eb" }}>
-                                          <span className="truncate max-w-[150px]">{typeof file === "string" ? "Stored File" : file.name}</span>
-                                          <button type="button" onClick={() => {
-                                            const updated = [...values.medicalInfoList[index].marDocs];
-                                            updated.splice(fIdx, 1);
-                                            setFieldValue(`medicalInfoList.${index}.marDocs`, updated);
-                                          }} className="text-red-500 hover:text-red-700">
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                      ))}
+                                      {values.medicalInfoList[index].marDocs.map((file, fIdx) => {
+                                        const isUrl = typeof file === "string";
+                                        const displayName = isUrl
+                                          ? (decodeURIComponent(file.split("/").pop().split("?")[0]).replace(/%20/g, " ") || `MAR File ${fIdx + 1}`)
+                                          : file.name;
+                                        return (
+                                          <div key={fIdx} className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg text-xs" style={{ borderColor: "#e5e7eb" }}>
+                                            {isUrl ? (
+                                              <a
+                                                href={file}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="truncate max-w-[200px] font-medium hover:underline flex items-center gap-1"
+                                                style={{ color: "#145228" }}
+                                                title={displayName}
+                                              >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                                {displayName}
+                                              </a>
+                                            ) : (
+                                              <span className="truncate max-w-[200px] text-gray-600">{displayName}</span>
+                                            )}
+                                            <button type="button" onClick={() => {
+                                              const updated = [...values.medicalInfoList[index].marDocs];
+                                              updated.splice(fIdx, 1);
+                                              setFieldValue(`medicalInfoList.${index}.marDocs`, updated);
+                                            }} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -2258,6 +2541,28 @@ const handleSubmit = async (values, { resetForm }) => {
                                   <button type="button" onClick={() => remove(index)} className="text-red-500 text-sm font-semibold hover:text-red-600">Remove</button>
                                 )}
                               </div>
+
+                              {/* Copy from Transportation 1 (shown for index > 0) */}
+                              {index > 0 && (
+                                <label className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg border-2 cursor-pointer w-fit"
+                                  style={{ borderColor: "#145228", background: "#f0fdf4" }}>
+                                  <input type="checkbox" className="h-4 w-4 accent-green-800"
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const src = values.transportationInfoList[0];
+                                        setFieldValue(`transportationInfoList.${index}.pickupAddress`, src.pickupAddress);
+                                        setFieldValue(`transportationInfoList.${index}.dropoffAddress`, src.dropoffAddress);
+                                        setFieldValue(`transportationInfoList.${index}.pickupTime`, src.pickupTime);
+                                        setFieldValue(`transportationInfoList.${index}.dropOffTime`, src.dropOffTime);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatRequired`, src.carSeatRequired);
+                                        setFieldValue(`transportationInfoList.${index}.carSeatType`, src.carSeatType);
+                                        setFieldValue(`transportationInfoList.${index}.transportationOverview`, src.transportationOverview);
+                                      }
+                                    }} />
+                                  <span className="text-sm font-semibold" style={{ color: "#145228" }}>Copy info from Transportation 1</span>
+                                </label>
+                              )}
+
                               <div className="grid grid-cols-3 gap-5">
                                 <div className="relative">
                                   <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Client Name</label>
@@ -2595,74 +2900,7 @@ const handleSubmit = async (values, { resetForm }) => {
                   </div>
                 </div>
 
-                  </div>{/* end left column */}
-
-                  {/* ── RIGHT: Form Summary sidebar ── */}
-                  <div className="w-[280px] flex-shrink-0 sticky top-4">
-                    <div className="bg-white rounded-xl border p-5" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                      <h3 className="font-bold text-gray-900 mb-4" style={{ fontSize: 15 }}>Form Summary</h3>
-
-                      <div className="space-y-3 pb-4 border-b" style={{ borderColor: "#f3f4f6" }}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Status</span>
-                          <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#fef3c7", color: "#d97706" }}>📄 Draft</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Created</span>
-                          <span className="text-[13px] font-semibold text-gray-700">Today</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] text-gray-500">Last Saved</span>
-                          <span className="text-[13px] font-semibold text-gray-700">Just now</span>
-                        </div>
-                      </div>
-
-                      <div className="py-4 border-b" style={{ borderColor: "#f3f4f6" }}>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">COMPLETION</p>
-                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full transition-all" style={{ width: `${completionPct}%`, backgroundColor: "#145228" }} />
-                        </div>
-                        <p className="text-[12px] font-semibold text-gray-500 mt-1.5 text-right">{completionPct}%</p>
-                      </div>
-
-                      <div className="py-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">SECTIONS</p>
-                        <ul className="space-y-2.5">
-                          {[
-                            { label: "Basic Info", filled: !!(values.clients?.[0]?.fullName) },
-                            { label: "Services", filled: (values.services?.serviceType?.length ?? 0) > 0 },
-                            { label: "Client Info", filled: !!(values.clients?.[0]?.fullName) },
-                            { label: "Billing Info", filled: !!(values.billingInfo?.invoiceEmail) },
-                            { label: "Parents Info", filled: !!(values.parentInfoList?.[0]?.parentName) },
-                            { label: "Medical Info", filled: !!(values.medicalInfoList?.[0]?.clientName) },
-                            ...(isCaseWorker ? [
-                              { label: "Case Worker Info", filled: !!(values.caseworkerName) },
-                              { label: "Intake Worker Info", filled: !!(values.intakeworkerName) },
-                            ] : []),
-                            { label: "Acknowledgement", filled: !!(values.workerInfo?.signature) },
-                          ].map(({ label, filled }) => (
-                            <li key={label} className="flex items-center gap-2.5">
-                              <div className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
-                                style={{ border: filled ? "none" : "1.5px solid #d1d5db", background: filled ? "#145228" : "white" }}>
-                                {filled && (
-                                  <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                                    <polyline points="2 6 5 9 10 3" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span className="text-[13px]" style={{ color: filled ? "#145228" : "#6b7280", fontWeight: filled ? 600 : 400 }}>{label}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <button type="button" className="w-full py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors mt-1" style={{ borderColor: "#e5e7eb" }}>
-                        Save Draft
-                      </button>
-                    </div>
-                  </div>
-
-                </div>{/* end flex gap-5 */}
+                </div>{/* end flex flex-col gap-6 */}
 
                 {/* ── Bottom Footer ── */}
                 <div className="sticky bottom-0 mt-4 bg-white border-t flex items-center justify-between px-6 py-4 -mx-6" style={{ borderColor: "#e5e7eb" }}>
@@ -2722,14 +2960,9 @@ const handleSubmit = async (values, { resetForm }) => {
                   onClick={async () => {
                     if (!inviteEmail) { alert("Please enter an email address"); return; }
                     setInviting(true);
-                    const encodedEmail = encodeURIComponent(inviteEmail.trim().toLowerCase());
-                    const continueBase = import.meta.env.VITE_CONTINUE_URL || window.location.origin;
-                    const actionCodeSettings = {
-                      url: `${continueBase}/intake-form/login?email=${encodedEmail}`,
-                      handleCodeInApp: true,
-                    };
+                    const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
                     try {
-                      await sendSignInLinkToEmail(auth, inviteEmail.trim().toLowerCase(), actionCodeSettings);
+                      await sendSignInEmail({ email: inviteEmail.trim().toLowerCase() });
                       window.localStorage.setItem("emailForSignIn", inviteEmail.trim().toLowerCase());
                       alert(`Invitation link sent to ${inviteEmail}`);
                       setShowInviteModal(false);

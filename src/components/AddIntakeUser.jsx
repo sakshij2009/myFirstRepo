@@ -14,8 +14,27 @@ import { db } from "../firebase";
 import SuccessSlider from "../components/SuccessSlider";
 import { FaChevronDown } from "react-icons/fa6";
 import { useNavigate, useParams } from "react-router-dom";
-import { sendSignInLinkToEmail } from "firebase/auth";
-import { auth } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
+
+const UPCS_EMAIL_OPTIONS = [
+  "billing@upcs.com",
+  "accounts@upcs.com",
+  "invoicewest@upcs.org",
+];
+
+const AGENCY_OPTIONS = [
+  "UPCS",
+  "Unlimited Potential Community Services",
+];
+
+const isUPCSLikeAgency = (agencyVal) => {
+  const lower = (agencyVal || "").trim().toLowerCase();
+  return (
+    lower.startsWith("upcs") ||
+    lower.includes("unlimited potential")
+  );
+};
 
 const AddIntakeUser = ({ mode = "add" }) => {
   const navigate = useNavigate();
@@ -28,6 +47,8 @@ const AddIntakeUser = ({ mode = "add" }) => {
     viewText: "",
   });
 
+  const [useCustomInvoice, setUseCustomInvoice] = useState(false);
+
   const [initialValues, setInitialValues] = useState({
     name: "",
     role: "",
@@ -36,8 +57,6 @@ const AddIntakeUser = ({ mode = "add" }) => {
     email: "",
     invoiceEmail: "",
   });
-
-  const UPCS_EMAIL_OPTIONS = ["billing@upcs.com", "accounts@upcs.com"];
 
   // Validation Schema
   const validationSchema = Yup.object({
@@ -67,6 +86,12 @@ const AddIntakeUser = ({ mode = "add" }) => {
 
           if (!snap.empty) {
             const docData = snap.docs[0].data();
+            const agency = docData.agency || "";
+            const invoiceEmail = docData.invoiceEmail || "";
+            // If the saved invoice email is not in the UPCS preset list, use custom mode
+            if (isUPCSLikeAgency(agency) && invoiceEmail && !UPCS_EMAIL_OPTIONS.includes(invoiceEmail)) {
+              setUseCustomInvoice(true);
+            }
             setInitialValues({
               name: docData.name || "",
              role:
@@ -75,10 +100,10 @@ const AddIntakeUser = ({ mode = "add" }) => {
                 : docData.role?.toLowerCase().includes("parent")
                 ? "Parent"
                 : "",
-              agency: docData.agency || "",
+              agency,
               phone: docData.phone || "",
               email: docData.email || "",
-              invoiceEmail: docData.invoiceEmail || "",
+              invoiceEmail,
             });
           } else {
             console.warn("⚠ No intake user found with id:", id);
@@ -136,14 +161,12 @@ const AddIntakeUser = ({ mode = "add" }) => {
 
         // Send Invitation Link
         try {
-          const encodedEmail = encodeURIComponent(values.email.trim().toLowerCase());
-          const actionCodeSettings = {
-            // Redirect to the intake form login page with pre-filled email and role
-            url: `${window.location.origin}/intake-form/login?email=${encodedEmail}&role=${values.role === "Parent" ? "parent" : "worker"}`,
-            handleCodeInApp: true,
-          };
-
-          await sendSignInLinkToEmail(auth, values.email.trim().toLowerCase(), actionCodeSettings);
+          const sendSignInEmail = httpsCallable(functions, "sendSignInEmail");
+          await sendSignInEmail({
+            email: values.email.trim().toLowerCase(),
+            role: values.role === "Parent" ? "parent" : "worker",
+            isInvitation: true,
+          });
           console.log("Invitation link sent to:", values.email);
         } catch (authError) {
           console.error("Error sending invitation link:", authError);
@@ -189,8 +212,7 @@ const AddIntakeUser = ({ mode = "add" }) => {
         onSubmit={handleSubmit}
       >
         {({ touched, errors, values, setFieldValue }) => {
-          const isUPCSAgency =
-            values.agency?.trim().toLowerCase().startsWith("upcs") ?? false;
+          const isUPCSAgency = isUPCSLikeAgency(values.agency);
 
           return (
             <Form className="flex flex-col gap-4 ">
@@ -288,22 +310,51 @@ const AddIntakeUser = ({ mode = "add" }) => {
                   <label className="font-bold text-sm text-light-black">Invoice Email</label>
 
                   {isUPCSAgency ? (
-                    <Field
-                      as="select"
-                      name="invoiceEmail"
-                      className={`w-full border rounded-sm p-[10px] appearance-none ${
-                        touched.invoiceEmail && errors.invoiceEmail
-                          ? "border-red-500"
-                          : "border-light-gray"
-                      }`}
-                    >
-                      <option value="">Select Invoice Email</option>
-                      {UPCS_EMAIL_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </Field>
+                    <>
+                      <div className="relative">
+                        <select
+                          name="invoiceEmail"
+                          value={useCustomInvoice ? "__other__" : (values.invoiceEmail || "")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "__other__") {
+                              setUseCustomInvoice(true);
+                              setFieldValue("invoiceEmail", "");
+                            } else {
+                              setUseCustomInvoice(false);
+                              setFieldValue("invoiceEmail", val);
+                            }
+                          }}
+                          className={`w-full border rounded-sm p-[10px] appearance-none pr-10 ${
+                            touched.invoiceEmail && errors.invoiceEmail
+                              ? "border-red-500"
+                              : "border-light-gray"
+                          }`}
+                        >
+                          <option value="">Select Invoice Email</option>
+                          {UPCS_EMAIL_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                          <option value="__other__">Other (enter manually)</option>
+                        </select>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <FaChevronDown className="text-light-green w-4 h-4" />
+                        </span>
+                      </div>
+                      {useCustomInvoice && (
+                        <input
+                          type="email"
+                          placeholder="Enter custom invoice email"
+                          value={values.invoiceEmail}
+                          onChange={(e) => setFieldValue("invoiceEmail", e.target.value)}
+                          className={`mt-2 w-full border rounded-sm p-[10px] placeholder:text-sm ${
+                            touched.invoiceEmail && errors.invoiceEmail
+                              ? "border-red-500"
+                              : "border-light-gray"
+                          }`}
+                        />
+                      )}
+                    </>
                   ) : (
                     <Field
                       name="invoiceEmail"
