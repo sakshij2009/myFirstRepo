@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Mail, Lock, Eye, EyeOff, Check, Users, Shield, CheckCircle, Heart } from 'lucide-react';
 import { useSafeNavigate } from '../hooks/useSafeNavigate';
-import logoImg from 'figma:asset/0d495a4b0b39eba28a6b72e320f92e9a00760e61.png';
+// Inline FF logo — no figma:asset import needed
+function FFLogo({ size = 40 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#1F6F43', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size * 0.65} height={size * 0.65} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="7.5" r="3.5" fill="#fff" />
+        <path d="M5 21c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAppContext } from '../../context/AppContext';
@@ -193,7 +203,7 @@ export function Login() {
                 WebkitBackdropFilter: 'blur(12px)',
               }}
             >
-              <img src={logoImg} alt="Family Forever" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
+              <FFLogo size={40} />
             </div>
           </div>
 
