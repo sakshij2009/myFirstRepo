@@ -3,9 +3,54 @@ import { ArrowLeft, Share2, RotateCcw, Sun } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useSafeNavigate } from '../hooks/useSafeNavigate';
 import { toast } from 'sonner';
-import imgStaffPhoto from "figma:asset/1af2086220affecd5f498aeca93f64918a91bf86.png";
-import imgLogo from "figma:asset/0d495a4b0b39eba28a6b72e320f92e9a00760e61.png";
-import imgQrCode from "figma:asset/72e4462f590042cd762853a816e000ce1895aaad.png";
+
+// ── Inline asset components (replaces figma:asset/... imports) ────────────────
+
+/** Family Forever circular logo mark */
+function FFLogoImg({ size = 32 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <svg width={size * 0.75} height={size * 0.75} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="7.5" r="3.5" fill="#1F6F43" />
+        <path d="M5 21c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#1F6F43" strokeWidth="2" strokeLinecap="round" />
+        <path d="M16.5 10.5c1.5.7 2.5 2.2 2.5 4" stroke="#1F6F43" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M7.5 10.5c-1.5.7-2.5 2.2-2.5 4" stroke="#1F6F43" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+/** Staff photo placeholder — circular avatar with initials */
+function StaffPhotoPlaceholder({ initials = 'SJ', size = 100 }: { initials?: string; size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#1F6F43', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: '#fff', fontSize: size * 0.3, fontWeight: 700, fontFamily: 'Poppins, sans-serif' }}>{initials}</span>
+    </div>
+  );
+}
+
+/** QR code placeholder grid */
+function QRCodePlaceholder({ size = 140 }: { size?: number }) {
+  const cell = size / 10;
+  // Simple fixed pattern mimicking a QR finder pattern
+  const filled = [
+    [0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],
+    [1,0],[1,6],[2,0],[2,2],[2,3],[2,4],[2,6],
+    [3,0],[3,2],[3,3],[3,4],[3,6],[4,0],[4,2],[4,4],[4,6],
+    [5,0],[5,6],[6,0],[6,1],[6,2],[6,3],[6,4],[6,5],[6,6],
+    [8,1],[8,3],[8,5],[8,7],[9,2],[9,4],[9,6],
+    [7,8],[7,9],[8,8],[9,8],[9,9],
+  ];
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
+      {filled.map(([r, c], i) => (
+        <rect key={i} x={c * cell} y={r * cell} width={cell - 1} height={cell - 1} fill="#1A1A1A" rx={1} />
+      ))}
+      {/* border frame */}
+      <rect x={0} y={0} width={size} height={size} fill="none" stroke="#e5e7eb" strokeWidth={1} rx={4} />
+    </svg>
+  );
+}
 
 // ─── Card Front ──────────────────────────────────────────────────────
 function CardFront() {
@@ -29,7 +74,7 @@ function CardFront() {
       >
         {/* Logo + company name */}
         <div className="flex items-center justify-center gap-2.5 pt-7">
-          <img src={imgLogo} alt="Family Forever" className="w-8 h-8 object-cover" />
+          <FFLogoImg size={32} />
           <span
             className="font-['Poppins'] font-bold text-white"
             style={{ fontSize: '18px' }}
@@ -80,11 +125,7 @@ function CardFront() {
           className="w-full h-full rounded-full overflow-hidden"
           style={{ border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
         >
-          <img
-            src={imgStaffPhoto}
-            alt="Sarah Johnson"
-            className="w-full h-full object-cover"
-          />
+          <StaffPhotoPlaceholder initials="SJ" size={100} />
         </div>
       </div>
 
@@ -165,12 +206,7 @@ function CardBack() {
 
       {/* QR Code */}
       <div className="mt-8">
-        <img
-          src={imgQrCode}
-          alt="Verification QR Code"
-          className="object-contain"
-          style={{ width: '140px', height: '140px' }}
-        />
+        <QRCodePlaceholder size={140} />
       </div>
 
       {/* Terms */}

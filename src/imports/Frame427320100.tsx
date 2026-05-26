@@ -1,5 +1,21 @@
-import imgRectangle from "figma:asset/1af2086220affecd5f498aeca93f64918a91bf86.png";
-import imgImage161 from "figma:asset/0d495a4b0b39eba28a6b72e320f92e9a00760e61.png";
+// Avatar + logo placeholders — no figma:asset imports needed
+function AvatarPlaceholder({ size = 91 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '64px', background: '#1F6F43', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: '#fff', fontSize: size * 0.28, fontWeight: 700 }}>AS</span>
+    </div>
+  );
+}
+function FFLogoMark({ size = 32 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size * 0.7} height={size * 0.7} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="7.5" r="3.5" fill="#1F6F43" />
+        <path d="M5 21c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#1F6F43" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
 
 export default function Frame({ className }: { className?: string }) {
   return (
@@ -8,7 +24,7 @@ export default function Frame({ className }: { className?: string }) {
       <div className="absolute bg-white h-[370px] left-[-18px] rounded-[301px] top-[144px] w-[337px]" />
       <div className="absolute left-[105px] size-[91px] top-[98px]">
         <div className="-translate-y-1/2 absolute aspect-[1024/1024] left-0 pointer-events-none right-0 rounded-[64px] top-1/2" data-name="Rectangle">
-          <img alt="" className="absolute inset-0 max-w-none object-cover rounded-[64px] size-full" src={imgRectangle} />
+          <AvatarPlaceholder size={91} />
           <div aria-hidden="true" className="absolute border-2 border-solid border-white inset-0 rounded-[64px]" />
         </div>
       </div>
@@ -25,7 +41,7 @@ export default function Frame({ className }: { className?: string }) {
       </div>
       <div className="-translate-x-1/2 absolute content-stretch flex gap-[10px] items-center left-1/2 top-[22px]">
         <div className="relative shrink-0 size-[32px]" data-name="image (16) 1">
-          <img alt="" className="absolute inset-0 max-w-none object-cover pointer-events-none size-full" src={imgImage161} />
+          <FFLogoMark size={32} />
         </div>
         <p className="font-['Roboto:Bold',sans-serif] font-bold leading-[28px] relative shrink-0 text-[20px] text-white whitespace-nowrap" style={{ fontVariationSettings: "'wdth' 100" }}>{`Family Forever Inc. `}</p>
       </div>

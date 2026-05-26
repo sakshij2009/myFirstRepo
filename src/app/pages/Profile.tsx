@@ -21,9 +21,29 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSafeNavigate } from '../hooks/useSafeNavigate';
-import imgStaffPhoto from "figma:asset/1af2086220affecd5f498aeca93f64918a91bf86.png";
-import imgLogo from "figma:asset/0d495a4b0b39eba28a6b72e320f92e9a00760e61.png";
-import imgQrCode from "figma:asset/72e4462f590042cd762853a816e000ce1895aaad.png";
+// ── Inline asset components (replaces figma:asset imports) ────────────────
+function FFLogoMark({ size = 20 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#1F6F43', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width={size * 0.7} height={size * 0.7} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="7.5" r="3.5" fill="#fff" />
+        <path d="M5 21c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+function StaffAvatar({ initials = 'SJ', size = 60 }: { initials?: string; size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: '#1F6F43', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <span style={{ color: '#fff', fontSize: size * 0.3, fontWeight: 700 }}>{initials}</span>
+    </div>
+  );
+}
+function QRBox({ size = 80 }: { size?: number }) {
+  const cell = size / 10;
+  const filled = [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[1,0],[1,6],[2,0],[2,2],[2,3],[2,4],[2,6],[3,0],[3,2],[3,3],[3,4],[3,6],[4,0],[4,2],[4,4],[4,6],[5,0],[5,6],[6,0],[6,1],[6,2],[6,3],[6,4],[6,5],[6,6]];
+  return (<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>{filled.map(([r,c],i)=><rect key={i} x={c*cell} y={r*cell} width={cell-1} height={cell-1} fill="#1A1A1A" rx={1}/>)}</svg>);
+}
 
 // ─── Data ─────────────────────────────────────────────────────────────
 const personalDetails = [
@@ -420,7 +440,7 @@ export function Profile() {
             }}
           >
             <div className="flex items-center gap-2">
-              <img src={imgLogo} alt="" className="w-5 h-5 object-cover" />
+              <FFLogoMark size={20} />
               <span
                 className="font-['Poppins'] font-semibold text-white"
                 style={{ fontSize: '12px' }}
@@ -449,11 +469,7 @@ export function Profile() {
                 className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0"
                 style={{ border: '2px solid #1F6F43' }}
               >
-                <img
-                  src={imgStaffPhoto}
-                  alt="Sarah Johnson"
-                  className="w-full h-full object-cover"
-                />
+                <StaffAvatar initials="SJ" size={36} />
               </div>
               <div>
                 <div
@@ -470,12 +486,7 @@ export function Profile() {
                 </div>
               </div>
             </div>
-            <img
-              src={imgQrCode}
-              alt="QR"
-              className="object-contain flex-shrink-0"
-              style={{ width: '28px', height: '28px' }}
-            />
+            <QRBox size={28} />
           </div>
         </button>
 
