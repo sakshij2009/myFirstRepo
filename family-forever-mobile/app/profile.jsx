@@ -237,7 +237,7 @@ export default function Profile() {
             <Image source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} style={styles.idCardAvatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.idCardName}>{user?.name || "Sarah Johnson"}</Text>
-              <Text style={styles.idCardRole}>{user?.position || user?.designation || "Staff"}</Text>
+              <Text style={styles.idCardRole}>{user?.role || "Staff"}</Text>
             </View>
             <Ionicons name="qr-code-outline" size={32} color={DARK_TEXT} style={{ opacity: 0.1 }} />
           </View>
@@ -263,7 +263,7 @@ export default function Profile() {
         <View style={styles.detailsBox}>
           <Text style={styles.sectionTitle}>Employment</Text>
           <DetailItem label="Employee ID" value={user?.userId || user?.employeeId || "—"} />
-          <DetailItem label="Role" value={user?.position || user?.designation || "—"} />
+          <DetailItem label="Role" value={user?.role || "—"} />
           <DetailItem
             label="Salary"
             value={user?.salaryPerHour ? `$${Number(user.salaryPerHour).toFixed(2)}/hr` : "—"}

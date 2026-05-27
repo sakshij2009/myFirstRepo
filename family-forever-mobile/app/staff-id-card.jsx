@@ -130,7 +130,7 @@ export default function StaffIdCard() {
               
               <View style={styles.mainInfo}>
                 <Text style={styles.nameText}>{user?.name || "Sarah Johnson"}</Text>
-                <Text style={styles.roleText}>{user?.position || user?.designation || "Staff"}</Text>
+                <Text style={styles.roleText}>{user?.role || "Staff"}</Text>
               </View>
 
               <View style={styles.contactDetails}>
