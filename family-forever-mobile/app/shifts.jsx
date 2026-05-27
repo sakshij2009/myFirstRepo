@@ -301,10 +301,13 @@ function ShiftCard({ shift, onAction, onDetails }) {
             </Pressable>
           )}
           {status === "Completed" && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
-            </View>
+            <Pressable
+              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}
+            >
+              <Ionicons name="document-text-outline" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>View Report</Text>
+            </Pressable>
           )}
         </View>
 
@@ -361,6 +364,9 @@ export default function Shifts() {
     let secondaryByDocIdLoaded = false;
     let secondaryByNameLoaded = false;
 
+    // Always put Firestore doc ID last so it wins over any in-document "id" field
+    const toShift = (d) => ({ ...d.data(), id: d.id });
+
     const merge = () => {
       if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
       const seen = new Set();
@@ -390,7 +396,7 @@ export default function Shifts() {
       : query(collection(db, "shifts"), ...primaryConstraints);
 
     const unsubPrimary = onSnapshot(qPrimary, (snap) => {
-      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryShifts = snap.docs.map(toShift);
       primaryLoaded = true;
       merge();
     }, (err) => { console.warn("primary shifts query error:", err?.message); primaryLoaded = true; merge(); });
@@ -404,7 +410,7 @@ export default function Shifts() {
         ...secondaryConstraints
       );
       unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
-        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdShifts = snap.docs.map(toShift);
         secondaryByIdLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryById query error:", err?.message); secondaryByIdLoaded = true; merge(); });
@@ -421,7 +427,7 @@ export default function Shifts() {
         ...secondaryConstraints
       );
       unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
-        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdShifts = snap.docs.map(toShift);
         secondaryByDocIdLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryByDocId query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
@@ -438,7 +444,7 @@ export default function Shifts() {
         ...secondaryConstraints
       );
       unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
-        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameShifts = snap.docs.map(toShift);
         secondaryByNameLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryByName query error:", err?.message); secondaryByNameLoaded = true; merge(); });
@@ -497,18 +503,31 @@ export default function Shifts() {
     return acc + (diff > 0 ? diff : diff + 24);
   }, 0);
 
+  // ── Optimistic local update helper ───────────────────────────────────────
+  const optimisticUpdate = (shiftId, patch) => {
+    setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, ...patch } : s));
+  };
+
   const handleAction = async () => {
     if (!confirmAction || !confirmAction.shift) return;
     setIsProcessing(true);
     const { type, shift } = confirmAction;
+    const shiftDocId = shift.id; // always the Firestore document ID (toShift() ensures this)
 
     try {
-      const ref = doc(db, "shifts", shift.id);
+      const ref = doc(db, "shifts", shiftDocId);
 
       if (type === "confirm") {
+        const now = new Date().toISOString();
         await updateDoc(ref, {
           shiftConfirmed: true,
-          confirmedAt: new Date().toISOString(),
+          confirmedAt: now,
+          confirmedBy: user?.name || user?.username,
+        });
+        // ── Optimistic UI update: card immediately shows "Clock In" ──────────
+        optimisticUpdate(shiftDocId, {
+          shiftConfirmed: true,
+          confirmedAt: now,
           confirmedBy: user?.name || user?.username,
         });
         await sendNotification(user?.username || user?.userId, {
@@ -524,10 +543,13 @@ export default function Shifts() {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
+          clockIn: serverTimestamp(),
           clockInTime: roundedTime,
           clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
+        // ── Optimistic UI update ─────────────────────────────────────────────
+        optimisticUpdate(shiftDocId, { clockInTime: roundedTime, clockInLocation: locationStr });
         await sendNotification(user?.username || user?.userId, {
           title: "Clocked In ✓",
           message: `Clocked in at ${roundedTime} for ${shift.category || "shift"}. Location: ${locationStr}`,
@@ -537,23 +559,26 @@ export default function Shifts() {
           iconColor: PRIMARY_GREEN,
           iconBg: "#F0FDF4",
         });
-        // For transportation AND supervised visitation shifts, navigate to transportation detail after clock-in
+        // For transportation AND supervised visitation shifts, navigate after clock-in
         const catRaw = shift.category || shift.categoryName || shift.serviceType || shift.shiftCategory || "";
         const catLower = safeString(catRaw).toLowerCase();
         if (catLower.includes("transportation") || catLower.includes("supervised") || catLower.includes("visitation")) {
           setIsProcessing(false);
           setConfirmAction(null);
-          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.docId || shift.id } });
+          router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shiftDocId } });
           return;
         }
       } else if (type === "clockOut") {
         const roundedTime = getRoundedTime();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
+          clockOut: serverTimestamp(),
           clockOutTime: roundedTime,
           clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
+        // ── Optimistic UI update ─────────────────────────────────────────────
+        optimisticUpdate(shiftDocId, { clockOutTime: roundedTime, clockOutLocation: locationStr });
         await sendNotification(user?.username || user?.userId, {
           title: "Shift Completed ✓",
           message: `Clocked out at ${roundedTime}. Great work on your ${shift.category || "shift"}!`,
