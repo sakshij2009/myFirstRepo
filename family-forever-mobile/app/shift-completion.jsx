@@ -94,7 +94,8 @@ function getDuration(shift) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ShiftCompletion() {
-  const { shiftId } = useLocalSearchParams();
+  const { shiftId, mode } = useLocalSearchParams();
+  const isViewMode = mode === "view";
 
   const [shift, setShift]     = useState(null);
   const [loading, setLoading] = useState(true);
@@ -123,6 +124,17 @@ export default function ShiftCompletion() {
     });
     return () => unsub();
   }, [shiftId]);
+
+  // Pre-fill form fields from saved shift data (needed for view mode + edit mode resume)
+  useEffect(() => {
+    if (!shift) return;
+    if (shift.finalNotes        && !finalNotes)    setFinalNotes(shift.finalNotes);
+    if (shift.approvedBy        && !approvedBy)    setApprovedBy(shift.approvedBy);
+    if (shift.reportAdminComments && !adminComments) setAdminComments(shift.reportAdminComments);
+    if (shift.officeToPickupKm) setOfficeToPickupKm(String(shift.officeToPickupKm));
+    if (shift.dropToOfficeKm)   setDropToOfficeKm(String(shift.dropToOfficeKm));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shift?.id]);
 
   const isTransport = shift ? isTransportOrVisit(shift) : false;
   const isPersonalVehicle = shift?.vehicleType === "personal";
@@ -232,29 +244,60 @@ export default function ShiftCompletion() {
         {/* ── Success Header ─────────────────────────────────────────────── */}
         <View style={styles.successHeader}>
           <View style={styles.checkCircle}>
-            <Ionicons name="checkmark-circle" size={56} color="#FFF" />
+            <Ionicons name={isViewMode ? "document-text" : "checkmark-circle"} size={56} color="#FFF" />
           </View>
-          <Text style={styles.successTitle}>Shift Complete!</Text>
+          <Text style={styles.successTitle}>{isViewMode ? "Shift Report" : "Shift Complete!"}</Text>
           <Text style={styles.successSub}>
-            Great work! Please complete the shift report below.
+            {isViewMode
+              ? `${shift?.clientName || shift?.name || "Client"} · ${shift?.startTime || ""} – ${shift?.endTime || ""}`
+              : "Great work! Please complete the shift report below."}
           </Text>
         </View>
 
-        {/* ── Shift Summary ───────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Shift Summary</Text>
-          {summaryItems.map(({ icon, label, value }) => (
-            <View key={label} style={styles.summaryRow}>
-              <View style={styles.summaryIconBox}>
-                <Ionicons name={icon} size={16} color={PRIMARY} />
+        {/* ── View Mode: Read-only shift report ────────────────────────────── */}
+        {isViewMode && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Shift Report</Text>
+
+            {/* Clock in / out times */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", backgroundColor: "#F8FAFC", borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: BORDER }}>
+              <View>
+                <Text style={{ fontSize: 11, color: MUTED, fontFamily: "Inter", marginBottom: 4 }}>CLOCKED IN</Text>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: PRIMARY, fontFamily: "Poppins-SemiBold" }}>{shift?.clockInTime || "—"}</Text>
               </View>
-              <View style={styles.summaryInfo}>
-                <Text style={styles.summaryLabel}>{label}</Text>
-                <Text style={styles.summaryValue}>{value}</Text>
+              <View style={{ width: 1, backgroundColor: BORDER }} />
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ fontSize: 11, color: MUTED, fontFamily: "Inter", marginBottom: 4 }}>CLOCKED OUT</Text>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: DARK, fontFamily: "Poppins-SemiBold" }}>{shift?.clockOutTime || "—"}</Text>
               </View>
             </View>
-          ))}
-        </View>
+
+            {/* Shift report text */}
+            {shift?.shiftReport ? (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={[styles.inputLabel, { marginBottom: 6 }]}>Daily Shift Report</Text>
+                <View style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 14, color: DARK, lineHeight: 22, fontFamily: "Inter" }}>{shift.shiftReport}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={{ alignItems: "center", paddingVertical: 16 }}>
+                <Ionicons name="document-outline" size={32} color={MUTED} />
+                <Text style={{ fontSize: 14, color: MUTED, marginTop: 8, fontFamily: "Inter" }}>No shift report was filed.</Text>
+              </View>
+            )}
+
+            {/* Final notes (if any) */}
+            {shift?.finalNotes ? (
+              <View>
+                <Text style={[styles.inputLabel, { marginBottom: 6 }]}>Final Notes</Text>
+                <View style={{ backgroundColor: "#F8FAFC", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 14, color: DARK, lineHeight: 22, fontFamily: "Inter" }}>{shift.finalNotes}</Text>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        )}
 
         {/* ── Transportation / Supervised Visit Report ───────────────────── */}
         {isTransport && (
@@ -444,44 +487,59 @@ export default function ShiftCompletion() {
           ))}
         </View>
 
-        {/* ── Final Notes ─────────────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Final Notes</Text>
-          <TextInput
-            value={finalNotes}
-            onChangeText={setFinalNotes}
-            placeholder="Any final observations or notes about this shift..."
-            placeholderTextColor={MUTED}
-            multiline
-            numberOfLines={4}
-            style={styles.notesInput}
-            textAlignVertical="top"
-          />
-        </View>
+        {/* ── Final Notes (editable — only in fill mode) ──────────────────── */}
+        {!isViewMode && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Final Notes</Text>
+            <TextInput
+              value={finalNotes}
+              onChangeText={setFinalNotes}
+              placeholder="Any final observations or notes about this shift..."
+              placeholderTextColor={MUTED}
+              multiline
+              numberOfLines={4}
+              style={styles.notesInput}
+              textAlignVertical="top"
+            />
+          </View>
+        )}
       </ScrollView>
 
       {/* ── Bottom Actions ───────────────────────────────────────────────── */}
       <View style={styles.bottomBar}>
-        <Pressable
-          onPress={handleFinish}
-          disabled={saving}
-          style={[styles.submitBtn, saving && { opacity: 0.6 }]}
-          activeOpacity={0.8}
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.submitBtnText}>
-                {uploadingReceipt ? "Uploading..." : "Submit & Complete"}
-              </Text>
-            </>
-          )}
-        </Pressable>
-        <Pressable onPress={() => router.replace("/home")} style={styles.skipBtn} activeOpacity={0.7}>
-          <Text style={styles.skipBtnText}>Skip & Return Home</Text>
-        </Pressable>
+        {isViewMode ? (
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.submitBtn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={styles.submitBtnText}>Back to Shift</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable
+              onPress={handleFinish}
+              disabled={saving}
+              style={[styles.submitBtn, saving && { opacity: 0.6 }]}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.submitBtnText}>
+                    {uploadingReceipt ? "Uploading..." : "Submit & Complete"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable onPress={() => router.replace("/home")} style={styles.skipBtn} activeOpacity={0.7}>
+              <Text style={styles.skipBtnText}>Skip & Return Home</Text>
+            </Pressable>
+          </>
+        )}
       </View>
     </SafeAreaView>
   );

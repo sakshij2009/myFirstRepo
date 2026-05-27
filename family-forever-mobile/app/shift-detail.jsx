@@ -11,8 +11,9 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import { Ionicons } from "@expo/vector-icons";
 import {
   doc,
@@ -60,16 +61,61 @@ const serviceTypeStyles = {
 };
 
 
-// ── Helper: 15-minute time rounding ──────────────────────────────────────────
-const getRoundedTime = () => {
+// ── Helper: Parse shift date + time string into a real Date ──────────────────
+const parseShiftDateTime = (dateStr, timeStr) => {
+  if (!timeStr) return null;
+  try {
+    let base = new Date();
+    if (dateStr) {
+      const d = dateStr?.toDate ? dateStr.toDate() : new Date(dateStr);
+      if (!isNaN(d)) base = d;
+    }
+    const [timePart, period] = String(timeStr).trim().split(" ");
+    let [h, m] = timePart.split(":").map(Number);
+    if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+    if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+    const result = new Date(base);
+    result.setHours(h, m || 0, 0, 0);
+    return result;
+  } catch { return null; }
+};
+
+// ── Helper: Round to nearest 15 min ──────────────────────────────────────────
+const roundToNearest15 = (date) => {
   const coeff = 1000 * 60 * 15;
-  const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/Edmonton"
+  return new Date(Math.round(date.getTime() / coeff) * coeff);
+};
+
+const toTimeStr = (date) =>
+  date.toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", hour12: true,
+    timeZone: "America/Edmonton",
   });
+
+// ── Helper: Clock-IN time — snaps to scheduled start if within 15-min window ─
+// "if clocking in between 8:45 and 9:00, record as 9:00"
+const getClockInTime = (startTimeStr, startDateStr) => {
+  const now = new Date();
+  const scheduled = parseShiftDateTime(startDateStr, startTimeStr);
+  if (scheduled) {
+    const diffMs = scheduled.getTime() - now.getTime(); // positive = scheduled is still future
+    // Within 15 min BEFORE scheduled start → snap to scheduled start
+    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toTimeStr(scheduled);
+  }
+  return toTimeStr(roundToNearest15(now));
+};
+
+// ── Helper: Clock-OUT time — snaps to scheduled end if within 15-min window ──
+// "if clocking out within 15 min after scheduled end, record as scheduled end"
+const getClockOutTime = (endTimeStr, startDateStr) => {
+  const now = new Date();
+  const scheduled = parseShiftDateTime(startDateStr, endTimeStr);
+  if (scheduled) {
+    const diffMs = now.getTime() - scheduled.getTime(); // positive = past scheduled end
+    // Within 15 min AFTER scheduled end → snap to scheduled end
+    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toTimeStr(scheduled);
+  }
+  return toTimeStr(roundToNearest15(now));
 };
 
 // ── Helper: Get current location string ──────────────────────────────────────
@@ -157,6 +203,11 @@ export default function ShiftDetails() {
   const [reportText, setReportText] = useState("");
   const [savingReport, setSavingReport] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+
+  // ── Clock-in/out window state ─────────────────────────────────────────────
+  const [clockInLocked, setClockInLocked] = useState(false);
+  const [minutesUntilStart, setMinutesUntilStart] = useState(null); // null = not in 15-min window
+  const notifsScheduledRef = useRef(false);
 
   // ── Transport report fields (shown after transportationCompleted) ──
   const [transComments, setTransComments] = useState("");
@@ -320,7 +371,90 @@ export default function ShiftDetails() {
     loadClient();
   }, [shift?.clientId]);
 
-  // Lightweight intake fetch — only when clientName looks like a numeric ID,
+  // ── Clock-window monitoring + local push-notification scheduling ─────────
+  useEffect(() => {
+    if (!shift || !shiftId) return;
+
+    const isUpcoming  = !!(shift.shiftConfirmed && !shift.clockInTime  && !shift.clockIn  && !shift.clockin);
+    const isInProgress = !!(shift.clockInTime   && !shift.clockOutTime && !shift.clockOut && !shift.clockout);
+
+    const startDT = parseShiftDateTime(shift.startDate, shift.startTime);
+    const endDT   = parseShiftDateTime(shift.startDate, shift.endTime);
+
+    // ── Schedule local phone notifications (once per status change) ──────
+    if (!notifsScheduledRef.current && (isUpcoming || isInProgress)) {
+      notifsScheduledRef.current = true;
+
+      // Set notification handler if not already configured
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+
+      (async () => {
+        try {
+          const now = new Date();
+          // Cancel any previously scheduled notifications for this shift
+          const existing = await Notifications.getAllScheduledNotificationsAsync();
+          await Promise.all(
+            existing
+              .filter((n) => n.content?.data?.shiftId === shiftId)
+              .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier))
+          );
+
+          const targets = isUpcoming && startDT ? [
+            { dt: new Date(startDT.getTime() - 15 * 60000), title: "Shift Starts in 15 Minutes", body: "Your shift starts in 15 minutes. Please clock in." },
+            { dt: new Date(startDT.getTime() - 10 * 60000), title: "Shift Starts in 10 Minutes", body: "Your shift starts in 10 minutes. Please clock in now." },
+            { dt: new Date(startDT.getTime() -  5 * 60000), title: "Shift Starts in 5 Minutes",  body: "Your shift starts in 5 minutes. Please clock in immediately." },
+            { dt: new Date(startDT.getTime() + 15 * 60000), title: "Clock-In Window Closed",      body: "The clock-in window has closed. Contact your admin if you need help." },
+          ] : isInProgress && endDT ? [
+            { dt: new Date(endDT.getTime() - 15 * 60000), title: "Shift Ends in 15 Minutes", body: "Your shift ends in 15 minutes. Please prepare to clock out." },
+            { dt: new Date(endDT.getTime() -  5 * 60000), title: "Shift Ends in 5 Minutes",  body: "Your shift ends in 5 minutes. Please clock out now." },
+            { dt: new Date(endDT.getTime() + 15 * 60000), title: "Clock-Out Reminder",        body: "Your shift ended 15 minutes ago. Please clock out now." },
+          ] : [];
+
+          for (const t of targets) {
+            const seconds = Math.round((t.dt.getTime() - now.getTime()) / 1000);
+            if (seconds > 10) {
+              await Notifications.scheduleNotificationAsync({
+                content: { title: t.title, body: t.body, data: { shiftId } },
+                trigger: { seconds, repeats: false },
+              });
+            }
+          }
+        } catch (err) {
+          console.warn("Shift notification scheduling error:", err);
+        }
+      })();
+    }
+
+    // ── Real-time window check every 30 seconds ───────────────────────────
+    const checkWindow = () => {
+      const now = new Date();
+      if (isUpcoming && startDT) {
+        const mins = (startDT.getTime() - now.getTime()) / 60000; // positive = future
+        if (mins > 0 && mins <= 15) {
+          setMinutesUntilStart(Math.ceil(mins));
+        } else if (mins <= 0 && mins >= -15) {
+          setMinutesUntilStart(0); // exactly at or just past start, still within window
+        } else if (mins < -15) {
+          setClockInLocked(true);
+          setMinutesUntilStart(null);
+        } else {
+          setMinutesUntilStart(null);
+        }
+      }
+    };
+
+    checkWindow();
+    const timer = setInterval(checkWindow, 30000);
+    return () => clearInterval(timer);
+  }, [shift?.id, shift?.shiftConfirmed, shift?.clockInTime, shift?.clockOutTime, shiftId]);
+
+  // ── Lightweight intake fetch — only when clientName looks like a numeric ID,
   // do a single targeted getDoc by clientId (no full collection scan).
   useEffect(() => {
     if (!shift) return;
@@ -365,6 +499,8 @@ export default function ShiftDetails() {
           confirmedAt: new Date().toISOString(),
           confirmedBy: user?.name || user?.username,
         });
+        // Optimistic local update so UI switches to "Clock In" immediately
+        setShift((prev) => ({ ...prev, shiftConfirmed: true }));
 
         // Notify admin
         const adminId = user?.agencyId || user?.adminId || "admin";
@@ -378,7 +514,8 @@ export default function ShiftDetails() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        const roundedTime = getRoundedTime();
+        // Smart rounding: snaps to scheduled start if clocking in within 15-min window
+        const roundedTime = getClockInTime(shift.startTime, shift.startDate);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -399,7 +536,8 @@ export default function ShiftDetails() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockOut") {
-        const roundedTime = getRoundedTime();
+        // Smart rounding: snaps to scheduled end if clocking out within 15-min window
+        const roundedTime = getClockOutTime(shift.endTime, shift.startDate);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -1062,14 +1200,40 @@ export default function ShiftDetails() {
           )}
           {shiftStatus === "upcoming" && (
             <>
+              {/* Clock-in window countdown banner */}
+              {minutesUntilStart !== null && !clockInLocked && (
+                <View style={{ backgroundColor: "#FFF7ED", padding: 12, borderRadius: 12, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="alarm-outline" size={18} color="#F59E0B" />
+                  <Text style={{ color: "#92400E", fontSize: 13, fontWeight: "600", flex: 1 }}>
+                    {minutesUntilStart === 0
+                      ? "Shift has started — please clock in now!"
+                      : `Shift starts in ${minutesUntilStart} min — please clock in soon`}
+                  </Text>
+                </View>
+              )}
+              {clockInLocked && (
+                <View style={{ backgroundColor: "#FEF2F2", padding: 12, borderRadius: 12, marginBottom: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name="time-outline" size={18} color={ERROR_RED} />
+                  <Text style={{ color: "#7F1D1D", fontSize: 13, fontWeight: "600", flex: 1 }}>
+                    Clock-in window has closed. Please contact your admin.
+                  </Text>
+                </View>
+              )}
               <Pressable
-                onPress={() => setConfirmAction({ type: "clockIn" })}
-                style={styles.solidBtn}
-                disabled={shiftLocked}
+                onPress={() => {
+                  if (clockInLocked) return;
+                  setConfirmAction({ type: "clockIn" });
+                }}
+                style={[styles.solidBtn, clockInLocked && { backgroundColor: "#9CA3AF" }]}
+                disabled={shiftLocked || clockInLocked}
               >
-                <Text style={styles.solidBtnText}>Clock In</Text>
+                <Text style={styles.solidBtnText}>{clockInLocked ? "Clock In Closed" : "Clock In"}</Text>
               </Pressable>
-              <Text style={styles.actionHint}>Your location will be captured (rounded to 15 min)</Text>
+              <Text style={styles.actionHint}>
+                {clockInLocked
+                  ? "Contact admin to resolve attendance"
+                  : "Your location will be captured (snapped to scheduled start if within 15 min)"}
+              </Text>
             </>
           )}
           {shiftStatus === "in-progress" && (
@@ -1086,7 +1250,7 @@ export default function ShiftDetails() {
           )}
           {shiftStatus === "completed" && (
             <Pressable
-              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id } })}
+              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
               style={[styles.solidBtn, { backgroundColor: "#10B981" }]}
             >
               <Text style={styles.solidBtnText}>View Shift Report</Text>
