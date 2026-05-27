@@ -1361,9 +1361,12 @@ const ShiftReport = ({ user }) => {
                     const visitLoc = sp.visitLocation || shiftData?.visitLocation || "N/A";
                     const visitStartTime = sp.visitStartTime || shiftData?.visitStartOfficialTime || "N/A";
                     const visitEndTime = sp.visitEndTime || shiftData?.visitEndOfficialTime || "N/A";
-                    // Mobile saves actual drop to dropActualLocation / dropDoneAt (via _ReportTransportationTab)
-                    const dropLoc = sp.dropActualLocation || sp.dropLocation || shiftData?.dropLocation || "N/A";
-                    const dropTime = sp.dropDoneAt || sp.dropTime || shiftData?.dropTime || "N/A";
+                    // Planned drop (from shift assignment)
+                    const dropLoc = sp.dropLocation || shiftData?.dropLocation || "N/A";
+                    const dropTime = sp.dropTime || shiftData?.dropTime || "N/A";
+                    // Actual drop (saved by mobile _ReportTransportationTab when staff confirms drop-off)
+                    const droppedOffLoc = sp.dropActualLocation || shiftData?.dropActualLocation || "N/A";
+                    const droppedOffTime = sp.dropDoneAt || shiftData?.dropDoneAt || "N/A";
 
                     const mapLink = (addr) => addr && addr !== "N/A"
                       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
@@ -1419,8 +1422,10 @@ const ShiftReport = ({ user }) => {
                         <div>
                           <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Drop Off</p>
                           <div className="grid grid-cols-2 gap-3">
-                            <Field label="Drop Off Location" value={dropLoc} mapUrl={mapLink(dropLoc)} />
                             <Field label="Drop Off Time" value={dropTime} />
+                            <Field label="Drop Off Location" value={dropLoc} mapUrl={mapLink(dropLoc)} />
+                            <Field label="Dropped Off Time (Actual)" value={droppedOffTime} />
+                            <Field label="Dropped Off Location (Actual)" value={droppedOffLoc} mapUrl={mapLink(droppedOffLoc)} />
                           </div>
                         </div>
                       </div>
