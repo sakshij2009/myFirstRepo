@@ -55,8 +55,20 @@ const ALLOWED_CATEGORIES = [
   "Emergent Care",
   "Emergency Care",
   "Supervised Visitation",
+  "Supervised Visitation + Transportation",
   "Transportation",
 ];
+
+// Normalize raw category strings so minor variations still match
+const normalizeCat = (raw) => {
+  const l = (raw || "").toLowerCase();
+  if (l.includes("supervised") && l.includes("transport")) return "Supervised Visitation + Transportation";
+  if (l.includes("supervised") || l.includes("visitation")) return "Supervised Visitation";
+  if (l.includes("emergent") || l.includes("emergency")) return "Emergency Care";
+  if (l.includes("respite")) return "Respite Care";
+  if (l.includes("transport")) return "Transportation";
+  return raw || "";
+};
 
 const serviceTypeStyles = {
   "Respite Care": { bg: "#EFF6FF", text: "#1D4ED8" },
@@ -245,27 +257,31 @@ export default function Home() {
     let secondaryByIdShifts = [];
     let secondaryByDocIdShifts = [];
     let secondaryByNameShifts = [];
+    let primaryByNameShifts = [];  // fallback: primary staff matched by userName
     let primaryLoaded = false;
     let secondaryByIdLoaded = false;
     let secondaryByDocIdLoaded = false;
     let secondaryByNameLoaded = false;
+    let primaryByNameLoaded = false;
 
     // Always put Firestore doc ID last so it wins over any in-document "id" field
     const toShift = (d) => ({ ...d.data(), id: d.id });
 
     const merge = () => {
-      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
+      if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded || !primaryByNameLoaded) return;
       const seen = new Set();
       const combined = [
         ...primaryShifts,
         ...secondaryByIdShifts,
         ...secondaryByDocIdShifts,
         ...secondaryByNameShifts,
+        ...primaryByNameShifts,
       ].filter(s => {
         if (seen.has(s.id)) return false;
         seen.add(s.id);
-        const category = s?.category || s?.categoryName || s?.serviceType;
-        return !category || ALLOWED_CATEGORIES.includes(category);
+        const raw = s?.category || s?.categoryName || s?.serviceType || s?.shiftCategory;
+        if (!raw) return true;
+        return ALLOWED_CATEGORIES.includes(normalizeCat(raw));
       }).sort((a, b) => {
         // Newest first — sort by startDate descending (client-side; no composite index needed)
         const da = parseDateFn(a.startDate);
@@ -340,7 +356,24 @@ export default function Home() {
       secondaryByNameLoaded = true;
     }
 
-    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
+    // Primary fallback: catch shifts where userId field doesn't match but userName does
+    let unsubPrimaryByName = () => {};
+    if (userName) {
+      const qPrimaryByName = query(
+        collection(db, "shifts"),
+        where("userName", "==", userName),
+        ...secondaryConstraints
+      );
+      unsubPrimaryByName = onSnapshot(qPrimaryByName, (snap) => {
+        primaryByNameShifts = snap.docs.map(toShift);
+        primaryByNameLoaded = true;
+        merge();
+      }, (err) => { console.warn("primaryByName query error:", err?.message); primaryByNameLoaded = true; merge(); });
+    } else {
+      primaryByNameLoaded = true;
+    }
+
+    return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); unsubPrimaryByName(); };
   }, [user]);
 
   // Device-local date key so shift date comparisons (parseDate = device-local midnight) match correctly
