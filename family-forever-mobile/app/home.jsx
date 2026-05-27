@@ -247,6 +247,9 @@ export default function Home() {
     let secondaryByDocIdLoaded = false;
     let secondaryByNameLoaded = false;
 
+    // Always put Firestore doc ID last so it wins over any in-document "id" field
+    const toShift = (d) => ({ ...d.data(), id: d.id });
+
     const merge = () => {
       if (!primaryLoaded || !secondaryByIdLoaded || !secondaryByDocIdLoaded || !secondaryByNameLoaded) return;
       const seen = new Set();
@@ -278,7 +281,7 @@ export default function Home() {
       : query(collection(db, "shifts"), ...primaryConstraints);
 
     const unsubPrimary = onSnapshot(qPrimary, (snap) => {
-      primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      primaryShifts = snap.docs.map(toShift);
       primaryLoaded = true;
       merge();
     }, (err) => { console.warn("primary shifts query error:", err?.message); primaryLoaded = true; merge(); });
@@ -292,7 +295,7 @@ export default function Home() {
         ...secondaryConstraints
       );
       unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
-        secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByIdShifts = snap.docs.map(toShift);
         secondaryByIdLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryById query error:", err?.message); secondaryByIdLoaded = true; merge(); });
@@ -309,7 +312,7 @@ export default function Home() {
         ...secondaryConstraints
       );
       unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
-        secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByDocIdShifts = snap.docs.map(toShift);
         secondaryByDocIdLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryByDocId query error:", err?.message); secondaryByDocIdLoaded = true; merge(); });
@@ -326,7 +329,7 @@ export default function Home() {
         ...secondaryConstraints
       );
       unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
-        secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        secondaryByNameShifts = snap.docs.map(toShift);
         secondaryByNameLoaded = true;
         merge();
       }, (err) => { console.warn("secondaryByName query error:", err?.message); secondaryByNameLoaded = true; merge(); });
@@ -446,18 +449,31 @@ export default function Home() {
     });
   }, [shifts, statPeriod]);
 
+  // ── Optimistic local update so card reflects new status immediately ─────────
+  const optimisticShiftUpdate = (shiftId, patch) => {
+    setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, ...patch } : s));
+  };
+
   const handleConfirmAction = async () => {
     if (!confirmAction || !confirmAction.shift) return;
     setIsProcessing(true);
     const { type, shift } = confirmAction;
+    const shiftDocId = shift.id;
 
     try {
-      const ref = doc(db, "shifts", shift.id);
+      const ref = doc(db, "shifts", shiftDocId);
 
       if (type === "confirm") {
+        const now = new Date().toISOString();
         await updateDoc(ref, {
           shiftConfirmed: true,
-          confirmedAt: new Date().toISOString(),
+          confirmedAt: now,
+          confirmedBy: user?.name || user?.username,
+        });
+        // ── Immediately flip the card to "Confirmed → Clock In" ──────────────
+        optimisticShiftUpdate(shiftDocId, {
+          shiftConfirmed: true,
+          confirmedAt: now,
           confirmedBy: user?.name || user?.username,
         });
         await sendNotification(user?.username || user?.userId, {
@@ -478,6 +494,7 @@ export default function Home() {
           clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
+        optimisticShiftUpdate(shiftDocId, { clockInTime: roundedTime, clockInLocation: locationStr });
         await sendNotification(user?.username || user?.userId, {
           title: "Clocked In ✓",
           message: `Clocked in at ${roundedTime} for ${shift.category || "shift"}. Location: ${locationStr}`,
@@ -505,6 +522,7 @@ export default function Home() {
           clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
+        optimisticShiftUpdate(shiftDocId, { clockOutTime: roundedTime, clockOutLocation: locationStr });
         await sendNotification(user?.username || user?.userId, {
           title: "Shift Completed ✓",
           message: `Clocked out at ${roundedTime}. Great work on your ${shift.category || "shift"}!`,
