@@ -33,7 +33,7 @@ functions/package-lock.json
 
 # Mobile / Expo
 family-forever-mobile/start.log
-app.json
+/app.json
 
 # Temporary / generated files
 shift_report_main.txt
