@@ -652,7 +652,8 @@ export default function ShiftDetails() {
       await updateDoc(ref, {
         shiftReport: reportText,
         reportLastSaved: serverTimestamp(),
-        ...(isSubmit && { reportSubmitted: true, status: "completed" })
+        // NOTE: do NOT set status:"completed" here — only clock-out should do that
+        ...(isSubmit && { reportSubmitted: true })
       });
       if (isSubmit) {
         Alert.alert("Success", "Daily Shift Report has been submitted successfully.");
@@ -1346,10 +1347,12 @@ export default function ShiftDetails() {
                   <View style={[styles.successCircle, { backgroundColor: "#EBF5FF" }]}>
                     <Ionicons name="log-in-outline" size={32} color="#1D4ED8" />
                   </View>
-                  <Text style={styles.modalTitle}>Confirm clock-in at {formatCanadaTime(new Date().toISOString())}?</Text>
+                  <Text style={styles.modalTitle}>
+                    Clock In at {getClockInTime(shift.startTime, shift.startDate)}?
+                  </Text>
                   <Text style={styles.modalDesc}>
-                    Your location and time will be recorded. {"\n"}
-                    <Text style={{ fontWeight: "700", color: "#1D4ED8" }}>Note:</Text> If clocking in early, payroll will reflect the scheduled start time of {shift.startTime}.
+                    Your location will be recorded.{"\n"}
+                    Time is rounded to the nearest 15 minutes for payroll accuracy.
                   </Text>
                 </>
               ) : (

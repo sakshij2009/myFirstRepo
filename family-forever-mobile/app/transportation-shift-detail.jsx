@@ -76,12 +76,20 @@ export default function TransportationShiftDetail() {
   const [intake, setIntake] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showIntake, setShowIntake] = useState(false);
+  const [noShowClients, setNoShowClients] = useState(new Set());
 
   // Real-time shift listener
   useEffect(() => {
     if (!shiftId) return;
     const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
-      if (snap.exists()) setShift({ id: snap.id, ...snap.data() });
+      if (snap.exists()) {
+        const data = snap.data();
+        setShift({ id: snap.id, ...data });
+        // Restore no-shows from Firestore (so back-navigation preserves state)
+        if (Array.isArray(data.noShowClients)) {
+          setNoShowClients(new Set(data.noShowClients));
+        }
+      }
       setLoading(false);
     });
     return () => unsub();
@@ -283,6 +291,24 @@ export default function TransportationShiftDetail() {
 
   const hasContacts =
     caseworkerName || caseworkerPhone || intakeWorkerName || weekendPhone1;
+
+  // ── No-Show toggle: marks a client as no-show at pickup, hides their drop ──
+  const toggleNoShow = async (clientName) => {
+    const updated = new Set(noShowClients);
+    if (updated.has(clientName)) {
+      updated.delete(clientName);
+    } else {
+      updated.add(clientName);
+    }
+    setNoShowClients(updated);
+    try {
+      await updateDoc(doc(db, "shifts", shiftId), {
+        noShowClients: Array.from(updated),
+      });
+    } catch (e) {
+      console.warn("noShow update error:", e);
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: PAGE_BG }}>
@@ -512,87 +538,126 @@ export default function TransportationShiftDetail() {
               Route
             </Text>
 
-            {stops.map((stop, idx) => (
-              <View key={idx}>
-                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-                  {/* Timeline dot + line */}
-                  <View style={{ alignItems: "center", width: 20, marginRight: 14 }}>
-                    <View
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: 6,
-                        backgroundColor: stop.color,
-                        marginTop: 4,
-                      }}
-                    />
-                    {idx < stops.length - 1 && (
-                      <View
-                        style={{
-                          width: 2,
-                          flex: 1,
-                          backgroundColor: "#E5E7EB",
-                          marginTop: 4,
-                          minHeight: 48,
-                        }}
-                      />
-                    )}
-                  </View>
+            {stops.map((stop, idx) => {
+              const isPickup = stop.label.toLowerCase().includes("pickup");
+              const isDrop = stop.label.toLowerCase().includes("drop");
 
-                  {/* Stop info */}
-                  <View style={{ flex: 1, paddingBottom: idx < stops.length - 1 ? 16 : 0 }}>
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "700",
-                        color: DARK,
-                        fontFamily: "Inter-Bold",
-                        marginBottom: 2,
-                      }}
-                    >
-                      {stop.label}
-                    </Text>
-                    {stop.address ? (
-                      <Text style={{ fontSize: 14, color: "#374151", fontFamily: "Inter", marginBottom: 2 }}>
-                        {stop.address}
+              // For drop stops: filter out clients who were a no-show at pickup
+              const activeDropClients = isDrop
+                ? (stop.clients || []).filter(name => !noShowClients.has(name))
+                : [];
+
+              // Skip a drop stop entirely if all its clients are no-shows
+              if (isDrop && stop.clients && stop.clients.length > 0 && activeDropClients.length === 0) {
+                return null;
+              }
+
+              return (
+                <View key={idx}>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                    {/* Timeline dot + line */}
+                    <View style={{ alignItems: "center", width: 20, marginRight: 14 }}>
+                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: stop.color, marginTop: 4 }} />
+                      {idx < stops.length - 1 && (
+                        <View style={{ width: 2, flex: 1, backgroundColor: "#E5E7EB", marginTop: 4, minHeight: 48 }} />
+                      )}
+                    </View>
+
+                    {/* Stop info */}
+                    <View style={{ flex: 1, paddingBottom: idx < stops.length - 1 ? 16 : 0 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: DARK, fontFamily: "Inter-Bold", marginBottom: 2 }}>
+                        {stop.label}
                       </Text>
-                    ) : null}
-                    {stop.time ? (
-                      <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter", marginBottom: 4 }}>
-                        {stop.time}
-                      </Text>
-                    ) : null}
-                    {stop.clients && stop.clients.length > 0 && clientsList.length > 1 ? (
-                      <Text style={{ fontSize: 12, color: stop.color, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 6 }}>
-                        {stop.clients.join(", ")}
-                      </Text>
-                    ) : null}
-                    {stop.address ? (
-                      <Pressable
-                        onPress={() => openMaps(stop.address)}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 5,
-                          backgroundColor: "#F0FDF4",
-                          borderRadius: 20,
-                          paddingHorizontal: 10,
-                          paddingVertical: 5,
-                          alignSelf: "flex-start",
-                        }}
-                      >
-                        <Ionicons name="location-outline" size={13} color={GREEN} />
-                        <Text
-                          style={{ fontSize: 12, fontWeight: "600", color: GREEN, fontFamily: "Inter-SemiBold" }}
-                        >
-                          View on Maps
+                      {stop.address ? (
+                        <Text style={{ fontSize: 14, color: "#374151", fontFamily: "Inter", marginBottom: 2 }}>
+                          {stop.address}
                         </Text>
-                      </Pressable>
-                    ) : null}
+                      ) : null}
+                      {stop.time ? (
+                        <Text style={{ fontSize: 12, color: GRAY, fontFamily: "Inter", marginBottom: 6 }}>
+                          {stop.time}
+                        </Text>
+                      ) : null}
+
+                      {/* ── PICKUP: show each client with No Show toggle ── */}
+                      {isPickup && (stop.clients?.length > 0 ? stop.clients : [clientName]).map((cName) => (
+                        <View key={cName} style={{
+                          flexDirection: "row", alignItems: "center",
+                          backgroundColor: noShowClients.has(cName) ? "#FEF2F2" : "#F9FAFB",
+                          borderRadius: 10, padding: 10, marginBottom: 6,
+                          borderWidth: 1, borderColor: noShowClients.has(cName) ? "#FECACA" : "#F3F4F6",
+                        }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{
+                              fontSize: 13, fontWeight: "600", fontFamily: "Inter-SemiBold",
+                              color: noShowClients.has(cName) ? "#9CA3AF" : DARK,
+                              textDecorationLine: noShowClients.has(cName) ? "line-through" : "none",
+                            }}>
+                              {cName}
+                            </Text>
+                            {noShowClients.has(cName) && (
+                              <Text style={{ fontSize: 11, color: "#EF4444", fontFamily: "Inter", marginTop: 2 }}>
+                                No Show — excluded from drop-off
+                              </Text>
+                            )}
+                          </View>
+                          <Pressable
+                            onPress={() => toggleNoShow(cName)}
+                            style={{
+                              backgroundColor: noShowClients.has(cName) ? "#FEE2E2" : "#F3F4F6",
+                              borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
+                              borderWidth: 1,
+                              borderColor: noShowClients.has(cName) ? "#FCA5A5" : "#E5E7EB",
+                            }}
+                          >
+                            <Text style={{
+                              fontSize: 12, fontWeight: "700", fontFamily: "Inter-Bold",
+                              color: noShowClients.has(cName) ? "#EF4444" : "#6B7280",
+                            }}>
+                              {noShowClients.has(cName) ? "Undo" : "No Show"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ))}
+
+                      {/* ── DROP-OFF: show only clients who were actually picked up ── */}
+                      {isDrop && activeDropClients.length > 0 && (
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                          {activeDropClients.map(cName => (
+                            <View key={cName} style={{ backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                              <Text style={{ fontSize: 12, color: "#DC2626", fontWeight: "600", fontFamily: "Inter-SemiBold" }}>{cName}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* ── Visit/other stops: show clients as before ── */}
+                      {!isPickup && !isDrop && stop.clients && stop.clients.length > 0 && clientsList.length > 1 ? (
+                        <Text style={{ fontSize: 12, color: stop.color, fontWeight: "600", fontFamily: "Inter-SemiBold", marginBottom: 6 }}>
+                          {stop.clients.join(", ")}
+                        </Text>
+                      ) : null}
+
+                      {stop.address ? (
+                        <Pressable
+                          onPress={() => openMaps(stop.address)}
+                          style={{
+                            flexDirection: "row", alignItems: "center", gap: 5,
+                            backgroundColor: "#F0FDF4", borderRadius: 20,
+                            paddingHorizontal: 10, paddingVertical: 5, alignSelf: "flex-start",
+                          }}
+                        >
+                          <Ionicons name="location-outline" size={13} color={GREEN} />
+                          <Text style={{ fontSize: 12, fontWeight: "600", color: GREEN, fontFamily: "Inter-SemiBold" }}>
+                            View on Maps
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
