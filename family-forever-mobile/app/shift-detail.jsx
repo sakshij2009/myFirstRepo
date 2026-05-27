@@ -86,10 +86,12 @@ const roundToNearest15 = (date) => {
   return new Date(Math.round(date.getTime() / coeff) * coeff);
 };
 
+// Store in device-local time. Staff in Edmonton will have Edmonton-timezone
+// devices, so local = Edmonton. Forcing a fixed timezone converts twice and
+// produces the wrong value for anyone not physically in Edmonton (e.g. IST testers).
 const toTimeStr = (date) =>
   date.toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", hour12: true,
-    timeZone: "America/Edmonton",
   });
 
 // ── Helper: Clock-IN time — snaps to scheduled start if within 15-min window ─

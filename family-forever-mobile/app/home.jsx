@@ -80,8 +80,11 @@ const parseShiftDT = (dateStr, timeStr) => {
     const r = new Date(base); r.setHours(h, m || 0, 0, 0); return r;
   } catch { return null; }
 };
+// Use device-local time — staff in Edmonton will have Edmonton-timezone devices,
+// so local time = Edmonton. Forcing "America/Edmonton" converts twice and gives
+// wrong results for anyone testing outside Edmonton (e.g. IST).
 const toEdmontonTimeStr = (d) =>
-  d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Edmonton" });
+  d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 const roundNearest15 = (d) => new Date(Math.round(d.getTime() / (1000 * 60 * 15)) * (1000 * 60 * 15));
 
 const getClockInTimeHome = (startTimeStr, startDateStr) => {
