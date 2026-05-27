@@ -231,13 +231,13 @@ export default function Profile() {
         <View style={styles.idCardPreview}>
           <View style={styles.idCardHeader}>
             <Text style={styles.idCardOrg}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
-            <Text style={styles.idCardNum}>Employee ID {user?.employeeId || "27"}</Text>
+            <Text style={styles.idCardNum}>Employee ID {user?.userId || user?.employeeId || "—"}</Text>
           </View>
           <View style={styles.idCardBody}>
             <Image source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} style={styles.idCardAvatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.idCardName}>{user?.name || "Sarah Johnson"}</Text>
-              <Text style={styles.idCardRole}>Child and Youth Care Worker</Text>
+              <Text style={styles.idCardRole}>{user?.designation || user?.role || "Staff"}</Text>
             </View>
             <Ionicons name="qr-code-outline" size={32} color={DARK_TEXT} style={{ opacity: 0.1 }} />
           </View>
@@ -262,11 +262,18 @@ export default function Profile() {
         {/* Employment */}
         <View style={styles.detailsBox}>
           <Text style={styles.sectionTitle}>Employment</Text>
-          <DetailItem label="Employee ID" value={user?.employeeId || "EMP-2024-0087"} />
-          <DetailItem label="CYIM ID" value={user?.cyimId || "1432569"} />
-          <DetailItem label="Role" value={user?.designation || "Intake Worker"} />
-          <DetailItem label="Department" value={user?.department || "Field Services"} />
-          <DetailItem label="Salary" value={user?.salary || "$24.50/hr"} isLast />
+          <DetailItem label="Employee ID" value={user?.userId || user?.employeeId || "—"} />
+          <DetailItem label="Role" value={user?.designation || user?.role || "—"} />
+          <DetailItem label="Salary" value={user?.salary || "—"} />
+          <DetailItem
+            label="KM Rate"
+            value={
+              user?.kmRate || user?.kmsRate || user?.kilometerRate || user?.transportationRate
+                ? `$${user?.kmRate ?? user?.kmsRate ?? user?.kilometerRate ?? user?.transportationRate}/km`
+                : "—"
+            }
+            isLast
+          />
         </View>
 
 
