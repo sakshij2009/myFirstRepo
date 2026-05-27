@@ -108,7 +108,7 @@ export default function StaffIdCard() {
                 />
                 <Text style={styles.cardOrgName}>Family Forever Inc.</Text>
               </View>
-              <Text style={styles.cardEmployeeId}>Employee ID {user?.employeeId || "27"}</Text>
+              <Text style={styles.cardEmployeeId}>Employee ID {user?.userId || user?.employeeId || "—"}</Text>
               
               {/* Curve implementation: using a background overlay or just styling */}
               <View style={styles.curveOverlay} />
@@ -130,7 +130,7 @@ export default function StaffIdCard() {
               
               <View style={styles.mainInfo}>
                 <Text style={styles.nameText}>{user?.name || "Sarah Johnson"}</Text>
-                <Text style={styles.roleText}>{user?.designation || "Child and Youth Care Worker"}</Text>
+                <Text style={styles.roleText}>{user?.position || user?.designation || "Staff"}</Text>
               </View>
 
               <View style={styles.contactDetails}>
