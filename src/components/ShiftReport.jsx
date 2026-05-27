@@ -170,8 +170,8 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
                     { label: "Date", value: normalized.displayDate || "—", sub: "", color: "#111827", bg: "#f9fafb" },
-                    { label: "Clock In", value: normalized.clockIn || "—", sub: "Start", color: "#145228", bg: "#f0fdf4" },
-                    { label: "Clock Out", value: normalized.clockOut || "—", sub: "End", color: "#dc2626", bg: "#fef2f2" },
+                    { label: "Clock In", value: formatClockDisplay(normalized.clockIn), sub: "Start", color: "#145228", bg: "#f0fdf4" },
+                    { label: "Clock Out", value: formatClockDisplay(normalized.clockOut), sub: "End", color: "#dc2626", bg: "#fef2f2" },
                     { label: "Status", value: normalized.statusVal, sub: "Shift status", color: "#111827", bg: "#f9fafb" },
                   ].map((k, i) => (
                     <div key={i} className="rounded-xl p-3 border" style={{ background: k.bg, borderColor: "#f3f4f6" }}>
@@ -310,6 +310,14 @@ const ShiftReport = ({ user }) => {
           const data = snap.data();
           setShiftData(data);
           setShiftReportAccess(!!data.accessToShiftReport);
+          // Pre-populate transportation fields from mobile-app-saved data
+          if (data.transComments) setTravelComments(data.transComments);
+          if (data.totalKmWithOffice) setTotalKm(String(data.totalKmWithOffice));
+          else if (data.transportationKm) setTotalKm(String(data.transportationKm));
+          const receipts = Array.isArray(data.expenseReceiptUrls)
+            ? data.expenseReceiptUrls.map(url => ({ url, name: "Receipt" }))
+            : data.receiptUrl ? [{ url: data.receiptUrl, name: "Receipt" }] : [];
+          if (receipts.length) setReceipts(receipts);
         }
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
@@ -492,7 +500,7 @@ const ShiftReport = ({ user }) => {
           if (sDate >= windowStart && sDate < startDate) {
             let rep = d.shiftReport;
             if (typeof rep === "string") { try { rep = JSON.parse(rep); } catch { } }
-            list.push({ shiftId: ds.id, shiftReport: rep, staffName: d.name || "Unknown", date: sDate, clockIn: d.clockIn, clockOut: d.clockOut, service: d.typeName || d.shiftType || "Regular" });
+            list.push({ shiftId: ds.id, shiftReport: rep, staffName: d.name || "Unknown", date: sDate, clockIn: d.clockInTime || d.clockIn, clockOut: d.clockOutTime || d.clockOut, service: d.typeName || d.shiftType || "Regular" });
           }
         });
         setRecentReports(list);
@@ -692,7 +700,10 @@ const ShiftReport = ({ user }) => {
   );
 
   // ── Normalise ──
-  const statusVal = shiftData.clockIn && shiftData.clockOut ? "Completed" : shiftData.clockIn ? "Ongoing" : "Incomplete";
+  // Mobile saves clockInTime/clockOutTime (formatted strings); admin edits save clockIn/clockOut (ISO strings)
+  const clockInVal  = shiftData.clockInTime  || shiftData.clockIn  || null;
+  const clockOutVal = shiftData.clockOutTime || shiftData.clockOut || null;
+  const statusVal = clockInVal && clockOutVal ? "Completed" : clockInVal ? "Ongoing" : "Incomplete";
   const sc = {
     Completed: { bg: "#f0fdf4", text: "#15803d", dot: "#16a34a" },
     Ongoing: { bg: "#fef3c7", text: "#b45309", dot: "#f59e0b" },
@@ -711,8 +722,8 @@ const ShiftReport = ({ user }) => {
     displayDate: renderDate(shiftData.startDate),
     startTime: shiftData.startTime || "—",
     endTime: shiftData.endTime || "—",
-    clockIn: shiftData.clockIn || null,
-    clockOut: shiftData.clockOut || null,
+    clockIn: clockInVal,
+    clockOut: clockOutVal,
     statusVal,
   };
 
@@ -1101,28 +1112,77 @@ const ShiftReport = ({ user }) => {
                       {shiftData?.shiftReport ? <><CheckCircle size={9} /> Report Filed</> : <><AlertCircle size={9} /> Pending</>}
                     </span>
                   </div>
-                  <div className="rounded-xl p-4" style={{ background: "#f9fafb", border: "1px solid #f3f4f6" }}>
-                    <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                      {shiftData?.shiftReport || "No shift report has been filed for this shift yet."}
-                    </p>
-                  </div>
-                </div>
 
-                {/* Action buttons */}
-                <div className="flex items-center gap-2 mt-4 pt-4 border-t" style={{ borderColor: "#f3f4f6" }}>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold transition-all hover:bg-red-50 hover:border-red-200"
-                    style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
-                    <Flag size={12} style={{ color: "#dc2626" }} /> Flag Issue
-                  </button>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold transition-all hover:bg-gray-50"
-                    style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
-                    <MessageSquare size={12} /> Add Note
-                  </button>
-                  <button onClick={() => setShowFullReport(true)}
-                    className="ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-semibold text-white transition-all hover:opacity-90"
-                    style={{ fontSize: 12, background: "#145228" }}>
-                    <FileText size={12} /> View Full Report
-                  </button>
+                  {/* Read-only view */}
+                  {!reportExpanded && (
+                    <div className="rounded-xl p-4" style={{ background: "#f9fafb", border: "1px solid #f3f4f6" }}>
+                      <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                        {shiftData?.shiftReport || "No shift report has been filed for this shift yet."}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Inline editor */}
+                  {reportExpanded && (
+                    <div className="space-y-2">
+                      <textarea
+                        rows={7}
+                        className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:border-[#145228] resize-none"
+                        style={{ borderColor: "#d1d5db", background: "#fff", color: "#374151", lineHeight: 1.7 }}
+                        placeholder="Describe the shift activities, client behaviour, any observations, goals worked on, and any other relevant notes…"
+                        value={reportDraft}
+                        onChange={e => setReportDraft(e.target.value)}
+                      />
+                      <div className="flex items-center justify-between">
+                        <p style={{ fontSize: 11, color: "#9ca3af" }}>{reportDraft.length} characters</p>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setReportExpanded(false)}
+                            className="px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-gray-50"
+                            style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
+                            Cancel
+                          </button>
+                          <button
+                            disabled={reportSubmitting || !reportDraft.trim()}
+                            onClick={async () => {
+                              if (!reportDraft.trim() || !shiftId) return;
+                              setReportSubmitting(true);
+                              try {
+                                await updateDoc(doc(db, "shifts", shiftId), {
+                                  shiftReport: reportDraft.trim(),
+                                  shiftReportSubmittedAt: new Date().toISOString(),
+                                  shiftReportSubmittedBy: user?.name || user?.email || "Unknown",
+                                });
+                                setShiftData(prev => ({ ...prev, shiftReport: reportDraft.trim() }));
+                                setReportSubmitted(true);
+                                setReportExpanded(false);
+                                toast.success("Shift report saved successfully!");
+                              } catch (e) {
+                                console.error("Report save error:", e);
+                                toast.error("Failed to save report. Please try again.");
+                              } finally {
+                                setReportSubmitting(false);
+                              }
+                            }}
+                            className="px-4 py-1.5 rounded-lg font-semibold text-xs text-white hover:opacity-90 disabled:opacity-50"
+                            style={{ background: "#145228" }}>
+                            {reportSubmitting ? "Saving…" : "Save Report"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Edit Report button */}
+                  {!reportExpanded && (
+                    <div className="flex items-center mt-4 pt-4 border-t" style={{ borderColor: "#f3f4f6" }}>
+                      <button
+                        onClick={() => { setReportDraft(shiftData?.shiftReport || ""); setReportExpanded(true); }}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-semibold text-white transition-all hover:opacity-90"
+                        style={{ fontSize: 12, background: "#145228" }}>
+                        <PenLine size={12} /> {shiftData?.shiftReport ? "Edit Report" : "Write Report"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1301,8 +1361,9 @@ const ShiftReport = ({ user }) => {
                     const visitLoc = sp.visitLocation || shiftData?.visitLocation || "N/A";
                     const visitStartTime = sp.visitStartTime || shiftData?.visitStartOfficialTime || "N/A";
                     const visitEndTime = sp.visitEndTime || shiftData?.visitEndOfficialTime || "N/A";
-                    const dropLoc = sp.dropLocation || shiftData?.dropLocation || "N/A";
-                    const dropTime = sp.dropTime || shiftData?.dropTime || "N/A";
+                    // Mobile saves actual drop to dropActualLocation / dropDoneAt (via _ReportTransportationTab)
+                    const dropLoc = sp.dropActualLocation || sp.dropLocation || shiftData?.dropLocation || "N/A";
+                    const dropTime = sp.dropDoneAt || sp.dropTime || shiftData?.dropTime || "N/A";
 
                     const mapLink = (addr) => addr && addr !== "N/A"
                       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
@@ -1384,47 +1445,6 @@ const ShiftReport = ({ user }) => {
                       <input className={inp} placeholder="0.00" value={approvedKm} onChange={e => setApprovedKm(e.target.value)} /></div>
                     <div><label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>Approved By</label>
                       <input className={inp} placeholder="Manager name" value={approvedBy} onChange={e => setApprovedBy(e.target.value)} /></div>
-                  </div>
-
-                  {/* External Expenses */}
-                  <div>
-                    <label className="font-bold mb-3 block" style={{ fontSize: 13, color: "#2b3232" }}>External Expenses</label>
-                    <div className="flex gap-2 mb-3 flex-wrap">
-                      <select className={inp} style={{ maxWidth: 180 }} value={newExpense.type} onChange={e => setNewExpense(p => ({ ...p, type: e.target.value }))}>
-                        {EXPENSE_TYPES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                      <input className={inp} placeholder="Amount ($)" value={newExpense.amount} onChange={e => setNewExpense(p => ({ ...p, amount: e.target.value }))} style={{ maxWidth: 120 }} />
-                      <input className={inp} placeholder="Note (optional)" value={newExpense.note} onChange={e => setNewExpense(p => ({ ...p, note: e.target.value }))} />
-                      <button onClick={() => { if (newExpense.amount) { setExpenses(prev => [...prev, { ...newExpense }]); setNewExpense({ type: EXPENSE_TYPES[0], amount: "", note: "" }); } }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-white flex-shrink-0 hover:opacity-90" style={{ background: "#145228", fontSize: 12 }}>
-                        <Plus size={13} /> Add
-                      </button>
-                    </div>
-                    {expenses.length > 0 && (
-                      <table className="w-full rounded-xl overflow-hidden border" style={{ borderColor: "#e5e7eb" }}>
-                        <thead>
-                          <tr style={{ background: "#f9fafb" }}>
-                            {["Type", "Amount", "Note", ""].map(h => (
-                              <th key={h} className="text-left px-3 py-2 font-semibold border-b" style={{ fontSize: 10, color: "#9ca3af", textTransform: "uppercase", borderColor: "#f3f4f6" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {expenses.map((ex, i) => (
-                            <tr key={i} className="border-b last:border-0" style={{ borderColor: "#f9fafb" }}>
-                              <td className="px-3 py-2" style={{ fontSize: 12, color: "#374151" }}>{ex.type}</td>
-                              <td className="px-3 py-2 font-semibold" style={{ fontSize: 12, color: "#111827" }}>${ex.amount}</td>
-                              <td className="px-3 py-2" style={{ fontSize: 12, color: "#6b7280" }}>{ex.note || "—"}</td>
-                              <td className="px-3 py-2">
-                                <button onClick={() => setExpenses(prev => prev.filter((_, xi) => xi !== i))} className="p-1 rounded hover:bg-red-50">
-                                  <X size={12} style={{ color: "#dc2626" }} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
                   </div>
 
                   {/* Travel Comments */}
@@ -1542,97 +1562,6 @@ const ShiftReport = ({ user }) => {
               <h3 className="font-bold" style={{ fontSize: 16, color: "#111827" }}>Other Actions</h3>
             </div>
             <div className="px-5 py-4 space-y-3">
-
-              {/* ── Shift Report Submission ── */}
-              <div className="rounded-xl border p-4" style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ width: 36, height: 36, background: "#dcfce7", border: "1px solid #bbf7d0" }}>
-                      <PenLine size={17} style={{ color: "#145228" }} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Shift Report</p>
-                        {(shiftData?.shiftReport || reportSubmitted) && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold" style={{ fontSize: 10, background: "#dcfce7", color: "#15803d" }}>
-                            <CheckCircle size={9} /> Submitted
-                          </span>
-                        )}
-                      </div>
-                      <p style={{ fontSize: 12, color: "#6b7280", marginTop: 2, lineHeight: 1.5 }}>Write and submit your daily shift narrative report for this shift.</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setReportDraft(shiftData?.shiftReport || "");
-                      setReportExpanded(v => !v);
-                    }}
-                    className="flex items-center justify-center gap-2 py-2 rounded-lg font-semibold text-white flex-shrink-0 hover:opacity-90 transition-all"
-                    style={{ background: "#145228", fontSize: 13, width: 210, boxShadow: "0 1px 2px rgba(20,82,40,0.2)" }}>
-                    <PenLine size={14} /> {shiftData?.shiftReport || reportSubmitted ? "Edit Report" : "Write Shift Report"}
-                  </button>
-                </div>
-
-                {/* Inline report editor */}
-                {reportExpanded && (
-                  <div className="mt-4 space-y-3">
-                    <textarea
-                      rows={8}
-                      className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:border-[#145228] resize-none"
-                      style={{ borderColor: "#d1fae5", background: "#fff", color: "#374151", lineHeight: 1.7 }}
-                      placeholder="Describe the shift activities, client behaviour, any observations, goals worked on, and any other relevant notes…"
-                      value={reportDraft}
-                      onChange={e => setReportDraft(e.target.value)}
-                    />
-                    <div className="flex items-center justify-between">
-                      <p style={{ fontSize: 11, color: "#9ca3af" }}>{reportDraft.length} characters</p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setReportExpanded(false)}
-                          className="px-3 py-1.5 rounded-lg border font-semibold text-xs hover:bg-gray-50"
-                          style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-                          Cancel
-                        </button>
-                        <button
-                          disabled={reportSubmitting || !reportDraft.trim()}
-                          onClick={async () => {
-                            if (!reportDraft.trim() || !shiftId) return;
-                            setReportSubmitting(true);
-                            try {
-                              await updateDoc(doc(db, "shifts", shiftId), {
-                                shiftReport: reportDraft.trim(),
-                                shiftReportSubmittedAt: new Date().toISOString(),
-                                shiftReportSubmittedBy: user?.name || user?.email || "Unknown",
-                              });
-                              setShiftData(prev => ({ ...prev, shiftReport: reportDraft.trim() }));
-                              setReportSubmitted(true);
-                              setReportExpanded(false);
-                              toast.success("Shift report submitted successfully!");
-                            } catch (e) {
-                              console.error("Report submit error:", e);
-                              toast.error("Failed to submit report. Please try again.");
-                            } finally {
-                              setReportSubmitting(false);
-                            }
-                          }}
-                          className="px-4 py-1.5 rounded-lg font-semibold text-xs text-white hover:opacity-90 disabled:opacity-50"
-                          style={{ background: "#145228" }}>
-                          {reportSubmitting ? "Submitting…" : "Submit Report"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Show existing report preview if filed */}
-                {!reportExpanded && (shiftData?.shiftReport || reportSubmitted) && (
-                  <div className="mt-3 pl-12">
-                    <p className="rounded-lg px-3 py-2" style={{ fontSize: 12, color: "#374151", background: "#dcfce7", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                      {(shiftData?.shiftReport || "").slice(0, 200)}{(shiftData?.shiftReport || "").length > 200 ? "…" : ""}
-                    </p>
-                  </div>
-                )}
-              </div>
 
               {/* Critical Incident */}
               <div className="rounded-xl border p-4" style={{ background: "#fff5f5", borderColor: "#fecaca" }}>
