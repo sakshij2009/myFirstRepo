@@ -179,7 +179,7 @@ function RoutePreview({ shift }) {
 
 function ShiftCard({ shift, onAction, onDetails }) {
   const getStatus = () => {
-    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
+    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed" || shift.transportationCompleted) return "Completed";
     if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
     return shift.shiftConfirmed ? "Confirmed" : "Assigned";
   };
@@ -301,13 +301,10 @@ function ShiftCard({ shift, onAction, onDetails }) {
             </Pressable>
           )}
           {status === "Completed" && (
-            <Pressable
-              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
-              style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}
-            >
-              <Ionicons name="document-text-outline" size={16} color="#10B981" />
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>View Report</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: "flex-start" }}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
+            </View>
           )}
         </View>
 
@@ -318,14 +315,12 @@ function ShiftCard({ shift, onAction, onDetails }) {
           <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
         </Pressable>
 
+        {/* "Details >" before confirmation; "View Report >" after — both navigate to shift-detail */}
         <Pressable
-          onPress={isTransport
-            ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
-            : onDetails
-          }
+          onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
           style={styles.detailsLink}
         >
-          <Text style={styles.detailsLinkText}>Details &gt;</Text>
+          <Text style={styles.detailsLinkText}>{status === "Assigned" ? "Details >" : "View Report >"}</Text>
         </Pressable>
       </View>
     </View>
@@ -455,10 +450,16 @@ export default function Shifts() {
     return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
-  // Live tab filtering
-  const today = getEdmontonToday();
+  // Live tab filtering — use device-local midnight so shift date comparisons
+  // (parseDate returns device-local midnight) match correctly regardless of timezone.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const isShiftCompleted = (s) => !!(s.clockOutTime || s.clockOut || s.clockout || s.status === "completed");
+  // transportationCompleted is set by the transportation-shift-detail flow when a route finishes
+  const isShiftCompleted = (s) => !!(
+    s.clockOutTime || s.clockOut || s.clockout ||
+    s.status === "completed" || s.transportationCompleted
+  );
   const isShiftInProgress = (s) => !!(s.clockInTime || s.clockIn || s.clockin || s.status === "active") && !isShiftCompleted(s);
 
   const filtered = shifts.filter(s => {
