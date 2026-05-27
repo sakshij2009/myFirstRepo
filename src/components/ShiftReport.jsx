@@ -31,6 +31,45 @@ const PILL_COLORS = [
 ];
 const EXPENSE_TYPES = ["Food", "Accommodation", "Parking", "Toll", "Medical Supply", "Other"];
 
+// Parse clockIn/Out — handles ISO timestamps, "HH:MM AM/PM", and "HH:mm" strings
+const parseClockTime = (val) => {
+  if (!val) return null;
+  if (typeof val !== "string") return null;
+  const s = val.trim();
+  if (s.includes("T") || s.includes("Z")) {
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = parseInt(ampmMatch[2], 10);
+    const isPM = ampmMatch[3].toUpperCase() === "PM";
+    if (isPM && h !== 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    const d = new Date(); d.setHours(h, m, 0, 0);
+    return d;
+  }
+  const [h, m] = s.split(":").map(Number);
+  if (isNaN(h)) return null;
+  const d = new Date(); d.setHours(h, m || 0, 0, 0);
+  return d;
+};
+
+const formatClockDisplay = (val) => {
+  if (!val) return "—";
+  if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
+  const d = parseClockTime(val);
+  if (!d) return "—";
+  if (typeof val === "string" && (val.includes("T") || val.includes("Z"))) {
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: "America/Edmonton",
+    });
+  }
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+};
+
 // ─── Add Medication Modal ─────────────────────────────────────────────────────
 function AddMedModal({ day, onClose, onSubmit }) {
   const [form, setForm] = useState({ medicineName: "", dosage: "", time: "", color: PILL_COLORS[0], errorField: "", staff: "", witness: "", reason: "" });
@@ -729,50 +768,6 @@ const ShiftReport = ({ user }) => {
 
   const initials = normalized.clientName.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || "?";
   const staffInitials = (primaryStaff?.name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-
-  // Parse clockIn/Out — handles ISO timestamps, "HH:MM AM/PM", and "HH:mm" strings
-  const parseClockTime = (val) => {
-    if (!val) return null;
-    if (typeof val !== "string") return null;
-    const s = val.trim();
-    // ISO timestamp
-    if (s.includes("T") || s.includes("Z")) {
-      const d = new Date(s);
-      return isNaN(d) ? null : d;
-    }
-    // 12-hour format: "09:30 AM" or "9:30 PM" (stored by mobile app)
-    const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (ampmMatch) {
-      let h = parseInt(ampmMatch[1], 10);
-      const m = parseInt(ampmMatch[2], 10);
-      const isPM = ampmMatch[3].toUpperCase() === "PM";
-      if (isPM && h !== 12) h += 12;
-      if (!isPM && h === 12) h = 0;
-      const d = new Date(); d.setHours(h, m, 0, 0);
-      return d;
-    }
-    // 24-hour HH:mm string
-    const [h, m] = s.split(":").map(Number);
-    if (isNaN(h)) return null;
-    const d = new Date(); d.setHours(h, m || 0, 0, 0);
-    return d;
-  };
-
-  const formatClockDisplay = (val) => {
-    if (!val) return "—";
-    // Already a formatted "HH:MM AM/PM" string — return as-is
-    if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
-    const d = parseClockTime(val);
-    if (!d) return "—";
-    // ISO timestamps: display in Edmonton timezone
-    if (typeof val === "string" && (val.includes("T") || val.includes("Z"))) {
-      return d.toLocaleTimeString("en-US", {
-        hour: "numeric", minute: "2-digit", hour12: true,
-        timeZone: "America/Edmonton",
-      });
-    }
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  };
 
   const computeDuration = () => {
     const s = parseClockTime(normalized.clockIn);
