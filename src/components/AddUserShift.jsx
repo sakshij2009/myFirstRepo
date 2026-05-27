@@ -28,7 +28,7 @@ import { FaChevronDown, FaRegCalendarAlt } from "react-icons/fa";
 import SuccessSlider from "../components/SuccessSlider";
 import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
-import { FaRegMap } from "react-icons/fa";
+import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { formatLocalISO } from "../utils/dateHelpers";
 
@@ -1792,6 +1792,26 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
                                 placeholder="N/A"
                               />
+                            </div>
+
+                            {/* Swap Pickup ↔ Drop */}
+                            <div className="col-span-2 flex items-center justify-center gap-3 -my-1">
+                              <div className="flex-1 border-t border-dashed border-gray-200" />
+                              <button
+                                type="button"
+                                title="Swap pickup & drop locations"
+                                onClick={() => setShiftPoints((prev) => prev.map((p, i) =>
+                                  i === idx
+                                    ? { ...p, pickupLocation: p.dropLocation || "", dropLocation: p.pickupLocation || "" }
+                                    : p
+                                ))}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all hover:bg-[#f0fdf4] hover:border-[#145228] hover:text-[#145228]"
+                                style={{ borderColor: "#d1d5db", color: "#6b7280", background: "#fff" }}
+                              >
+                                <FaExchangeAlt className="rotate-90 text-sm" />
+                                Swap
+                              </button>
+                              <div className="flex-1 border-t border-dashed border-gray-200" />
                             </div>
 
                             {/* Drop Location */}
