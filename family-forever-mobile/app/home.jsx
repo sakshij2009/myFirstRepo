@@ -67,15 +67,41 @@ const serviceTypeStyles = {
   default: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
-const getRoundedTime = () => {
-  const coeff = 1000 * 60 * 15;
-  const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString("en-US", { 
-    hour: "2-digit", 
-    minute: "2-digit", 
-    hour12: true,
-    timeZone: "America/Edmonton" 
-  });
+// ── Smart 15-min rounding helpers ─────────────────────────────────────────────
+const parseShiftDT = (dateStr, timeStr) => {
+  if (!timeStr) return null;
+  try {
+    let base = new Date();
+    if (dateStr) { const d = dateStr?.toDate ? dateStr.toDate() : new Date(dateStr); if (!isNaN(d)) base = d; }
+    const [timePart, period] = String(timeStr).trim().split(" ");
+    let [h, m] = timePart.split(":").map(Number);
+    if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+    if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+    const r = new Date(base); r.setHours(h, m || 0, 0, 0); return r;
+  } catch { return null; }
+};
+const toEdmontonTimeStr = (d) =>
+  d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Edmonton" });
+const roundNearest15 = (d) => new Date(Math.round(d.getTime() / (1000 * 60 * 15)) * (1000 * 60 * 15));
+
+const getClockInTimeHome = (startTimeStr, startDateStr) => {
+  const now = new Date();
+  const scheduled = parseShiftDT(startDateStr, startTimeStr);
+  if (scheduled) {
+    const diffMs = scheduled.getTime() - now.getTime();
+    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toEdmontonTimeStr(scheduled);
+  }
+  return toEdmontonTimeStr(roundNearest15(now));
+};
+
+const getClockOutTimeHome = (endTimeStr, startDateStr) => {
+  const now = new Date();
+  const scheduled = parseShiftDT(startDateStr, endTimeStr);
+  if (scheduled) {
+    const diffMs = now.getTime() - scheduled.getTime();
+    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toEdmontonTimeStr(scheduled);
+  }
+  return toEdmontonTimeStr(roundNearest15(now));
 };
 
 const getLocationString = async () => {
@@ -444,7 +470,7 @@ export default function Home() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        const roundedTime = getRoundedTime();
+        const roundedTime = getClockInTimeHome(shift.startTime, shift.startDate);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockIn: serverTimestamp(),      // admin app reads this field
@@ -471,7 +497,7 @@ export default function Home() {
           return;
         }
       } else if (type === "clockOut") {
-        const roundedTime = getRoundedTime();
+        const roundedTime = getClockOutTimeHome(shift.endTime, shift.startDate);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockOut: serverTimestamp(),     // admin app reads this field
@@ -877,10 +903,13 @@ function ShiftCard({ shift, onAction, onDetails }) {
             </Pressable>
           )}
           {status === "Completed" && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}>
-              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
-            </View>
+            <Pressable
+              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}
+            >
+              <Ionicons name="document-text-outline" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>View Report</Text>
+            </Pressable>
           )}
         </View>
 
