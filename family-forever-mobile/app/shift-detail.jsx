@@ -476,7 +476,7 @@ export default function ShiftDetails() {
   const displayDescription = shift?.jobdescription || shift?.description || shift?.shiftDescription || shift?.notes || clientInfo?.serviceDesc || clientInfo?.jobDescription || intakeDescription;
 
   const getStatus = () => {
-    if (shift?.clockOutTime || shift?.clockOut || shift?.clockout || shift?.status === "completed") return "completed";
+    if (shift?.clockOutTime || shift?.clockOut || shift?.clockout || shift?.status === "completed" || shift?.transportationCompleted) return "completed";
     if (shift?.clockInTime || shift?.clockIn || shift?.clockin || shift?.status === "active") return "in-progress";
     return shift?.shiftConfirmed ? "upcoming" : "assigned";
   };

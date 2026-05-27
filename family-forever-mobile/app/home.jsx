@@ -340,7 +340,8 @@ export default function Home() {
     return () => { unsubPrimary(); unsubSecondaryById(); unsubSecondaryByDocId(); unsubSecondaryByName(); };
   }, [user]);
 
-  const todayKey = formatEdmontonISO(new Date());
+  // Device-local date key so shift date comparisons (parseDate = device-local midnight) match correctly
+  const todayKey = formatDateKey(new Date());
 
   const todayShifts = shifts.filter((s) => {
     const d = parseDateFn(s.startDate);
@@ -802,7 +803,7 @@ export default function Home() {
 
 function ShiftCard({ shift, onAction, onDetails }) {
   const getStatus = () => {
-    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
+    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed" || shift.transportationCompleted) return "Completed";
     if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
     return shift.shiftConfirmed ? "Confirmed" : "Assigned";
   };
@@ -921,13 +922,10 @@ function ShiftCard({ shift, onAction, onDetails }) {
             </Pressable>
           )}
           {status === "Completed" && (
-            <Pressable
-              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
-              style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start' }}
-            >
-              <Ionicons name="document-text-outline" size={16} color="#10B981" />
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>View Report</Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#ECFDF5", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignSelf: "flex-start" }}>
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#10B981", fontFamily: "Inter-Bold" }}>Completed</Text>
+            </View>
           )}
         </View>
 
@@ -938,14 +936,12 @@ function ShiftCard({ shift, onAction, onDetails }) {
           <Ionicons name="swap-horizontal" size={20} color={GRAY_TEXT} />
         </Pressable>
 
+        {/* "Details >" before confirmation; "View Report >" after — both navigate to shift-detail */}
         <Pressable
-          onPress={isTransport
-            ? () => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })
-            : () => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })
-          }
+          onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
           style={styles.detailsLink}
         >
-          <Text style={styles.detailsLinkText}>Details &gt;</Text>
+          <Text style={styles.detailsLinkText}>{status === "Assigned" ? "Details >" : "View Report >"}</Text>
         </Pressable>
       </View>
     </View>
