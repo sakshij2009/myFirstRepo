@@ -216,6 +216,7 @@ export default function ShiftDetails() {
   const [savingTransReport, setSavingTransReport] = useState(false);
   const [officeToPickup, setOfficeToPickup] = useState("");
   const [dropToOffice, setDropToOffice] = useState("");
+  const [showClockOutSuccess, setShowClockOutSuccess] = useState(false);
 
   // ── Fetch Intake Form ───────────────────────────────────────────
   const fetchIntakeForm = async () => {
@@ -476,7 +477,7 @@ export default function ShiftDetails() {
   const displayDescription = shift?.jobdescription || shift?.description || shift?.shiftDescription || shift?.notes || clientInfo?.serviceDesc || clientInfo?.jobDescription || intakeDescription;
 
   const getStatus = () => {
-    if (shift?.clockOutTime || shift?.clockOut || shift?.clockout || shift?.status === "completed" || shift?.transportationCompleted) return "completed";
+    if (shift?.clockOutTime || shift?.clockOut || shift?.clockout || shift?.status === "completed") return "completed";
     if (shift?.clockInTime || shift?.clockIn || shift?.clockin || shift?.status === "active") return "in-progress";
     return shift?.shiftConfirmed ? "upcoming" : "assigned";
   };
@@ -565,6 +566,11 @@ export default function ShiftDetails() {
 
     setIsProcessing(false);
     setConfirmAction(null);
+
+    // Show inline thank-you after clock-out (no navigation to shift-completion)
+    if (type === "clockOut") {
+      setShowClockOutSuccess(true);
+    }
 
     // Navigate to specialized transportation screen for transportation AND supervised visitation
     if (type === "clockIn") {
@@ -1249,12 +1255,37 @@ export default function ShiftDetails() {
             </>
           )}
           {shiftStatus === "completed" && (
-            <Pressable
-              onPress={() => router.push({ pathname: "/shift-completion", params: { shiftId: shift.id, mode: "view" } })}
-              style={[styles.solidBtn, { backgroundColor: "#10B981" }]}
-            >
-              <Text style={styles.solidBtnText}>View Shift Report</Text>
-            </Pressable>
+            showClockOutSuccess ? (
+              /* ── Shown right after the user taps "Clock Out" in this session ── */
+              <View style={{ backgroundColor: "#F0FDF4", borderRadius: 20, padding: 28, alignItems: "center", gap: 14, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="checkmark-circle" size={42} color="#10B981" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: "800", color: "#111827", fontFamily: "Poppins-Bold", textAlign: "center", lineHeight: 26 }}>
+                  Thank you for completing your shift!
+                </Text>
+                <Text style={{ fontSize: 14, color: "#6B7280", fontFamily: "Inter", textAlign: "center", lineHeight: 22 }}>
+                  Your time has been recorded. Great work today! 🎉
+                </Text>
+                <Pressable
+                  onPress={() => router.navigate("/shifts")}
+                  style={{ marginTop: 4, backgroundColor: "#1F6F43", paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
+                >
+                  <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" }}>Back to My Shifts</Text>
+                </Pressable>
+              </View>
+            ) : (
+              /* ── Shown when returning to a previously completed shift ── */
+              <View style={{ backgroundColor: "#F0FDF4", borderRadius: 16, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                <Ionicons name="checkmark-circle" size={30} color="#10B981" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: "#111827", fontFamily: "Inter-Bold" }}>Shift Completed</Text>
+                  <Text style={{ fontSize: 12, color: "#6B7280", fontFamily: "Inter", marginTop: 3 }}>
+                    {shift.clockOutTime ? `Clocked out at ${formatCanadaTime(shift.clockOutTime)}` : "Great work on this shift!"}
+                  </Text>
+                </View>
+              </View>
+            )
           )}
           {shiftLocked && (
             <Text style={[styles.actionHint, { color: ERROR_RED, marginTop: 10 }]}>

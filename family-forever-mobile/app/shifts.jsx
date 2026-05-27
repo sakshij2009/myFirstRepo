@@ -179,7 +179,7 @@ function RoutePreview({ shift }) {
 
 function ShiftCard({ shift, onAction, onDetails }) {
   const getStatus = () => {
-    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed" || shift.transportationCompleted) return "Completed";
+    if (shift.clockOutTime || shift.clockOut || shift.clockout || shift.status === "completed") return "Completed";
     if (shift.clockInTime || shift.clockIn || shift.clockin || shift.status === "active") return "In Progress";
     return shift.shiftConfirmed ? "Confirmed" : "Assigned";
   };
@@ -286,13 +286,20 @@ function ShiftCard({ shift, onAction, onDetails }) {
               <Text style={styles.mainActionBtnText}>Clock In</Text>
             </Pressable>
           )}
-          {status === "In Progress" && isTransport && (
+          {status === "In Progress" && isTransport && !shift.transportationCompleted && (
             <Pressable
               onPress={() => router.push({ pathname: "/transportation-shift-detail", params: { shiftId: shift.id } })}
               style={[styles.mainActionBtn, { backgroundColor: "#1E5FA6" }]}
             >
               <Ionicons name="navigate" size={15} color="#fff" style={{ marginRight: 6 }} />
               <Text style={styles.mainActionBtnText}>Continue Route</Text>
+            </Pressable>
+          )}
+          {status === "In Progress" && isTransport && shift.transportationCompleted && (
+            /* Route done — worker still needs to clock out */
+            <Pressable onPress={() => onAction("clockOut", shift)} style={[styles.mainActionBtn, { backgroundColor: ERROR_RED }]}>
+              <Ionicons name="log-out-outline" size={15} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.mainActionBtnText}>Clock Out</Text>
             </Pressable>
           )}
           {status === "In Progress" && !isTransport && (
@@ -455,10 +462,11 @@ export default function Shifts() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // transportationCompleted is set by the transportation-shift-detail flow when a route finishes
+  // transportationCompleted means the route is done but clock-out is still needed
+  // A shift is only truly "Completed" when the worker has actually clocked out
   const isShiftCompleted = (s) => !!(
     s.clockOutTime || s.clockOut || s.clockout ||
-    s.status === "completed" || s.transportationCompleted
+    s.status === "completed"
   );
   const isShiftInProgress = (s) => !!(s.clockInTime || s.clockIn || s.clockin || s.status === "active") && !isShiftCompleted(s);
 
