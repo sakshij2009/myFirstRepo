@@ -1768,8 +1768,8 @@ const AddUserShift = ({ mode = "add", user }) => {
                           {/* Fields grid */}
                           <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-4">
 
-                            {/* Pickup Location */}
-                            <div>
+                            {/* Pickup Location — swap icon floats in the gap below */}
+                            <div className="relative">
                               <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Location</label>
                               <div className="flex items-center gap-2">
                                 <input type="text"
@@ -1781,6 +1781,20 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
                                   onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.pickupLocation || "")}`, "_blank")} />
                               </div>
+                              {/* Swap icon centred in the gap between pickup & drop inputs */}
+                              <button
+                                type="button"
+                                title="Swap pickup & drop locations"
+                                onClick={() => setShiftPoints((prev) => prev.map((p, i) =>
+                                  i === idx
+                                    ? { ...p, pickupLocation: p.dropLocation || "", dropLocation: p.pickupLocation || "" }
+                                    : p
+                                ))}
+                                className="absolute left-1/2 z-10 w-5 h-5 rounded-full bg-white border border-[#e6e6e6] flex items-center justify-center text-gray-400 hover:text-[#145228] hover:border-[#145228] transition-colors cursor-pointer"
+                                style={{ bottom: 0, transform: "translate(-50%, 50%)" }}
+                              >
+                                <FaExchangeAlt style={{ fontSize: 9 }} />
+                              </button>
                             </div>
 
                             {/* Pickup Time */}
@@ -1792,26 +1806,6 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
                                 placeholder="N/A"
                               />
-                            </div>
-
-                            {/* Swap Pickup ↔ Drop */}
-                            <div className="flex items-center justify-center gap-3 -my-1">
-                              <div className="flex-1 border-t border-dashed border-gray-200" />
-                              <button
-                                type="button"
-                                title="Swap pickup & drop locations"
-                                onClick={() => setShiftPoints((prev) => prev.map((p, i) =>
-                                  i === idx
-                                    ? { ...p, pickupLocation: p.dropLocation || "", dropLocation: p.pickupLocation || "" }
-                                    : p
-                                ))}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all hover:bg-[#f0fdf4] hover:border-[#145228] hover:text-[#145228]"
-                                style={{ borderColor: "#d1d5db", color: "#6b7280", background: "#fff" }}
-                              >
-                                <FaExchangeAlt className="rotate-90 text-sm" />
-                                Swap
-                              </button>
-                              <div className="flex-1 border-t border-dashed border-gray-200" />
                             </div>
 
                             {/* Drop Location */}
