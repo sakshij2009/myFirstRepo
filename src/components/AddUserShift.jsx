@@ -1795,7 +1795,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                             </div>
 
                             {/* Swap Pickup ↔ Drop */}
-                            <div className="col-span-2 flex items-center justify-center gap-3 -my-1">
+                            <div className="flex items-center justify-center gap-3 -my-1">
                               <div className="flex-1 border-t border-dashed border-gray-200" />
                               <button
                                 type="button"
