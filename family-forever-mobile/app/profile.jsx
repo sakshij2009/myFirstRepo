@@ -94,8 +94,8 @@ export default function Profile() {
     });
     // Tenure calc
     let tenure = "—";
-    if (user?.startDate) {
-      const start = new Date(user.startDate);
+    if (user?.dayOfJoining || user?.startDate) {
+      const start = new Date(user?.dayOfJoining || user?.startDate);
       if (!isNaN(start.getTime())) {
         const diffMs = Date.now() - start.getTime();
         const months = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.44));
@@ -237,7 +237,7 @@ export default function Profile() {
             <Image source={user?.profilePhotoUrl ? { uri: user.profilePhotoUrl } : require("../assets/defaultuser.jpg")} style={styles.idCardAvatar} />
             <View style={{ flex: 1 }}>
               <Text style={styles.idCardName}>{user?.name || "Sarah Johnson"}</Text>
-              <Text style={styles.idCardRole}>{user?.designation || user?.role || "Staff"}</Text>
+              <Text style={styles.idCardRole}>{user?.position || user?.designation || "Staff"}</Text>
             </View>
             <Ionicons name="qr-code-outline" size={32} color={DARK_TEXT} style={{ opacity: 0.1 }} />
           </View>
@@ -256,22 +256,26 @@ export default function Profile() {
           <DetailItem label="Date of Birth" value={user?.dob || "June 15, 1994"} />
           <DetailItem label="Gender" value={user?.gender || "Female"} />
           <DetailItem label="Address" value={user?.address || "456 Birch Lane, Ontario"} />
-          <DetailItem label="Start Date" value={user?.startDate || "March 1, 2024"} isLast />
+          <DetailItem label="Start Date" value={user?.dayOfJoining || user?.dateOfJoining || user?.startDate || "—"} isLast />
         </View>
 
         {/* Employment */}
         <View style={styles.detailsBox}>
           <Text style={styles.sectionTitle}>Employment</Text>
           <DetailItem label="Employee ID" value={user?.userId || user?.employeeId || "—"} />
-          <DetailItem label="Role" value={user?.designation || user?.role || "—"} />
-          <DetailItem label="Salary" value={user?.salary || "—"} />
+          <DetailItem label="Role" value={user?.position || user?.designation || "—"} />
+          <DetailItem
+            label="Salary"
+            value={user?.salaryPerHour ? `$${Number(user.salaryPerHour).toFixed(2)}/hr` : "—"}
+          />
           <DetailItem
             label="KM Rate"
-            value={
-              user?.kmRate || user?.kmsRate || user?.kilometerRate || user?.transportationRate
-                ? `$${user?.kmRate ?? user?.kmsRate ?? user?.kilometerRate ?? user?.transportationRate}/km`
-                : "—"
-            }
+            value={(() => {
+              const rate = Number(user?.totalKMs) >= 5000
+                ? user?.rateAfter5000km
+                : user?.rateBefore5000km;
+              return rate ? `$${Number(rate).toFixed(3)}/km` : "—";
+            })()}
             isLast
           />
         </View>
