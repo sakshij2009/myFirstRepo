@@ -640,6 +640,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         });
 
         let foundDesc = "";
+        let foundCategory = "";
         let intakePoints = [];
 
         // Build surname/keyword list from the selected client name
@@ -719,6 +720,57 @@ const AddUserShift = ({ mode = "add", user }) => {
               || (Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.servicePlanAndRisk)
               || "";
             if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
+
+            // Find Service Category — check all known field names
+            if (!foundCategory) {
+              const rawCat =
+                data.serviceRequired ||
+                data.services?.serviceRequired ||
+                data.services?.serviceType ||
+                data.serviceType ||
+                data.category ||
+                null;
+
+              if (rawCat) {
+                // Could be an array (of IDs or readable names) or a single string
+                const candidates = Array.isArray(rawCat) ? rawCat : [rawCat];
+
+                // Keyword aliases → allowed category name
+                const aliasMap = [
+                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation"], name: "Supervised Visitation + Transportation" },
+                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation", "supervisedVisitation"], name: "Supervised Visitation" },
+                  { keywords: ["transportation", "transport"], name: "Transportation" },
+                  { keywords: ["respite care", "respite", "respitecare", "respiteCare"], name: "Respite Care" },
+                  { keywords: ["emergent care", "emergent", "emergentcare", "emergentCare", "emergency"], name: "Emergent Care" },
+                  { keywords: ["office admin", "officeadmin", "officeAdmin", "office"], name: "Office Admin" },
+                ];
+
+                for (const val of candidates) {
+                  const str = String(val).trim();
+                  if (!str) continue;
+
+                  // 1. Exact name match (case-insensitive)
+                  const exactMatch = shiftCategories.find(
+                    (c) => c.name.toLowerCase() === str.toLowerCase()
+                  );
+                  if (exactMatch) { foundCategory = exactMatch.name; break; }
+
+                  // 2. Exact ID match
+                  const idMatch = shiftCategories.find((c) => c.id === str);
+                  if (idMatch) { foundCategory = idMatch.name; break; }
+
+                  // 3. Alias/keyword match
+                  const strLower = str.toLowerCase();
+                  for (const alias of aliasMap) {
+                    if (alias.keywords.some((kw) => strLower.includes(kw) || kw.includes(strLower))) {
+                      foundCategory = alias.name;
+                      break;
+                    }
+                  }
+                  if (foundCategory) break;
+                }
+              }
+            }
 
             // Find Siblings/Members for Shift Points if we don't have them yet
             if (intakePoints.length === 0) {
@@ -806,6 +858,13 @@ const AddUserShift = ({ mode = "add", user }) => {
         if (mode !== "update" && foundDesc) {
           setIntakeDescription(foundDesc);
           formikRef.current?.setFieldValue("description", foundDesc);
+        }
+
+        // Auto-fill shift category from intake form service type (only in add mode)
+        if (mode !== "update" && foundCategory) {
+          formikRef.current?.setFieldValue("shiftCategory", foundCategory);
+          const catObj = shiftCategories.find((c) => c.name === foundCategory);
+          if (catObj) setSelectedShiftCategory(catObj);
         }
 
       } catch (err) {
