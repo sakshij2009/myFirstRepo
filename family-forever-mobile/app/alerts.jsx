@@ -10,7 +10,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, onSnapshot, orderBy, updateDoc, doc } from "firebase/firestore";
+import { collection, query, onSnapshot, orderBy, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
@@ -75,6 +75,15 @@ export default function Alerts() {
     await updateDoc(doc(db, "notifications", user.username, "userNotifications", id), { read: true });
   };
 
+  const clearAll = async () => {
+    if (!user?.username) return;
+    await Promise.all(
+      alerts.map((a) =>
+        deleteDoc(doc(db, "notifications", user.username, "userNotifications", a.id))
+      )
+    );
+  };
+
   // Group notifications by date (Today, Yesterday, This Week, Older)
   const groupByDate = (items) => {
     const now = new Date();
@@ -133,9 +142,16 @@ export default function Alerts() {
           <Text style={styles.headerTitle}>Notifications</Text>
           <Text style={styles.headerSubtitle}>{unreadCount} unread</Text>
         </View>
-        <Pressable onPress={markAllRead}>
-          <Text style={styles.markReadText}>Mark All Read</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={markAllRead}>
+            <Text style={styles.markReadText}>Mark All Read</Text>
+          </Pressable>
+          {alerts.length > 0 && (
+            <Pressable onPress={clearAll}>
+              <Text style={styles.clearAllText}>Clear All</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Tabs */}
@@ -261,7 +277,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   headerSubtitle: { fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter" },
+  headerActions: { alignItems: "flex-end", gap: 6 },
   markReadText: { fontSize: 13, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
+  clearAllText: { fontSize: 13, fontWeight: "700", color: "#EF4444", fontFamily: "Inter-Bold" },
   
   tabContainer: { 
     flexDirection: "row", 
