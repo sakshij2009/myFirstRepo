@@ -6,7 +6,9 @@ import {
   Modal,
   ActivityIndicator,
   StyleSheet,
+  Platform,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -230,8 +232,12 @@ export default function Home() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stats, setStats] = useState({ total: 0, hours: 0, completed: 0 });
-  const [statPeriod, setStatPeriod] = useState("month"); // "week" | "month" | "year"
+  const [statPeriod, setStatPeriod] = useState("month"); // "month" | "year" | "custom"
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+  const [customFrom, setCustomFrom] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
+  const [customTo, setCustomTo] = useState(() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; });
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -423,28 +429,22 @@ export default function Home() {
     const now = new Date();
     let filtered = [];
 
-    if (statPeriod === "week") {
-      // Sunday-to-Saturday week containing today
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - now.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
-      endOfWeek.setHours(23, 59, 59, 999);
-      filtered = shifts.filter((s) => {
-        const d = parseDateFn(s.startDate);
-        return d && d >= startOfWeek && d <= endOfWeek;
-      });
-    } else if (statPeriod === "month") {
+    if (statPeriod === "month") {
       filtered = shifts.filter((s) => {
         const d = parseDateFn(s.startDate);
         return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       });
-    } else {
-      // year
+    } else if (statPeriod === "year") {
       filtered = shifts.filter((s) => {
         const d = parseDateFn(s.startDate);
         return d && d.getFullYear() === now.getFullYear();
+      });
+    } else if (statPeriod === "custom") {
+      const from = new Date(customFrom); from.setHours(0, 0, 0, 0);
+      const to = new Date(customTo); to.setHours(23, 59, 59, 999);
+      filtered = shifts.filter((s) => {
+        const d = parseDateFn(s.startDate);
+        return d && d >= from && d <= to;
       });
     }
 
@@ -484,7 +484,7 @@ export default function Home() {
       hours: Math.round(totalHours * 10) / 10,
       completed: countCompleted,
     });
-  }, [shifts, statPeriod]);
+  }, [shifts, statPeriod, customFrom, customTo]);
 
   // ── Optimistic local update so card reflects new status immediately ─────────
   const optimisticShiftUpdate = (shiftId, patch) => {
@@ -594,6 +594,14 @@ export default function Home() {
   };
 
   const firstName = user?.name?.split(" ")[0] || "User";
+  const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const now = new Date();
+  const currentMonthLabel = MONTH_NAMES_FULL[now.getMonth()];
+  const currentYear = now.getFullYear();
+  const periodLabel =
+    statPeriod === "month" ? `This Month (${currentMonthLabel})` :
+    statPeriod === "year"  ? `This Year (${currentYear})` :
+    `${customFrom.toLocaleDateString("en-US",{month:"short",day:"numeric"})} – ${customTo.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F8F8F6" }}>
@@ -653,9 +661,7 @@ export default function Home() {
               onPress={() => setShowPeriodPicker(true)}
               style={styles.periodDropdown}
             >
-              <Text style={styles.periodDropdownText}>
-                {statPeriod === "week" ? "This Week" : statPeriod === "month" ? "This Month" : "This Year"}
-              </Text>
+              <Text style={styles.periodDropdownText}>{periodLabel}</Text>
               <Ionicons name="chevron-down" size={13} color={PRIMARY_GREEN} />
             </Pressable>
           </View>
@@ -743,18 +749,16 @@ export default function Home() {
               <Text style={[styles.modalTitle, { textAlign: "left", fontSize: 18, marginBottom: 20 }]}>
                 View Period
               </Text>
+
               {[
-                { key: "week",  label: "This Week",  sub: "Shifts in the current Sun–Sat week" },
-                { key: "month", label: "This Month", sub: "Shifts in the current calendar month" },
-                { key: "year",  label: "This Year",  sub: "All shifts in the current year" },
+                { key: "month", label: `This Month (${currentMonthLabel})`, sub: `Shifts in ${currentMonthLabel} ${currentYear}` },
+                { key: "year",  label: `This Year (${currentYear})`,         sub: `All shifts in ${currentYear}` },
+                { key: "custom", label: "Custom Range",                      sub: "Choose your own start and end dates" },
               ].map((opt) => (
                 <Pressable
                   key={opt.key}
-                  onPress={() => { setStatPeriod(opt.key); setShowPeriodPicker(false); }}
-                  style={[
-                    styles.periodOption,
-                    statPeriod === opt.key && styles.periodOptionActive,
-                  ]}
+                  onPress={() => setStatPeriod(opt.key)}
+                  style={[styles.periodOption, statPeriod === opt.key && styles.periodOptionActive]}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.periodOptionText, statPeriod === opt.key && { color: PRIMARY_GREEN }]}>
@@ -767,8 +771,55 @@ export default function Home() {
                   )}
                 </Pressable>
               ))}
-              <Pressable onPress={() => setShowPeriodPicker(false)} style={[styles.modalCancelBtn, { marginTop: 8 }]}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+
+              {/* Custom date range pickers */}
+              {statPeriod === "custom" && (
+                <View style={styles.customRangeBox}>
+                  <View style={styles.customDateRow}>
+                    <Text style={styles.customDateLabel}>From</Text>
+                    <Pressable onPress={() => { setShowFromPicker(true); setShowToPicker(false); }} style={styles.customDateBtn}>
+                      <Ionicons name="calendar-outline" size={15} color={PRIMARY_GREEN} />
+                      <Text style={styles.customDateBtnText}>
+                        {customFrom.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.customDateRow}>
+                    <Text style={styles.customDateLabel}>To</Text>
+                    <Pressable onPress={() => { setShowToPicker(true); setShowFromPicker(false); }} style={styles.customDateBtn}>
+                      <Ionicons name="calendar-outline" size={15} color={PRIMARY_GREEN} />
+                      <Text style={styles.customDateBtnText}>
+                        {customTo.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </Text>
+                    </Pressable>
+                  </View>
+                  {showFromPicker && (
+                    <DateTimePicker
+                      value={customFrom}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "inline" : "default"}
+                      maximumDate={customTo}
+                      onChange={(_, date) => { setShowFromPicker(Platform.OS === "ios"); if (date) setCustomFrom(date); }}
+                    />
+                  )}
+                  {showToPicker && (
+                    <DateTimePicker
+                      value={customTo}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "inline" : "default"}
+                      minimumDate={customFrom}
+                      maximumDate={new Date()}
+                      onChange={(_, date) => { setShowToPicker(Platform.OS === "ios"); if (date) setCustomTo(date); }}
+                    />
+                  )}
+                </View>
+              )}
+
+              <Pressable
+                onPress={() => { setShowPeriodPicker(false); setShowFromPicker(false); setShowToPicker(false); }}
+                style={[styles.modalCancelBtn, { marginTop: 8 }]}
+              >
+                <Text style={styles.modalCancelText}>Done</Text>
               </Pressable>
             </Pressable>
           </Pressable>
@@ -1184,6 +1235,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: GRAY_TEXT,
     fontFamily: "Inter",
+  },
+  customRangeBox: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 4,
+    marginBottom: 4,
+    gap: 10,
+  },
+  customDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  customDateLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: DARK_TEXT,
+    fontFamily: "Inter-Bold",
+    width: 36,
+  },
+  customDateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(31, 111, 67, 0.25)",
+    flex: 1,
+    marginLeft: 10,
+  },
+  customDateBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: PRIMARY_GREEN,
+    fontFamily: "Inter-SemiBold",
   },
   // Upcoming rows
   upcomingRow: {
