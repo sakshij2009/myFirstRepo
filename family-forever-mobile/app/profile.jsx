@@ -9,17 +9,19 @@ import {
   ActivityIndicator,
   Modal,
   Linking,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState, useMemo } from "react";
-import { doc, onSnapshot, updateDoc, collection, query, where } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, collection, addDoc, serverTimestamp, query } from "firebase/firestore";
 import { db, auth } from "../src/firebase/config";
-import { sendPasswordResetEmail } from "firebase/auth";
+import { reauthenticateWithCredential, EmailAuthProvider, updatePassword } from "firebase/auth";
 import * as ImagePicker from "expo-image-picker";
 import { uploadProfilePhoto } from "../src/utils/uploadProfilePhoto";
+import Constants from "expo-constants";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY_GREEN = "#1F6F43";
@@ -38,6 +40,14 @@ export default function Profile() {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwChanging, setPwChanging] = useState(false);
+  const [pwShowCurrent, setPwShowCurrent] = useState(false);
+  const [pwShowNew, setPwShowNew] = useState(false);
+  const [pwShowConfirm, setPwShowConfirm] = useState(false);
 
   useEffect(() => {
     let unsub;
@@ -133,44 +143,60 @@ export default function Profile() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!pwCurrent || !pwNew || !pwConfirm) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      Alert.alert("Error", "New passwords do not match.");
+      return;
+    }
+    if (pwNew.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters.");
+      return;
+    }
+    setPwChanging(true);
+    try {
+      const credential = EmailAuthProvider.credential(user?.email, pwCurrent);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, pwNew);
+      // Notify admin
+      await addDoc(collection(db, "adminNotifications"), {
+        title: "Password Changed",
+        message: `${user?.name || "A staff member"} (${user?.email}) changed their password.`,
+        type: "security",
+        userId: user?.userId || user?.id,
+        userName: user?.name,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      setShowChangePw(false);
+      setPwCurrent(""); setPwNew(""); setPwConfirm("");
+      Alert.alert("Success ✓", "Your password has been updated.");
+    } catch (e) {
+      if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") {
+        Alert.alert("Error", "Current password is incorrect.");
+      } else {
+        Alert.alert("Error", "Failed to update password. Please try again.");
+      }
+    } finally {
+      setPwChanging(false);
+    }
+  };
+
   const handleQuickAction = (action) => {
     switch (action) {
       case "Change Password":
-        Alert.alert(
-          "Change Password",
-          `A reset link will be sent to ${user?.email || "your email address"}.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Send Link",
-              onPress: async () => {
-                try {
-                  await sendPasswordResetEmail(auth, user?.email);
-                  Alert.alert("Email Sent", "Check your inbox for a password reset link.");
-                } catch {
-                  Alert.alert("Error", "Could not send reset email. Please try again.");
-                }
-              },
-            },
-          ]
-        );
+        setPwCurrent(""); setPwNew(""); setPwConfirm("");
+        setShowChangePw(true);
         break;
       case "Notification Preferences":
         Linking.openSettings();
         break;
       case "Privacy & Security":
-        Linking.openURL("https://familyforever.ca/privacy").catch(() => {
-          Alert.alert("Privacy Policy", "Visit familyforever.ca for our full privacy policy.");
-        });
-        break;
-      case "Help & Support":
-        Linking.openURL("mailto:familyforeverca@gmail.com?subject=App Support").catch(() => {
-          Alert.alert("Help & Support", "Email us at familyforeverca@gmail.com for assistance.");
-        });
-        break;
-      case "Terms & Policies":
-        Linking.openURL("https://familyforever.ca/terms").catch(() => {
-          Alert.alert("Terms & Policies", "Visit familyforever.ca for our terms of service.");
+        Linking.openURL("https://familyforever.ca/privacy.html").catch(() => {
+          Alert.alert("Privacy Policy", "Visit familyforever.ca/privacy.html for our privacy policy.");
         });
         break;
       default:
@@ -185,7 +211,7 @@ export default function Profile() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <Pressable style={styles.settingsBtn}><Ionicons name="settings-outline" size={24} color={DARK_TEXT} /></Pressable>
+        <View style={styles.settingsBtn} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -206,17 +232,15 @@ export default function Profile() {
             </Pressable>
           </View>
           <Text style={styles.nameText}>{user?.name || "Sarah Johnson"}</Text>
-          <Text style={styles.roleText}>{user?.designation || "Staff - Intake Worker"}</Text>
+          <Text style={styles.roleText}>{user?.role || "User"} (Staff)</Text>
           <Text style={styles.orgText}>{user?.organization || user?.agencyName || user?.agency || "Family Forever Inc."}</Text>
           <View style={styles.badgeRow}>
-            <View style={styles.badge}><Text style={styles.badgeText}>CYIM: {user?.cyimId || "1432569"}</Text></View>
             <View style={[styles.badge, { backgroundColor: "#F0FDF4" }]}><Text style={[styles.badgeText, { color: "#10B981" }]}>Active</Text></View>
           </View>
 
           <View style={styles.statsRow}>
             <StatItem value={String(stats.total)} label="Total Shifts" />
             <StatItem value={`${stats.hours}`} label="Hours Logged" />
-            <StatItem value={user?.rating ? `${user.rating} ★` : "—"} label="Rating" />
             <StatItem value={stats.tenure} label="Tenure" />
           </View>
         </View>
@@ -248,7 +272,6 @@ export default function Profile() {
         <View style={styles.detailsBox}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Personal Details</Text>
-            <Pressable><Text style={styles.linkText}>Edit &gt;</Text></Pressable>
           </View>
           <DetailItem label="Full Name" value={user?.name || "Sarah Catherine Johnson"} />
           <DetailItem label="Email" value={user?.email || "sarah.johnson@email.com"} isEmail />
@@ -287,9 +310,7 @@ export default function Profile() {
         <View style={styles.actionsBox}>
           <ActionItem icon="lock-closed-outline" label="Change Password" onPress={() => handleQuickAction("Change Password")} />
           <ActionItem icon="notifications-outline" label="Notification Preferences" onPress={() => handleQuickAction("Notification Preferences")} />
-          <ActionItem icon="shield-checkmark-outline" label="Privacy & Security" onPress={() => handleQuickAction("Privacy & Security")} />
-          <ActionItem icon="help-circle-outline" label="Help & Support" onPress={() => handleQuickAction("Help & Support")} />
-          <ActionItem icon="document-text-outline" label="Terms & Policies" isLast onPress={() => handleQuickAction("Terms & Policies")} />
+          <ActionItem icon="shield-checkmark-outline" label="Privacy & Security" isLast onPress={() => handleQuickAction("Privacy & Security")} />
         </View>
 
         {/* Sign Out */}
@@ -298,8 +319,92 @@ export default function Profile() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
         
-        <Text style={styles.versionText}>Version 1.0.2</Text>
+        <Text style={styles.versionText}>Version {Constants.expoConfig?.version || "1.0"}</Text>
       </ScrollView>
+
+      {/* Change Password Modal */}
+      <Modal visible={showChangePw} transparent animationType="slide">
+        <View style={styles.pwOverlay}>
+          <View style={styles.pwSheet}>
+            <View style={styles.pwSheetHandle} />
+            <Text style={styles.pwTitle}>Change Password</Text>
+            <Text style={styles.pwSubtitle}>Enter your current password then choose a new one.</Text>
+
+            {/* Current Password */}
+            <Text style={styles.pwLabel}>Current Password</Text>
+            <View style={styles.pwInputRow}>
+              <TextInput
+                style={styles.pwInput}
+                placeholder="Enter current password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!pwShowCurrent}
+                value={pwCurrent}
+                onChangeText={setPwCurrent}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Pressable onPress={() => setPwShowCurrent(v => !v)} style={styles.pwEyeBtn}>
+                <Ionicons name={pwShowCurrent ? "eye-off-outline" : "eye-outline"} size={20} color={GRAY_TEXT} />
+              </Pressable>
+            </View>
+
+            {/* New Password */}
+            <Text style={styles.pwLabel}>New Password</Text>
+            <View style={styles.pwInputRow}>
+              <TextInput
+                style={styles.pwInput}
+                placeholder="Enter new password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!pwShowNew}
+                value={pwNew}
+                onChangeText={setPwNew}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Pressable onPress={() => setPwShowNew(v => !v)} style={styles.pwEyeBtn}>
+                <Ionicons name={pwShowNew ? "eye-off-outline" : "eye-outline"} size={20} color={GRAY_TEXT} />
+              </Pressable>
+            </View>
+
+            {/* Confirm New Password */}
+            <Text style={styles.pwLabel}>Confirm New Password</Text>
+            <View style={styles.pwInputRow}>
+              <TextInput
+                style={styles.pwInput}
+                placeholder="Repeat new password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!pwShowConfirm}
+                value={pwConfirm}
+                onChangeText={setPwConfirm}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Pressable onPress={() => setPwShowConfirm(v => !v)} style={styles.pwEyeBtn}>
+                <Ionicons name={pwShowConfirm ? "eye-off-outline" : "eye-outline"} size={20} color={GRAY_TEXT} />
+              </Pressable>
+            </View>
+
+            {/* Actions */}
+            <Pressable
+              onPress={handleChangePassword}
+              disabled={pwChanging}
+              style={[styles.pwSaveBtn, pwChanging && { opacity: 0.6 }]}
+            >
+              {pwChanging
+                ? <ActivityIndicator color="#FFF" size="small" />
+                : <Text style={styles.pwSaveBtnText}>Update Password</Text>
+              }
+            </Pressable>
+
+            <Pressable
+              onPress={() => { setShowChangePw(false); setPwCurrent(""); setPwNew(""); setPwConfirm(""); }}
+              style={styles.pwCancelBtn}
+            >
+              <Text style={styles.pwCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Profile Zoom Modal */}
       <Modal visible={isZoomed} transparent animationType="fade">
@@ -335,7 +440,16 @@ function DetailItem({ label, value, isEmail, isPhone, isLast }) {
   return (
     <View style={[styles.detailItem, isLast && { borderBottomWidth: 0 }]}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={[styles.detailValue, isEmail && { color: PRIMARY_GREEN }, isPhone && { color: PRIMARY_GREEN }]}>{value}</Text>
+      <Text
+        style={[
+          styles.detailValue,
+          { flexShrink: 1, flexWrap: "wrap", textAlign: "right", maxWidth: "60%" },
+          isEmail && { color: PRIMARY_GREEN },
+          isPhone && { color: PRIMARY_GREEN },
+        ]}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -426,15 +540,30 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.15)" 
   },
   zoomedImage: { width: "100%", height: "100%", resizeMode: "cover" },
-  zoomCloseBtn: { 
-    marginTop: 40, 
-    width: 64, 
-    height: 64, 
-    borderRadius: 32, 
-    backgroundColor: "rgba(255,255,255,0.1)", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    borderWidth: 1, 
-    borderColor: "rgba(255,255,255,0.2)" 
+  zoomCloseBtn: {
+    marginTop: 40,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)"
   },
+
+  // Change Password Modal
+  pwOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  pwSheet: { backgroundColor: "#FFF", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 50 },
+  pwSheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", alignSelf: "center", marginBottom: 20 },
+  pwTitle: { fontSize: 20, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold", marginBottom: 6 },
+  pwSubtitle: { fontSize: 13, color: GRAY_TEXT, fontFamily: "Inter", marginBottom: 24, lineHeight: 20 },
+  pwLabel: { fontSize: 13, fontWeight: "600", color: DARK_TEXT, fontFamily: "Inter-SemiBold", marginBottom: 8, marginTop: 4 },
+  pwInputRow: { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: GRAY_BORDER, borderRadius: 14, marginBottom: 16, backgroundColor: PAGE_BG },
+  pwInput: { flex: 1, height: 52, paddingHorizontal: 16, fontSize: 15, color: DARK_TEXT, fontFamily: "Inter" },
+  pwEyeBtn: { paddingHorizontal: 14, height: 52, alignItems: "center", justifyContent: "center" },
+  pwSaveBtn: { height: 56, borderRadius: 16, backgroundColor: PRIMARY_GREEN, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  pwSaveBtnText: { fontSize: 16, fontWeight: "700", color: "#FFF", fontFamily: "Inter-Bold" },
+  pwCancelBtn: { height: 50, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  pwCancelText: { fontSize: 15, fontWeight: "600", color: GRAY_TEXT, fontFamily: "Inter-SemiBold" },
 });

@@ -198,7 +198,7 @@ function defaultEditDraft(existingData) {
       available: existing?.available ?? false,
       slots: existing?.slots?.length
         ? existing.slots.map((s) => ({ ...s }))
-        : [{ start: "08:00", end: "17:00" }],
+        : [{ start: "", end: "" }],
     };
   });
   return draft;
@@ -352,7 +352,7 @@ export default function Availability() {
     if (!timePicker) return;
     const { dayKey, slotIdx, field } = timePicker;
     setEditDraft((prev) => {
-      const slots = [...(prev[dayKey]?.slots || [{ start: "08:00", end: "17:00" }])];
+      const slots = [...(prev[dayKey]?.slots || [{ start: "", end: "" }])];
       slots[slotIdx] = { ...slots[slotIdx], [field]: value };
       return { ...prev, [dayKey]: { ...prev[dayKey], slots } };
     });
@@ -389,9 +389,10 @@ export default function Availability() {
       Alert.alert("No Availability Set", "Set your availability for this week first.");
       return;
     }
-    const nextMonday = new Date(weekDays[0].fullDate);
-    nextMonday.setDate(nextMonday.getDate() + 7);
-    const nextStart = toDateStr(nextMonday);
+    // Derive nextStart using the same logic as the snapshot listener to avoid date-format mismatches
+    const nextWeekDays = getWeekDays(weekOffset + 1);
+    const nextStart = nextWeekDays[0].dateStr;
+    const nextMonday = nextWeekDays[0].fullDate;
     const nextLabel = `${MONTH_NAMES[nextMonday.getMonth()]} ${nextMonday.getDate()}`;
 
     Alert.alert(
@@ -706,11 +707,9 @@ export default function Availability() {
         </Pressable>
         <View style={styles.headerTitleBox}>
           <Text style={styles.headerTitle}>Availability</Text>
-          <Text style={styles.headerSubtitle}>{user?.name || "Staff"} · Staff</Text>
+          <Text style={styles.headerSubtitle}>{user?.name || "Staff"} · {user?.role || "User"}</Text>
         </View>
-        <Pressable onPress={() => setShowQuickActions(true)} style={styles.headerPlus}>
-          <Ionicons name="add" size={28} color={PRIMARY_GREEN} />
-        </Pressable>
+        <View style={styles.headerPlus} />
       </View>
 
       {/* Tab Bar */}
@@ -741,7 +740,12 @@ export default function Availability() {
       </ScrollView>
 
       {/* ── Quick Actions Modal ────────────────────────────────────────────── */}
-      {showQuickActions && (
+      <Modal
+        visible={showQuickActions}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowQuickActions(false)}
+      >
         <View style={styles.modalOverlay}>
           <Pressable style={{ flex: 1 }} onPress={() => setShowQuickActions(false)} />
           <View style={styles.modalSheet}>
@@ -781,7 +785,7 @@ export default function Availability() {
             </Pressable>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* ── Edit Availability Modal ────────────────────────────────────────── */}
       <Modal
@@ -801,8 +805,8 @@ export default function Availability() {
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               {weekDays.map((d) => {
-                const draft = editDraft[d.key] || { available: false, slots: [{ start: "08:00", end: "17:00" }] };
-                const slot = draft.slots?.[0] || { start: "08:00", end: "17:00" };
+                const draft = editDraft[d.key] || { available: false, slots: [{ start: "", end: "" }] };
+                const slot = draft.slots?.[0] || { start: "", end: "" };
                 return (
                   <View key={d.key} style={styles.editDayRow}>
                     <View style={styles.editDayLeft}>
@@ -819,14 +823,14 @@ export default function Availability() {
                             onPress={() => pickTime(d.key, 0, "start")}
                             style={styles.timeChip}
                           >
-                            <Text style={styles.timeChipText}>{fmt12(slot.start)}</Text>
+                            <Text style={styles.timeChipText}>{slot.start ? fmt12(slot.start) : "Start"}</Text>
                           </Pressable>
                           <Text style={styles.toText}>–</Text>
                           <Pressable
                             onPress={() => pickTime(d.key, 0, "end")}
                             style={styles.timeChip}
                           >
-                            <Text style={styles.timeChipText}>{fmt12(slot.end)}</Text>
+                            <Text style={styles.timeChipText}>{slot.end ? fmt12(slot.end) : "End"}</Text>
                           </Pressable>
                         </View>
                       )}
@@ -1155,11 +1159,7 @@ const styles = StyleSheet.create({
 
   // Modal Sheet (shared)
   modalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
