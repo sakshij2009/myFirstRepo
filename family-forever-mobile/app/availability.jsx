@@ -16,11 +16,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   collection,
   query,
   where,
+  limit,
   onSnapshot,
   doc,
   setDoc,
@@ -240,7 +241,7 @@ export default function Availability() {
   const [weekDays, setWeekDays] = useState(() => getWeekDays(0));
 
   const [availData, setAvailData] = useState({});
-  const [shifts, setShifts] = useState([]);
+  const [allShifts, setAllShifts] = useState([]); // ALL user's shifts — week filtering done in useMemo
   const [timeOffRequests, setTimeOffRequests] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -253,29 +254,40 @@ export default function Availability() {
 
   // (time picker replaced with inline TextInput — no modal state needed)
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // ── Derived (memoized to avoid re-computation on every render) ────────────
   const weekStart = weekDays[0]?.dateStr;
-  const weekLabel = getWeekLabel(weekDays);
+  const weekLabel = useMemo(() => getWeekLabel(weekDays), [weekDays]);
   const isCurrentWeek = weekOffset === 0;
 
-  const daysWithShifts = new Set(
-    shifts
-      .map((s) => { const d = parseShiftDate(s); return d ? toDateStr(d) : null; })
-      .filter(Boolean)
-  );
+  // Filter allShifts to the currently-viewed week — instant, no Firestore re-fetch
+  const shifts = useMemo(() => {
+    if (!weekDays.length) return [];
+    const weekStartDate = weekDays[0].fullDate;
+    const weekEndDate = new Date(weekDays[6].fullDate);
+    weekEndDate.setHours(23, 59, 59, 999);
+    return allShifts.filter((s) => {
+      const d = parseShiftDate(s);
+      return d && d >= weekStartDate && d <= weekEndDate;
+    });
+  }, [allShifts, weekDays]);
 
-  const { availDays, totalHours } = computeStats(availData);
-  const uniqueClients = [
+  const daysWithShifts = useMemo(() => new Set(
+    shifts.map((s) => { const d = parseShiftDate(s); return d ? toDateStr(d) : null; }).filter(Boolean)
+  ), [shifts]);
+
+  const { availDays, totalHours } = useMemo(() => computeStats(availData), [availData]);
+
+  const uniqueClients = useMemo(() => [
     ...new Set(shifts.map((s) => s.clientId || s.clientName).filter(Boolean)),
-  ].length;
+  ].length, [shifts]);
 
-  const shiftsByDay = weekDays.map((d) => ({
+  const shiftsByDay = useMemo(() => weekDays.map((d) => ({
     day: d,
     shifts: shifts.filter((s) => {
       const sd = parseShiftDate(s);
       return sd && isSameDay(sd, d.fullDate);
     }),
-  })).filter((g) => g.shifts.length > 0);
+  })).filter((g) => g.shifts.length > 0), [shifts, weekDays]);
 
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -331,32 +343,45 @@ export default function Availability() {
     return () => unsub();
   }, [user]);
 
-  // Shifts listener
+  // Shifts listener — only fetches THIS user's shifts (server-filtered), not the whole collection
+  // Week filtering happens in the useMemo above, so this listener runs once per user login.
   useEffect(() => {
-    if (!user || !weekDays.length) return;
+    if (!user) return;
     const uid = user.userId || user.uid || user.id;
-    const weekStartDate = weekDays[0].fullDate;
-    const weekEndDate = new Date(weekDays[6].fullDate);
-    weekEndDate.setHours(23, 59, 59, 999);
 
-    const unsub = onSnapshot(query(collection(db, "shifts")), (snap) => {
-      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const mine = all.filter(
-        (s) =>
-          s.userId === uid || s.staffId === uid ||
-          (s.name && user.name && s.name.toLowerCase() === user.name.toLowerCase()) ||
-          s.secondaryUserId === uid ||
-          (s.secondaryUserName && user.name && s.secondaryUserName.toLowerCase() === user.name.toLowerCase()) ||
-          (s.secondaryUser && user.name && s.secondaryUser.toLowerCase() === user.name.toLowerCase())
+    let primary = [];
+    let secondary = [];
+    let pLoaded = false;
+    let sLoaded = false;
+
+    const merge = () => {
+      if (!pLoaded || !sLoaded) return;
+      const seen = new Set();
+      setAllShifts(
+        [...primary, ...secondary].filter((s) => {
+          if (seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        })
       );
-      const weekShifts = mine.filter((s) => {
-        const d = parseShiftDate(s);
-        return d && d >= weekStartDate && d <= weekEndDate;
-      });
-      setShifts(weekShifts);
-    });
-    return () => unsub();
-  }, [user, weekDays]);
+    };
+
+    // Primary: shifts where this user is the main worker
+    const q1 = query(collection(db, "shifts"), where("userId", "==", uid), limit(300));
+    const unsub1 = onSnapshot(q1,
+      (snap) => { primary = snap.docs.map((d) => ({ id: d.id, ...d.data() })); pLoaded = true; merge(); },
+      () => { pLoaded = true; merge(); }
+    );
+
+    // Secondary: shifts where this user is the secondary worker
+    const q2 = query(collection(db, "shifts"), where("secondaryUserId", "==", uid), limit(100));
+    const unsub2 = onSnapshot(q2,
+      (snap) => { secondary = snap.docs.map((d) => ({ id: d.id, ...d.data() })); sLoaded = true; merge(); },
+      () => { sLoaded = true; merge(); }
+    );
+
+    return () => { unsub1(); unsub2(); };
+  }, [user]); // ← only re-runs when user changes, NOT when week changes
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const openEditModal = () => {
