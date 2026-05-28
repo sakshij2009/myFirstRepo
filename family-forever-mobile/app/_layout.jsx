@@ -122,13 +122,7 @@ export default function Layout() {
           tabBarIcon: ({ focused }) => <CustomTabIcon name="calendar" focused={focused} />,
         }}
       />
-      <Tabs.Screen
-        name="routes"
-        options={{
-          title: "Routes",
-          tabBarIcon: ({ focused }) => <CustomTabIcon name="navigate" focused={focused} />,
-        }}
-      />
+      <Tabs.Screen name="routes" options={{ href: null }} />
       <Tabs.Screen
         name="alerts"
         options={{
