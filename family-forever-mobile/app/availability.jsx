@@ -575,7 +575,29 @@ export default function Availability() {
   );
 
   // ── Render Overview Tab ────────────────────────────────────────────────────
-  const renderOverview = () => (
+  const renderOverview = () => {
+    // Compute actual shift hours for this week
+    const totalShiftHours = (() => {
+      let h = 0;
+      shifts.forEach((s) => {
+        try {
+          if (s.totalTimeMinutes > 0) { h += s.totalTimeMinutes / 60; return; }
+          const parseT = (t) => {
+            if (!t) return null;
+            const [time, period] = String(t).trim().split(" ");
+            let [hh, mm] = time.split(":").map(Number);
+            if (period?.toUpperCase() === "PM" && hh !== 12) hh += 12;
+            if (period?.toUpperCase() === "AM" && hh === 12) hh = 0;
+            return hh + (mm || 0) / 60;
+          };
+          const s1 = parseT(s.startTime); const e1 = parseT(s.endTime);
+          if (s1 !== null && e1 !== null) { const d = e1 - s1; h += d > 0 ? d : d + 24; }
+        } catch {}
+      });
+      return Math.round(h * 10) / 10;
+    })();
+
+    return (
     <View>
       {/* Stats Strip */}
       <View style={styles.overviewStatsStrip}>
@@ -585,8 +607,8 @@ export default function Availability() {
         </View>
         <View style={styles.overviewStatDivider} />
         <View style={styles.overviewStatItem}>
-          <Text style={styles.overviewStatValue}>{totalHours}h</Text>
-          <Text style={styles.overviewStatLabel}>Available Hrs</Text>
+          <Text style={[styles.overviewStatValue, { color: PRIMARY_GREEN }]}>{totalShiftHours}h</Text>
+          <Text style={styles.overviewStatLabel}>Total Hours</Text>
         </View>
         <View style={styles.overviewStatDivider} />
         <View style={styles.overviewStatItem}>
@@ -608,8 +630,8 @@ export default function Availability() {
                 {d.date}
               </Text>
             </View>
-            {daysWithShifts.has(d.dateStr) && !d.isToday && (
-              <View style={styles.overviewDot} />
+            {daysWithShifts.has(d.dateStr) && (
+              <View style={[styles.overviewDot, d.isToday && { backgroundColor: "#FFF" }]} />
             )}
           </View>
         ))}
@@ -636,55 +658,65 @@ export default function Availability() {
               <Text style={styles.dayHeader}>
                 {day.short}, {MONTH_NAMES[day.fullDate.getMonth()]} {day.date}
                 {"  "}
-                <Text style={{ color: GRAY_TEXT, fontWeight: "500" }}>
+                <Text style={{ color: GRAY_TEXT, fontWeight: "500", textTransform: "none" }}>
                   {dayShifts.length} shift{dayShifts.length !== 1 ? "s" : ""}
                 </Text>
               </Text>
 
               {dayShifts.map((shift) => {
-                const svcType =
-                  shift.serviceType ||
-                  shift.category ||
-                  shift.categoryName ||
-                  shift.shiftCategory ||
-                  "Shift";
+                const svcType = shift.serviceType || shift.category || shift.categoryName || shift.shiftCategory || "Shift";
                 const colors = getServiceColors(svcType);
-                const clientName =
-                  shift.clientName || shift.name || "Client";
+                const clientName = shift.clientName || shift.familyName || shift.name || "Client";
                 const initials = getInitials(clientName);
-                const startT = shift.startTime || shift.clockInTime || "";
-                const endT = shift.endTime || shift.clockOutTime || "";
-                const timeRange = startT
-                  ? endT
-                    ? `${startT} \u2013 ${endT}`
-                    : startT
-                  : "\u2013";
+                const startT = shift.startTime || "";
+                const endT = shift.endTime || "";
+                const timeRange = startT ? (endT ? `${startT} \u2013 ${endT}` : startT) : "\u2013";
                 const loc = shift.location || shift.address || shift.pickupLocation || "";
+                const durH = (() => {
+                  try {
+                    const parseT = (t) => {
+                      if (!t) return null;
+                      const [time, period] = String(t).trim().split(" ");
+                      let [h, m] = time.split(":").map(Number);
+                      if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
+                      if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+                      return h + (m || 0) / 60;
+                    };
+                    const s1 = parseT(startT); const e1 = parseT(endT);
+                    if (s1 === null || e1 === null) return null;
+                    const d = e1 - s1; return Math.round((d > 0 ? d : d + 24) * 10) / 10;
+                  } catch { return null; }
+                })();
 
                 return (
                   <Pressable
                     key={shift.id}
                     style={styles.shiftListCard}
-                    onPress={() => router.push({ pathname: "/shifts", params: { shiftId: shift.id } })}
+                    onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
                   >
+                    {/* Top: service tag + duration */}
                     <View style={styles.shiftListTop}>
                       <View style={[styles.serviceTag, { backgroundColor: colors.bg }]}>
-                        <Text style={[styles.serviceTagText, { color: colors.text }]}>
-                          {svcType}
-                        </Text>
+                        <Text style={[styles.serviceTagText, { color: colors.text }]}>{svcType}</Text>
                       </View>
+                      {durH !== null && (
+                        <View style={styles.durBadge}>
+                          <Ionicons name="time-outline" size={12} color={GRAY_TEXT} />
+                          <Text style={styles.durBadgeText}>{durH}h</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.shiftListTime}>{timeRange}</Text>
                     <View style={styles.shiftListClient}>
-                      <View style={styles.clientAvatar}>
-                        <Text style={styles.avatarText}>{initials}</Text>
+                      <View style={[styles.clientAvatar, { backgroundColor: colors.bg }]}>
+                        <Text style={[styles.avatarText, { color: colors.text }]}>{initials}</Text>
                       </View>
                       <Text style={styles.clientLabel}>{clientName}</Text>
                     </View>
                     {!!loc && (
                       <View style={styles.shiftListLocation}>
                         <Ionicons name="location-outline" size={14} color={GRAY_TEXT} />
-                        <Text style={styles.locationLabel}>{loc}</Text>
+                        <Text style={styles.locationLabel} numberOfLines={1}>{loc}</Text>
                       </View>
                     )}
                   </Pressable>
@@ -695,7 +727,8 @@ export default function Availability() {
         )}
       </View>
     </View>
-  );
+    );
+  };
 
   // ── Main Return ────────────────────────────────────────────────────────────
   return (
@@ -742,8 +775,9 @@ export default function Availability() {
       {/* ── Quick Actions Modal ────────────────────────────────────────────── */}
       <Modal
         visible={showQuickActions}
-        animationType="slide"
+        animationType="fade"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setShowQuickActions(false)}
       >
         <View style={styles.modalOverlay}>
@@ -790,20 +824,21 @@ export default function Availability() {
       {/* ── Edit Availability Modal ────────────────────────────────────────── */}
       <Modal
         visible={showEditModal}
-        animationType="slide"
+        animationType="fade"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setShowEditModal(false)}
       >
         <View style={styles.modalOverlay}>
           <Pressable style={{ flex: 1 }} onPress={() => setShowEditModal(false)} />
-          <View style={[styles.modalSheet, { paddingBottom: 40 }]}>
+          <View style={[styles.modalSheet, { paddingBottom: 40, maxHeight: "88%" }]}>
             <View style={styles.modalHandle} />
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <Text style={styles.modalTitle}>Edit Availability</Text>
               <Text style={styles.editWeekLabel}>{weekLabel}</Text>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
               {weekDays.map((d) => {
                 const draft = editDraft[d.key] || { available: false, slots: [{ start: "", end: "" }] };
                 const slot = draft.slots?.[0] || { start: "", end: "" };
@@ -869,8 +904,9 @@ export default function Availability() {
       {/* ── Time Picker Modal ─────────────────────────────────────────────── */}
       <Modal
         visible={!!timePicker}
-        animationType="slide"
+        animationType="fade"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setTimePicker(null)}
       >
         <View style={styles.modalOverlay}>
@@ -926,21 +962,7 @@ const styles = StyleSheet.create({
   headerTitleBox: { alignItems: "center", flex: 1 },
   headerTitle: { fontSize: 20, fontWeight: "800", color: DARK_TEXT, fontFamily: "Poppins-Bold" },
   headerSubtitle: { fontSize: 13, color: GRAY_TEXT, marginTop: 1, fontFamily: "Inter" },
-  headerPlus: {
-    backgroundColor: "#FFF",
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
+  headerPlus: { width: 42 },
 
   // Tab Bar
   tabBar: {
@@ -1137,6 +1159,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.04)",
   },
   shiftListTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  durBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  durBadgeText: { fontSize: 12, fontWeight: "700", color: GRAY_TEXT, fontFamily: "Inter-Bold" },
   serviceTag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   serviceTagText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", fontFamily: "Inter-Bold" },
   shiftListTime: { fontSize: 16, fontWeight: "700", color: DARK_TEXT, marginBottom: 14, fontFamily: "Poppins-Bold" },
