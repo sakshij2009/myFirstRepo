@@ -8,6 +8,9 @@ import {
   Alert,
   Modal,
   Switch,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,17 +45,6 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_SHORTS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const TIME_OPTIONS = (() => {
-  const opts = [];
-  for (let h = 6; h <= 22; h++) {
-    for (let m = 0; m < 60; m += 30) {
-      if (h === 22 && m > 0) break;
-      opts.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-    }
-  }
-  return opts;
-})();
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function toDateStr(date) {
@@ -111,10 +103,42 @@ function getWeekLabel(days) {
 
 function fmt12(time24) {
   if (!time24) return "";
+  // Already 12h — pass through (e.g. "8:00 AM" typed directly by user)
+  if (/AM|PM/i.test(time24)) return time24.trim();
   const [h, m] = time24.split(":").map(Number);
+  if (isNaN(h)) return time24;
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+// Parse whatever the user typed → "HH:MM" 24h for Firestore storage.
+// Accepts: "8:00 AM", "5PM", "17:00", "08:00", "8", "830 am", etc.
+function parse12hTo24h(raw) {
+  if (!raw) return "";
+  const s = raw.trim();
+  // Already 24h: "HH:MM" or "H:MM"
+  if (/^\d{1,2}:\d{2}$/.test(s)) {
+    const [h, m] = s.split(":").map(Number);
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  // 12h with colon: "8:30 AM", "12:00pm"
+  const m1 = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (m1) {
+    let h = parseInt(m1[1]); const m = parseInt(m1[2]); const p = m1[3].toUpperCase();
+    if (p === "PM" && h !== 12) h += 12;
+    if (p === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  // 12h without colon: "8 AM", "5PM", "830AM"
+  const m2 = s.match(/^(\d{1,2})(\d{2})?\s*(AM|PM)$/i);
+  if (m2) {
+    let h = parseInt(m2[1]); const m = m2[2] ? parseInt(m2[2]) : 0; const p = m2[3].toUpperCase();
+    if (p === "PM" && h !== 12) h += 12;
+    if (p === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+  return s; // unknown format — keep as typed
 }
 
 function slotHours(slot) {
@@ -196,8 +220,12 @@ function defaultEditDraft(existingData) {
     const existing = existingData?.[k];
     draft[k] = {
       available: existing?.available ?? false,
+      // Pre-fill times in 12h display format so the TextInput looks friendly
       slots: existing?.slots?.length
-        ? existing.slots.map((s) => ({ ...s }))
+        ? existing.slots.map((s) => ({
+            start: s.start ? fmt12(s.start) : "",
+            end:   s.end   ? fmt12(s.end)   : "",
+          }))
         : [{ start: "", end: "" }],
     };
   });
@@ -223,8 +251,7 @@ export default function Availability() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editDraft, setEditDraft] = useState({});
 
-  // Time picker state
-  const [timePicker, setTimePicker] = useState(null); // { dayKey, slotIdx, field: "start"|"end" }
+  // (time picker replaced with inline TextInput — no modal state needed)
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const weekStart = weekDays[0]?.dateStr;
@@ -344,19 +371,13 @@ export default function Availability() {
     }));
   };
 
-  const pickTime = (dayKey, slotIdx, field) => {
-    setTimePicker({ dayKey, slotIdx, field });
-  };
-
-  const applyTime = (value) => {
-    if (!timePicker) return;
-    const { dayKey, slotIdx, field } = timePicker;
+  // Inline handler: update a time field directly from TextInput
+  const updateSlotTime = (dayKey, slotIdx, field, text) => {
     setEditDraft((prev) => {
       const slots = [...(prev[dayKey]?.slots || [{ start: "", end: "" }])];
-      slots[slotIdx] = { ...slots[slotIdx], [field]: value };
+      slots[slotIdx] = { ...slots[slotIdx], [field]: text };
       return { ...prev, [dayKey]: { ...prev[dayKey], slots } };
     });
-    setTimePicker(null);
   };
 
   const saveAvailability = async () => {
@@ -364,13 +385,25 @@ export default function Availability() {
     setSaving(true);
     try {
       const uid = user.userId || user.uid || user.id;
+      // Normalise user-typed times ("8:00 AM", "5PM", "17:00" …) → 24h "HH:MM" for storage
+      const normalisedDays = {};
+      Object.keys(editDraft).forEach((k) => {
+        const day = editDraft[k];
+        normalisedDays[k] = {
+          ...day,
+          slots: day.slots.map((s) => ({
+            start: parse12hTo24h(s.start),
+            end:   parse12hTo24h(s.end),
+          })),
+        };
+      });
       await setDoc(
         doc(db, "availability", `${uid}_${weekStart}`),
         {
           userId: uid,
           userName: user.name || "",
           weekStart,
-          days: editDraft,
+          days: normalisedDays,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -829,6 +862,10 @@ export default function Availability() {
         statusBarTranslucent
         onRequestClose={() => setShowEditModal(false)}
       >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
         <View style={styles.modalOverlay}>
           <Pressable style={{ flex: 1 }} onPress={() => setShowEditModal(false)} />
           <View style={[styles.modalSheet, { paddingBottom: 40, maxHeight: "88%" }]}>
@@ -854,19 +891,27 @@ export default function Availability() {
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, justifyContent: "flex-end" }}>
                       {draft.available && (
                         <View style={styles.editTimeRow}>
-                          <Pressable
-                            onPress={() => pickTime(d.key, 0, "start")}
-                            style={styles.timeChip}
-                          >
-                            <Text style={styles.timeChipText}>{slot.start ? fmt12(slot.start) : "Start"}</Text>
-                          </Pressable>
+                          <TextInput
+                            style={styles.timeInput}
+                            value={slot.start}
+                            placeholder="9:00 AM"
+                            placeholderTextColor="#9CA3AF"
+                            onChangeText={(t) => updateSlotTime(d.key, 0, "start", t)}
+                            returnKeyType="next"
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                          />
                           <Text style={styles.toText}>–</Text>
-                          <Pressable
-                            onPress={() => pickTime(d.key, 0, "end")}
-                            style={styles.timeChip}
-                          >
-                            <Text style={styles.timeChipText}>{slot.end ? fmt12(slot.end) : "End"}</Text>
-                          </Pressable>
+                          <TextInput
+                            style={styles.timeInput}
+                            value={slot.end}
+                            placeholder="5:00 PM"
+                            placeholderTextColor="#9CA3AF"
+                            onChangeText={(t) => updateSlotTime(d.key, 0, "end", t)}
+                            returnKeyType="done"
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                          />
                         </View>
                       )}
                       <Switch
@@ -899,47 +944,10 @@ export default function Availability() {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Time Picker Modal ─────────────────────────────────────────────── */}
-      <Modal
-        visible={!!timePicker}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={() => setTimePicker(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={() => setTimePicker(null)} />
-          <View style={[styles.modalSheet, { paddingBottom: 40 }]}>
-            <View style={styles.modalHandle} />
-            <Text style={[styles.modalTitle, { marginBottom: 16 }]}>
-              Select {timePicker?.field === "start" ? "Start" : "End"} Time
-            </Text>
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-              {TIME_OPTIONS.map((t) => {
-                const isSelected =
-                  timePicker &&
-                  editDraft[timePicker.dayKey]?.slots?.[timePicker.slotIdx]?.[timePicker.field] === t;
-                return (
-                  <Pressable
-                    key={t}
-                    onPress={() => applyTime(t)}
-                    style={[styles.timeOption, isSelected && styles.timeOptionSelected]}
-                  >
-                    <Text style={[styles.timeOptionText, isSelected && styles.timeOptionTextSelected]}>
-                      {fmt12(t)}
-                    </Text>
-                    {isSelected && (
-                      <Ionicons name="checkmark" size={18} color={PRIMARY_GREEN} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* Time picker modal removed — replaced with inline TextInput */}
     </SafeAreaView>
   );
 }
@@ -1224,15 +1232,20 @@ const styles = StyleSheet.create({
   editDayLabel: { fontSize: 14, fontWeight: "700", color: DARK_TEXT, fontFamily: "Inter-Bold" },
   editDayDate: { fontSize: 11, color: GRAY_TEXT, marginTop: 2, fontFamily: "Inter" },
   editTimeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  timeChip: {
+  timeInput: {
+    width: 80,
+    height: 38,
     backgroundColor: "#F0FDF4",
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: LIGHT_GREEN,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: PRIMARY_GREEN,
+    fontFamily: "Inter-Bold",
+    textAlign: "center",
   },
-  timeChipText: { fontSize: 12, fontWeight: "700", color: PRIMARY_GREEN, fontFamily: "Inter-Bold" },
   toText: { fontSize: 14, color: GRAY_TEXT, fontWeight: "600" },
   editCancelBtn: {
     flex: 1,
@@ -1252,17 +1265,4 @@ const styles = StyleSheet.create({
   },
   editSaveText: { fontSize: 15, fontWeight: "700", color: "#FFF", fontFamily: "Inter-Bold" },
 
-  // Time Picker
-  timeOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F9FAFB",
-  },
-  timeOptionSelected: { backgroundColor: "#F0FDF4", borderRadius: 10, paddingHorizontal: 12 },
-  timeOptionText: { fontSize: 15, fontWeight: "600", color: DARK_TEXT, fontFamily: "Inter-SemiBold" },
-  timeOptionTextSelected: { color: PRIMARY_GREEN, fontWeight: "800" },
 });
