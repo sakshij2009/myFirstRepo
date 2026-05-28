@@ -81,45 +81,14 @@ const serviceTypeStyles = {
   default: { bg: "#F3F4F6", text: "#6B7280" },
 };
 
-// ── Smart 15-min rounding helpers ─────────────────────────────────────────────
-const parseShiftDT = (dateStr, timeStr) => {
-  if (!timeStr) return null;
-  try {
-    let base = new Date();
-    if (dateStr) { const d = dateStr?.toDate ? dateStr.toDate() : new Date(dateStr); if (!isNaN(d)) base = d; }
-    const [timePart, period] = String(timeStr).trim().split(" ");
-    let [h, m] = timePart.split(":").map(Number);
-    if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
-    if (period?.toUpperCase() === "AM" && h === 12) h = 0;
-    const r = new Date(base); r.setHours(h, m || 0, 0, 0); return r;
-  } catch { return null; }
-};
 // Use device-local time — staff in Edmonton will have Edmonton-timezone devices,
-// so local time = Edmonton. Forcing "America/Edmonton" converts twice and gives
-// wrong results for anyone testing outside Edmonton (e.g. IST).
+// so local time = Edmonton.
 const toEdmontonTimeStr = (d) =>
   d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-const roundNearest15 = (d) => new Date(Math.round(d.getTime() / (1000 * 60 * 15)) * (1000 * 60 * 15));
 
-const getClockInTimeHome = (startTimeStr, startDateStr) => {
-  const now = new Date();
-  const scheduled = parseShiftDT(startDateStr, startTimeStr);
-  if (scheduled) {
-    const diffMs = scheduled.getTime() - now.getTime();
-    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toEdmontonTimeStr(scheduled);
-  }
-  return toEdmontonTimeStr(roundNearest15(now));
-};
-
-const getClockOutTimeHome = (endTimeStr, startDateStr) => {
-  const now = new Date();
-  const scheduled = parseShiftDT(startDateStr, endTimeStr);
-  if (scheduled) {
-    const diffMs = now.getTime() - scheduled.getTime();
-    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toEdmontonTimeStr(scheduled);
-  }
-  return toEdmontonTimeStr(roundNearest15(now));
-};
+// Always capture the exact current device time when clocking in/out
+const getClockInTimeHome = () => toEdmontonTimeStr(new Date());
+const getClockOutTimeHome = () => toEdmontonTimeStr(new Date());
 
 const getLocationString = async () => {
   try {
@@ -523,7 +492,7 @@ export default function Home() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        const roundedTime = getClockInTimeHome(shift.startTime, shift.startDate);
+        const roundedTime = getClockInTimeHome();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockIn: serverTimestamp(),      // admin app reads this field
@@ -551,7 +520,7 @@ export default function Home() {
           return;
         }
       } else if (type === "clockOut") {
-        const roundedTime = getClockOutTimeHome(shift.endTime, shift.startDate);
+        const roundedTime = getClockOutTimeHome();
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockOut: serverTimestamp(),     // admin app reads this field
@@ -858,7 +827,7 @@ export default function Home() {
                 {confirmAction.type === "confirm"
                   ? "You'll be committing to attend this shift. The owner will be notified."
                   : confirmAction.type === "clockIn"
-                  ? "Your GPS location will be captured and time rounded to the nearest 15 min for payroll accuracy."
+                  ? "Your exact current time and GPS location will be captured for payroll accuracy."
                   : "This will finalize your shift hours. Your location will be logged for payroll."}
               </Text>
               <Pressable
