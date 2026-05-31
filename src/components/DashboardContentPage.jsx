@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+// ── URL param helpers ─────────────────────────────────────────────────────────
+// Store dates as "YYYY-MM-DD,YYYY-MM-DD" so the URL is human-readable and
+// survives a page reload or browser back-navigation.
+const parseDateParam = (s) => {
+  if (!s) return null;
+  // Use noon so that no timezone shift flips the date to the previous day
+  const d = new Date(s + "T12:00:00");
+  return isNaN(d) ? null : d;
+};
+const formatDateParam = (d) => d.toISOString().slice(0, 10); // "YYYY-MM-DD"
 import ShiftsData from "../components/ShiftsData";
 import IntakeFormChoiceModel from "../components/IntakeFormChoiceModel";
 import { collection, getDocs } from "firebase/firestore";
@@ -12,18 +23,27 @@ import { Plus, Search, ChevronDown, Calendar } from "lucide-react";
 
 const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails,initialShiftCategory }) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  // ── Initialise all filter state from URL params ───────────────────────────
+  // This is what makes back-navigation restore the exact filters the user had.
   const [categories, setCategories] = useState([]);
-  const [shiftStatus, setShiftStatus] = useState("");
+  const [shiftStatus, setShiftStatus] = useState(() => searchParams.get("status") || "");
   const [shiftCategory, setShiftCategory] = useState(
-  initialShiftCategory || ""
-);
-
+    () => searchParams.get("category") || initialShiftCategory || ""
+  );
   const [statusOpen, setStatusOpen] = useState(false);
-  const [selectedDates, setSelectedDates] = useState([new Date()]);
+  const [selectedDates, setSelectedDates] = useState(() => {
+    const raw = searchParams.get("dates");
+    if (raw) {
+      const parsed = raw.split(",").map(parseDateParam).filter(Boolean);
+      if (parsed.length) return parsed;
+    }
+    return [new Date()];
+  });
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [shifts, setShifts] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") || "");
   const [showModal, setShowModal] = useState(false);
 
   const statusOptions = ["All", "InProgress", "Completed", "Incomplete"];
@@ -39,6 +59,18 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
 // }, [initialShiftCategory, categories]);
 
 
+
+  // ── Sync filter state → URL params (replace:true so filter changes don't
+  //    pollute browser history — only the navigation TO shift-report creates
+  //    a new history entry, so back-navigation restores this exact URL).
+  useEffect(() => {
+    const params = {};
+    if (selectedDates.length > 0) params.dates = selectedDates.map(formatDateParam).join(",");
+    if (shiftStatus) params.status = shiftStatus;
+    if (shiftCategory) params.category = shiftCategory;
+    if (searchTerm) params.search = searchTerm;
+    setSearchParams(params, { replace: true });
+  }, [selectedDates, shiftStatus, shiftCategory, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch shifts
   useEffect(() => {
