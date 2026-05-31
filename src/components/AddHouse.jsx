@@ -1918,6 +1918,7 @@ const AddHouse = () => {
         </div>
       )}
     </div>
+  </div>
   );
 };
 
