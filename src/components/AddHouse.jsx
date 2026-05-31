@@ -46,14 +46,145 @@ import {
 } from "lucide-react";
 
 const MOCK_STAFF = [
-  { id: 1, name: "Sarah Mitchell", role: "Senior Caregiver", experience: "4 yrs experience", initials: "SM", color: "#fce7f3" },
-  { id: 2, name: "James Park",     role: "Caregiver",        experience: "2 yrs experience", initials: "JP", color: "#dbeafe" },
-  { id: 3, name: "Emily Chen",     role: "Support Worker",   experience: "3 yrs experience", initials: "EC", color: "#dcfce7" },
-  { id: 4, name: "Michael Torres", role: "Senior Caregiver", experience: "6 yrs experience", initials: "MT", color: "#fef3c7" },
-  { id: 5, name: "Rachel Brown",   role: "Caregiver",        experience: "1 yr experience",  initials: "RB", color: "#ede9fe" },
-  { id: 6, name: "David Kim",      role: "Support Worker",   experience: "5 yrs experience", initials: "DK", color: "#ffedd5" },
-  { id: 7, name: "Anna Garcia",    role: "Senior Caregiver", experience: "7 yrs experience", initials: "AG", color: "#f0fdf4" },
-  { id: 8, name: "Tom Anderson",   role: "Caregiver",        experience: "2 yrs experience", initials: "TA", color: "#e0f2fe" },
+  { id: '1', name: 'Sarah Mitchell', role: 'Senior Caregiver', experience: '4 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
+  { id: '2', name: 'James Park',     role: 'Caregiver',        experience: '2 yrs', certifications: ['First Aid','CPR'], status: 'Available' },
+  { id: '3', name: 'Emily Chen',     role: 'Support Worker',   experience: '3 yrs', certifications: ['First Aid','CPR','Medication'], status: 'Available' },
+  { id: '4', name: 'Michael Torres', role: 'Senior Caregiver', experience: '6 yrs', certifications: ['First Aid','CPR','Medication','ASIST','Mental Health'], status: 'Available' },
+  { id: '5', name: 'Rachel Brown',   role: 'Caregiver',        experience: '1 yr',  certifications: ['First Aid','CPR'], status: 'Available' },
+  { id: '6', name: 'David Kim',      role: 'Support Worker',   experience: '5 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
+  { id: '7', name: 'Anna Garcia',    role: 'Senior Caregiver', experience: '7 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
+  { id: '8', name: 'Tom Anderson',   role: 'Caregiver',        experience: '2 yrs', certifications: ['First Aid','CPR'], status: 'Available' },
+];
+
+const getAvatarColor = (name) => {
+  const colors = ['#FFCDD2','#F8BBD0','#E1BEE7','#C5CAE9','#BBDEFB','#B2DFDB','#DCEDC8','#FFF9C4'];
+  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
+};
+const getInitials = (name) => name.split(' ').map(n => n[0]).join('');
+
+const SHIFTS_CONFIG = [
+  { id: 'morning', name: 'Morning', time: '8:00 AM – 4:00 PM', color: '#F57C00', minStaff: 2 },
+  { id: 'evening', name: 'Evening', time: '4:00 PM – 12:00 AM', color: '#7B1FA2', minStaff: 1 },
+  { id: 'night',   name: 'Night',   time: '12:00 AM – 8:00 AM', color: '#3F51B5', minStaff: 1 },
+  { id: 'weekend', name: 'Weekend', time: 'Sat–Sun, 8AM – 8PM',  color: '#00897B', minStaff: 2 },
+];
+
+const HOUSE_INVENTORY_CATEGORIES = [
+  {
+    id: 'bedroom', name: 'Bedroom Essentials', icon: 'Bed', color: '#7B1FA2',
+    items: [
+      { name: 'Bed Sheets (Queen)', qty: 12, location: 'Linen Closet A', notes: '' },
+      { name: 'Pillows', qty: 12, location: 'Linen Closet A', notes: '' },
+      { name: 'Pillowcases', qty: 24, location: 'Linen Closet A', notes: '' },
+      { name: 'Blankets (Winter)', qty: 6, location: 'Linen Closet B', notes: '' },
+      { name: 'Mattress Protectors', qty: 6, location: 'Linen Closet A', notes: '' },
+    ],
+  },
+  {
+    id: 'bathroom', name: 'Bathroom Essentials', icon: 'Bath', color: '#0277BD',
+    items: [
+      { name: 'Bath Towels', qty: 18, location: 'Bathroom Storage', notes: '' },
+      { name: 'Hand Towels', qty: 12, location: 'Bathroom Storage', notes: '' },
+      { name: 'Bath Mats', qty: 3, location: 'Bathroom Storage', notes: '' },
+      { name: 'Soap Dispensers', qty: 4, location: 'Bathrooms', notes: '' },
+      { name: 'Toilet Brushes', qty: 3, location: 'Bathrooms', notes: '' },
+    ],
+  },
+  {
+    id: 'kitchen', name: 'Kitchen Essentials', icon: 'Utensils', color: '#F57C00',
+    items: [
+      { name: 'Plates (Dinner)', qty: 18, location: 'Kitchen Cabinet A', notes: '' },
+      { name: 'Bowls', qty: 18, location: 'Kitchen Cabinet A', notes: '' },
+      { name: 'Drinking Glasses', qty: 18, location: 'Kitchen Cabinet B', notes: '' },
+      { name: 'Cutlery Sets', qty: 18, location: 'Kitchen Drawer', notes: '' },
+      { name: 'Cooking Pots', qty: 6, location: 'Kitchen Storage', notes: '' },
+    ],
+  },
+  {
+    id: 'cleaning', name: 'Cleaning Supplies', icon: 'Sparkles', color: '#00897B',
+    items: [
+      { name: 'All-Purpose Cleaner', qty: 6, location: 'Cleaning Closet', notes: '' },
+      { name: 'Disinfectant Wipes', qty: 12, location: 'Cleaning Closet', notes: '' },
+      { name: 'Mop & Bucket', qty: 2, location: 'Cleaning Closet', notes: '' },
+      { name: 'Vacuum Bags', qty: 10, location: 'Cleaning Closet', notes: '' },
+      { name: 'Trash Bags', qty: 100, location: 'Cleaning Closet', notes: '' },
+    ],
+  },
+  {
+    id: 'safety', name: 'Safety Equipment', icon: 'ShieldAlert', color: '#C62828',
+    items: [
+      { name: 'Smoke Detectors', qty: 8, location: 'Ceiling Mounted', notes: '' },
+      { name: 'Fire Extinguisher (ABC)', qty: 3, location: 'Kitchen, Hallways', notes: '' },
+      { name: 'Carbon Monoxide Detectors', qty: 4, location: 'Near Bedrooms', notes: '' },
+      { name: 'First Aid Kit (basic)', qty: 2, location: 'Office, Kitchen', notes: '' },
+      { name: 'Emergency Flashlights', qty: 4, location: 'Various Locations', notes: '' },
+    ],
+  },
+  {
+    id: 'maintenance', name: 'Maintenance Tools', icon: 'Wrench', color: '#5D4037',
+    items: [
+      { name: 'Screwdriver Set', qty: 1, location: 'Maintenance Closet', notes: '' },
+      { name: 'Hammer', qty: 2, location: 'Maintenance Closet', notes: '' },
+      { name: 'Pliers', qty: 2, location: 'Maintenance Closet', notes: '' },
+      { name: 'Tape Measure', qty: 1, location: 'Maintenance Closet', notes: '' },
+      { name: 'Light Bulb Spares', qty: 24, location: 'Maintenance Closet', notes: '' },
+    ],
+  },
+];
+
+const EMERGENCY_KIT_CATEGORIES = [
+  {
+    id: 'water', name: 'Water Supply', icon: 'Droplets', color: '#0288D1',
+    items: [
+      { name: 'Bottled Water (1L)', qty: 84, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Emergency Water Pouches', qty: 20, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Water Purification Tablets', qty: 50, location: 'Emergency Storage', notes: '', expiry: '' },
+    ],
+  },
+  {
+    id: 'food', name: 'Food Supply', icon: 'Apple', color: '#388E3C',
+    items: [
+      { name: 'Ready-to-Eat Meals (MRE)', qty: 63, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Protein Bars', qty: 50, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Canned Vegetables', qty: 30, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Canned Fruits', qty: 30, location: 'Emergency Storage', notes: '', expiry: '' },
+    ],
+  },
+  {
+    id: 'emergency-supplies', name: 'Emergency Supplies', icon: 'Package', color: '#FBC02D',
+    items: [
+      { name: 'Flashlights (LED)', qty: 6, location: 'Emergency Kit', notes: '', expiry: '' },
+      { name: 'D-cell Batteries', qty: 24, location: 'Emergency Kit', notes: '', expiry: '' },
+      { name: 'Emergency Blankets', qty: 10, location: 'Emergency Kit', notes: '', expiry: '' },
+    ],
+  },
+  {
+    id: 'first-aid', name: 'First Aid & Medical', icon: 'Heart', color: '#D32F2F',
+    items: [
+      { name: 'First Aid Kit (Comprehensive)', qty: 2, location: 'Emergency Kit', notes: '', expiry: '' },
+      { name: 'Bandages (Assorted)', qty: 100, location: 'Emergency Kit', notes: '', expiry: '' },
+      { name: 'Antiseptic Wipes', qty: 50, location: 'Emergency Kit', notes: '', expiry: '' },
+    ],
+  },
+  {
+    id: 'sanitation', name: 'Sanitation', icon: 'Droplets', color: '#00897B',
+    items: [
+      { name: 'Toilet Paper (12-pack)', qty: 6, location: 'Emergency Storage', notes: '', expiry: '' },
+      { name: 'Hand Sanitizer (500ml)', qty: 6, location: 'Emergency Kit', notes: '', expiry: '' },
+      { name: 'Garbage Bags (Heavy Duty)', qty: 50, location: 'Emergency Storage', notes: '', expiry: '' },
+    ],
+  },
+];
+
+const SHARPS_ITEMS = [
+  { name: 'Needles (18 Gauge)', type: 'Needle', qty: 10, location: 'Locked Med Cabinet A', notes: '' },
+  { name: 'Syringes (5ml, capped)', type: 'Needle', qty: 20, location: 'Locked Med Cabinet A', notes: '' },
+  { name: 'Lancets (Blood Glucose)', type: 'Needle', qty: 100, location: 'Diabetes Kit (locked)', notes: '' },
+  { name: 'EpiPen (Emergency)', type: 'Needle', qty: 2, location: 'Front Office (locked)', notes: '' },
+  { name: 'Kitchen Knife Set', type: 'Knife', qty: 6, location: 'Locked Drawer A (Kitchen)', notes: '' },
+  { name: 'Utility Razor Blades', type: 'Blade', qty: 10, location: 'Locked Toolbox (Maintenance)', notes: '' },
+  { name: 'Scissors (Kitchen / Office Standard)', type: 'Scissor', qty: 4, location: 'Office Drawer + Kitchen Block', notes: '' },
 ];
 
 const steps = [
@@ -92,9 +223,22 @@ const AddHouse = () => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Legacy state kept for compatibility
   const [expandedCategory, setExpandedCategory] = useState("Bedroom Essentials");
   const [inventoryTab, setInventoryTab] = useState("house");
   const [expandedKitCategory, setExpandedKitCategory] = useState(null);
+
+  // Step 2 Staff Assignment
+  const [selectedStaffIds, setSelectedStaffIds] = useState([]);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [shiftAssignments, setShiftAssignments] = useState({ morning: [], evening: [], night: [], weekend: [] });
+  // Step 3 Initial Clients
+  const [wizardClients, setWizardClients] = useState([]);
+  // Step 5 Inventory
+  const [activeInventorySection, setActiveInventorySection] = useState(0);
+  const [expandedInventoryCategories, setExpandedInventoryCategories] = useState({ bedroom: true, water: true });
+  const [sharpsConfirmed, setSharpsConfirmed] = useState(false);
+
   const [formData, setFormData] = useState({
     houseName: "",
     houseCode: "",
@@ -140,14 +284,14 @@ const AddHouse = () => {
       }
     ],
     clientSearchQuery: "",
-    complianceSchedules: {
-      fireSafety: "",
-      healthSafety: "",
-      medicationAudit: "",
-      fireDrill: "",
-      hygieneInspection: "",
-      ohsInspection: ""
-    },
+    complianceSchedules: [
+      { id: 1, title: 'Fire Safety Inspection',  frequency: 'Quarterly', enabled: true },
+      { id: 2, title: 'Health & Safety Audit',   frequency: 'Monthly',   enabled: true },
+      { id: 3, title: 'Medication Audit',        frequency: 'Weekly',    enabled: true },
+      { id: 4, title: 'Fire Drill',              frequency: 'Monthly',   enabled: true },
+      { id: 5, title: 'Hygiene Inspection',      frequency: 'Weekly',    enabled: true },
+      { id: 6, title: 'OHS Inspection',          frequency: 'Bi-weekly', enabled: true },
+    ],
     inventory: {
       "Bathroom Essentials": {
         "Bath Towels": { qty: "18", location: "Bathroom Storage", notes: "" },
@@ -598,85 +742,69 @@ const AddHouse = () => {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-[#ffffff] p-10 overflow-y-auto">
-            {currentStep === 1 ? (
-              <div className="max-w-[640px]">
-                <div className="inline-block px-2.5 py-1 rounded-md bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 1 of 7
+          <div className="flex-1 overflow-y-auto overflow-x-hidden wizard-form-body" style={{ minWidth: 0, backgroundColor: '#FFFFFF', padding: '32px 48px' }}>
+            <style>{`
+              .wizard-form-body::-webkit-scrollbar { width: 6px; }
+              .wizard-form-body::-webkit-scrollbar-thumb { background: #BDBDBD; border-radius: 3px; }
+              .wizard-form-body::-webkit-scrollbar-thumb:hover { background: #9E9E9E; }
+            `}</style>
+            <div style={{ maxWidth: 820, margin: '0 auto' }}>
+
+            {/* Step Badge + Heading + Description shared pattern */}
+            {(() => {
+              const stepInfo = [
+                { title: 'House Details', subtitle: 'Basic information about the property and its capacity.' },
+                { title: 'Staff Assignment', subtitle: 'Assign the staff who will operate this house. You can change assignments anytime later.' },
+                { title: 'Initial Clients', subtitle: 'Add the residents already living in this house. You can also add clients later from the Clients tab.' },
+                { title: 'Compliance Setup', subtitle: "Define inspection cadences. We've pre-filled industry-standard schedules for Alberta licensed group homes — adjust if needed." },
+                { title: 'Inventory Baseline', subtitle: "Pre-populate the standard inventory checklist. We'll auto-suggest required quantities based on your house capacity." },
+                { title: 'Emergency Preparedness', subtitle: '72-hour emergency kit and contacts. Auto-calculated from your capacity + staff count.' },
+                { title: 'Review & Create', subtitle: 'Review everything. Each section can be edited inline.' },
+              ];
+              const info = stepInfo[currentStep - 1];
+              return (
+                <div style={{ marginBottom: 24 }}>
+                  <div className="inline-flex px-3 py-1 rounded-full" style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.6px', textTransform: 'uppercase', color: '#1D6033', backgroundColor: '#E8F5E9', marginBottom: 12 }}>
+                    STEP {currentStep} OF 7
+                  </div>
+                  <h2 style={{ fontSize: 22, fontWeight: 600, color: '#212121', marginBottom: 8 }}>{info.title}</h2>
+                  <p style={{ fontSize: 14, color: '#616161', marginBottom: 24, maxWidth: 600 }}>{info.subtitle}</p>
                 </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-2 tracking-tight">
-                  House Details
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-10 leading-relaxed">
-                  Basic information about the property and its capacity.
-                </p>
+              );
+            })()}
 
-                <div className="rounded-2xl border border-gray-100 p-8 space-y-8 bg-[#ffffff] shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                  <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                    House Identity
-                  </h3>
+            {currentStep === 1 ? (
+              <div>
 
-                  <div className="space-y-6">
+                {/* Section A: House Identity */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24, marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242', marginBottom: 16 }}>HOUSE IDENTITY</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div>
-                      <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                        House Name <span className="text-[#145228] ml-0.5">*</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="e.g. Maple Grove House"
-                        value={formData.houseName}
-                        onChange={(e) => setFormData({...formData, houseName: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] placeholder:text-gray-300"
-                      />
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>House Name <span style={{ color: '#1D6033' }}>*</span></label>
+                      <input type="text" value={formData.houseName} onChange={(e) => setFormData({...formData, houseName: e.target.value})} placeholder="e.g. Maple Grove House" className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }} />
                     </div>
-
                     <div>
-                      <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                        House Code / Internal ID <span className="text-[#145228] ml-0.5">*</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="XX-NNN"
-                        value={formData.houseCode}
-                        onChange={(e) => setFormData({...formData, houseCode: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] placeholder:text-gray-300"
-                      />
-                      <p className="text-[11px] text-gray-400 mt-2 font-medium">Used for reports. Format: XX-NNN</p>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>House Code / Internal ID <span style={{ color: '#1D6033' }}>*</span></label>
+                      <input type="text" value={formData.houseCode} onChange={(e) => setFormData({...formData, houseCode: e.target.value.toUpperCase()})} placeholder="XX-NNN" className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14, fontFamily: 'JetBrains Mono, monospace' }} />
+                      <p style={{ fontSize: 12, color: '#757575', marginTop: 4 }}>Used for reports. Format: XX-NNN</p>
                     </div>
-
                     <div>
-                      <label className="block text-[13px] font-bold text-[#374151] mb-3">
-                        Display Photo
-                      </label>
-                      <input 
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handlePhotoChange}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                      <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-gray-100 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 bg-[#fafafa] hover:bg-[#f8fcf9] hover:border-emerald-200 transition-all cursor-pointer group relative overflow-hidden min-h-[160px]"
-                      >
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Display Photo</label>
+                      <input type="file" ref={fileInputRef} onChange={handlePhotoChange} accept="image/*" className="hidden" />
+                      <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors cursor-pointer group relative overflow-hidden" style={{ borderColor: '#BDBDBD', height: 160, backgroundColor: '#FAFAFA' }}>
                         {photoPreview ? (
                           <div className="absolute inset-0">
                             <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="p-3 rounded-xl bg-white shadow-sm text-[#145228]">
-                                <Upload size={24} />
-                              </div>
+                              <div className="p-3 rounded-xl bg-white shadow-sm" style={{ color: '#1D6033' }}><Upload size={24} /></div>
                             </div>
                           </div>
                         ) : (
                           <>
-                            <div className="p-3 rounded-xl bg-white shadow-sm text-gray-400 group-hover:text-[#145228] transition-colors">
-                              <Upload size={24} />
-                            </div>
-                            <p className="text-[13px] font-medium text-gray-500">
-                              Drop image or <span className="text-[#145228] font-bold underline">browse</span>
-                            </p>
+                            <Upload size={40} style={{ color: '#9E9E9E', marginBottom: 12 }} />
+                            <p style={{ fontSize: 13, color: '#616161' }}>Drop image or <span style={{ color: '#1D6033', textDecoration: 'underline', cursor: 'pointer' }}>browse</span></p>
+                            <p style={{ fontSize: 12, color: '#9E9E9E', marginTop: 4 }}>PNG/JPG, max 5MB</p>
                           </>
                         )}
                       </div>
@@ -684,268 +812,106 @@ const AddHouse = () => {
                   </div>
                 </div>
 
-                {/* Address Card */}
-                <div className="rounded-2xl border border-gray-100 p-8 space-y-8 bg-[#ffffff] shadow-[0_2px_8px_rgba(0,0,0,0.02)] mt-6">
-                  <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                    Address
-                  </h3>
-
-                  <div className="space-y-6">
+                {/* Section B: Address */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24, marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242', marginBottom: 16 }}>ADDRESS</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Street Address <span style={{ color: '#1D6033' }}>*</span></label>
+                      <input type="text" value={formData.streetAddress} onChange={(e) => setFormData({...formData, streetAddress: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }} />
+                    </div>
                     <div>
-                      <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                        Street Address <span className="text-[#145228] ml-0.5">*</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="Enter street address"
-                        value={formData.streetAddress}
-                        onChange={(e) => setFormData({...formData, streetAddress: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] placeholder:text-gray-300"
-                      />
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>City <span style={{ color: '#1D6033' }}>*</span></label>
+                      <input type="text" value={formData.city} onChange={(e) => setFormData({...formData, city: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }} />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="relative">
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          City <span className="text-[#145228] ml-0.5">*</span>
-                        </label>
-                        <input 
-                          type="text"
-                          placeholder="City"
-                          value={formData.city}
-                          onChange={(e) => setFormData({...formData, city: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] placeholder:text-gray-300"
-                        />
-                      </div>
-                      <div className="relative">
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Province
-                        </label>
-                        <select 
-                          value={formData.province}
-                          onChange={(e) => setFormData({...formData, province: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] bg-white appearance-none"
-                        >
-                          <option value="Alberta">Alberta</option>
-                          <option value="British Columbia">British Columbia</option>
-                          <option value="Manitoba">Manitoba</option>
-                          <option value="New Brunswick">New Brunswick</option>
-                          <option value="Newfoundland and Labrador">Newfoundland and Labrador</option>
-                          <option value="Nova Scotia">Nova Scotia</option>
-                          <option value="Ontario">Ontario</option>
-                          <option value="Prince Edward Island">Prince Edward Island</option>
-                          <option value="Quebec">Quebec</option>
-                          <option value="Saskatchewan">Saskatchewan</option>
-                        </select>
-                        <div className="absolute right-4 bottom-3.5 pointer-events-none">
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Province</label>
+                      <select value={formData.province} onChange={(e) => setFormData({...formData, province: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }}>
+                        <option>Alberta</option>
+                        <option>British Columbia</option>
+                        <option>Ontario</option>
+                        <option>Manitoba</option>
+                        <option>Saskatchewan</option>
+                      </select>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Postal Code <span className="text-[#145228] ml-0.5">*</span>
-                        </label>
-                        <input 
-                          type="text"
-                          placeholder="Postal Code"
-                          value={formData.postalCode}
-                          onChange={(e) => setFormData({...formData, postalCode: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] placeholder:text-gray-300"
-                        />
-                      </div>
-                      <div className="relative">
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Country
-                        </label>
-                        <select 
-                          value={formData.country}
-                          onChange={(e) => setFormData({...formData, country: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px] bg-white appearance-none"
-                        >
-                          <option value="Canada">Canada</option>
-                          <option value="United States">United States</option>
-                        </select>
-                        <div className="absolute right-4 bottom-3.5 pointer-events-none">
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Postal Code <span style={{ color: '#1D6033' }}>*</span></label>
+                      <input type="text" value={formData.postalCode} onChange={(e) => setFormData({...formData, postalCode: e.target.value.toUpperCase()})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14, fontFamily: 'JetBrains Mono, monospace' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Country</label>
+                      <select value={formData.country} onChange={(e) => setFormData({...formData, country: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }}>
+                        <option>Canada</option>
+                        <option>United States</option>
+                      </select>
                     </div>
                   </div>
                 </div>
 
-                {/* Capacity & Layout Card */}
-                <div className="rounded-2xl border border-gray-100 p-8 space-y-8 bg-[#ffffff] shadow-[0_2px_8_rgba(0,0,0,0.02)] mt-6 mb-8">
-                  <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
-                    Capacity & Layout
-                  </h3>
-
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Maximum Capacity <span className="text-[#145228] ml-0.5">*</span>
-                        </label>
-                        <input 
-                          type="number"
-                          placeholder="0"
-                          value={formData.maxCapacity}
-                          onChange={(e) => setFormData({...formData, maxCapacity: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Total Bedrooms <span className="text-[#145228] ml-0.5">*</span>
-                        </label>
-                        <input 
-                          type="number"
-                          placeholder="0"
-                          value={formData.totalBedrooms}
-                          onChange={(e) => setFormData({...formData, totalBedrooms: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                          Total Bathrooms <span className="text-[#145228] ml-0.5">*</span>
-                        </label>
-                        <input 
-                          type="number"
-                          placeholder="0"
-                          value={formData.totalBathrooms}
-                          onChange={(e) => setFormData({...formData, totalBathrooms: e.target.value})}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px]"
-                        />
-                      </div>
+                {/* Section C: Capacity & Layout */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24 }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242', marginBottom: 16 }}>CAPACITY &amp; LAYOUT</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                      {[{ label: 'Maximum Capacity', field: 'maxCapacity' }, { label: 'Total Bedrooms', field: 'totalBedrooms' }, { label: 'Total Bathrooms', field: 'totalBathrooms' }].map((item) => (
+                        <div key={item.field}>
+                          <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>{item.label} <span style={{ color: '#1D6033' }}>*</span></label>
+                          <input type="number" value={formData[item.field]} onChange={(e) => setFormData({...formData, [item.field]: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14, textAlign: 'center' }} min="0" />
+                        </div>
+                      ))}
                     </div>
-
                     <div>
-                      <label className="block text-[13px] font-bold text-[#374151] mb-2.5">
-                        Total Common Areas
-                      </label>
-                      <input 
-                        type="number"
-                        placeholder="0"
-                        value={formData.totalCommonAreas}
-                        onChange={(e) => setFormData({...formData, totalCommonAreas: e.target.value})}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[14px]"
-                      />
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Total Common Areas</label>
+                      <input type="number" value={formData.totalCommonAreas} onChange={(e) => setFormData({...formData, totalCommonAreas: e.target.value})} className="w-full px-3 rounded-lg border focus:outline-none focus:ring-2" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14 }} min="0" />
                     </div>
-
-                    <div className="space-y-4 pt-6 border-t border-gray-50">
-                      <div className="flex items-center justify-between group cursor-pointer" onClick={() => setFormData({...formData, hasAccessibility: !formData.hasAccessibility})}>
-                        <span className="text-[14px] font-semibold text-[#374151]">Has accessibility accommodations</span>
-                        <div className={`w-11 h-6 rounded-full transition-colors relative ${formData.hasAccessibility ? 'bg-[#145228]' : 'bg-gray-200'}`}>
-                          <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${formData.hasAccessibility ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between group cursor-pointer" onClick={() => setFormData({...formData, hasSecuredStorage: !formData.hasSecuredStorage})}>
-                        <span className="text-[14px] font-semibold text-[#374151]">Has secured/locked storage for medications & sharps</span>
-                        <div className={`w-11 h-6 rounded-full transition-colors relative ${formData.hasSecuredStorage ? 'bg-[#145228]' : 'bg-gray-200'}`}>
-                          <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${formData.hasSecuredStorage ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </div>
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid #F5F5F5' }}>
+                      <label style={{ fontSize: 14, fontWeight: 500, color: '#424242', flex: 1, cursor: 'pointer' }} onClick={() => setFormData({...formData, hasAccessibility: !formData.hasAccessibility})}>Has accessibility accommodations</label>
+                      <button onClick={() => setFormData({...formData, hasAccessibility: !formData.hasAccessibility})} className="relative inline-flex items-center rounded-full transition-colors flex-shrink-0" style={{ width: 40, height: 22, backgroundColor: formData.hasAccessibility ? '#1D6033' : '#BDBDBD' }}>
+                        <span className="inline-block rounded-full bg-white transition-transform" style={{ width: 18, height: 18, transform: formData.hasAccessibility ? 'translateX(20px)' : 'translateX(2px)', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }} />
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid #F5F5F5' }}>
+                      <label style={{ fontSize: 14, fontWeight: 500, color: '#424242', flex: 1, cursor: 'pointer' }} onClick={() => setFormData({...formData, hasSecuredStorage: !formData.hasSecuredStorage})}>Has secured/locked storage for medications &amp; sharps</label>
+                      <button onClick={() => setFormData({...formData, hasSecuredStorage: !formData.hasSecuredStorage})} className="relative inline-flex items-center rounded-full transition-colors flex-shrink-0" style={{ width: 40, height: 22, backgroundColor: formData.hasSecuredStorage ? '#1D6033' : '#BDBDBD' }}>
+                        <span className="inline-block rounded-full bg-white transition-transform" style={{ width: 18, height: 18, transform: formData.hasSecuredStorage ? 'translateX(20px)' : 'translateX(2px)', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }} />
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
             ) : currentStep === 2 ? (
-              <div className="max-w-[900px] w-full mx-auto">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 2 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Staff Assignment
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-10 leading-relaxed">
-                  Assign the staff who will operate this house. You can change assignments anytime later.
-                </p>
-
-                {/* Available Staff Box */}
-                <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm flex flex-col">
-                  {/* Box Header */}
-                  <div className="px-5 border-b border-gray-100 flex items-center justify-between bg-white" style={{ height: 56 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Section A: Available Staff Pool */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', overflow: 'hidden' }}>
+                  <div className="flex items-center justify-between" style={{ height: 56, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
                     <div className="flex items-center gap-3">
-                      <h3 className="text-[12px] font-bold text-[#374151] uppercase tracking-wider">Available Staff</h3>
-                      <span className="px-2.5 py-0.5 rounded-xl bg-emerald-50 text-[#145228] text-[11px] font-bold">
-                        {MOCK_STAFF.length} available
-                      </span>
-                      {formData.assignedStaff.length > 0 && (
-                        <span className="px-2.5 py-0.5 rounded-xl bg-gray-100 text-gray-600 text-[11px] font-bold">
-                          {formData.assignedStaff.length} selected
-                        </span>
-                      )}
+                      <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>AVAILABLE STAFF</h3>
+                      <div className="px-2 py-1 rounded-xl" style={{ fontSize: 11.5, fontWeight: 500, color: '#1D6033', backgroundColor: '#E8F5E9' }}>{MOCK_STAFF.length} available</div>
                     </div>
                     <div className="relative" style={{ width: 240 }}>
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                      <input
-                        type="text"
-                        placeholder="Search by name or role..."
-                        value={formData.searchQuery}
-                        onChange={(e) => setFormData({ ...formData, searchQuery: e.target.value })}
-                        className="w-full pl-9 pr-3 rounded-lg border border-gray-200 focus:outline-none text-[13px] placeholder:text-gray-400"
-                        style={{ height: 32 }}
-                      />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2" style={{ width: 16, height: 16, color: '#9E9E9E' }} />
+                      <input type="text" value={staffSearchQuery} onChange={(e) => setStaffSearchQuery(e.target.value)} placeholder="Search by name or role..." className="w-full pl-10 pr-3 rounded-lg border" style={{ height: 32, borderColor: '#BDBDBD', fontSize: 13 }} />
                     </div>
                   </div>
-
-                  {/* Staff Pool List */}
-                  <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-                    {MOCK_STAFF.filter(s =>
-                      s.name.toLowerCase().includes((formData.searchQuery || "").toLowerCase()) ||
-                      s.role.toLowerCase().includes((formData.searchQuery || "").toLowerCase())
-                    ).map((staff, index) => {
-                      const isSelected = formData.assignedStaff.some(s => s.id === staff.id);
+                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    {MOCK_STAFF.filter(s => s.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) || s.role.toLowerCase().includes(staffSearchQuery.toLowerCase())).map((staff, index) => {
+                      const isSelected = selectedStaffIds.includes(staff.id);
                       return (
-                        <div
-                          key={staff.id}
-                          onClick={() => setFormData({
-                            ...formData,
-                            assignedStaff: isSelected
-                              ? formData.assignedStaff.filter(s => s.id !== staff.id)
-                              : [...formData.assignedStaff, staff]
-                          })}
-                          className="flex items-center gap-4 cursor-pointer transition-colors"
-                          style={{
-                            height: 64, padding: '0 20px',
-                            borderBottom: index < MOCK_STAFF.length - 1 ? '1px solid #f5f5f5' : 'none',
-                            backgroundColor: isSelected ? '#F1F8E9' : 'transparent',
-                            borderLeft: isSelected ? '3px solid #1D6033' : '3px solid transparent',
-                          }}
+                        <div key={staff.id} onClick={() => setSelectedStaffIds(isSelected ? selectedStaffIds.filter(id => id !== staff.id) : [...selectedStaffIds, staff.id])} className="flex items-center gap-4 cursor-pointer transition-colors" style={{ height: 64, padding: '0 16px', borderBottom: index < MOCK_STAFF.length - 1 ? '1px solid #F5F5F5' : 'none', backgroundColor: isSelected ? '#F1F8E9' : 'transparent', borderLeft: isSelected ? '2px solid #1D6033' : '2px solid transparent' }}
+                          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FAFAFA'; }}
+                          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                         >
-                          {/* Checkbox */}
-                          <div className="flex items-center justify-center rounded shrink-0" style={{
-                            width: 18, height: 18,
-                            border: isSelected ? 'none' : '1.5px solid #BDBDBD',
-                            backgroundColor: isSelected ? '#1D6033' : '#FFFFFF',
-                          }}>
+                          <div className="flex items-center justify-center rounded transition-colors" style={{ width: 18, height: 18, border: isSelected ? 'none' : '1.5px solid #BDBDBD', backgroundColor: isSelected ? '#1D6033' : '#FFFFFF' }}>
                             {isSelected && <Check size={12} style={{ color: '#FFFFFF' }} strokeWidth={3} />}
                           </div>
-
-                          {/* Avatar */}
-                          <div className="rounded-full flex items-center justify-center shrink-0 font-bold text-[14px] text-gray-600 border border-black/5"
-                            style={{ width: 40, height: 40, backgroundColor: staff.color || '#f3f4f6' }}>
-                            {staff.initials}
+                          <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, backgroundColor: getAvatarColor(staff.name) }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>{getInitials(staff.name)}</span>
                           </div>
-
-                          {/* Name + Role */}
                           <div className="flex-1">
                             <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{staff.name}</div>
-                            <div style={{ fontSize: 12, color: '#757575' }}>{staff.role} · {staff.experience}</div>
+                            <div style={{ fontSize: 12, color: '#757575' }}>{staff.role} · {staff.experience} experience</div>
                           </div>
-
-                          {/* Status badge */}
-                          <div className="px-3 py-1 rounded flex items-center gap-1.5 shrink-0" style={{
-                            fontSize: 11.5, fontWeight: 500, color: '#2E7D32', backgroundColor: '#E8F5E9',
-                          }}>
+                          <div className="px-3 py-1 rounded flex items-center gap-1.5" style={{ fontSize: 11.5, fontWeight: 500, color: '#2E7D32', backgroundColor: '#E8F5E9' }}>
                             <div className="rounded-full" style={{ width: 6, height: 6, backgroundColor: '#2E7D32' }} />
                             Available
                           </div>
@@ -953,1178 +919,573 @@ const AddHouse = () => {
                       );
                     })}
                   </div>
-
-                  {/* Box Footer */}
-                  <div className="px-6 py-3 border-t border-gray-100 flex items-center gap-2" style={{ backgroundColor: '#FAFAFA' }}>
-                    <Info size={13} style={{ color: '#757575' }} />
-                    <p className="text-[12px] text-gray-500">
-                      Showing {MOCK_STAFF.length} of 24 total staff · {24 - MOCK_STAFF.length} already assigned to other houses.
-                    </p>
+                  <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderTop: '1px solid #F5F5F5', backgroundColor: '#FAFAFA' }}>
+                    <Info size={14} style={{ color: '#757575' }} />
+                    <p style={{ fontSize: 11.5, color: '#757575' }}>Showing {MOCK_STAFF.length} of 24 total staff. 16 staff are already assigned to other houses and not shown here.</p>
                   </div>
                 </div>
 
-                {/* Shift Rotation Box */}
-                <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm flex flex-col mt-6">
-                  {/* Box Header */}
-                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-[#ffffff]">
-                    <h3 className="text-[13px] font-bold text-[#374151] uppercase tracking-wider">
-                      Shift Rotation
-                    </h3>
-                    <button className="text-[12px] font-bold text-[#145228] flex items-center gap-1 hover:underline">
-                      How shifts work <ChevronRight size={14} />
-                    </button>
-                  </div>
-
-                  {/* Shifts List */}
-                  <div className="divide-y divide-gray-50">
-                    {/* Morning Shift */}
-                    <div className="px-6 py-5 flex items-center gap-8">
-                      <div className="flex items-center gap-4 w-[200px] shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
-                          <Sun size={20} />
-                        </div>
-                        <div>
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Morning</h4>
-                          <p className="text-[12px] text-gray-500 font-medium">8:00 AM – 4:00 PM</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="min-h-[46px] w-full px-2 py-2 rounded-xl border border-gray-100 bg-gray-50/30 flex flex-wrap gap-2 items-center">
-                          {formData.shifts.morning.map(staff => (
-                            <div key={staff.id} className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg bg-white border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                              <div 
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 border border-black/5"
-                                style={{ backgroundColor: staff.color || '#f3f4f6' }}
-                              >
-                                {staff.initials}
-                              </div>
-                              <span className="text-[12px] font-bold text-[#374151]">{staff.name}</span>
-                              <button 
-                                onClick={() => setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, morning: formData.shifts.morning.filter(s => s.id !== staff.id) }
-                                })}
-                                className="text-gray-300 hover:text-red-500 transition-colors"
-                              >
-                                <X size={14} />
-                              </button>
+                {/* Section B: Selected Staff Summary */}
+                {selectedStaffIds.length > 0 && (
+                  <div className="border rounded-xl" style={{ borderColor: '#C8E6C9', backgroundColor: '#F1F8E9', padding: 16 }}>
+                    <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 600, color: '#1D6033' }}>Selected Staff</h3>
+                      <div className="px-2 py-0.5 rounded" style={{ fontSize: 11.5, fontWeight: 600, color: '#1D6033', backgroundColor: '#C8E6C9' }}>{selectedStaffIds.length}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2" style={{ marginBottom: 12 }}>
+                      {selectedStaffIds.map(id => {
+                        const staff = MOCK_STAFF.find(s => s.id === id);
+                        if (!staff) return null;
+                        return (
+                          <div key={id} className="flex items-center gap-2 px-1 pr-3 rounded-full border" style={{ height: 32, backgroundColor: '#FFFFFF', borderColor: '#C8E6C9' }}>
+                            <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 24, height: 24, backgroundColor: getAvatarColor(staff.name) }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#FFFFFF' }}>{getInitials(staff.name)}</span>
                             </div>
-                          ))}
-                          <select 
-                            className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
-                            onChange={(e) => {
-                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
-                              if (staff && !formData.shifts.morning.find(s => s.id === staff.id)) {
-                                setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, morning: [...formData.shifts.morning, staff] }
-                                });
-                              }
-                              e.target.value = "";
-                            }}
-                          >
-                            <option value="">Select staff...</option>
-                            {MOCK_STAFF.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
+                            <span style={{ fontSize: 12.5, fontWeight: 500, color: '#212121' }}>{staff.name}</span>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedStaffIds(selectedStaffIds.filter(sid => sid !== id)); }}>
+                              <X size={12} style={{ color: '#757575' }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {selectedStaffIds.length >= 2 && (
+                      <>
+                        <div style={{ height: 1, backgroundColor: '#C8E6C9', margin: '12px 0' }} />
+                        <div>
+                          <label style={{ fontSize: 13, fontWeight: 500, color: '#424242', display: 'block', marginBottom: 6 }}>Designate House Lead <span style={{ color: '#C62828' }}>*</span></label>
+                          <select className="w-full px-3 rounded-lg border" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14, backgroundColor: '#FFFFFF' }}>
+                            <option value="">Select a lead...</option>
+                            {selectedStaffIds.map(id => {
+                              const staff = MOCK_STAFF.find(s => s.id === id);
+                              return staff ? <option key={id} value={id}>{staff.name}</option> : null;
+                            })}
                           </select>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 w-[120px] justify-end">
-                        <div className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-[12px] font-bold border transition-colors ${formData.shifts.morning.length >= 2 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-500 border-red-100'}`}>
-                          {formData.shifts.morning.length < 2 && <AlertTriangle size={12} />}
-                          {formData.shifts.morning.length >= 2 && <Check size={12} />}
-                          {formData.shifts.morning.length}/2
-                        </div>
-                        <button className="p-2 text-gray-400 hover:text-[#145228] hover:bg-emerald-50 rounded-lg transition-all">
-                          <Pencil size={16} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Evening Shift */}
-                    <div className="px-6 py-5 flex items-center gap-8">
-                      <div className="flex items-center gap-4 w-[200px] shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-purple-500">
-                          <CloudMoon size={20} />
-                        </div>
-                        <div>
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Evening</h4>
-                          <p className="text-[12px] text-gray-500 font-medium">4:00 PM – 12:00 AM</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="min-h-[46px] w-full px-2 py-2 rounded-xl border border-gray-100 bg-gray-50/30 flex flex-wrap gap-2 items-center">
-                          {formData.shifts.evening.map(staff => (
-                            <div key={staff.id} className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg bg-white border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                              <div 
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 border border-black/5"
-                                style={{ backgroundColor: staff.color || '#f3f4f6' }}
-                              >
-                                {staff.initials}
-                              </div>
-                              <span className="text-[12px] font-bold text-[#374151]">{staff.name}</span>
-                              <button 
-                                onClick={() => setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, evening: formData.shifts.evening.filter(s => s.id !== staff.id) }
-                                })}
-                                className="text-gray-300 hover:text-red-500 transition-colors"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          <select 
-                            className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
-                            onChange={(e) => {
-                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
-                              if (staff && !formData.shifts.evening.find(s => s.id === staff.id)) {
-                                setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, evening: [...formData.shifts.evening, staff] }
-                                });
-                              }
-                              e.target.value = "";
-                            }}
-                          >
-                            <option value="">Select staff...</option>
-                            {MOCK_STAFF.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 w-[120px] justify-end">
-                        <div className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-[12px] font-bold border transition-colors ${formData.shifts.evening.length >= 1 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-500 border-red-100'}`}>
-                          {formData.shifts.evening.length < 1 && <AlertTriangle size={12} />}
-                          {formData.shifts.evening.length >= 1 && <Check size={12} />}
-                          {formData.shifts.evening.length}/1
-                        </div>
-                        <button className="p-2 text-gray-400 hover:text-[#145228] hover:bg-emerald-50 rounded-lg transition-all">
-                          <Pencil size={16} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Night Shift */}
-                    <div className="px-6 py-5 flex items-center gap-8">
-                      <div className="flex items-center gap-4 w-[200px] shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500">
-                          <Moon size={20} />
-                        </div>
-                        <div>
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Night</h4>
-                          <p className="text-[12px] text-gray-500 font-medium">12:00 AM – 8:00 AM</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="min-h-[46px] w-full px-2 py-2 rounded-xl border border-gray-100 bg-gray-50/30 flex flex-wrap gap-2 items-center">
-                          {formData.shifts.night.map(staff => (
-                            <div key={staff.id} className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg bg-white border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                              <div 
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 border border-black/5"
-                                style={{ backgroundColor: staff.color || '#f3f4f6' }}
-                              >
-                                {staff.initials}
-                              </div>
-                              <span className="text-[12px] font-bold text-[#374151]">{staff.name}</span>
-                              <button 
-                                onClick={() => setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, night: formData.shifts.night.filter(s => s.id !== staff.id) }
-                                })}
-                                className="text-gray-300 hover:text-red-500 transition-colors"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          <select 
-                            className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
-                            onChange={(e) => {
-                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
-                              if (staff && !formData.shifts.night.find(s => s.id === staff.id)) {
-                                setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, night: [...formData.shifts.night, staff] }
-                                });
-                              }
-                              e.target.value = "";
-                            }}
-                          >
-                            <option value="">Select staff...</option>
-                            {MOCK_STAFF.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 w-[120px] justify-end">
-                        <div className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-[12px] font-bold border transition-colors ${formData.shifts.night.length >= 1 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-500 border-red-100'}`}>
-                          {formData.shifts.night.length < 1 && <AlertTriangle size={12} />}
-                          {formData.shifts.night.length >= 1 && <Check size={12} />}
-                          {formData.shifts.night.length}/1
-                        </div>
-                        <button className="p-2 text-gray-400 hover:text-[#145228] hover:bg-emerald-50 rounded-lg transition-all">
-                          <Pencil size={16} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Weekend Shift */}
-                    <div className="px-6 py-5 flex items-center gap-8">
-                      <div className="flex items-center gap-4 w-[200px] shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-teal-50 flex items-center justify-center text-teal-500">
-                          <CalendarDays size={20} />
-                        </div>
-                        <div>
-                          <h4 className="text-[14px] font-bold text-[#0f172a]">Weekend</h4>
-                          <p className="text-[12px] text-gray-500 font-medium">Sat–Sun, 8AM – 8PM</p>
-                        </div>
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="min-h-[46px] w-full px-2 py-2 rounded-xl border border-gray-100 bg-gray-50/30 flex flex-wrap gap-2 items-center">
-                          {formData.shifts.weekend.map(staff => (
-                            <div key={staff.id} className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-lg bg-white border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                              <div 
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 border border-black/5"
-                                style={{ backgroundColor: staff.color || '#f3f4f6' }}
-                              >
-                                {staff.initials}
-                              </div>
-                              <span className="text-[12px] font-bold text-[#374151]">{staff.name}</span>
-                              <button 
-                                onClick={() => setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, weekend: formData.shifts.weekend.filter(s => s.id !== staff.id) }
-                                })}
-                                className="text-gray-300 hover:text-red-500 transition-colors"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          <select 
-                            className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
-                            onChange={(e) => {
-                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
-                              if (staff && !formData.shifts.weekend.find(s => s.id === staff.id)) {
-                                setFormData({
-                                  ...formData,
-                                  shifts: { ...formData.shifts, weekend: [...formData.shifts.weekend, staff] }
-                                });
-                              }
-                              e.target.value = "";
-                            }}
-                          >
-                            <option value="">Select staff...</option>
-                            {MOCK_STAFF.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 w-[120px] justify-end">
-                        <div className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-[12px] font-bold border transition-colors ${formData.shifts.weekend.length >= 2 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-500 border-red-100'}`}>
-                          {formData.shifts.weekend.length < 2 && <AlertTriangle size={12} />}
-                          {formData.shifts.weekend.length >= 2 && <Check size={12} />}
-                          {formData.shifts.weekend.length}/2
-                        </div>
-                        <button className="p-2 text-gray-400 hover:text-[#145228] hover:bg-emerald-50 rounded-lg transition-all">
-                          <Pencil size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Box Footer */}
-                  <div className="px-6 py-4 bg-emerald-50/50 border-t border-emerald-100/50 flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center text-[#145228] shadow-sm">
-                      <Info size={14} />
-                    </div>
-                    <p className="text-[12px] text-[#145228] font-medium">
-                      💡 Family Forever recommends 24/7 coverage. Staff can be assigned to multiple shifts. Shifts can be edited anytime from the Shift tab.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Coverage Summary Bar */}
-                <div className="mt-6 p-5 rounded-2xl border border-gray-200 bg-white flex items-center justify-between shadow-sm border-l-4 border-l-[#145228]">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-[#145228]">
-                      <BarChart3 size={20} />
-                    </div>
-                    <p className="text-[14px] font-medium text-gray-700">
-                      Total Weekly Coverage: <span className="font-bold text-[#0f172a]">0 hours</span> across 4 shifts
-                    </p>
-                  </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 flex items-center gap-2 text-[12px] font-bold border border-amber-100">
-                    <Check size={14} className="opacity-50" />
-                    Coverage Gap
-                  </div>
-                </div>
-              </div>
-            ) : currentStep === 3 ? (
-              <div className="max-w-[900px] w-full mx-auto">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 3 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Initial Clients
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-8 leading-relaxed">
-                  Add the residents already living in this house. You can also add clients later from the Clients tab.
-                </p>
-
-                <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-2xl p-6 mb-10 flex items-start gap-4">
-                  <div className="text-[#3b82f6] mt-1">
-                    <Info size={20} />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-[15px] text-[#1e293b] font-medium leading-relaxed">
-                      No residents yet? You can skip this step and admit clients individually later. Most new houses start empty.
-                    </p>
-                    <button 
-                      onClick={() => setCurrentStep(4)}
-                      className="text-[15px] font-bold text-[#3b82f6] hover:underline flex items-center gap-1"
-                    >
-                      Skip this step →
-                    </button>
-                  </div>
-                </div>
-
-                {/* Clients In House Box */}
-                <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm flex flex-col">
-                  {/* Box Header */}
-                  <div className="px-6 py-5 border-b border-gray-100 flex items-center gap-3 bg-[#ffffff]">
-                    <h3 className="text-[12px] font-bold text-[#374151] uppercase tracking-widest">
-                      Clients in this house
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-md bg-[#e6f4ea] text-[#137333] text-[11px] font-bold">
-                      {formData.assignedClients.length} added
-                    </span>
-                  </div>
-
-                  {/* Clients List Area */}
-                  <div className="min-h-[380px] flex flex-col">
-                    {formData.assignedClients.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-12">
-                        <div className="w-20 h-20 rounded-full bg-gray-50 flex items-center justify-center text-gray-400/60 mb-6">
-                          <UserPlus size={36} strokeWidth={1.5} />
-                        </div>
-                        <h4 className="text-[18px] font-bold text-[#0f172a] mb-2">No clients added yet</h4>
-                        <p className="text-[14px] text-gray-500 font-medium mb-8 text-center max-w-[420px] leading-relaxed">
-                          Use the existing Add Client flow to create new client records. Once created, they'll appear here.
-                        </p>
-                        
-                        <button 
-                          onClick={handleAddClientClick}
-                          className="flex items-center gap-2 px-8 py-3 rounded-lg bg-[#1a532e] text-[15px] font-bold text-white shadow-sm hover:opacity-90 transition-all active:scale-[0.98] mb-5"
-                        >
-                          <span className="text-[20px] font-normal leading-none mb-0.5">+</span>
-                          Add New Client
-                        </button>
-                        
-                        <button className="text-[14px] font-bold text-[#3b82f6] hover:underline flex items-center gap-1.5">
-                          Or browse pending intake requests <ChevronRight size={16} />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col">
-                        {/* Table Header */}
-                        <div className="grid grid-cols-12 px-6 py-3.5 bg-gray-50/70 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase tracking-wider text-left">
-                          <div className="col-span-4">Client</div>
-                          <div className="col-span-1">Age</div>
-                          <div className="col-span-2">Service Type</div>
-                          <div className="col-span-2">Room</div>
-                          <div className="col-span-2">Supervisor</div>
-                          <div className="col-span-1 text-right">Actions</div>
-                        </div>
-
-                        {/* Table Rows */}
-                        <div className="divide-y divide-gray-100">
-                          {formData.assignedClients.map((client) => {
-                            const initials = client.initials || client.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-                            const avatarColor = client.color || '#fef3c7';
-                            const avatarTextColor = client.textColor || '#b56d10';
-                            
-                            // Supervisor info
-                            const supervisorName = client.supervisor?.name || "Unassigned";
-                            const supervisorInitials = client.supervisor?.initials || supervisorName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-                            const supervisorBg = client.supervisor?.color || '#fce7f3';
-                            const supervisorTextCol = client.supervisor?.textColor || '#9d174d';
-
-                            return (
-                              <div key={client.id} className="grid grid-cols-12 px-6 py-4.5 items-center hover:bg-gray-50/50 transition-colors text-left text-[14px]">
-                                {/* Client Column */}
-                                <div className="col-span-4 flex items-center gap-4">
-                                  <div 
-                                    className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[13px] shrink-0"
-                                    style={{ backgroundColor: avatarColor, color: avatarTextColor }}
-                                  >
-                                    {initials}
-                                  </div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="font-bold text-[#0f172a] truncate">{client.name}</span>
-                                    <span className="text-[12px] text-gray-400 font-mono tracking-tight">{client.caseId}</span>
-                                  </div>
-                                </div>
-
-                                {/* Age Column */}
-                                <div className="col-span-1 text-[#374151] font-medium">
-                                  {client.age}
-                                </div>
-
-                                {/* Service Type Column */}
-                                <div className="col-span-2">
-                                  <span className="inline-flex items-center px-3 py-1 rounded-md text-[12px] font-bold bg-[#e6f4ea] text-[#137333]">
-                                    {client.serviceType}
-                                  </span>
-                                </div>
-
-                                {/* Room Column */}
-                                <div className="col-span-2 text-[#374151] font-medium tracking-tight">
-                                  {client.room}
-                                </div>
-
-                                {/* Supervisor Column */}
-                                <div className="col-span-2 flex items-center gap-2.5 min-w-0">
-                                  <div 
-                                    className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0"
-                                    style={{ backgroundColor: supervisorBg, color: supervisorTextCol }}
-                                  >
-                                    {supervisorInitials}
-                                  </div>
-                                  <span className="text-[#374151] font-medium text-[13px] truncate">{supervisorName}</span>
-                                </div>
-
-                                {/* Actions Column */}
-                                <div className="col-span-1 flex items-center justify-end gap-1">
-                                  <button 
-                                    onClick={() => handleEditClient(client)}
-                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
-                                    title="Edit Client"
-                                  >
-                                    <Pencil size={16} />
-                                  </button>
-                                  <button 
-                                    onClick={() => handleDeleteClient(client.id)}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                    title="Delete Client"
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      </>
                     )}
                   </div>
+                )}
 
-                  {/* Box Footer */}
-                  <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-[#fafafa]/50">
-                    <p className="text-[13px] text-gray-500 font-medium">
-                      {formData.assignedClients.length} {formData.assignedClients.length === 1 ? 'client' : 'clients'} added · {Math.max(0, (Number(formData.maxCapacity) || 6) - formData.assignedClients.length)} beds remaining of {Number(formData.maxCapacity) || 6}
-                    </p>
-                    <button 
-                      onClick={handleAddClientClick}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#145228] text-[14px] font-bold text-[#145228] hover:bg-[#145228]/5 transition-all bg-white shadow-sm active:scale-[0.98]"
-                    >
-                      <Plus size={16} />
-                      Add Another Client
-                    </button>
+                {/* Section C: Shift Rotation */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', overflow: 'hidden' }}>
+                  <div className="flex items-center justify-between" style={{ height: 56, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
+                    <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>SHIFT ROTATION</h3>
+                    <button className="flex items-center gap-1" style={{ fontSize: 12, color: '#1D6033' }}>How shifts work <ChevronRight size={12} /></button>
                   </div>
-                </div>
-
-
-              </div>
-            ) : currentStep === 4 ? (
-              <div className="max-w-[900px] w-full mx-auto">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 4 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Compliance Setup
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-10 leading-relaxed">
-                  Define inspection cadences. We've pre-filled industry-standard schedules for Alberta licensed group homes — adjust if needed.
-                </p>
-
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Card 1: Fire Safety */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-emerald-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
-                        <ShieldCheck size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">Fire Safety Inspection</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.fireSafety}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, fireSafety: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-
-                  {/* Card 2: Health & Safety */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-red-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-red-50 text-red-500">
-                        <Heart size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">Health & Safety Audit</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.healthSafety}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, healthSafety: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-
-                  {/* Card 3: Medication Audit */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-blue-50 text-blue-500">
-                        <Pill size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">Medication Audit</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.medicationAudit}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, medicationAudit: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-
-                  {/* Card 4: Fire Drill */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-orange-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-orange-50 text-orange-500">
-                        <Flame size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">Fire Drill</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.fireDrill}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, fireDrill: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-orange-500/10 focus:border-orange-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-
-                  {/* Card 5: Hygiene Inspection */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-teal-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-teal-50 text-teal-500">
-                        <Sparkles size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">Hygiene Inspection</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.hygieneInspection}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, hygieneInspection: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-
-                  {/* Card 6: OHS Inspection */}
-                  <div className="bg-white border border-gray-100 rounded-2xl p-7 shadow-sm hover:shadow-md transition-all border-l-4 border-l-purple-500">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2.5 rounded-xl bg-purple-50 text-purple-500">
-                        <FileSearch size={22} />
-                      </div>
-                      <h3 className="font-bold text-[#1e293b] text-[16px]">OHS Inspection</h3>
-                    </div>
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <select 
-                          value={formData.complianceSchedules.ohsInspection}
-                          onChange={(e) => setFormData({
-                            ...formData, 
-                            complianceSchedules: { ...formData.complianceSchedules, ohsInspection: e.target.value }
-                          })}
-                          className="w-full px-5 py-3.5 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-purple-500/10 focus:border-purple-500 focus:bg-white transition-all text-[15px] appearance-none font-bold text-[#0f172a]"
-                        >
-                          <option value="" disabled hidden>Select Cadence</option>
-                          <option value="Daily">Daily</option>
-                          <option value="Weekly">Weekly</option>
-                          <option value="Bi-weekly">Bi-weekly</option>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annually">Annually</option>
-                        </select>
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                          <ChevronDown size={20} />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[13px] text-gray-400 mt-4 font-medium pl-1">Next due : -- -- --</p>
-                  </div>
-                </div>
-
-                <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-2xl p-5 mt-10 flex items-center gap-4 shadow-sm border-l-4 border-l-[#3b82f6]">
-                  <div className="text-[#3b82f6] p-1.5 rounded-lg bg-white shadow-sm">
-                    <Info size={20} />
-                  </div>
-                  <p className="text-[14px] text-[#1e293b] font-semibold leading-relaxed">
-                    💡 These cadences match Alberta Children's Services minimum standards for licensed group homes.
-                  </p>
-                </div>
-              </div>
-            ) : currentStep === 5 ? (
-              <div className="max-w-[1000px] w-full mx-auto pb-20">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 5 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Inventory Baseline
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-8 leading-relaxed">
-                  Pre-populate the standard inventory checklist. We'll auto-suggest required quantities based on your house capacity.
-                </p>
-
-                <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-2xl p-6 mb-10 flex items-start gap-4">
-                  <div className="text-[#3b82f6] mt-1">
-                    <Info size={20} />
-                  </div>
-                  <p className="text-[15px] text-[#1e293b] font-medium leading-relaxed">
-                    Quantities are auto-suggested based on your <span className="font-bold text-[#1d4ed8]">{formData.maxCapacity || 0}-bed capacity</span>. You can edit any value, remove items you don't need, or add custom items specific to your house.
-                  </p>
-                </div>
-
-                {/* Inventory Tabs */}
-                <div className="flex items-center gap-4 p-2 bg-gray-50/50 rounded-2xl border border-gray-100 mb-8">
-                  <button 
-                    onClick={() => setInventoryTab("house")}
-                    className={`flex items-center gap-3 px-6 py-3.5 rounded-xl transition-all ${inventoryTab === "house" ? "bg-[#f0f9f1] border border-[#145228]/10 text-[#145228] shadow-sm" : "hover:bg-gray-100/50 text-gray-500"}`}
-                  >
-                    <Package size={20} strokeWidth={inventoryTab === "house" ? 2.5 : 2} />
-                    <span className="text-[14px] font-bold">House Inventory</span>
-                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${inventoryTab === "house" ? "bg-white/80 shadow-sm" : "bg-gray-100"}`}>
-                      {Object.values(formData.inventory).reduce((sum, cat) => sum + Object.keys(cat).length, 0)} items
-                    </span>
-                  </button>
-                  <button 
-                    onClick={() => setInventoryTab("emergency")}
-                    className={`flex items-center gap-3 px-6 py-3.5 rounded-xl transition-all ${inventoryTab === "emergency" ? "bg-[#f0f9f1] border border-[#145228]/10 text-[#145228] shadow-sm" : "hover:bg-gray-100/50 text-gray-500"}`}
-                  >
-                    <Briefcase size={20} strokeWidth={inventoryTab === "emergency" ? 2.5 : 2} />
-                    <span className="text-[14px] font-bold">72-Hour Emergency Kit</span>
-                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${inventoryTab === "emergency" ? "bg-white/80 shadow-sm" : "bg-gray-100"}`}>
-                      {Object.values(formData.emergencyKit).reduce((sum, cat) => sum + Object.keys(cat).length, 0)} items
-                    </span>
-                  </button>
-                  <button 
-                    onClick={() => setInventoryTab("sharps")}
-                    className={`flex items-center gap-3 px-6 py-3.5 rounded-xl transition-all ${inventoryTab === "sharps" ? "bg-[#f0f9f1] border border-[#145228]/10 text-[#145228] shadow-sm" : "hover:bg-gray-100/50 text-gray-500"}`}
-                  >
-                    <AlertTriangle size={20} strokeWidth={inventoryTab === "sharps" ? 2.5 : 2} />
-                    <span className="text-[14px] font-bold">Sharps & Hazards</span>
-                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${inventoryTab === "sharps" ? "bg-white/80 shadow-sm" : "bg-gray-100"}`}>0 items</span>
-                  </button>
-                </div>
-
-                {/* Main Inventory Box */}
-                {inventoryTab === "house" ? (
-                <div className="rounded-[32px] border border-gray-100 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                  {/* Inventory Header */}
-                  <div className="p-8 flex items-center justify-between border-b border-gray-50">
-                    <div className="flex items-center gap-5">
-                      <div className="w-14 h-14 rounded-2xl bg-[#f0f9f1] flex items-center justify-center text-[#145228]">
-                        <Package size={28} />
-                      </div>
-                      <div>
-                        <h3 className="text-[20px] font-bold text-[#0f172a]">House Inventory</h3>
-                        <p className="text-[14px] text-gray-400 font-medium">Daily-use household items by category</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <button className="flex items-center gap-2 text-[14px] font-bold text-gray-500 hover:text-[#145228] transition-colors">
-                        <RotateCcw size={18} />
-                        Reset to defaults
-                      </button>
-                      <button className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-[#145228] text-[#145228] text-[14px] font-bold hover:bg-[#f0f9f1] transition-all">
-                        <Plus size={20} strokeWidth={3} />
-                        Add Custom Item
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Categories List */}
-                  <div className="divide-y divide-gray-50">
-                    {[
-                      { title: "Bedroom Essentials", icon: <Bed size={22} />, color: "text-[#7c3aed]", bgColor: "bg-purple-50" },
-                      { title: "Bathroom Essentials", icon: <Bath size={22} />, color: "text-[#0ea5e9]", bgColor: "bg-sky-50" },
-                      { title: "Kitchen Essentials", icon: <Utensils size={22} />, color: "text-[#f59e0b]", bgColor: "bg-amber-50" },
-                      { title: "Cleaning Supplies", icon: <Sparkles size={22} />, color: "text-[#059669]", bgColor: "bg-emerald-50" },
-                      { title: "Safety Equipment", icon: <ShieldAlert size={22} />, color: "text-[#dc2626]", bgColor: "bg-red-50" },
-                      { title: "Maintenance Tools", icon: <Wrench size={22} />, color: "text-[#4b5563]", bgColor: "bg-gray-100" },
-                    ].map((item, index) => (
-                      <div key={index} className="flex flex-col">
-                        <div 
-                          onClick={() => setExpandedCategory(expandedCategory === item.title ? null : item.title)}
-                          className={`p-7 flex items-center justify-between hover:bg-gray-50/50 transition-colors cursor-pointer group ${expandedCategory === item.title ? 'bg-gray-50/30' : ''}`}
-                        >
-                          <div className="flex items-center gap-6">
-                            <ChevronRight size={20} className={`text-gray-300 group-hover:text-gray-400 transition-all ${expandedCategory === item.title ? 'rotate-90 text-gray-500' : ''}`} />
-                            <div className={`p-3 rounded-2xl ${item.bgColor} ${item.color} shadow-sm`}>
-                              {item.icon}
+                  <div>
+                    {SHIFTS_CONFIG.map((shift, index) => {
+                      const ShiftIcon = shift.id === 'morning' ? Sun : shift.id === 'evening' ? CloudMoon : shift.id === 'night' ? Moon : CalendarDays;
+                      const assigned = shiftAssignments[shift.id] || [];
+                      const coverageMet = assigned.length >= shift.minStaff;
+                      return (
+                        <div key={shift.id} style={{ padding: '16px 20px', borderBottom: index < SHIFTS_CONFIG.length - 1 ? '1px solid #F5F5F5' : 'none' }}>
+                          <div className="flex items-start gap-4">
+                            <div className="flex items-center gap-3 flex-shrink-0" style={{ width: 180 }}>
+                              <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, backgroundColor: `${shift.color}20` }}>
+                                <ShiftIcon size={16} style={{ color: shift.color }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{shift.name}</div>
+                                <div style={{ fontSize: 12, color: '#757575' }}>{shift.time}</div>
+                              </div>
                             </div>
-                            <span className="text-[16px] font-bold text-[#1e293b]">{item.title}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            {(() => {
-                              const categoryItems = formData.inventory[item.title] || {};
-                              const totalItems = Object.keys(categoryItems).length;
-                              const filledItems = Object.values(categoryItems).filter(v => v.qty && parseInt(v.qty) > 0).length;
-                              return (
-                                <>
-                                  <span className="px-4 py-1.5 rounded-xl bg-gray-50 text-gray-400 text-[12px] font-bold border border-gray-100">{totalItems} items</span>
-                                  <div className="px-4 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-bold border border-emerald-100 flex items-center gap-2">
-                                    <Check size={16} strokeWidth={3} />
-                                    {filledItems}
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-
-                        {expandedCategory === item.title && (
-                          <div className="p-8 bg-gray-50/20 border-t border-gray-50">
-                            <div className="grid grid-cols-[1.5fr_1fr_1.2fr_1.2fr_40px] gap-6 px-4 mb-5">
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Item Name</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Required Qty</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Location</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Notes (Optional)</span>
-                              <span></span>
-                            </div>
-
-                            <div className="space-y-3">
-                              {(item.title === "Bedroom Essentials" ? [
-                                "Bed Sheets (Queen)", "Pillows", "Pillowcases", "Blankets (Winter)", "Mattress Protectors"
-                              ] : item.title === "Bathroom Essentials" ? [
-                                "Bath Towels", "Hand Towels", "Bath Mats", "Soap Dispensers", "Toilet Brushes"
-                              ] : item.title === "Kitchen Essentials" ? [
-                                "Plates (Dinner)", "Bowls", "Drinking Glasses", "Cutlery Sets", "Cooking Pots"
-                              ] : item.title === "Cleaning Supplies" ? [
-                                "All-Purpose Cleaner", "Disinfectant Wipes", "Mop & Bucket", "Vacuum Bags", "Trash Bags"
-                              ] : item.title === "Safety Equipment" ? [
-                                "Smoke Detectors", "Fire Extinguisher (ABC)", "Carbon Monoxide Detectors", "First Aid Kit (basic)", "Emergency Flashlights"
-                              ] : item.title === "Maintenance Tools" ? [
-                                "Screwdriver Set", "Hammer", "Pliers", "Tape Measure", "Light Bulb Spares"
-                              ] : []).map((itemName, i) => {
-                                  const itemData = formData.inventory[item.title]?.[itemName] || { qty: "", location: "", notes: "" };
-                                  
-                                  const updateItem = (field, value) => {
-                                    setFormData({
-                                      ...formData,
-                                      inventory: {
-                                        ...formData.inventory,
-                                        [item.title]: {
-                                          ...formData.inventory[item.title],
-                                          [itemName]: { ...itemData, [field]: value }
-                                        }
-                                      }
-                                    });
-                                  };
-
+                            <div className="flex-1" style={{ minWidth: 0 }}>
+                              <div className="border rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap" style={{ minHeight: 40, borderColor: '#BDBDBD', backgroundColor: '#FFFFFF' }}>
+                                {assigned.length > 0 ? assigned.map(staffId => {
+                                  const staff = MOCK_STAFF.find(s => s.id === staffId);
+                                  if (!staff) return null;
                                   return (
-                                    <div key={i} className="grid grid-cols-[1.5fr_1fr_1.2fr_1.2fr_40px] gap-6 p-4 bg-white rounded-2xl border border-gray-100 items-center shadow-sm hover:shadow-md transition-all">
-                                      <span className="text-[15px] font-bold text-[#0f172a]">{itemName}</span>
-                                      <div className="flex items-center justify-center">
-                                        <div className="flex items-center gap-3 p-1 rounded-xl bg-gray-50 border border-gray-100">
-                                          <button 
-                                            onClick={() => updateItem('qty', Math.max(0, (parseInt(itemData.qty) || 0) - 1).toString())}
-                                            className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-[#145228] shadow-sm transition-all border border-gray-100"
-                                          >
-                                            <Minus size={14} />
-                                          </button>
-                                          <input 
-                                            type="number"
-                                            placeholder="0"
-                                            value={itemData.qty}
-                                            onChange={(e) => updateItem('qty', e.target.value)}
-                                            className="w-12 text-center text-[15px] font-bold text-[#0f172a] bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                          />
-                                          <button 
-                                            onClick={() => updateItem('qty', ((parseInt(itemData.qty) || 0) + 1).toString())}
-                                            className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-[#145228] shadow-sm transition-all border border-gray-100"
-                                          >
-                                            <Plus size={14} />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <input 
-                                        type="text" 
-                                        placeholder="Location" 
-                                        value={itemData.location}
-                                        onChange={(e) => updateItem('location', e.target.value)}
-                                        className="px-5 py-3 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#145228] focus:bg-white transition-all text-[14px] font-bold text-[#0f172a] placeholder:text-gray-300" 
-                                      />
-                                      <input 
-                                        type="text" 
-                                        placeholder="Notes" 
-                                        value={itemData.notes}
-                                        onChange={(e) => updateItem('notes', e.target.value)}
-                                        className="px-5 py-3 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#145228] focus:bg-white transition-all text-[14px] font-bold text-[#0f172a] placeholder:text-gray-300" 
-                                      />
-                                      <button className="text-gray-300 hover:text-red-500 transition-colors flex justify-center">
-                                        <Trash2 size={20} />
+                                    <div key={staffId} className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ height: 24, backgroundColor: '#F5F5F5', fontSize: 12 }}>
+                                      {staff.name}
+                                      <button onClick={() => setShiftAssignments({ ...shiftAssignments, [shift.id]: assigned.filter(id => id !== staffId) })}>
+                                        <X size={12} style={{ color: '#757575' }} />
                                       </button>
                                     </div>
                                   );
-                                })}
-
-                              <button className="w-full py-5 mt-6 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center gap-3 text-[14px] font-bold text-[#145228] hover:bg-[#f0f9f1] hover:border-[#145228]/20 transition-all bg-gray-50/30">
-                                <Plus size={20} strokeWidth={2.5} />
-                                Add to {item.title}
-                              </button>
+                                }) : (
+                                  <span style={{ fontSize: 13, color: '#9E9E9E' }}>Select staff for this shift...</span>
+                                )}
+                              </div>
+                              {selectedStaffIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {selectedStaffIds.filter(id => !assigned.includes(id)).map(id => {
+                                    const staff = MOCK_STAFF.find(s => s.id === id);
+                                    return staff ? (
+                                      <button key={id} onClick={() => setShiftAssignments({ ...shiftAssignments, [shift.id]: [...assigned, id] })} className="px-2 py-1 rounded border transition-colors" style={{ fontSize: 11, borderColor: '#BDBDBD', backgroundColor: '#FFFFFF', color: '#424242' }}
+                                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F5F5F5')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}>
+                                        + {staff.name}
+                                      </button>
+                                    ) : null;
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                ) : inventoryTab === "emergency" ? (
-                <div className="rounded-[32px] border border-gray-100 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                  {/* Emergency Kit Header */}
-                  <div className="p-8 flex items-center justify-between border-b border-gray-50">
-                    <div className="flex items-center gap-5">
-                      <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-                        <Lock size={28} />
-                      </div>
-                      <div>
-                        <h3 className="text-[20px] font-bold text-[#0f172a]">72-Hour Emergency Kit</h3>
-                        <p className="text-[14px] text-gray-400 font-medium">Disaster preparedness for 72 hours of self-sufficiency</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <button className="flex items-center gap-2 text-[14px] font-bold text-gray-500 hover:text-[#145228] transition-colors">
-                        <RotateCcw size={18} />
-                        Reset to defaults
-                      </button>
-                      <button className="flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-[#145228] text-[#145228] text-[14px] font-bold hover:bg-[#f0f9f1] transition-all">
-                        <Plus size={20} strokeWidth={3} />
-                        Add Custom Item
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Summary Bar */}
-                  <div className="mx-8 my-6 bg-gray-50/80 border border-gray-100 rounded-2xl p-6 flex items-center justify-between">
-                    <div className="flex-1 px-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">People to Cover</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-[#0f172a]">{Math.max(1, (parseInt(formData.maxCapacity) || 0) + 1)}</span>
-                        <span className="text-[12px] text-gray-400 font-medium">{formData.maxCapacity || 0} capacity + 1 staff min</span>
-                      </div>
-                    </div>
-                    <div className="w-[1px] h-10 bg-gray-200 mx-2"></div>
-                    <div className="flex-1 px-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Water Required</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-[#0f172a]">{12 * Math.max(1, (parseInt(formData.maxCapacity) || 0) + 1)} L</span>
-                        <span className="text-[12px] text-gray-400 font-medium">12L × {Math.max(1, (parseInt(formData.maxCapacity) || 0) + 1)} people</span>
-                      </div>
-                    </div>
-                    <div className="w-[1px] h-10 bg-gray-200 mx-2"></div>
-                    <div className="flex-1 px-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Meals Required</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-[#0f172a]">{9 * Math.max(1, (parseInt(formData.maxCapacity) || 0) + 1)}</span>
-                        <span className="text-[12px] text-gray-400 font-medium">9 meals × {Math.max(1, (parseInt(formData.maxCapacity) || 0) + 1)} people</span>
-                      </div>
-                    </div>
-                    <div className="w-[1px] h-10 bg-gray-200 mx-2"></div>
-                    <div className="flex-1 px-4">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Days of Coverage</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-[#0f172a]">3</span>
-                        <span className="text-[12px] text-gray-400 font-medium">Provincial standard</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Categories */}
-                  <div className="divide-y divide-gray-50">
-                    {[
-                      { title: "Water Supply", icon: <Droplets size={22} />, color: "text-[#0ea5e9]", bgColor: "bg-sky-50" },
-                      { title: "Food Supply", icon: <Apple size={22} />, color: "text-[#22c55e]", bgColor: "bg-green-50" },
-                    ].map((item, index) => (
-                      <div key={index} className="flex flex-col">
-                        <div 
-                          onClick={() => setExpandedKitCategory(expandedKitCategory === item.title ? null : item.title)}
-                          className={`p-7 flex items-center justify-between hover:bg-gray-50/50 transition-colors cursor-pointer group ${expandedKitCategory === item.title ? 'bg-gray-50/30' : ''}`}
-                        >
-                          <div className="flex items-center gap-6">
-                            <ChevronRight size={20} className={`text-gray-300 group-hover:text-gray-400 transition-all ${expandedKitCategory === item.title ? 'rotate-90 text-gray-500' : ''}`} />
-                            <div className={`p-3 rounded-2xl ${item.bgColor} ${item.color} shadow-sm`}>
-                              {item.icon}
+                            <div className="px-3 py-1 rounded flex items-center gap-1.5 flex-shrink-0" style={{ height: 24, backgroundColor: coverageMet ? '#E8F5E9' : '#FFEBEE', fontSize: 11.5, fontWeight: 500, color: coverageMet ? '#2E7D32' : '#C62828', minWidth: 80, justifyContent: 'center' }}>
+                              {coverageMet ? <Check size={14} /> : <AlertTriangle size={14} />}
+                              {assigned.length}/{shift.minStaff}
                             </div>
-                            <span className="text-[16px] font-bold text-[#1e293b]">{item.title}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            {(() => {
-                              const categoryItems = formData.emergencyKit[item.title] || {};
-                              const totalItems = Object.keys(categoryItems).length;
-                              const filledItems = Object.values(categoryItems).filter(v => v.qty && parseInt(v.qty) > 0).length;
-                              return (
-                                <>
-                                  <span className="px-4 py-1.5 rounded-xl bg-gray-50 text-gray-400 text-[12px] font-bold border border-gray-100">{totalItems} items</span>
-                                  <div className="px-4 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-bold border border-emerald-100 flex items-center gap-2">
-                                    <Check size={16} strokeWidth={3} />
-                                    {filledItems}
-                                  </div>
-                                </>
-                              );
-                            })()}
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-start gap-2" style={{ padding: 12, backgroundColor: '#E3F2FD', borderTop: '1px solid #F5F5F5' }}>
+                    <Info size={16} className="shrink-0 mt-0.5" style={{ color: '#1565C0' }} />
+                    <p style={{ fontSize: 11.5, color: '#1565C0' }}>💡 Family Forever recommends 24/7 coverage. Staff can be assigned to multiple shifts. Shifts can be edited anytime from the Shift tab.</p>
+                  </div>
+                </div>
 
-                        {expandedKitCategory === item.title && (
-                          <div className="p-8 bg-gray-50/20 border-t border-gray-50">
-                            <div className="grid grid-cols-[1.5fr_1fr_1.2fr_1.2fr_40px] gap-6 px-4 mb-5">
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Item Name</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Required Qty</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Location</span>
-                              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Notes (Optional)</span>
-                              <span></span>
+                {/* Section D: Coverage Preview */}
+                {(() => {
+                  const totalWeeklyCoverage = (shiftAssignments.morning.length * 40) + (shiftAssignments.evening.length * 56) + (shiftAssignments.night.length * 56) + (shiftAssignments.weekend.length * 24);
+                  const hasFullCoverage = SHIFTS_CONFIG.every(s => (shiftAssignments[s.id]?.length || 0) >= s.minStaff);
+                  return (
+                    <div className="border rounded-xl flex items-center gap-4" style={{ borderColor: '#E0E0E0', borderLeft: '3px solid #1D6033', padding: '12px 20px', height: 56 }}>
+                      <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, backgroundColor: '#E8F5E9' }}>
+                        <BarChart3 size={16} style={{ color: '#1D6033' }} />
+                      </div>
+                      <div className="flex-1">
+                        <span style={{ fontSize: 14, color: '#616161' }}>Total Weekly Coverage: </span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#212121' }}>{totalWeeklyCoverage} hours</span>
+                        <span style={{ fontSize: 14, color: '#616161' }}> across 4 shifts</span>
+                      </div>
+                      <div className="px-3 py-1 rounded flex items-center gap-1.5" style={{ fontSize: 11.5, fontWeight: 500, color: hasFullCoverage ? '#2E7D32' : '#F57C00', backgroundColor: hasFullCoverage ? '#E8F5E9' : '#FFF3E0' }}>
+                        <Check size={14} />
+                        {hasFullCoverage ? 'Full Coverage' : 'Coverage Gap'}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : currentStep === 3 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Skip Notice */}
+                <div className="border rounded-xl p-4" style={{ borderColor: '#B3D4FC', backgroundColor: '#E3F2FD' }}>
+                  <div className="flex items-start gap-3">
+                    <Info size={20} className="shrink-0" style={{ color: '#1565C0' }} />
+                    <div>
+                      <p style={{ fontSize: 14, color: '#424242' }}>No residents yet? You can skip this step and admit clients individually later. Most new houses start empty.</p>
+                      <button onClick={() => setCurrentStep(4)} style={{ fontSize: 14, color: '#1565C0', marginTop: 8, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>Skip this step →</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Clients In This House */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24 }}>
+                  <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+                    <div className="flex items-center gap-3">
+                      <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>CLIENTS IN THIS HOUSE</h3>
+                      <div className="px-2 py-1 rounded" style={{ fontSize: 11.5, fontWeight: 500, color: formData.assignedClients.length > 0 ? '#1D6033' : '#757575', backgroundColor: formData.assignedClients.length > 0 ? '#E8F5E9' : '#F5F5F5' }}>{formData.assignedClients.length} added</div>
+                    </div>
+                    {formData.assignedClients.length > 0 && (
+                      <button onClick={handleAddClientClick} className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors" style={{ fontSize: 13, fontWeight: 500, backgroundColor: '#1D6033', color: '#FFFFFF' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1F6F43')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1D6033')}>
+                        <Plus size={14} /> Add New Client
+                      </button>
+                    )}
+                  </div>
+
+                  {formData.assignedClients.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center" style={{ padding: '40px 0' }}>
+                      <div className="rounded-full flex items-center justify-center" style={{ width: 64, height: 64, backgroundColor: '#F5F5F5', marginBottom: 16 }}>
+                        <UserPlus size={32} style={{ color: '#BDBDBD' }} />
+                      </div>
+                      <h4 style={{ fontSize: 15, fontWeight: 600, color: '#212121', marginBottom: 8 }}>No clients added yet</h4>
+                      <p style={{ fontSize: 13, color: '#757575', textAlign: 'center', maxWidth: 360, marginBottom: 20 }}>Use the existing Add Client flow to create new client records. Once created, they'll appear here.</p>
+                      <button onClick={handleAddClientClick} className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors" style={{ fontSize: 14, fontWeight: 500, backgroundColor: '#1D6033', color: '#FFFFFF' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1F6F43')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1D6033')}>
+                        <Plus size={16} /> Add New Client
+                      </button>
+                      <button style={{ fontSize: 12, color: '#1565C0', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', marginTop: 12 }}>Or browse pending intake requests →</button>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Table Header */}
+                      <div className="flex items-center gap-4" style={{ height: 40, padding: '0 16px', backgroundColor: '#FAFAFA', borderBottom: '1px solid #F5F5F5', borderRadius: '8px 8px 0 0' }}>
+                        <div style={{ flex: '2', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Client</div>
+                        <div style={{ width: 60, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Age</div>
+                        <div style={{ width: 120, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Service Type</div>
+                        <div style={{ width: 80, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Room</div>
+                        <div style={{ width: 120, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Supervisor</div>
+                        <div style={{ width: 80, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>Actions</div>
+                      </div>
+                      {formData.assignedClients.map((client, index) => {
+                        const serviceColors = { Respite: { bg: '#E8F5E9', text: '#2E7D32' }, Emergency: { bg: '#FFEBEE', text: '#C62828' }, Supervised: { bg: '#F3E5F5', text: '#7B1FA2' } };
+                        const svc = serviceColors[client.serviceType] || { bg: '#F5F5F5', text: '#757575' };
+                        const initials = client.initials || client.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        const supervisorName = client.supervisor?.name || 'Unassigned';
+                        const supervisorInitials = client.supervisor?.initials || supervisorName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                        return (
+                          <div key={client.id} className="flex items-center gap-4" style={{ height: 64, padding: '0 16px', borderBottom: index < formData.assignedClients.length - 1 ? '1px solid #F5F5F5' : 'none' }}>
+                            <div className="flex items-center gap-3" style={{ flex: '2' }}>
+                              <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, backgroundColor: client.color || getAvatarColor(client.name) }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>{initials}</span>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{client.name}</div>
+                                <div style={{ fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#757575' }}>{client.caseId}</div>
+                              </div>
                             </div>
-
-                            <div className="space-y-3">
-                              {Object.keys(formData.emergencyKit[item.title] || {}).map((itemName, i) => {
-                                const itemData = formData.emergencyKit[item.title]?.[itemName] || { qty: "", location: "", notes: "" };
-                                
-                                const updateKitItem = (field, value) => {
-                                  setFormData({
-                                    ...formData,
-                                    emergencyKit: {
-                                      ...formData.emergencyKit,
-                                      [item.title]: {
-                                        ...formData.emergencyKit[item.title],
-                                        [itemName]: { ...itemData, [field]: value }
-                                      }
-                                    }
-                                  });
-                                };
-
-                                return (
-                                  <div key={i} className="grid grid-cols-[1.5fr_1fr_1.2fr_1.2fr_40px] gap-6 p-4 bg-white rounded-2xl border border-gray-100 items-center shadow-sm hover:shadow-md transition-all">
-                                    <span className="text-[15px] font-bold text-[#0f172a]">{itemName}</span>
-                                    <div className="flex items-center justify-center">
-                                      <div className="flex items-center gap-3 p-1 rounded-xl bg-gray-50 border border-gray-100">
-                                        <button 
-                                          onClick={() => updateKitItem('qty', Math.max(0, (parseInt(itemData.qty) || 0) - 1).toString())}
-                                          className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-[#145228] shadow-sm transition-all border border-gray-100"
-                                        >
-                                          <Minus size={14} />
-                                        </button>
-                                        <input 
-                                          type="number"
-                                          placeholder="0"
-                                          value={itemData.qty}
-                                          onChange={(e) => updateKitItem('qty', e.target.value)}
-                                          className="w-12 text-center text-[15px] font-bold text-[#0f172a] bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        />
-                                        <button 
-                                          onClick={() => updateKitItem('qty', ((parseInt(itemData.qty) || 0) + 1).toString())}
-                                          className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-[#145228] shadow-sm transition-all border border-gray-100"
-                                        >
-                                          <Plus size={14} />
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <input 
-                                      type="text" 
-                                      placeholder="Location" 
-                                      value={itemData.location}
-                                      onChange={(e) => updateKitItem('location', e.target.value)}
-                                      className="px-5 py-3 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#145228] focus:bg-white transition-all text-[14px] font-bold text-[#0f172a] placeholder:text-gray-300" 
-                                    />
-                                    <input 
-                                      type="text" 
-                                      placeholder="Notes" 
-                                      value={itemData.notes}
-                                      onChange={(e) => updateKitItem('notes', e.target.value)}
-                                      className="px-5 py-3 rounded-xl border border-gray-100 bg-gray-50/50 focus:outline-none focus:border-[#145228] focus:bg-white transition-all text-[14px] font-bold text-[#0f172a] placeholder:text-gray-300" 
-                                    />
-                                    <button className="text-gray-300 hover:text-red-500 transition-colors flex justify-center">
-                                      <Trash2 size={20} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-
-                              <button className="w-full py-5 mt-6 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center gap-3 text-[14px] font-bold text-[#145228] hover:bg-[#f0f9f1] hover:border-[#145228]/20 transition-all bg-gray-50/30">
-                                <Plus size={20} strokeWidth={2.5} />
-                                Add to {item.title}
+                            <div style={{ width: 60, fontSize: 13, color: '#424242' }}>{client.age}</div>
+                            <div style={{ width: 120 }}>
+                              <div className="px-2 py-1 rounded text-center" style={{ fontSize: 11.5, fontWeight: 500, color: svc.text, backgroundColor: svc.bg }}>{client.serviceType}</div>
+                            </div>
+                            <div style={{ width: 80, fontSize: 13, fontFamily: 'JetBrains Mono, monospace', color: '#424242' }}>{client.room}</div>
+                            <div className="flex items-center gap-2" style={{ width: 120 }}>
+                              <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 20, height: 20, backgroundColor: client.supervisor?.color || getAvatarColor(supervisorName) }}>
+                                <span style={{ fontSize: 9, fontWeight: 600, color: '#FFFFFF' }}>{supervisorInitials}</span>
+                              </div>
+                              <span style={{ fontSize: 12.5, color: '#424242' }}>{supervisorName}</span>
+                            </div>
+                            <div className="flex items-center gap-2" style={{ width: 80 }}>
+                              <button onClick={() => handleEditClient(client)} className="rounded flex items-center justify-center transition-colors" style={{ width: 28, height: 28, backgroundColor: 'transparent' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#E3F2FD')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                <Pencil size={14} style={{ color: '#1565C0' }} />
+                              </button>
+                              <button onClick={() => handleDeleteClient(client.id)} className="rounded flex items-center justify-center transition-colors" style={{ width: 28, height: 28, backgroundColor: 'transparent' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FFEBEE')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                <Trash2 size={14} style={{ color: '#C62828' }} />
                               </button>
                             </div>
                           </div>
-                        )}
+                        );
+                      })}
+                      <div className="flex items-center justify-between" style={{ padding: 16, borderTop: '1px solid #F5F5F5', marginTop: 8 }}>
+                        <p style={{ fontSize: 12.5, color: '#757575' }}>{formData.assignedClients.length} clients added · {Math.max(0, (Number(formData.maxCapacity) || 6) - formData.assignedClients.length)} beds remaining of {Number(formData.maxCapacity) || 6}</p>
+                        <button onClick={handleAddClientClick} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', backgroundColor: 'transparent' }}>
+                          <Plus size={14} /> Add Another Client
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
-                ) : (
-                <div className="rounded-[32px] border border-gray-100 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden p-16 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 mx-auto mb-4">
-                    <AlertTriangle size={32} />
-                  </div>
-                  <h3 className="text-[18px] font-bold text-[#0f172a] mb-2">Sharps & Hazards</h3>
-                  <p className="text-[14px] text-gray-400 font-medium">Coming soon — this section will be available in a future update.</p>
+              </div>
+            ) : currentStep === 4 ? (
+              <div>
+                <div className="grid grid-cols-2 gap-4" style={{ marginBottom: 24 }}>
+                  {formData.complianceSchedules.map((schedule) => {
+                    const iconMap = { 1: ShieldCheck, 2: Heart, 3: Pill, 4: Flame, 5: Sparkles, 6: FileSearch };
+                    const colorMap = { 1: '#2E7D32', 2: '#C62828', 3: '#1565C0', 4: '#F57C00', 5: '#00897B', 6: '#7B1FA2' };
+                    const Icon = iconMap[schedule.id];
+                    const iconColor = colorMap[schedule.id];
+                    return (
+                      <div key={schedule.id} className="border rounded-xl p-4" style={{ borderColor: '#E0E0E0', backgroundColor: '#FFFFFF' }}>
+                        <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
+                          <Icon size={20} style={{ color: iconColor }} />
+                          <div style={{ fontSize: 14, fontWeight: 600, color: '#212121' }}>{schedule.title}</div>
+                        </div>
+                        <select value={schedule.frequency} onChange={(e) => setFormData({ ...formData, complianceSchedules: formData.complianceSchedules.map(s => s.id === schedule.id ? { ...s, frequency: e.target.value } : s) })} className="w-full px-3 rounded-lg border" style={{ height: 36, borderColor: '#BDBDBD', fontSize: 13, marginBottom: 8 }}>
+                          <option>Daily</option>
+                          <option>Weekly</option>
+                          <option>Bi-weekly</option>
+                          <option>Monthly</option>
+                          <option>Quarterly</option>
+                          <option>Annually</option>
+                        </select>
+                        <p style={{ fontSize: 11.5, color: '#757575' }}>Next due: Apr 22, 2026</p>
+                      </div>
+                    );
+                  })}
                 </div>
+                <div className="border rounded-lg p-3 flex items-start gap-3" style={{ borderColor: '#B3D4FC', backgroundColor: '#E3F2FD' }}>
+                  <Info size={16} className="shrink-0" style={{ color: '#1565C0' }} />
+                  <p style={{ fontSize: 12.5, color: '#1565C0' }}>💡 These cadences match Alberta Children's Services minimum standards for licensed group homes.</p>
+                </div>
+              </div>
+            ) : currentStep === 5 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Helper Banner */}
+                <div className="border rounded-xl p-4 flex items-start gap-3" style={{ borderColor: '#BBDEFB', backgroundColor: '#E3F2FD' }}>
+                  <Info size={16} className="shrink-0 mt-0.5" style={{ color: '#1565C0' }} />
+                  <p style={{ fontSize: 13, color: '#1565C0' }}>Quantities are auto-suggested based on your <strong>{formData.maxCapacity || 0}-bed capacity</strong>. You can edit any value, remove items you don't need, or add custom items specific to your house.</p>
+                </div>
+
+                {/* Section Navigator */}
+                <div className="border rounded-lg flex items-center gap-1" style={{ borderColor: '#E0E0E0', backgroundColor: '#FFFFFF', padding: 4, minHeight: 56 }}>
+                  {[
+                    { icon: Package, label: 'House Inventory', count: `${HOUSE_INVENTORY_CATEGORIES.reduce((s, c) => s + c.items.length, 0)} items`, index: 0 },
+                    { icon: Briefcase, label: '72-Hour Emergency Kit', count: `${EMERGENCY_KIT_CATEGORIES.reduce((s, c) => s + c.items.length, 0)} items`, index: 1 },
+                    { icon: AlertTriangle, label: 'Sharps & Hazards', count: `${SHARPS_ITEMS.length} items`, index: 2 },
+                  ].map((tab) => {
+                    const TabIcon = tab.icon;
+                    const isActive = activeInventorySection === tab.index;
+                    return (
+                      <button key={tab.index} onClick={() => setActiveInventorySection(tab.index)} className="flex-1 flex items-center rounded-lg transition-colors" style={{ minHeight: 48, padding: '0 16px', gap: 12, backgroundColor: isActive ? '#E8F5E9' : 'transparent', borderBottom: isActive ? '2px solid #1D6033' : '2px solid transparent' }}>
+                        <TabIcon size={18} className="flex-shrink-0" style={{ color: isActive ? '#1D6033' : '#616161' }} />
+                        <span style={{ fontSize: 14, fontWeight: isActive ? 600 : 500, color: isActive ? '#1D6033' : '#616161', whiteSpace: 'nowrap' }}>{tab.label}</span>
+                        <div className="px-2 rounded flex-shrink-0" style={{ height: 22, display: 'flex', alignItems: 'center', marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#757575', backgroundColor: '#F5F5F5', whiteSpace: 'nowrap' }}>{tab.count}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Section 1: House Inventory */}
+                {activeInventorySection === 0 && (
+                  <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', overflow: 'hidden' }}>
+                    <div className="flex items-center justify-between" style={{ height: 64, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full flex items-center justify-center" style={{ width: 32, height: 32, backgroundColor: '#F1F8E9' }}><Package size={16} style={{ color: '#1D6033' }} /></div>
+                        <div>
+                          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#212121' }}>House Inventory</h3>
+                          <p style={{ fontSize: 12, color: '#757575' }}>Daily-use household items by category</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F1F8E9')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                          <RotateCcw size={14} /> Reset to defaults
+                        </button>
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border transition-colors" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}>
+                          <Plus size={14} /> Add Custom Item
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      {HOUSE_INVENTORY_CATEGORIES.map((category) => {
+                        const isExpanded = expandedInventoryCategories[category.id];
+                        const IconMap = { Bed, Bath, Utensils, Sparkles, ShieldAlert, Wrench };
+                        const CatIcon = IconMap[category.icon] || Package;
+                        return (
+                          <div key={category.id}>
+                            <button onClick={() => setExpandedInventoryCategories({ ...expandedInventoryCategories, [category.id]: !isExpanded })} className="w-full flex items-center justify-between px-5 transition-colors" style={{ height: 56, borderBottom: '1px solid #F5F5F5', cursor: 'pointer' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAFAFA')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                              <div className="flex items-center gap-3">
+                                <ChevronRight size={16} style={{ color: '#757575', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                <CatIcon size={20} style={{ color: category.color }} />
+                                <span style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{category.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="px-2 py-0.5 rounded" style={{ fontSize: 11.5, fontWeight: 500, color: '#757575', backgroundColor: '#F5F5F5' }}>{category.items.length} items</div>
+                                <div className="px-2 py-0.5 rounded flex items-center gap-1" style={{ fontSize: 11.5, fontWeight: 500, color: '#2E7D32', backgroundColor: '#E8F5E9' }}>
+                                  <Check size={12} />{category.items.length}
+                                </div>
+                              </div>
+                            </button>
+                            {isExpanded && (
+                              <div style={{ backgroundColor: '#FAFAFA', padding: 16 }}>
+                                <div className="flex items-center gap-3 px-3" style={{ height: 36, borderBottom: '1px solid #E0E0E0', marginBottom: 4 }}>
+                                  <div style={{ flex: '1.3 1 180px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>ITEM NAME</div>
+                                  <div style={{ width: 130, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>QTY</div>
+                                  <div style={{ width: 200, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>LOCATION</div>
+                                  <div style={{ flex: '1 1 160px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>NOTES</div>
+                                  <div style={{ width: 40 }} />
+                                </div>
+                                {category.items.map((item, itemIdx) => (
+                                  <div key={itemIdx} className="flex items-center gap-3 px-3 rounded transition-colors" style={{ height: 48, backgroundColor: '#FFFFFF', marginBottom: 4 }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAFAFA')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}>
+                                    <div style={{ flex: '1.3 1 180px', fontSize: 14, fontWeight: 500, color: '#212121', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
+                                    <div className="flex items-center justify-center gap-0" style={{ width: 130 }}>
+                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                                      <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }} />
+                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                                    </div>
+                                    <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: '1 1 160px', height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <button className="flex items-center justify-center rounded transition-colors" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FFEBEE')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                      <Trash2 size={14} style={{ color: '#BDBDBD' }} />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button className="w-full flex items-center justify-center gap-2 rounded transition-all" style={{ height: 36, border: '1.5px dashed #BDBDBD', backgroundColor: 'transparent', marginTop: 8 }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#1D6033'; e.currentTarget.style.backgroundColor = '#F1F8E9'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#BDBDBD'; e.currentTarget.style.backgroundColor = 'transparent'; }}>
+                                  <Plus size={14} style={{ color: '#1D6033' }} />
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: '#1D6033' }}>Add to {category.name}</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 2: 72-Hour Emergency Kit */}
+                {activeInventorySection === 1 && (
+                  <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', overflow: 'hidden' }}>
+                    <div className="flex items-center justify-between" style={{ height: 64, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full flex items-center justify-center" style={{ width: 32, height: 32, backgroundColor: '#FFF3E0' }}><Briefcase size={16} style={{ color: '#F57C00' }} /></div>
+                        <div>
+                          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#212121' }}>72-Hour Emergency Kit</h3>
+                          <p style={{ fontSize: 12, color: '#757575' }}>Disaster preparedness for 72 hours of self-sufficiency</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}><Plus size={14} /> Add Custom Item</button>
+                      </div>
+                    </div>
+                    {/* Coverage calculator */}
+                    {(() => {
+                      const peopleCount = (Number(formData.maxCapacity) || 6) + 1;
+                      return (
+                        <div className="flex items-center gap-6" style={{ margin: 20, padding: 16, border: '1px solid #E0E0E0', borderRadius: 8 }}>
+                          {[
+                            { label: 'PEOPLE TO COVER', value: peopleCount, sub: `${formData.maxCapacity || 6} capacity + 1 staff min` },
+                            { label: 'WATER REQUIRED', value: `${peopleCount * 12} L`, sub: `12L × ${peopleCount} people` },
+                            { label: 'MEALS REQUIRED', value: peopleCount * 9, sub: `9 meals × ${peopleCount} people` },
+                            { label: 'DAYS OF COVERAGE', value: 3, sub: 'Provincial standard' },
+                          ].map((m, i) => (
+                            <div key={i}>
+                              <div style={{ fontSize: 11, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>{m.label}</div>
+                              <div style={{ fontSize: 22, fontWeight: 600, color: '#212121' }}>{m.value}</div>
+                              <div style={{ fontSize: 11, color: '#757575' }}>{m.sub}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <div>
+                      {EMERGENCY_KIT_CATEGORIES.map((category) => {
+                        const isExpanded = expandedInventoryCategories[category.id];
+                        const IconMap2 = { Droplets, Apple, Package, Heart };
+                        const CatIcon2 = IconMap2[category.icon] || Package;
+                        return (
+                          <div key={category.id}>
+                            <button onClick={() => setExpandedInventoryCategories({ ...expandedInventoryCategories, [category.id]: !isExpanded })} className="w-full flex items-center justify-between px-5 transition-colors" style={{ height: 56, borderBottom: '1px solid #F5F5F5', cursor: 'pointer' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAFAFA')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                              <div className="flex items-center gap-3">
+                                <ChevronRight size={16} style={{ color: '#757575', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                                <CatIcon2 size={20} style={{ color: category.color }} />
+                                <span style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{category.name}</span>
+                              </div>
+                              <div className="px-2 py-0.5 rounded" style={{ fontSize: 11.5, fontWeight: 500, color: '#757575', backgroundColor: '#F5F5F5' }}>{category.items.length} items</div>
+                            </button>
+                            {isExpanded && (
+                              <div style={{ backgroundColor: '#FAFAFA', padding: 16 }}>
+                                <div className="flex items-center gap-3 px-3" style={{ height: 36, borderBottom: '1px solid #E0E0E0', marginBottom: 4 }}>
+                                  <div style={{ flex: 1, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: '#757575' }}>ITEM NAME</div>
+                                  <div style={{ width: 90, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: '#757575' }}>QTY</div>
+                                  <div style={{ width: 140, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: '#757575' }}>EXPIRY DATE</div>
+                                  <div style={{ width: 180, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: '#757575' }}>LOCATION</div>
+                                  <div style={{ flex: 1, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: '#757575' }}>NOTES</div>
+                                  <div style={{ width: 40 }} />
+                                </div>
+                                {category.items.map((item, itemIdx) => (
+                                  <div key={itemIdx} className="flex items-center gap-3 px-3 rounded" style={{ height: 48, backgroundColor: '#FFFFFF', marginBottom: 4 }}>
+                                    <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: '#212121' }}>{item.name}</div>
+                                    <div className="flex items-center gap-1" style={{ width: 90 }}>
+                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                                      <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 34, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
+                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                                    </div>
+                                    <input type="date" className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 180, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <button className="flex items-center justify-center rounded" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}><Trash2 size={14} style={{ color: '#BDBDBD' }} /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 3: Sharps & Hazards */}
+                {activeInventorySection === 2 && (
+                  <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', borderTop: '4px solid #C62828', overflow: 'hidden' }}>
+                    <div className="flex items-center justify-between" style={{ height: 64, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full flex items-center justify-center" style={{ width: 32, height: 32, backgroundColor: '#FFEBEE' }}><AlertTriangle size={16} style={{ color: '#C62828' }} /></div>
+                        <div>
+                          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#212121' }}>Sharps & Hazardous Items</h3>
+                          <p style={{ fontSize: 12, color: '#757575' }}>Strict tracking required. All items here trigger the Sharps Investigation workflow if found missing.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#C62828', borderColor: '#C62828', height: 32 }}><Plus size={14} /> Add Custom Sharp Item</button>
+                      </div>
+                    </div>
+                    <div className="border rounded-lg" style={{ margin: 20, padding: 16, borderColor: '#FFCDD2', backgroundColor: '#FFEBEE' }}>
+                      <h4 style={{ fontSize: 13, fontWeight: 600, color: '#C62828', marginBottom: 8 }}>🛑 Provincial Compliance Requirement</h4>
+                      <p style={{ fontSize: 12.5, color: '#B71C1C' }}>Every sharp or hazardous item below is auto-tracked. A missing count triggers an immediate <strong>Critical Alert</strong> and starts a Sharps Investigation. Lock these in secure storage and update counts at every shift change.</p>
+                    </div>
+                    <div style={{ padding: 20 }}>
+                      <div className="flex items-center gap-3 px-3" style={{ height: 40, borderBottom: '1px solid #E0E0E0', marginBottom: 4 }}>
+                        {['ITEM NAME', 'TYPE', 'EXPECTED QTY', 'STORAGE LOCATION', 'AUTO-TRACK', 'NOTES'].map((h, i) => (
+                          <div key={i} style={{ flex: i === 0 || i === 5 ? 1 : undefined, width: i === 1 ? 140 : i === 2 ? 120 : i === 3 ? 200 : i === 4 ? 100 : undefined, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#757575' }}>{h}</div>
+                        ))}
+                        <div style={{ width: 40 }} />
+                      </div>
+                      {SHARPS_ITEMS.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-3 px-3 rounded transition-colors" style={{ height: 48, backgroundColor: '#FFFFFF', marginBottom: 4, border: '1px solid #F5F5F5' }}>
+                          <div className="flex items-center gap-2" style={{ flex: 1 }}>
+                            <AlertTriangle size={12} style={{ color: '#C62828' }} />
+                            <span style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{item.name}</span>
+                          </div>
+                          <select defaultValue={item.type} className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }}>
+                            <option>Needle</option><option>Blade</option><option>Scissor</option><option>Knife</option><option>Razor</option><option>Other</option>
+                          </select>
+                          <div className="flex items-center gap-1" style={{ width: 120 }}>
+                            <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                            <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
+                            <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                          </div>
+                          <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                          <div className="flex items-center justify-center" style={{ width: 100 }}>
+                            <button className="relative inline-flex items-center rounded-full transition-colors flex-shrink-0" style={{ width: 40, height: 22, backgroundColor: '#1D6033' }}>
+                              <span className="inline-block rounded-full bg-white transition-transform" style={{ width: 18, height: 18, transform: 'translateX(20px)', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }} />
+                            </button>
+                          </div>
+                          <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                          <button className="flex items-center justify-center rounded" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}><Trash2 size={14} style={{ color: '#BDBDBD' }} /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border rounded-lg" style={{ margin: 20, padding: 16, borderColor: '#E0E0E0', backgroundColor: '#FFFFFF' }}>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" checked={sharpsConfirmed} onChange={(e) => setSharpsConfirmed(e.target.checked)} className="mt-0.5" style={{ width: 18, height: 18, accentColor: '#1D6033' }} />
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>I confirm all sharps and hazardous items above are stored in <strong>locked, secure storage</strong> accessible only to authorized staff.</p>
+                          <p style={{ fontSize: 12, color: '#757575', marginTop: 4 }}>This confirmation is logged with your name and timestamp for audit purposes.</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 )}
               </div>
             ) : currentStep === 6 ? (
-              <div className="max-w-[1000px] w-full mx-auto pb-20">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 6 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Emergency Preparedness
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-10 leading-relaxed">
-                  72-hour emergency kit and contacts. Auto-calculated from your capacity + staff count.
-                </p>
-
-                {/* Summary Bar */}
-                <div className="bg-white border border-gray-100 rounded-[24px] p-8 shadow-sm flex items-center justify-between relative overflow-hidden mb-10 border-l-[6px] border-l-[#145228]">
-                  <div className="flex-1 px-4">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">People to Cover</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#0f172a]">—</span>
-                      <span className="text-[12px] text-gray-400 font-medium">capacity {formData.maxCapacity || 0} + staff</span>
+              <div style={{ paddingBottom: 80 }}>
+                {/* 4-Metric Summary Bar */}
+                {(() => {
+                  const peopleCount = (parseInt(formData.maxCapacity) || 6) + 1;
+                  const waterRequired = peopleCount * 12;
+                  const mealsRequired = peopleCount * 9;
+                  return (
+                    <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', borderLeft: '4px solid #1D6033', padding: '24px', marginBottom: '24px' }}>
+                      <div className="grid grid-cols-4 gap-6">
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>PEOPLE TO COVER</div>
+                          <div style={{ fontSize: 22, fontWeight: 600, color: '#212121' }}>{peopleCount}</div>
+                          <div style={{ fontSize: 11, color: '#757575' }}>capacity {formData.maxCapacity || 6} + 1 staff</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>WATER REQUIRED</div>
+                          <div style={{ fontSize: 22, fontWeight: 600, color: '#212121' }}>{waterRequired} L</div>
+                          <div style={{ fontSize: 11, color: '#757575' }}>12L × {peopleCount}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>MEALS REQUIRED</div>
+                          <div style={{ fontSize: 22, fontWeight: 600, color: '#212121' }}>{mealsRequired}</div>
+                          <div style={{ fontSize: 11, color: '#757575' }}>9 × {peopleCount}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9E9E9E', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>DAYS OF COVERAGE</div>
+                          <div style={{ fontSize: 22, fontWeight: 600, color: '#212121' }}>3</div>
+                          <div style={{ fontSize: 11, color: '#757575' }}>Provincial standard: 72 hours</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="w-[1px] h-12 bg-gray-100 mx-2"></div>
-                  <div className="flex-1 px-8">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Water Required</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#0f172a]">— L</span>
-                      <span className="text-[12px] text-gray-400 font-medium">12L × —</span>
-                    </div>
-                  </div>
-                  <div className="w-[1px] h-12 bg-gray-100 mx-2"></div>
-                  <div className="flex-1 px-8">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Meals Required</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#0f172a]">—</span>
-                      <span className="text-[12px] text-gray-400 font-medium">9 × —</span>
-                    </div>
-                  </div>
-                  <div className="w-[1px] h-12 bg-gray-100 mx-2"></div>
-                  <div className="flex-1 px-8">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Days of Coverage</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#0f172a]">3</span>
-                      <span className="text-[12px] text-gray-400 font-medium leading-tight">Provincial standard: 72 hours</span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Emergency Contacts */}
                 <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm mb-8">
@@ -2238,82 +1599,48 @@ const AddHouse = () => {
 
               </div>
             ) : currentStep === 7 ? (
-              <div className="max-w-[800px] w-full mx-auto">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-[#145228] text-[10px] font-bold uppercase tracking-wider mb-6">
-                  Step 7 of 7
-                </div>
-                
-                <h1 className="text-3xl font-bold text-[#0f172a] mb-3 tracking-tight">
-                  Review & Create
-                </h1>
-                <p className="text-[#64748b] text-[15px] font-medium mb-10 leading-relaxed">
-                  Review everything. Each section can be edited inline.
-                </p>
-
-                {/* Final Confirmation Card */}
-                <div className="bg-[#f0f9f1]/50 border border-[#145228]/10 rounded-[32px] p-10 flex items-start gap-8 shadow-sm">
-                  <div className="w-14 h-14 rounded-full bg-[#145228] flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-900/10">
-                    <Check size={32} strokeWidth={3} />
-                  </div>
-                  
-                  <div className="flex-1 space-y-6">
-                    <div className="space-y-2">
-                      <h3 className="text-[20px] font-bold text-[#0f172a]">Ready to create this house?</h3>
-                      <p className="text-[15px] text-[#64748b] font-medium leading-relaxed">
+              <div style={{ paddingBottom: 80 }}>
+                {/* Ready Banner */}
+                <div className="border rounded-xl" style={{ borderColor: '#C8E6C9', backgroundColor: '#F1F8E9', padding: '24px', marginBottom: '24px' }}>
+                  <div className="flex items-start gap-4">
+                    <div className="flex items-center justify-center rounded-full shrink-0" style={{ width: 48, height: 48, backgroundColor: '#1D6033' }}>
+                      <Check size={24} style={{ color: '#FFFFFF' }} strokeWidth={3} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ fontSize: 18, fontWeight: 600, color: '#212121', marginBottom: 8 }}>
+                        Ready to create {formData.houseName || 'this house'}?
+                      </h3>
+                      <p style={{ fontSize: 14, color: '#424242', marginBottom: 16, maxWidth: 480 }}>
                         Once created, this house will appear under Family Treatment Program with all 12 dashboard tabs initialized. You can continue editing any section from the house dashboard at any time.
                       </p>
-                    </div>
-
-                    <div className="space-y-4 pt-2">
-                      <label className="flex items-center gap-4 group cursor-pointer">
-                        <div className="relative flex items-center">
-                          <input 
-                            type="checkbox" 
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <label className="flex items-center gap-3" style={{ cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
                             checked={formData.reviewSettings.notifyStaff}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              reviewSettings: { ...formData.reviewSettings, notifyStaff: e.target.checked }
-                            })}
-                            className="w-6 h-6 rounded-lg border-2 border-gray-200 text-[#145228] focus:ring-[#145228] transition-all cursor-pointer appearance-none checked:bg-[#145228] checked:border-[#145228]"
+                            onChange={(e) => setFormData({ ...formData, reviewSettings: { ...formData.reviewSettings, notifyStaff: e.target.checked } })}
+                            style={{ width: 16, height: 16, accentColor: '#1D6033', cursor: 'pointer' }}
                           />
-                          {formData.reviewSettings.notifyStaff && (
-                            <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white pointer-events-none" size={14} strokeWidth={4} />
-                          )}
-                        </div>
-                        <span className="text-[15px] font-bold text-[#374151] group-hover:text-[#0f172a] transition-colors">
-                          Notify assigned staff via email
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-4 group cursor-pointer">
-                        <div className="relative flex items-center">
-                          <input 
-                            type="checkbox" 
+                          <span style={{ fontSize: 14, color: '#424242' }}>Notify assigned staff via email</span>
+                        </label>
+                        <label className="flex items-center gap-3" style={{ cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
                             checked={formData.reviewSettings.scheduleInspections}
-                            onChange={(e) => setFormData({
-                              ...formData,
-                              reviewSettings: { ...formData.reviewSettings, scheduleInspections: e.target.checked }
-                            })}
-                            className="w-6 h-6 rounded-lg border-2 border-gray-200 text-[#145228] focus:ring-[#145228] transition-all cursor-pointer appearance-none checked:bg-[#145228] checked:border-[#145228]"
+                            onChange={(e) => setFormData({ ...formData, reviewSettings: { ...formData.reviewSettings, scheduleInspections: e.target.checked } })}
+                            style={{ width: 16, height: 16, accentColor: '#1D6033', cursor: 'pointer' }}
                           />
-                          {formData.reviewSettings.scheduleInspections && (
-                            <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white pointer-events-none" size={14} strokeWidth={4} />
-                          )}
-                        </div>
-                        <span className="text-[15px] font-bold text-[#374151] group-hover:text-[#0f172a] transition-colors">
-                          Schedule first compliance inspections starting next week
-                        </span>
-                      </label>
+                          <span style={{ fontSize: 14, color: '#424242' }}>Schedule first compliance inspections starting next week</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Info Tip */}
-                <div className="mt-10 p-6 rounded-2xl bg-blue-50/50 border border-blue-100 flex items-start gap-4">
-                  <div className="text-blue-500 mt-0.5">
-                    <Info size={20} />
-                  </div>
-                  <p className="text-[14px] text-blue-800 font-medium leading-relaxed">
+                <div className="flex items-start gap-3 rounded-xl" style={{ padding: '16px', border: '1px solid #BBDEFB', backgroundColor: '#E3F2FD' }}>
+                  <Info size={18} style={{ color: '#1565C0', flexShrink: 0, marginTop: 2 }} />
+                  <p style={{ fontSize: 13.5, color: '#1565C0' }}>
                     By clicking "Create House", you agree that all information provided is accurate to the best of your knowledge and complies with Alberta licensing requirements.
                   </p>
                 </div>
