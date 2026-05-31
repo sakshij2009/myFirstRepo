@@ -66,21 +66,22 @@ const parseClockTime = (val) => {
   return d;
 };
 
-// Format a clock value for display in Edmonton time.
-// UTC-based values (Firestore Timestamp, ISO string) are converted to America/Edmonton.
-// AM/PM strings saved by the mobile app are returned as-is (already Edmonton local).
+// Format a clock value for display — read the time exactly as stored, no timezone conversion.
+// UTC-based values (Firestore Timestamp, ISO string): display the UTC time digits as-is.
+//   e.g. "2026-05-22T16:30:00.000Z" → "4:30 PM"  (16:30 read directly, no offset applied)
+// AM/PM strings saved by the mobile app are returned as-is.
 const formatClockDisplay = (val) => {
   if (!val) return "—";
   const d = parseClockTime(val);
   if (!d) return "—";
   if (isUTCBased(val)) {
-    // Convert UTC → Edmonton (handles MDT/MST automatically)
+    // Use timeZone:"UTC" so the displayed hours/minutes match the digits in the timestamp exactly
     return d.toLocaleTimeString("en-US", {
       hour: "numeric", minute: "2-digit", hour12: true,
-      timeZone: "America/Edmonton",
+      timeZone: "UTC",
     });
   }
-  // Already a formatted AM/PM string (device-local Edmonton time from mobile app)
+  // Already a formatted AM/PM string (saved directly by mobile app)
   if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 };
