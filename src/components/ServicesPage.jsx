@@ -167,47 +167,43 @@ const ServicesPage = ({ filter = "Weekly", dateRange }) => {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {/* Header Section */}
-      <div className="px-8 py-10">
-        <h1
-          className="font-bold text-[#0f172a] mb-1.5"
-          style={{ fontSize: "30px", letterSpacing: "-0.02em" }}
-        >
-          Services
-        </h1>
-        <p
-          className="text-[#64748b] mb-10"
-          style={{ fontSize: "15px", fontWeight: 500 }}
-        >
-          Manage programs, houses, and compliance across all facilities
-        </p>
+    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {/* Page Title */}
+      <h1
+        className="font-bold text-[#0f172a] mb-1"
+        style={{ fontSize: "22px", letterSpacing: "-0.01em" }}
+      >
+        Services
+      </h1>
+      <p
+        className="text-[#6b7280] mb-6"
+        style={{ fontSize: "14px" }}
+      >
+        Manage programs, houses, and compliance across all facilities
+      </p>
 
-        {/* Service Overview cards — Emergent Care, Respite Care, Supervised Visitation, Transportation */}
-        <div className="mb-12 max-w-[1200px]">
-          <ServiceOverview filter={filter} dateRange={dateRange} />
-        </div>
-
-        <h2
-          className="font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-8"
-          style={{ fontSize: "11px" }}
-        >
-          PROGRAM OVERVIEW
-        </h2>
-
-        {/* Programs Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-[1200px]">
-          {programs.map((program, index) => (
-            <ProgramCard
-              key={index}
-              {...program}
-              onClick={() => program.path && navigate(program.path)}
-            />
-          ))}
-        </div>
+      {/* Service Overview cards — Emergent Care, Respite Care, Supervised Visitation, Transportation */}
+      <div className="mb-8">
+        <ServiceOverview filter={filter} dateRange={dateRange} />
       </div>
 
-      <div className="flex-1"></div>
+      {/* Program Overview */}
+      <p
+        className="font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-4"
+        style={{ fontSize: "11px" }}
+      >
+        PROGRAM OVERVIEW
+      </p>
+
+      <div className="grid grid-cols-3 gap-5">
+        {programs.map((program, index) => (
+          <ProgramCard
+            key={index}
+            {...program}
+            onClick={() => program.path && navigate(program.path)}
+          />
+        ))}
+      </div>
     </div>
   );
 };
