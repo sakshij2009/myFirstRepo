@@ -1648,6 +1648,7 @@ const AddHouse = () => {
             ) : null}
           </div>
         </div>
+        </div>
 
         {/* Footer Navigation */}
         <div className="h-[80px] border-t border-gray-100 flex items-center justify-between px-8 bg-white shrink-0">
@@ -1918,7 +1919,6 @@ const AddHouse = () => {
         </div>
       )}
     </div>
-  </div>
   );
 };
 
