@@ -123,7 +123,7 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="gst-reporting" element={<GSTReportingPage />} />
 
             {/* Under construction pages */}
-            <Route path="services" element={<ServicesPage />} />
+            <Route path="services" element={<ServicesPage filter={filter} dateRange={dateRange} />} />
             <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
             <Route path="pdd-houses" element={<PDDHouses />} />
             <Route path="child-youth-houses" element={<ChildYouthHouses />} />
