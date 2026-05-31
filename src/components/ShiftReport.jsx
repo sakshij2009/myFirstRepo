@@ -31,15 +31,24 @@ const PILL_COLORS = [
 ];
 const EXPENSE_TYPES = ["Food", "Accommodation", "Parking", "Toll", "Medical Supply", "Other"];
 
-// Parse clockIn/Out — handles ISO timestamps, "HH:MM AM/PM", and "HH:mm" strings
+// Returns true for Firestore Timestamps and ISO UTC strings — both carry absolute UTC time
+const isUTCBased = (val) =>
+  typeof val?.toDate === "function" ||
+  (typeof val === "string" && (val.includes("T") || val.includes("Z")));
+
+// Parse clockIn/Out — handles Firestore Timestamps, ISO UTC strings, "HH:MM AM/PM", and "HH:mm"
 const parseClockTime = (val) => {
   if (!val) return null;
+  // Firestore Timestamp object (.toDate() returns a UTC Date)
+  if (typeof val?.toDate === "function") return val.toDate();
   if (typeof val !== "string") return null;
   const s = val.trim();
-  if (s.includes("T") || s.includes("Z")) {
+  // ISO UTC string e.g. "2025-04-26T14:00:00.000Z"
+  if (s.includes("T") || s.endsWith("Z")) {
     const d = new Date(s);
     return isNaN(d) ? null : d;
   }
+  // "H:MM AM/PM" — treated as Edmonton local time (saved by mobile app)
   const ampmMatch = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (ampmMatch) {
     let h = parseInt(ampmMatch[1], 10);
@@ -50,23 +59,29 @@ const parseClockTime = (val) => {
     const d = new Date(); d.setHours(h, m, 0, 0);
     return d;
   }
+  // "HH:mm" 24-hour format
   const [h, m] = s.split(":").map(Number);
   if (isNaN(h)) return null;
   const d = new Date(); d.setHours(h, m || 0, 0, 0);
   return d;
 };
 
+// Format a clock value for display in Edmonton time.
+// UTC-based values (Firestore Timestamp, ISO string) are converted to America/Edmonton.
+// AM/PM strings saved by the mobile app are returned as-is (already Edmonton local).
 const formatClockDisplay = (val) => {
   if (!val) return "—";
-  if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
   const d = parseClockTime(val);
   if (!d) return "—";
-  if (typeof val === "string" && (val.includes("T") || val.includes("Z"))) {
+  if (isUTCBased(val)) {
+    // Convert UTC → Edmonton (handles MDT/MST automatically)
     return d.toLocaleTimeString("en-US", {
       hour: "numeric", minute: "2-digit", hour12: true,
       timeZone: "America/Edmonton",
     });
   }
+  // Already a formatted AM/PM string (device-local Edmonton time from mobile app)
+  if (typeof val === "string" && /AM|PM/i.test(val)) return val.toUpperCase();
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 };
 
@@ -739,9 +754,11 @@ const ShiftReport = ({ user }) => {
   );
 
   // ── Normalise ──
-  // Mobile saves clockInTime/clockOutTime (formatted strings); admin edits save clockIn/clockOut (ISO strings)
-  const clockInVal  = shiftData.clockInTime  || shiftData.clockIn  || null;
-  const clockOutVal = shiftData.clockOutTime || shiftData.clockOut || null;
+  // Prefer clockIn/clockOut (Firestore Timestamp or ISO UTC string — authoritative UTC time)
+  // over clockInTime/clockOutTime (device-local AM/PM strings — may reflect wrong timezone).
+  // Falls back to the string fields if no UTC-based value exists (older shifts).
+  const clockInVal  = isUTCBased(shiftData.clockIn)  ? shiftData.clockIn  : (shiftData.clockInTime  || shiftData.clockIn  || null);
+  const clockOutVal = isUTCBased(shiftData.clockOut) ? shiftData.clockOut : (shiftData.clockOutTime || shiftData.clockOut || null);
   const statusVal = clockInVal && clockOutVal ? "Completed" : clockInVal ? "Ongoing" : "Incomplete";
   const sc = {
     Completed: { bg: "#f0fdf4", text: "#15803d", dot: "#16a34a" },
@@ -781,11 +798,18 @@ const ShiftReport = ({ user }) => {
 
   const duration = computeDuration();
 
-  // Shift timeline bar percent
+  // Shift timeline bar percent — use formatClockDisplay so UTC values are Edmonton-local
   const toMinutesOfDay = (val) => {
-    const d = parseClockTime(val);
-    if (!d) return null;
-    return d.getHours() * 60 + d.getMinutes();
+    const timeStr = formatClockDisplay(val); // e.g. "4:45 PM" already in Edmonton time
+    if (!timeStr || timeStr === "—") return null;
+    const m = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const isPM = m[3].toUpperCase() === "PM";
+    if (isPM && h !== 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + min;
   };
   const clockInMins = toMinutesOfDay(normalized.clockIn);
   const clockOutMins = toMinutesOfDay(normalized.clockOut);
@@ -997,9 +1021,17 @@ const ShiftReport = ({ user }) => {
                     <button
                       onClick={() => {
                         const toInputVal = (val) => {
-                          const d = parseClockTime(val);
-                          if (!d) return "";
-                          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                          // Use formatClockDisplay so UTC values are converted to Edmonton first
+                          const timeStr = formatClockDisplay(val); // e.g. "4:45 PM"
+                          if (!timeStr || timeStr === "—") return "";
+                          const mx = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+                          if (!mx) return "";
+                          let h = parseInt(mx[1], 10);
+                          const min = parseInt(mx[2], 10);
+                          const isPM = mx[3].toUpperCase() === "PM";
+                          if (isPM && h !== 12) h += 12;
+                          if (!isPM && h === 12) h = 0;
+                          return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
                         };
                         setEditClockIn(toInputVal(normalized.clockIn));
                         setEditClockOut(toInputVal(normalized.clockOut));
