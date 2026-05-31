@@ -2,12 +2,19 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 // ── URL-param helpers — preserve filter state across navigation ───────────────
+// Use LOCAL date parts (not UTC) so the stored string matches what the user sees.
+// e.g. May 22 in IST would become May 21 in UTC — wrong! Use getDate() instead.
+const formatDateParam = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`; // "YYYY-MM-DD" in local time
+};
 const parseDateParam = (s) => {
   if (!s) return null;
-  const d = new Date(s + "T12:00:00"); // noon prevents timezone-midnight flip
+  const d = new Date(s + "T12:00:00"); // local noon — no midnight timezone flip
   return isNaN(d) ? null : d;
 };
-const formatDateParam = (d) => d.toISOString().slice(0, 10); // "YYYY-MM-DD"
 import { collection, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { toast } from "sonner";
