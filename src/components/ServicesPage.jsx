@@ -8,80 +8,98 @@ import {
   UserCheck,
   Clock,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
 } from "lucide-react";
 import ServiceOverview from "./ServiceOverview";
 
-const ProgramCard = ({
-  title,
-  houses,
-  clients,
-  staff,
-  compliance,
-  complianceColor,
-  pending,
-  critical,
-  icon: Icon,
-  iconBg,
-  iconColor,
-  onClick
-}) => {
+const ProgramCard = ({ name, icon, iconBg, iconColor, totalHouses, totalClients, totalStaff, compliancePercent, pendingApprovals, criticalIssues, onClick, index }) => {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all duration-200 group cursor-pointer"
+      className="bg-white rounded-xl p-5 border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+      style={{
+        borderColor: '#e5e7eb',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        animation: `fadeUp 0.4s ease-out ${index * 0.08}s both`,
+      }}
     >
-      {/* Card Header */}
-      <div className="flex items-start gap-4 mb-8">
-        <div className={`p-3 rounded-xl ${iconBg} ${iconColor} shrink-0`}>
-          <Icon size={22} strokeWidth={2} />
+      {/* Icon + Title */}
+      <div className="flex items-center gap-3 mb-4">
+        <div
+          className="flex items-center justify-center rounded-lg shrink-0"
+          style={{ width: 36, height: 36, backgroundColor: iconBg, color: iconColor }}
+        >
+          {icon}
         </div>
-        <h3 className="font-bold text-[#0f172a] text-[17px] leading-tight pt-1">
-          {title}
-        </h3>
+        <div
+          className="leading-tight flex-1"
+          style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}
+        >
+          {name}
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-y-7 gap-x-4 mb-8">
+      <div className="grid grid-cols-2 gap-3 mb-4 pb-4 border-b" style={{ borderColor: '#f3f4f6' }}>
         <div>
-          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1.5">Total Houses</p>
-          <p className="text-[22px] font-bold text-[#0f172a]">{houses}</p>
+          <div className="text-[11px] font-medium mb-1" style={{ color: '#9ca3af' }}>Total Houses</div>
+          <div className="text-lg font-semibold" style={{ color: '#111827' }}>{totalHouses}</div>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1.5">Total Clients</p>
-          <p className="text-[22px] font-bold text-[#0f172a]">{clients}</p>
+          <div className="text-[11px] font-medium mb-1" style={{ color: '#9ca3af' }}>Total Clients</div>
+          <div className="text-lg font-semibold" style={{ color: '#111827' }}>{totalClients}</div>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1.5">Total Staff</p>
-          <p className="text-[22px] font-bold text-[#0f172a]">{staff}</p>
+          <div className="text-[11px] font-medium mb-1" style={{ color: '#9ca3af' }}>Total Staff</div>
+          <div className="text-lg font-semibold" style={{ color: '#111827' }}>{totalStaff}</div>
         </div>
         <div>
-          <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1.5">Compliance</p>
-          <p className={`text-[22px] font-bold ${complianceColor}`}>{compliance}</p>
+          <div className="text-[11px] font-medium mb-1" style={{ color: '#9ca3af' }}>Compliance</div>
+          <div
+            className="text-lg font-semibold"
+            style={{
+              color: compliancePercent >= 95
+                ? '#16a34a'
+                : compliancePercent >= 90
+                ? '#f59e0b'
+                : compliancePercent > 0
+                ? '#dc2626'
+                : '#9ca3af',
+            }}
+          >
+            {compliancePercent > 0 ? `${compliancePercent}%` : '—'}
+          </div>
         </div>
       </div>
 
-      {/* Status Footer */}
-      <div className="flex items-center justify-between pt-6 border-t border-gray-50 mb-6">
-        <div className="flex items-center gap-1.5 text-[#f59e0b] text-[13px] font-semibold">
-          <Clock size={16} strokeWidth={2.5} />
-          <span>{pending} Pending</span>
+      {/* Pending + Critical */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <Clock size={14} style={{ color: '#f59e0b' }} strokeWidth={2} />
+          <span className="text-[11px] font-medium" style={{ color: '#6b7280' }}>
+            {pendingApprovals} Pending
+          </span>
         </div>
-        {critical > 0 && (
-          <div className="flex items-center gap-1.5 text-[#ef4444] text-[13px] font-semibold">
-            <AlertCircle size={16} strokeWidth={2.5} />
-            <span>{critical} Critical</span>
+        {criticalIssues > 0 && (
+          <div className="flex items-center gap-1.5">
+            <AlertCircle size={14} style={{ color: '#dc2626' }} strokeWidth={2} />
+            <span className="text-[11px] font-semibold" style={{ color: '#dc2626' }}>
+              {criticalIssues} Critical
+            </span>
           </div>
         )}
       </div>
 
-      {/* Action Button */}
-      <div className="flex justify-center">
-        <button className="flex items-center gap-2 text-[#64748b] font-bold text-[13px] group-hover:text-[#0f172a] transition-colors">
-          View Houses
-          <ArrowRight size={14} strokeWidth={3} className="transition-transform group-hover:translate-x-0.5" />
-        </button>
-      </div>
+      {/* View Houses */}
+      <button
+        className="w-full flex items-center justify-center gap-1 font-semibold transition-colors"
+        style={{ fontSize: 12, color: '#6b7280' }}
+        onMouseEnter={e => (e.currentTarget.style.color = '#1f7a3c')}
+        onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
+      >
+        <span>View Houses</span>
+        <ArrowRight size={12} strokeWidth={2.5} />
+      </button>
     </div>
   );
 };
@@ -91,7 +109,7 @@ const ServicesPage = ({ filter = "Weekly", dateRange }) => {
   const [stats, setStats] = useState({
     "family-treatment": { houses: 0 },
     "pdd": { houses: 0 },
-    "child-youth": { houses: 0 }
+    "child-youth": { houses: 0 },
   });
 
   useEffect(() => {
@@ -101,109 +119,107 @@ const ServicesPage = ({ filter = "Weekly", dateRange }) => {
         const newStats = {
           "family-treatment": { houses: 0 },
           "pdd": { houses: 0 },
-          "child-youth": { houses: 0 }
+          "child-youth": { houses: 0 },
         };
-
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           const type = data.programType || "family-treatment";
-          if (newStats[type]) {
-            newStats[type].houses += 1;
-          }
+          if (newStats[type]) newStats[type].houses += 1;
         });
-
         setStats(newStats);
       } catch (error) {
         console.error("Error fetching house stats:", error);
       }
     };
-
     fetchStats();
   }, []);
 
   const programs = [
     {
-      title: "Family Treatment Program",
+      name: "Family Treatment Program",
       path: "/admin-dashboard/family-treatment-houses",
-      houses: stats["family-treatment"].houses,
-      clients: 0,
-      staff: 0,
-      compliance: "0%",
-      complianceColor: "text-[#94a3b8]",
-      pending: 0,
-      critical: 0,
-      icon: Building2,
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-500",
+      icon: <Building2 size={17} strokeWidth={1.7} />,
+      iconBg: '#eff6ff',
+      iconColor: '#3b82f6',
+      totalHouses: stats["family-treatment"].houses,
+      totalClients: 0,
+      totalStaff: 0,
+      compliancePercent: 0,
+      pendingApprovals: 0,
+      criticalIssues: 0,
     },
     {
-      title: "Person with Developmental Disability (PDD)",
+      name: "Person with Developmental Disability (PDD)",
       path: "/admin-dashboard/pdd-houses",
-      houses: stats["pdd"].houses,
-      clients: 0,
-      staff: 0,
-      compliance: "0%",
-      complianceColor: "text-[#94a3b8]",
-      pending: 0,
-      critical: 0,
-      icon: Users,
-      iconBg: "bg-emerald-50",
-      iconColor: "text-emerald-500",
+      icon: <Users size={17} strokeWidth={1.7} />,
+      iconBg: '#f0fdf4',
+      iconColor: '#22c55e',
+      totalHouses: stats["pdd"].houses,
+      totalClients: 0,
+      totalStaff: 0,
+      compliancePercent: 0,
+      pendingApprovals: 0,
+      criticalIssues: 0,
     },
     {
-      title: "Child & Youth Program Cycle",
+      name: "Child & Youth Program Cycle",
       path: "/admin-dashboard/child-youth-houses",
-      houses: stats["child-youth"].houses,
-      clients: 0,
-      staff: 0,
-      compliance: "0%",
-      complianceColor: "text-[#94a3b8]",
-      pending: 0,
-      critical: 0,
-      icon: UserCheck,
-      iconBg: "bg-purple-50",
-      iconColor: "text-purple-500",
+      icon: <UserCheck size={17} strokeWidth={1.7} />,
+      iconBg: '#faf5ff',
+      iconColor: '#a855f7',
+      totalHouses: stats["child-youth"].houses,
+      totalClients: 0,
+      totalStaff: 0,
+      compliancePercent: 0,
+      pendingApprovals: 0,
+      criticalIssues: 0,
     },
   ];
 
   return (
-    <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ fontFamily: 'Roboto, sans-serif' }}>
       {/* Page Title */}
       <h1
-        className="font-bold text-[#0f172a] mb-1"
-        style={{ fontSize: "22px", letterSpacing: "-0.01em" }}
+        className="font-bold mb-1"
+        style={{ fontSize: 22, letterSpacing: '-0.01em', color: '#111827' }}
       >
         Services
       </h1>
-      <p
-        className="text-[#6b7280] mb-6"
-        style={{ fontSize: "14px" }}
-      >
+      <p className="mb-6" style={{ fontSize: 14, color: '#6b7280' }}>
         Manage programs, houses, and compliance across all facilities
       </p>
 
-      {/* Service Overview cards — Emergent Care, Respite Care, Supervised Visitation, Transportation */}
+      {/* Service Overview — Emergent Care, Respite Care, Supervised Visitation, Transportation */}
       <div className="mb-8">
         <ServiceOverview filter={filter} dateRange={dateRange} />
       </div>
 
-      {/* Program Overview */}
+      {/* Program Overview label */}
       <p
-        className="font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-4"
-        style={{ fontSize: "11px" }}
+        className="font-bold uppercase mb-4"
+        style={{ fontSize: 11, color: '#6b7280', letterSpacing: '0.08em' }}
       >
-        PROGRAM OVERVIEW
+        Program Overview
       </p>
 
-      <div className="grid grid-cols-3 gap-5">
+      {/* Program Cards */}
+      <div className="grid grid-cols-3 gap-3">
         {programs.map((program, index) => (
           <ProgramCard
             key={index}
+            index={index}
             {...program}
             onClick={() => program.path && navigate(program.path)}
           />
         ))}
       </div>
+
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };
