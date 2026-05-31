@@ -1,271 +1,283 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { 
-  Search, 
-  Plus, 
-  MapPin, 
-  Users, 
-  Shield, 
-  ArrowRight, 
-  Home, 
-  Eye, 
-  Edit2, 
-  Trash2, 
-  MoreHorizontal 
+import {
+  Search,
+  Plus,
+  MapPin,
+  Home,
+  Eye,
+  Edit2,
+  Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 import { db } from "../firebase";
 import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
 
+const PROGRAM_TYPE  = "family-treatment";
+const PROGRAM_LABEL = "Family Treatment Program";
+const PROGRAM_TITLE = "Family Treatment Program – Houses";
+const PROGRAM_SUB   = "Manage houses under Family Treatment Program";
+const ADD_PARAM     = "family-treatment";
+
+const getComplianceColor = (pct) => {
+  if (pct >= 95) return "#16a34a";
+  if (pct >= 90) return "#f59e0b";
+  return "#dc2626";
+};
+
 const FamilyTreatmentHouses = () => {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [houses, setHouses] = useState([]);
+  const [search, setSearch]   = useState("");
+  const [houses, setHouses]   = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchHouses = async () => {
+    (async () => {
       try {
-        const q = query(collection(db, "houses"), where("programType", "==", "family-treatment"));
-        const querySnapshot = await getDocs(q);
-        const houseList = [];
-        querySnapshot.forEach((doc) => {
-          houseList.push({ id: doc.id, ...doc.data() });
-        });
-        setHouses(houseList);
-      } catch (error) {
-        console.error("Error fetching houses:", error);
+        const q = query(collection(db, "houses"), where("programType", "==", PROGRAM_TYPE));
+        const snap = await getDocs(q);
+        setHouses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Error fetching houses:", err);
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchHouses();
+    })();
   }, []);
 
   const handleDelete = async (houseId, houseName) => {
-    if (window.confirm(`Are you sure you want to delete ${houseName}? This action cannot be undone.`)) {
-      try {
-        await deleteDoc(doc(db, "houses", houseId));
-        setHouses(houses.filter(h => h.id !== houseId));
-        toast.success("House deleted successfully", {
-          description: `${houseName} has been removed from the system.`
-        });
-      } catch (error) {
-        console.error("Error deleting house:", error);
-        toast.error("Failed to delete house", {
-          description: "An error occurred while trying to delete the house. Please try again."
-        });
-      }
+    if (!window.confirm(`Are you sure you want to delete ${houseName}? This action cannot be undone.`)) return;
+    try {
+      await deleteDoc(doc(db, "houses", houseId));
+      setHouses((prev) => prev.filter((h) => h.id !== houseId));
+      toast.success("House deleted successfully", { description: `${houseName} has been removed.` });
+    } catch (err) {
+      console.error("Error deleting house:", err);
+      toast.error("Failed to delete house", { description: "Please try again." });
     }
   };
 
-  const filteredHouses = houses.filter(h => 
-    h.houseName?.toLowerCase().includes(search.toLowerCase()) ||
-    h.address?.toLowerCase().includes(search.toLowerCase())
+  const filtered = houses.filter(
+    (h) =>
+      h.houseName?.toLowerCase().includes(search.toLowerCase()) ||
+      h.address?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getComplianceColor = (pct) => {
-    if (pct >= 95) return "bg-emerald-500";
-    if (pct >= 90) return "bg-amber-500";
-    return "bg-red-500";
-  };
-
   return (
-    <div className="flex flex-col min-h-screen bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <div className="px-8 py-10">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 mb-8 text-[14px] font-semibold">
-          <span 
-            className="text-[#145228] cursor-pointer hover:underline" 
-            onClick={() => navigate("/admin-dashboard/services")}
+    <div style={{ fontFamily: "Roboto, sans-serif" }}>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 mb-3" style={{ fontSize: 13, color: "#6b7280" }}>
+        <button
+          onClick={() => navigate("/admin-dashboard/services")}
+          className="font-medium transition-colors hover:underline"
+          style={{ color: "#1f7a3c" }}
+        >
+          Programs
+        </button>
+        <span>/</span>
+        <span className="font-semibold" style={{ color: "#111827" }}>{PROGRAM_LABEL}</span>
+      </div>
+
+      {/* Title */}
+      <h1 className="font-bold mb-1" style={{ fontSize: 28, letterSpacing: "-0.02em", color: "#111827" }}>
+        {PROGRAM_TITLE}
+      </h1>
+      <p className="mb-5" style={{ fontSize: 14, color: "#6b7280" }}>{PROGRAM_SUB}</p>
+
+      {/* Search + Add */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="relative">
+          <Search
+            size={14}
+            strokeWidth={2}
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "#9ca3af" }}
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search houses..."
+            className="pl-9 pr-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            style={{ width: 360, borderColor: "#e5e7eb", fontSize: 13 }}
+          />
+        </div>
+        <button
+          onClick={() => navigate(`/admin-dashboard/add/add-house?program=${ADD_PARAM}`)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:opacity-90"
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            backgroundColor: "#1f7a3c",
+            color: "#ffffff",
+            boxShadow: "0 1px 2px rgba(31,122,60,0.2)",
+          }}
+        >
+          <Plus size={16} strokeWidth={2.5} />
+          Add New House
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
+        <table className="w-full">
+          <thead
+            className="sticky top-0 bg-gray-50/80 backdrop-blur-sm"
+            style={{ borderBottom: "1px solid #e5e7eb" }}
           >
-            Programs
-          </span>
-          <span className="text-[#94a3b8] font-normal">/</span>
-          <span className="text-[#0f172a]">Family Treatment Program</span>
-        </div>
+            <tr>
+              {["House Name", "Address", "Capacity", "Active Clients", "Staff Count", "Compliance", "Last Inspection", "Alerts"].map((h) => (
+                <th
+                  key={h}
+                  className="text-left px-4 py-3.5"
+                  style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}
+                >
+                  {h}
+                </th>
+              ))}
+              <th
+                className="text-right px-4 py-3.5"
+                style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", width: 120 }}
+              >
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-16 text-center">
+                  <div className="flex justify-center">
+                    <div className="w-7 h-7 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-16 text-center" style={{ fontSize: 13, color: "#9ca3af" }}>
+                  {search ? "No houses match your search." : "No houses added yet."}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((house) => {
+                const pct   = house.compliancePct ?? 100;
+                const color = getComplianceColor(pct);
+                return (
+                  <tr
+                    key={house.id}
+                    className="border-t transition-colors hover:bg-gray-50/80 group"
+                    style={{ borderColor: "#f3f4f6" }}
+                  >
+                    {/* House Name */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <Home size={16} style={{ color: "#6b7280" }} strokeWidth={1.7} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{house.houseName}</span>
+                      </div>
+                    </td>
 
-        {/* Title Section */}
-        <div className="mb-10 flex items-end justify-between">
-          <div>
-            <h1 
-              className="font-bold text-[#0f172a] mb-2" 
-              style={{ fontSize: "32px", letterSpacing: "-0.02em" }}
-            >
-              Family Treatment Program – Houses
-            </h1>
-            <p 
-              className="text-[#64748b]" 
-              style={{ fontSize: "17px", fontWeight: 500 }}
-            >
-              Manage and monitor houses under the Family Treatment Program
-            </p>
-          </div>
+                    {/* Address */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={13} style={{ color: "#9ca3af" }} strokeWidth={2} />
+                        <span style={{ fontSize: 13, color: "#4b5563" }}>{house.address || "—"}</span>
+                      </div>
+                    </td>
 
-          <button
-            onClick={() => navigate("/admin-dashboard/add/add-house?program=family-treatment")}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl text-white font-bold transition-all hover:opacity-90 shadow-sm shrink-0"
-            style={{ 
-              backgroundColor: "#1f7a3c", 
-              fontSize: "14px",
-              boxShadow: "0 1px 2px rgba(31,122,60,0.2)"
-            }}
-          >
-            <Plus size={18} strokeWidth={2.5} />
-            Add New House
-          </button>
-        </div>
+                    {/* Capacity */}
+                    <td className="px-4 py-3.5">
+                      <span style={{ fontSize: 13, color: "#4b5563", fontWeight: 500 }}>{house.maxCapacity || 0}</span>
+                    </td>
 
-        {/* Action Bar: Search */}
-        <div className="flex items-center gap-4 mb-8">
-          <div className="relative max-w-[400px] flex-1">
-            <Search
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-              size={18}
-              strokeWidth={2}
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by house name or address..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-sm"
-              style={{ borderColor: "#e5e7eb", backgroundColor: "white", fontSize: "14px" }}
-            />
-          </div>
-        </div>
+                    {/* Active Clients */}
+                    <td className="px-4 py-3.5">
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-md font-medium"
+                        style={{ fontSize: 12, color: "#1f7a3c", backgroundColor: "#f0fdf4" }}
+                      >
+                        {house.activeClients || 0}
+                      </span>
+                    </td>
 
-        {/* Content area: Table View */}
-        <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-50">
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">House Name</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Address</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Capacity</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Active Clients</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Staff Count</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Compliance</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Last Inspection</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Alerts</th>
-                  <th className="px-6 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
-                  <tr>
-                    <td colSpan="9" className="px-6 py-20 text-center">
-                      <div className="flex justify-center">
-                        <div className="w-8 h-8 border-3 border-[#145228]/10 border-t-[#145228] rounded-full animate-spin" />
+                    {/* Staff Count */}
+                    <td className="px-4 py-3.5">
+                      <span style={{ fontSize: 13, color: "#4b5563", fontWeight: 500 }}>{house.staffCount || 0}</span>
+                    </td>
+
+                    {/* Compliance */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-200 rounded-full h-1.5" style={{ maxWidth: 60 }}>
+                          <div
+                            className="h-1.5 rounded-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: color }}
+                          />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#4b5563" }}>{pct}%</span>
+                      </div>
+                    </td>
+
+                    {/* Last Inspection */}
+                    <td className="px-4 py-3.5">
+                      <span style={{ fontSize: 13, color: "#6b7280" }}>{house.lastInspectionDate || "—"}</span>
+                    </td>
+
+                    {/* Alerts */}
+                    <td className="px-4 py-3.5">
+                      {(house.alertsCount || 0) > 0 ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-md font-semibold"
+                          style={{ fontSize: 11, color: "#dc2626", backgroundColor: "#fef2f2" }}
+                        >
+                          {house.alertsCount}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#9ca3af" }}>—</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
+                          style={{ width: 28, height: 28, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe" }}
+                          title="View House"
+                        >
+                          <Eye size={14} strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/admin-dashboard/add/update-house/${house.id}`)}
+                          className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
+                          style={{ width: 28, height: 28, background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0" }}
+                          title="Edit House"
+                        >
+                          <Edit2 size={14} strokeWidth={2} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(house.id, house.houseName)}
+                          className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
+                          style={{ width: 28, height: 28, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
+                          title="Delete House"
+                        >
+                          <Trash2 size={14} strokeWidth={2} />
+                        </button>
+                        <button
+                          className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
+                          style={{ width: 28, height: 28, background: "#f3f4f6", color: "#374151", border: "1px solid #e5e7eb" }}
+                          title="More Options"
+                        >
+                          <MoreHorizontal size={14} strokeWidth={2} />
+                        </button>
                       </div>
                     </td>
                   </tr>
-                ) : filteredHouses.length === 0 ? (
-                  <tr>
-                    <td colSpan="9" className="px-6 py-20 text-center text-gray-400 font-medium">
-                      {search ? "No houses match your search criteria." : "No houses added yet."}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredHouses.map((house) => (
-                    <tr key={house.id} className="hover:bg-gray-50/50 transition-colors group">
-                      {/* House Name */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:border-emerald-100 group-hover:text-emerald-500 transition-all">
-                            <Home size={18} />
-                          </div>
-                          <span className="font-bold text-[#0f172a] text-[14px]">{house.houseName}</span>
-                        </div>
-                      </td>
-
-                      {/* Address */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-start gap-2 max-w-[200px]">
-                          <MapPin size={14} className="text-gray-300 mt-1 shrink-0" />
-                          <span className="text-[13px] text-gray-500 font-medium leading-relaxed">
-                            {house.address || '—'}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Capacity */}
-                      <td className="px-6 py-4">
-                        <span className="text-[14px] font-bold text-[#0f172a]">{house.maxCapacity || 0}</span>
-                      </td>
-
-                      {/* Active Clients */}
-                      <td className="px-6 py-4">
-                        <div className="inline-flex items-center justify-center min-w-[32px] h-8 px-2 rounded-lg bg-emerald-50 text-emerald-600 font-bold text-[13px]">
-                          {house.activeClients || 0}
-                        </div>
-                      </td>
-
-                      {/* Staff Count */}
-                      <td className="px-6 py-4">
-                        <span className="text-[14px] font-bold text-[#0f172a]">{house.staffCount || 0}</span>
-                      </td>
-
-                      {/* Compliance */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3 min-w-[120px]">
-                          <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${getComplianceColor(house.compliancePct || 100)}`}
-                              style={{ width: `${house.compliancePct || 100}%` }}
-                            />
-                          </div>
-                          <span className="text-[13px] font-bold text-[#0f172a]">{house.compliancePct || 100}%</span>
-                        </div>
-                      </td>
-
-                      {/* Last Inspection */}
-                      <td className="px-6 py-4">
-                        <span className="text-[13px] text-gray-400 font-medium">
-                          {house.lastInspectionDate || '—'}
-                        </span>
-                      </td>
-
-                      {/* Alerts */}
-                      <td className="px-6 py-4">
-                        {house.alertsCount > 0 ? (
-                          <div className="w-6 h-6 rounded-full bg-red-50 text-red-500 flex items-center justify-center text-[11px] font-bold border border-red-100">
-                            {house.alertsCount}
-                          </div>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors border border-transparent hover:border-blue-100 shadow-sm hover:shadow-none bg-white">
-                            <Eye size={16} />
-                          </button>
-                          <button className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-500 transition-colors border border-transparent hover:border-emerald-100 shadow-sm hover:shadow-none bg-white">
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(house.id, house.houseName)}
-                            className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors border border-transparent hover:border-red-100 shadow-sm hover:shadow-none bg-white"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                          <button className="p-2 rounded-lg hover:bg-gray-50 text-gray-400 transition-colors border border-transparent hover:border-gray-100 shadow-sm hover:shadow-none bg-white">
-                            <MoreHorizontal size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
