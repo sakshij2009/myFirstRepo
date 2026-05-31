@@ -8,10 +8,9 @@ import {
   UserCheck,
   Clock,
   AlertCircle,
-  ArrowRight,
-  CheckCircle,
-  LayoutGrid
+  ArrowRight
 } from "lucide-react";
+import ServiceOverview from "./ServiceOverview";
 
 const ProgramCard = ({
   title,
@@ -87,7 +86,7 @@ const ProgramCard = ({
   );
 };
 
-const ServicesPage = () => {
+const ServicesPage = ({ filter = "Weekly", dateRange }) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     "family-treatment": { houses: 0 },
@@ -95,46 +94,25 @@ const ServicesPage = () => {
     "child-youth": { houses: 0 }
   });
 
-  const [summary, setSummary] = useState({
-    totalHouses: 0,
-    totalClients: 0,
-    totalStaff: 0,
-    activePrograms: 3,
-  });
-
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [housesSnap, clientsSnap, usersSnap] = await Promise.all([
-          getDocs(collection(db, "houses")),
-          getDocs(collection(db, "clients")),
-          getDocs(collection(db, "users")),
-        ]);
-
+        const querySnapshot = await getDocs(collection(db, "houses"));
         const newStats = {
           "family-treatment": { houses: 0 },
           "pdd": { houses: 0 },
           "child-youth": { houses: 0 }
         };
 
-        housesSnap.forEach((doc) => {
+        querySnapshot.forEach((doc) => {
           const data = doc.data();
           const type = data.programType || "family-treatment";
-          if (newStats[type]) newStats[type].houses += 1;
+          if (newStats[type]) {
+            newStats[type].houses += 1;
+          }
         });
-
-        const staffCount = usersSnap.docs.filter(d => {
-          const role = d.data().role;
-          return role === "user" || role === "staff";
-        }).length;
 
         setStats(newStats);
-        setSummary({
-          totalHouses: housesSnap.size,
-          totalClients: clientsSnap.size,
-          totalStaff: staffCount,
-          activePrograms: 3,
-        });
       } catch (error) {
         console.error("Error fetching house stats:", error);
       }
@@ -188,41 +166,6 @@ const ServicesPage = () => {
     },
   ];
 
-  const summaryCards = [
-    {
-      label: "Total Houses",
-      value: summary.totalHouses,
-      icon: <Building2 size={18} strokeWidth={1.8} />,
-      iconBg: "#eff6ff",
-      iconColor: "#3b82f6",
-      border: "#bfdbfe",
-    },
-    {
-      label: "Total Clients",
-      value: summary.totalClients,
-      icon: <Users size={18} strokeWidth={1.8} />,
-      iconBg: "#f0fdf4",
-      iconColor: "#22c55e",
-      border: "#bbf7d0",
-    },
-    {
-      label: "Total Staff",
-      value: summary.totalStaff,
-      icon: <UserCheck size={18} strokeWidth={1.8} />,
-      iconBg: "#faf5ff",
-      iconColor: "#a855f7",
-      border: "#e9d5ff",
-    },
-    {
-      label: "Active Programs",
-      value: summary.activePrograms,
-      icon: <LayoutGrid size={18} strokeWidth={1.8} />,
-      iconBg: "#fff7ed",
-      iconColor: "#f97316",
-      border: "#fed7aa",
-    },
-  ];
-
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {/* Header Section */}
@@ -240,36 +183,9 @@ const ServicesPage = () => {
           Manage programs, houses, and compliance across all facilities
         </p>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-[1200px] mb-12">
-          {summaryCards.map((card, i) => (
-            <div
-              key={i}
-              className="bg-white rounded-2xl p-5 border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-              style={{ borderColor: card.border }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className="flex items-center justify-center rounded-xl"
-                  style={{ width: 40, height: 40, backgroundColor: card.iconBg, color: card.iconColor }}
-                >
-                  {card.icon}
-                </div>
-              </div>
-              <div
-                className="font-bold mb-1"
-                style={{ fontSize: 28, fontWeight: 700, color: "#0f172a", lineHeight: 1 }}
-              >
-                {card.value}
-              </div>
-              <div
-                className="font-semibold"
-                style={{ fontSize: 12, color: "#94a3b8", letterSpacing: "0.04em" }}
-              >
-                {card.label}
-              </div>
-            </div>
-          ))}
+        {/* Service Overview cards — Emergent Care, Respite Care, Supervised Visitation, Transportation */}
+        <div className="mb-12 max-w-[1200px]">
+          <ServiceOverview filter={filter} dateRange={dateRange} />
         </div>
 
         <h2
@@ -297,4 +213,3 @@ const ServicesPage = () => {
 };
 
 export default ServicesPage;
-
