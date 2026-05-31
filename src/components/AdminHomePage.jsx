@@ -24,6 +24,7 @@ import ServicesPage from "./ServicesPage";
 import FamilyTreatmentHouses from "./FamilyTreatmentHouses";
 import PDDHouses from "./PDDHouses";
 import ChildYouthHouses from "./ChildYouthHouses";
+import HouseDetailPage from "./HouseDetailPage";
 
 
 
@@ -127,6 +128,7 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
             <Route path="pdd-houses" element={<PDDHouses />} />
             <Route path="child-youth-houses" element={<ChildYouthHouses />} />
+            <Route path="house/:id" element={<HouseDetailPage />} />
             <Route path="reports" element={<UnderConstruction title="Reports & Analytics" />} />
 
 

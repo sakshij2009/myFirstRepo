@@ -26,6 +26,33 @@ const getComplianceColor = (pct) => {
   return "#dc2626";
 };
 
+const DEMO_HOUSES = [
+  {
+    id: "__demo_1",
+    houseName: "Willow Creek House",
+    address: "55 Willow Cres, Red Deer AB",
+    maxCapacity: 6,
+    activeClients: 5,
+    staffCount: 6,
+    compliancePct: 97,
+    lastInspectionDate: "2026-04-08",
+    alertsCount: 0,
+    programType: PROGRAM_TYPE,
+  },
+  {
+    id: "__demo_2",
+    houseName: "Pine Valley Youth Home",
+    address: "90 Pine St, Red Deer AB",
+    maxCapacity: 8,
+    activeClients: 6,
+    staffCount: 5,
+    compliancePct: 91,
+    lastInspectionDate: "2026-04-18",
+    alertsCount: 1,
+    programType: PROGRAM_TYPE,
+  },
+];
+
 const ChildYouthHouses = () => {
   const navigate = useNavigate();
   const [search, setSearch]   = useState("");
@@ -37,9 +64,11 @@ const ChildYouthHouses = () => {
       try {
         const q = query(collection(db, "houses"), where("programType", "==", PROGRAM_TYPE));
         const snap = await getDocs(q);
-        setHouses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const houseList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setHouses(houseList.length > 0 ? houseList : DEMO_HOUSES);
       } catch (err) {
         console.error("Error fetching houses:", err);
+        setHouses(DEMO_HOUSES);
       } finally {
         setLoading(false);
       }
@@ -47,6 +76,11 @@ const ChildYouthHouses = () => {
   }, []);
 
   const handleDelete = async (houseId, houseName) => {
+    if (houseId.startsWith("__demo_")) {
+      setHouses((prev) => prev.filter((h) => h.id !== houseId));
+      toast.success("Demo house removed");
+      return;
+    }
     if (!window.confirm(`Are you sure you want to delete ${houseName}? This action cannot be undone.`)) return;
     try {
       await deleteDoc(doc(db, "houses", houseId));
@@ -241,6 +275,9 @@ const ChildYouthHouses = () => {
                     <td className="px-4 py-3.5">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => navigate(`/admin-dashboard/house/${house.id}`, {
+                            state: { house, programLabel: PROGRAM_LABEL, programPath: `/admin-dashboard/child-youth-houses` }
+                          })}
                           className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
                           style={{ width: 28, height: 28, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe" }}
                           title="View House"
