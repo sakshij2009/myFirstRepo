@@ -2,7 +2,7 @@
   "expo": {
     "name": "Family Forever App",
     "slug": "family-forever-mobile",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "scheme": "familyforevermobile",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
       "projectName": "FamilyForeverApp",
       "supportsTablet": false,
       "bundleIdentifier": "com.familyforever.staffapp",
-      "buildNumber": "5",
+      "buildNumber": "7",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
