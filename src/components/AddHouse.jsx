@@ -59,9 +59,9 @@ const MOCK_STAFF = [
 const steps = [
   { id: 1, title: "House Details",           description: "Name, address, capacity" },
   { id: 2, title: "Staff Assignment",        description: "Assign at least one staff member" },
-  { id: 3, title: "Initial Clients",         description: "Optional – Skip if needed" },
+  { id: 3, title: "Initial Clients",         description: "Optional · Skip if needed" },
   { id: 4, title: "Compliance Setup",        description: "Inspection schedules & frequencies" },
-  { id: 5, title: "Inventory Baseline",      description: "Optional – Skip if needed" },
+  { id: 5, title: "Inventory Baseline",      description: "Optional · Skip if needed" },
   { id: 6, title: "Emergency Preparedness",  description: "72-hour kit & emergency contacts" },
   { id: 7, title: "Review & Confirm",        description: "Final check before saving" },
 ];
@@ -507,10 +507,10 @@ const AddHouse = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-6 overflow-auto">
-      <div 
-        className="bg-white w-full max-w-[1100px] h-[800px] rounded-2xl shadow-2xl flex flex-col relative overflow-hidden"
-        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4 overflow-auto">
+      <div
+        className="bg-white w-full max-w-[1100px] rounded-2xl shadow-2xl flex flex-col relative overflow-hidden"
+        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", height: "calc(100vh - 32px)", maxHeight: 900, minHeight: 560 }}
       >
         {/* Top Header */}
         <div className="h-[60px] border-b border-gray-100 flex items-center justify-between px-6 shrink-0 bg-white">
@@ -555,10 +555,9 @@ const AddHouse = () => {
                 return (
                   <div key={step.id}>
                     <button
-                      onClick={() => { if (step.id <= currentStep) setCurrentStep(step.id); }}
-                      disabled={step.id > currentStep}
-                      className="w-full flex items-center gap-3 rounded-lg transition-colors"
-                      style={{ minHeight: 56, padding: '12px 16px', cursor: step.id <= currentStep ? 'pointer' : 'default' }}
+                      onClick={() => setCurrentStep(step.id)}
+                      className="w-full flex items-center gap-3 rounded-lg transition-colors hover:bg-gray-50"
+                      style={{ minHeight: 56, padding: '12px 16px', cursor: 'pointer' }}
                     >
                       {/* Step circle */}
                       <div className="rounded-full flex items-center justify-center shrink-0" style={{
