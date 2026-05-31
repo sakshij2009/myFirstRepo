@@ -45,14 +45,25 @@ import {
   Lock
 } from "lucide-react";
 
+const MOCK_STAFF = [
+  { id: 1, name: "Sarah Mitchell", role: "Senior Caregiver", experience: "4 yrs experience", initials: "SM", color: "#fce7f3" },
+  { id: 2, name: "James Park",     role: "Caregiver",        experience: "2 yrs experience", initials: "JP", color: "#dbeafe" },
+  { id: 3, name: "Emily Chen",     role: "Support Worker",   experience: "3 yrs experience", initials: "EC", color: "#dcfce7" },
+  { id: 4, name: "Michael Torres", role: "Senior Caregiver", experience: "6 yrs experience", initials: "MT", color: "#fef3c7" },
+  { id: 5, name: "Rachel Brown",   role: "Caregiver",        experience: "1 yr experience",  initials: "RB", color: "#ede9fe" },
+  { id: 6, name: "David Kim",      role: "Support Worker",   experience: "5 yrs experience", initials: "DK", color: "#ffedd5" },
+  { id: 7, name: "Anna Garcia",    role: "Senior Caregiver", experience: "7 yrs experience", initials: "AG", color: "#f0fdf4" },
+  { id: 8, name: "Tom Anderson",   role: "Caregiver",        experience: "2 yrs experience", initials: "TA", color: "#e0f2fe" },
+];
+
 const steps = [
-  { id: 1, title: "House Details", description: "Name, address, capacity" },
-  { id: 2, title: "Staff Assignment", description: "Assign at least one staff member" },
-  { id: 3, title: "Initial Clients", description: "Optional - Skip if needed" },
-  { id: 4, title: "Compliance Setup", description: "Inspection schedules & frequencies" },
-  { id: 5, title: "Inventory Baseline", description: "Optional - Skip if needed" },
-  { id: 6, title: "Emergency Preparedness", description: "72-hour kit & emergency contacts" },
-  { id: 7, title: "Review & Confirm", description: "" },
+  { id: 1, title: "House Details",           description: "Name, address, capacity" },
+  { id: 2, title: "Staff Assignment",        description: "Assign at least one staff member" },
+  { id: 3, title: "Initial Clients",         description: "Optional – Skip if needed" },
+  { id: 4, title: "Compliance Setup",        description: "Inspection schedules & frequencies" },
+  { id: 5, title: "Inventory Baseline",      description: "Optional – Skip if needed" },
+  { id: 6, title: "Emergency Preparedness",  description: "72-hour kit & emergency contacts" },
+  { id: 7, title: "Review & Confirm",        description: "Final check before saving" },
 ];
 
 const AddHouse = () => {
@@ -196,7 +207,14 @@ const AddHouse = () => {
         { name: "Flashlights & Batteries", qty: "", status: "Pending" },
         { name: "Emergency Blankets", qty: "", status: "Pending" },
       ],
-      contacts: []
+      contacts: [
+        { role: "Primary Contact",   name: "", phone: "", email: "" },
+        { role: "Secondary Contact", name: "", phone: "", email: "" },
+        { role: "Medical Liaison",   name: "", phone: "", email: "" },
+      ],
+      hasEvacuationPlan: false,
+      musterPoint: "",
+      backupMusterPoint: "",
     },
     reviewSettings: {
       notifyStaff: false,
@@ -514,7 +532,11 @@ const AddHouse = () => {
           </h2>
 
           <div className="flex items-center gap-4">
-            <button 
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#1D6033' }} />
+              <span style={{ fontSize: 12, color: '#757575' }}>Draft saved · just now</span>
+            </div>
+            <button
               onClick={() => navigate(-1)}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
             >
@@ -525,37 +547,55 @@ const AddHouse = () => {
 
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar Navigation */}
-          <div className="w-[280px] border-r border-gray-50 bg-[#fafafa] p-6 flex flex-col gap-1 overflow-y-auto shrink-0">
-            {steps.map((step) => (
-              <div 
-                key={step.id}
-                className={`flex gap-4 p-3 rounded-xl transition-all duration-200 ${
-                  currentStep === step.id 
-                    ? "bg-white shadow-sm border border-gray-100" 
-                    : "opacity-60"
-                }`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-[13px] font-bold ${
-                  currentStep === step.id 
-                    ? "bg-emerald-50 text-[#145228] border border-[#145228]/10" 
-                    : currentStep > step.id 
-                      ? "bg-[#145228] text-white"
-                      : "bg-gray-100 text-gray-500"
-                }`}>
-                  {currentStep > step.id ? <Check size={16} strokeWidth={3} /> : step.id}
-                </div>
-                <div className="flex flex-col gap-0.5 pt-0.5">
-                  <span className={`text-[13px] font-bold ${currentStep === step.id ? "text-[#0f172a]" : "text-gray-500"}`}>
-                    {step.title}
-                  </span>
-                  {step.description && (
-                    <span className="text-[11px] font-medium text-gray-400 leading-tight">
-                      {step.description}
-                    </span>
-                  )}
-                </div>
+          <div className="flex flex-col overflow-y-auto shrink-0" style={{ width: 280, backgroundColor: '#FAFAFA', borderRight: '1px solid #EEEEEE', padding: '24px 16px' }}>
+            <div className="flex-1">
+              {steps.map((step, index) => {
+                const isCompleted = step.id < currentStep;
+                const isCurrent   = step.id === currentStep;
+                return (
+                  <div key={step.id}>
+                    <button
+                      onClick={() => { if (step.id <= currentStep) setCurrentStep(step.id); }}
+                      disabled={step.id > currentStep}
+                      className="w-full flex items-center gap-3 rounded-lg transition-colors"
+                      style={{ minHeight: 56, padding: '12px 16px', cursor: step.id <= currentStep ? 'pointer' : 'default' }}
+                    >
+                      {/* Step circle */}
+                      <div className="rounded-full flex items-center justify-center shrink-0" style={{
+                        width: 28, height: 28,
+                        backgroundColor: isCompleted ? '#1D6033' : isCurrent ? '#FFFFFF' : '#EEEEEE',
+                        border: isCurrent ? '2px solid #1D6033' : 'none',
+                      }}>
+                        {isCompleted
+                          ? <Check size={13} style={{ color: '#FFFFFF' }} strokeWidth={3} />
+                          : <span style={{ fontSize: 13, fontWeight: 600, color: isCurrent ? '#1D6033' : '#9E9E9E' }}>{step.id}</span>
+                        }
+                      </div>
+                      {/* Step label */}
+                      <div className="flex-1 text-left">
+                        <div style={{ fontSize: 13.5, fontWeight: 500, color: isCurrent ? '#212121' : isCompleted ? '#424242' : '#9E9E9E' }}>
+                          {step.title}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#9E9E9E' }}>{step.description}</div>
+                      </div>
+                    </button>
+                    {/* Connector line */}
+                    {index < steps.length - 1 && (
+                      <div style={{ paddingLeft: 23 }}>
+                        <div style={{ width: 1, height: 12, backgroundColor: isCompleted ? '#1D6033' : '#E0E0E0' }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Bottom hint */}
+            <div className="px-4 py-4 border-t mt-4" style={{ borderColor: '#EEEEEE' }}>
+              <div className="flex items-start gap-2">
+                <Info size={13} className="shrink-0 mt-0.5" style={{ color: '#757575' }} />
+                <p style={{ fontSize: 11, color: '#757575' }}>Saving as draft? All entered data persists for 30 days.</p>
               </div>
-            ))}
+            </div>
           </div>
 
           {/* Main Content Area */}
@@ -833,121 +873,93 @@ const AddHouse = () => {
                 {/* Available Staff Box */}
                 <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm flex flex-col">
                   {/* Box Header */}
-                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-[#ffffff]">
+                  <div className="px-5 border-b border-gray-100 flex items-center justify-between bg-white" style={{ height: 56 }}>
                     <div className="flex items-center gap-3">
-                      <h3 className="text-[13px] font-bold text-[#374151] uppercase tracking-wider">
-                        Available Staff
-                      </h3>
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-[#145228] text-[11px] font-bold">
-                        {formData.assignedStaff.length} available
+                      <h3 className="text-[12px] font-bold text-[#374151] uppercase tracking-wider">Available Staff</h3>
+                      <span className="px-2.5 py-0.5 rounded-xl bg-emerald-50 text-[#145228] text-[11px] font-bold">
+                        {MOCK_STAFF.length} available
                       </span>
+                      {formData.assignedStaff.length > 0 && (
+                        <span className="px-2.5 py-0.5 rounded-xl bg-gray-100 text-gray-600 text-[11px] font-bold">
+                          {formData.assignedStaff.length} selected
+                        </span>
+                      )}
                     </div>
-
-                    <div className="relative w-[300px]">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input 
+                    <div className="relative" style={{ width: 240 }}>
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                      <input
                         type="text"
                         placeholder="Search by name or role..."
                         value={formData.searchQuery}
-                        onChange={(e) => setFormData({...formData, searchQuery: e.target.value})}
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#145228] transition-all text-[13px] placeholder:text-gray-400"
+                        onChange={(e) => setFormData({ ...formData, searchQuery: e.target.value })}
+                        className="w-full pl-9 pr-3 rounded-lg border border-gray-200 focus:outline-none text-[13px] placeholder:text-gray-400"
+                        style={{ height: 32 }}
                       />
                     </div>
                   </div>
 
-                  {/* Staff List Area */}
-                  <div className="min-h-[400px] flex flex-col">
-                    {formData.assignedStaff.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center p-12 bg-gray-50/30">
-                        <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-300 mb-4 border border-gray-100">
-                          <Users size={32} strokeWidth={1.5} />
-                        </div>
-                        <h4 className="text-[16px] font-bold text-[#0f172a] mb-1">No staff members found</h4>
-                        <p className="text-[13px] text-gray-500 font-medium mb-6 text-center max-w-[300px]">
-                          Enter a staff member's details or add a new entry to the system.
-                        </p>
-                        <button 
-                          onClick={() => {
-                            // Demo: adding a staff member
-                            const newStaff = {
-                              id: Date.now(),
-                              name: "Sarah Mitchell",
-                              role: "Senior Caregiver",
-                              experience: "4 yrs experience",
-                              initials: "SM",
-                              color: "#fce7f3" // pink
-                            };
-                            setFormData({
-                              ...formData,
-                              assignedStaff: [...formData.assignedStaff, newStaff]
-                            });
+                  {/* Staff Pool List */}
+                  <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                    {MOCK_STAFF.filter(s =>
+                      s.name.toLowerCase().includes((formData.searchQuery || "").toLowerCase()) ||
+                      s.role.toLowerCase().includes((formData.searchQuery || "").toLowerCase())
+                    ).map((staff, index) => {
+                      const isSelected = formData.assignedStaff.some(s => s.id === staff.id);
+                      return (
+                        <div
+                          key={staff.id}
+                          onClick={() => setFormData({
+                            ...formData,
+                            assignedStaff: isSelected
+                              ? formData.assignedStaff.filter(s => s.id !== staff.id)
+                              : [...formData.assignedStaff, staff]
+                          })}
+                          className="flex items-center gap-4 cursor-pointer transition-colors"
+                          style={{
+                            height: 64, padding: '0 20px',
+                            borderBottom: index < MOCK_STAFF.length - 1 ? '1px solid #f5f5f5' : 'none',
+                            backgroundColor: isSelected ? '#F1F8E9' : 'transparent',
+                            borderLeft: isSelected ? '3px solid #1D6033' : '3px solid transparent',
                           }}
-                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-[13px] font-bold text-[#145228] shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
                         >
-                          <UserPlus size={16} />
-                          Add Sample Staff
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-gray-50">
-                        {formData.assignedStaff
-                          .filter(s => 
-                            s.name.toLowerCase().includes(formData.searchQuery.toLowerCase()) ||
-                            s.role.toLowerCase().includes(formData.searchQuery.toLowerCase())
-                          )
-                          .map((staff) => (
-                          <div key={staff.id} className="px-6 py-5 flex items-center justify-between hover:bg-gray-50/50 transition-colors group">
-                            <div className="flex items-center gap-6">
-                              <input 
-                                type="checkbox" 
-                                checked={true}
-                                readOnly
-                                className="w-5 h-5 rounded border-gray-300 text-[#145228] focus:ring-[#145228] transition-all cursor-pointer"
-                              />
-                              
-                              <div className="flex items-center gap-4">
-                                <div 
-                                  className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-[15px] text-gray-600 shadow-sm border border-black/5"
-                                  style={{ backgroundColor: staff.color || '#f3f4f6' }}
-                                >
-                                  {staff.initials || staff.name.charAt(0)}
-                                </div>
-                                <div className="space-y-0.5">
-                                  <h4 className="text-[15px] font-bold text-[#0f172a]">{staff.name}</h4>
-                                  <p className="text-[13px] text-gray-500 font-medium">{staff.role} · {staff.experience}</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-4">
-                              <div className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                                <span className="text-[12px] font-bold text-[#145228]">Available</span>
-                              </div>
-                              
-                              <button 
-                                onClick={() => setFormData({
-                                  ...formData,
-                                  assignedStaff: formData.assignedStaff.filter(s => s.id !== staff.id)
-                                })}
-                                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
+                          {/* Checkbox */}
+                          <div className="flex items-center justify-center rounded shrink-0" style={{
+                            width: 18, height: 18,
+                            border: isSelected ? 'none' : '1.5px solid #BDBDBD',
+                            backgroundColor: isSelected ? '#1D6033' : '#FFFFFF',
+                          }}>
+                            {isSelected && <Check size={12} style={{ color: '#FFFFFF' }} strokeWidth={3} />}
                           </div>
-                        ))}
-                      </div>
-                    )}
+
+                          {/* Avatar */}
+                          <div className="rounded-full flex items-center justify-center shrink-0 font-bold text-[14px] text-gray-600 border border-black/5"
+                            style={{ width: 40, height: 40, backgroundColor: staff.color || '#f3f4f6' }}>
+                            {staff.initials}
+                          </div>
+
+                          {/* Name + Role */}
+                          <div className="flex-1">
+                            <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{staff.name}</div>
+                            <div style={{ fontSize: 12, color: '#757575' }}>{staff.role} · {staff.experience}</div>
+                          </div>
+
+                          {/* Status badge */}
+                          <div className="px-3 py-1 rounded flex items-center gap-1.5 shrink-0" style={{
+                            fontSize: 11.5, fontWeight: 500, color: '#2E7D32', backgroundColor: '#E8F5E9',
+                          }}>
+                            <div className="rounded-full" style={{ width: 6, height: 6, backgroundColor: '#2E7D32' }} />
+                            Available
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Box Footer */}
-                  <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center text-gray-400">
-                      <span className="text-[10px] font-bold">i</span>
-                    </div>
-                    <p className="text-[12px] text-gray-500 font-medium">
-                      Showing {formData.assignedStaff.length} of {formData.assignedStaff.length} total staff. {24 - formData.assignedStaff.length} staff are already assigned to other houses and not shown here.
+                  <div className="px-6 py-3 border-t border-gray-100 flex items-center gap-2" style={{ backgroundColor: '#FAFAFA' }}>
+                    <Info size={13} style={{ color: '#757575' }} />
+                    <p className="text-[12px] text-gray-500">
+                      Showing {MOCK_STAFF.length} of 24 total staff · {24 - MOCK_STAFF.length} already assigned to other houses.
                     </p>
                   </div>
                 </div>
@@ -1002,7 +1014,7 @@ const AddHouse = () => {
                           <select 
                             className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
                             onChange={(e) => {
-                              const staff = formData.assignedStaff.find(s => s.id.toString() === e.target.value);
+                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
                               if (staff && !formData.shifts.morning.find(s => s.id === staff.id)) {
                                 setFormData({
                                   ...formData,
@@ -1013,7 +1025,7 @@ const AddHouse = () => {
                             }}
                           >
                             <option value="">Select staff...</option>
-                            {formData.assignedStaff.map(s => (
+                            {MOCK_STAFF.map(s => (
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                           </select>
@@ -1067,7 +1079,7 @@ const AddHouse = () => {
                           <select 
                             className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
                             onChange={(e) => {
-                              const staff = formData.assignedStaff.find(s => s.id.toString() === e.target.value);
+                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
                               if (staff && !formData.shifts.evening.find(s => s.id === staff.id)) {
                                 setFormData({
                                   ...formData,
@@ -1078,7 +1090,7 @@ const AddHouse = () => {
                             }}
                           >
                             <option value="">Select staff...</option>
-                            {formData.assignedStaff.map(s => (
+                            {MOCK_STAFF.map(s => (
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                           </select>
@@ -1132,7 +1144,7 @@ const AddHouse = () => {
                           <select 
                             className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
                             onChange={(e) => {
-                              const staff = formData.assignedStaff.find(s => s.id.toString() === e.target.value);
+                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
                               if (staff && !formData.shifts.night.find(s => s.id === staff.id)) {
                                 setFormData({
                                   ...formData,
@@ -1143,7 +1155,7 @@ const AddHouse = () => {
                             }}
                           >
                             <option value="">Select staff...</option>
-                            {formData.assignedStaff.map(s => (
+                            {MOCK_STAFF.map(s => (
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                           </select>
@@ -1197,7 +1209,7 @@ const AddHouse = () => {
                           <select 
                             className="bg-transparent border-none focus:ring-0 text-[13px] text-gray-400 font-medium cursor-pointer flex-1 min-w-[150px] outline-none"
                             onChange={(e) => {
-                              const staff = formData.assignedStaff.find(s => s.id.toString() === e.target.value);
+                              const staff = MOCK_STAFF.find(s => s.id.toString() === e.target.value);
                               if (staff && !formData.shifts.weekend.find(s => s.id === staff.id)) {
                                 setFormData({
                                   ...formData,
@@ -1208,7 +1220,7 @@ const AddHouse = () => {
                             }}
                           >
                             <option value="">Select staff...</option>
-                            {formData.assignedStaff.map(s => (
+                            {MOCK_STAFF.map(s => (
                               <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                           </select>
@@ -2115,6 +2127,115 @@ const AddHouse = () => {
                   </div>
                 </div>
 
+                {/* Emergency Contacts */}
+                <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm mb-8">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+                    <h3 className="text-[13px] font-bold text-[#374151] uppercase tracking-wider">Emergency Contacts</h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[11px] font-bold">Required</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {[
+                      { role: "Primary Contact",   placeholder: "First responder contact",       roleColor: "#dc2626", roleBg: "#fef2f2" },
+                      { role: "Secondary Contact", placeholder: "Backup emergency contact",       roleColor: "#f59e0b", roleBg: "#fffbeb" },
+                      { role: "Medical Liaison",   placeholder: "Medical professional contact",  roleColor: "#3b82f6", roleBg: "#eff6ff" },
+                    ].map((contact, idx) => (
+                      <div key={idx} className="p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="px-3 py-1 rounded-lg text-[12px] font-bold" style={{ color: contact.roleColor, backgroundColor: contact.roleBg }}>
+                            {contact.role}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-[12px] font-bold text-[#374151] mb-2">Full Name</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Dr. Jane Smith"
+                              value={formData.emergencyPreparedness.contacts[idx]?.name || ""}
+                              onChange={(e) => {
+                                const contacts = [...(formData.emergencyPreparedness.contacts || [])];
+                                contacts[idx] = { ...(contacts[idx] || { role: contact.role }), name: e.target.value };
+                                setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, contacts } });
+                              }}
+                              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#145228] text-[13px] transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[12px] font-bold text-[#374151] mb-2">Phone</label>
+                            <input
+                              type="tel"
+                              placeholder="e.g. +1 780 555-0100"
+                              value={formData.emergencyPreparedness.contacts[idx]?.phone || ""}
+                              onChange={(e) => {
+                                const contacts = [...(formData.emergencyPreparedness.contacts || [])];
+                                contacts[idx] = { ...(contacts[idx] || { role: contact.role }), phone: e.target.value };
+                                setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, contacts } });
+                              }}
+                              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#145228] text-[13px] transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[12px] font-bold text-[#374151] mb-2">Email</label>
+                            <input
+                              type="email"
+                              placeholder="e.g. contact@example.com"
+                              value={formData.emergencyPreparedness.contacts[idx]?.email || ""}
+                              onChange={(e) => {
+                                const contacts = [...(formData.emergencyPreparedness.contacts || [])];
+                                contacts[idx] = { ...(contacts[idx] || { role: contact.role }), email: e.target.value };
+                                setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, contacts } });
+                              }}
+                              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#145228] text-[13px] transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Evacuation Plan */}
+                <div className="rounded-2xl border border-gray-100 bg-white overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-gray-100">
+                    <h3 className="text-[13px] font-bold text-[#374151] uppercase tracking-wider">Evacuation Plan</h3>
+                  </div>
+                  <div className="p-6 space-y-5">
+                    <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                      <div>
+                        <span className="text-[14px] font-semibold text-[#374151]">Has a formal evacuation plan on file</span>
+                        <p className="text-[12px] text-gray-400 mt-0.5">Required for Alberta licensing compliance</p>
+                      </div>
+                      <div
+                        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${formData.emergencyPreparedness.hasEvacuationPlan ? 'bg-[#145228]' : 'bg-gray-200'}`}
+                        onClick={() => setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, hasEvacuationPlan: !formData.emergencyPreparedness.hasEvacuationPlan } })}
+                      >
+                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${formData.emergencyPreparedness.hasEvacuationPlan ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div>
+                        <label className="block text-[13px] font-bold text-[#374151] mb-2">Primary Muster Point</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Front driveway / Street corner"
+                          value={formData.emergencyPreparedness.musterPoint || ""}
+                          onChange={(e) => setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, musterPoint: e.target.value } })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#145228] text-[13px] transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[13px] font-bold text-[#374151] mb-2">Backup Muster Point</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Neighbour's property / Community centre"
+                          value={formData.emergencyPreparedness.backupMusterPoint || ""}
+                          onChange={(e) => setFormData({ ...formData, emergencyPreparedness: { ...formData.emergencyPreparedness, backupMusterPoint: e.target.value } })}
+                          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:border-[#145228] text-[13px] transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
               </div>
             ) : currentStep === 7 ? (
