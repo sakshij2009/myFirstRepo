@@ -150,6 +150,7 @@ const AdminHomePage = ({ user, setUser }) => {
               <Route path="add-intakeworker" element={<AddIntakeUser mode="add" user={user} />} />
               <Route path="update-intakeworker/:id" element={<AddIntakeUser mode="update" user={user} />} />
               <Route path="add-house" element={<AddHouse mode="add" user={user} />} />
+              <Route path="update-house/:id" element={<AddHouse mode="update" user={user} />} />
             </Route>
 
 
