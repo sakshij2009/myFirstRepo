@@ -1,5 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+// ── URL-param helpers — preserve filter state across navigation ───────────────
+const parseDateParam = (s) => {
+  if (!s) return null;
+  const d = new Date(s + "T12:00:00"); // noon prevents timezone-midnight flip
+  return isNaN(d) ? null : d;
+};
+const formatDateParam = (d) => d.toISOString().slice(0, 10); // "YYYY-MM-DD"
 import { collection, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { toast } from "sonner";
@@ -104,20 +112,38 @@ function matchesSelectedDates(shift, selectedDates) {
 
 export default function ClientActivityTable({ onNavigateToReport }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const handleTabClick = (tabId) => {
-    setActiveTab(tabId);
-  };
+  const handleTabClick = (tabId) => { setActiveTab(tabId); };
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all");
+
+  // ── Initialise from URL params so back-navigation restores the exact state ──
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
+  const [selectedDates, setSelectedDates] = useState(() => {
+    const raw = searchParams.get("dates");
+    if (raw) {
+      const parsed = raw.split(",").map(parseDateParam).filter(Boolean);
+      if (parsed.length) return parsed;
+    }
+    return [new Date()];
+  });
+
   const [lockTarget, setLockTarget] = useState(null);
   const [unlockTarget, setUnlockTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [selectedDates, setSelectedDates] = useState([new Date()]);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [rowsToShow, setRowsToShow] = useState(5);
+
+  // ── Sync filter state → URL params (replace:true = no extra history entries)
+  useEffect(() => {
+    const params = {};
+    if (selectedDates.length > 0) params.dates = selectedDates.map(formatDateParam).join(",");
+    if (activeTab && activeTab !== "all") params.tab = activeTab;
+    setSearchParams(params, { replace: true });
+  }, [selectedDates, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch shifts + enrich
   useEffect(() => {
