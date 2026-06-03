@@ -623,12 +623,31 @@ const AddHouse = () => {
         // 2. Prepare Final Data (strip out binary photo File to prevent Firestore serialization crash)
         const houseId = `house_${Date.now()}`;
         const { photo, ...cleanFormData } = formData;
+
+        // Resolve selected staff objects from firestoreStaff
+        const assignedStaffObjects = firestoreStaff.filter(s => selectedStaffIds.includes(s.id));
+
+        // Combined address string for list display
+        const addressParts = [formData.streetAddress, formData.city, formData.province, formData.postalCode].filter(Boolean);
+        const address = addressParts.join(", ");
+
         const finalData = {
           ...cleanFormData,
           id: houseId,
           programType: programType,
           programName: programInfo.name,
-          housePhoto: photoURL, // Store the URL instead of the File object
+          housePhoto: photoURL,
+          // Derived counts for list display
+          address,
+          assignedStaff: assignedStaffObjects,
+          assignedStaffIds: selectedStaffIds,
+          staffCount: assignedStaffObjects.length,
+          activeClients: formData.assignedClients?.length || 0,
+          // Inventory data from local state
+          houseInventory,
+          emergencyInventory,
+          sharpsInventory,
+          shiftAssignments,
           createdAt: new Date(),
           updatedAt: new Date(),
           status: "Active"

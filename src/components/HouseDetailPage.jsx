@@ -119,9 +119,9 @@ const HouseDetailPage = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-6 gap-3 mb-5">
         {[
-          { label: "Capacity / Occupancy", value: `${house.activeClients ?? 0}/${house.maxCapacity ?? 0}`, color: "#111827" },
-          { label: "Total Clients",         value: house.activeClients ?? 0,   color: "#111827" },
-          { label: "Total Staff",           value: house.staffCount ?? 0,      color: "#111827" },
+          { label: "Capacity / Occupancy", value: `${house.activeClients ?? house.assignedClients?.length ?? 0}/${house.maxCapacity ?? 0}`, color: "#111827" },
+          { label: "Total Clients",         value: house.activeClients ?? house.assignedClients?.length ?? 0,   color: "#111827" },
+          { label: "Total Staff",           value: house.staffCount ?? house.assignedStaff?.length ?? 0,      color: "#111827" },
           { label: "Active Shifts",         value: 12,                          color: "#111827" },
           { label: "Compliance",            value: `${pct}%`,                   color: compColor },
           { label: "Open Issues",           value: alerts,                      color: alerts > 0 ? "#dc2626" : "#16a34a" },
@@ -152,14 +152,14 @@ const HouseDetailPage = () => {
       {/* Tab content */}
       <div>
         {activeTab === "overview"      && <OverviewTab house={house} />}
-        {activeTab === "clients"       && <ClientsTab />}
-        {activeTab === "staff"         && <StaffTab />}
+        {activeTab === "clients"       && <ClientsTab house={house} />}
+        {activeTab === "staff"         && <StaffTab house={house} />}
         {activeTab === "shift"         && <ShiftTab />}
         {activeTab === "compliance"    && <ComplianceTabContent />}
         {activeTab === "maintenance"   && <MaintenanceTab />}
         {activeTab === "alerts"        && <AlertsTab house={house} />}
-        {activeTab === "inventory"     && <InventoryTab />}
-        {activeTab === "sharps"        && <SharpsTab />}
+        {activeTab === "inventory"     && <InventoryTab house={house} />}
+        {activeTab === "sharps"        && <SharpsTab house={house} />}
         {activeTab === "food-safety"   && <FoodSafetyTab />}
         {activeTab === "emergency-kit" && <EmergencyKitTab />}
         {activeTab === "reports"       && <ReportsTab />}
@@ -402,14 +402,20 @@ function OverviewTab({ house }) {
 }
 
 // ─── CLIENTS TAB ──────────────────────────────────────────────────────────────
-function ClientsTab() {
-  const clients = [
-    { id: 1, name: "Joseph Tate",     clientId: "CVIM-087604", age: 14, service: "Respite Care",      status: "Active",  staff: "Kimberly Fox", admission: "2024-01-15", room: "A-101" },
-    { id: 2, name: "Andrew Anderson", clientId: "CVIM-098889", age: 16, service: "Emergency Care",    status: "Active",  staff: "Tony Miles",   admission: "2024-03-20", room: "A-102" },
-    { id: 3, name: "Shakira Gadot",   clientId: "CVIM-324455", age: 12, service: "Respite Care",      status: "Active",  staff: "Robert Sato",  admission: "2024-02-10", room: "B-201" },
-    { id: 4, name: "Tanya Pearl",     clientId: "CVIM-657689", age: 15, service: "Supervised Visits", status: "Pending", staff: "Vanilla Fox",  admission: "2024-04-05", room: "B-202" },
-    { id: 5, name: "Marcus Johnson",  clientId: "CVIM-223344", age: 13, service: "Emergency Care",    status: "Active",  staff: "Sarah Chen",   admission: "2024-01-28", room: "A-103" },
-  ];
+function ClientsTab({ house }) {
+  const clients = Array.isArray(house?.assignedClients) && house.assignedClients.length > 0
+    ? house.assignedClients.map((c, i) => ({
+        id: c.id || i,
+        name: c.name || "—",
+        clientId: c.caseId || c.clientId || "—",
+        age: c.age || "—",
+        service: c.serviceType || "—",
+        status: "Active",
+        staff: c.supervisor?.name || "Unassigned",
+        admission: c.admissionDate || "—",
+        room: c.room || "N/A",
+      }))
+    : [];
 
   const svcStyle = (s) =>
     s === "Emergency Care" ? { color: "#dc2626", bg: "#fef2f2" }
@@ -428,7 +434,9 @@ function ClientsTab() {
           </tr>
         </thead>
         <tbody>
-          {clients.map((c) => {
+          {clients.length === 0 ? (
+            <tr><td colSpan={9} className="px-4 py-12 text-center" style={{ fontSize: 13, color: "#9ca3af" }}>No clients assigned to this house.</td></tr>
+          ) : clients.map((c) => {
             const ss = svcStyle(c.service);
             const active = c.status === "Active";
             return (
@@ -452,13 +460,20 @@ function ClientsTab() {
 }
 
 // ─── STAFF TAB ────────────────────────────────────────────────────────────────
-function StaffTab() {
-  const staff = [
-    { id: 1, name: "Benjamin Harris", cyimId: "9876542", role: "Senior Caregiver", status: "On Duty",  phone: "+1-8987345670", clients: 3, start: "2023-01-15" },
-    { id: 2, name: "Amelia Jackson",  cyimId: "2344456", role: "Caregiver",        status: "On Duty",  phone: "+1-6677887998", clients: 2, start: "2023-03-20" },
-    { id: 3, name: "Mason Mitchell",  cyimId: "D986009", role: "Nurse",            status: "Off Duty", phone: "+1-6677887567", clients: 4, start: "2023-02-10" },
-    { id: 4, name: "Lucas Harris",    cyimId: "1234567", role: "Caregiver",        status: "On Break", phone: "+1-453337567",  clients: 2, start: "2023-06-05" },
-  ];
+function StaffTab({ house }) {
+  const staff = Array.isArray(house?.assignedStaff) && house.assignedStaff.length > 0
+    ? house.assignedStaff.map((s, i) => ({
+        id: s.id || i,
+        name: s.name || "—",
+        cyimId: s.userId || s.staffId || s.id || "—",
+        role: s.role || s.userType || "Staff",
+        status: "Active",
+        phone: s.phone || s.contactPhone || "—",
+        clients: 0,
+        start: s.startDate || "—",
+        agencyName: s.agencyName || "",
+      }))
+    : [];
   const stStyle = (s) =>
     s === "On Duty" ? { color: "#16a34a", bg: "#f0fdf4" }
     : s === "On Break" ? { color: "#f59e0b", bg: "#fffbeb" }
@@ -476,7 +491,9 @@ function StaffTab() {
           </tr>
         </thead>
         <tbody>
-          {staff.map((s) => {
+          {staff.length === 0 ? (
+            <tr><td colSpan={8} className="px-4 py-12 text-center" style={{ fontSize: 13, color: "#9ca3af" }}>No staff assigned to this house.</td></tr>
+          ) : staff.map((s) => {
             const ss = stStyle(s.status);
             return (
               <tr key={s.id} className="border-t hover:bg-gray-50/80 transition-colors" style={{ borderColor: "#f3f4f6" }}>
@@ -842,34 +859,13 @@ function AlertsTab({ house }) {
 }
 
 // ─── INVENTORY TAB ────────────────────────────────────────────────────────────
-function InventoryTab() {
-  const [expanded, setExpanded] = useState({ "Bedroom Essentials": true });
-  const categories = {
-    "Bedroom Essentials": [
-      { name: "Bed", loc: "Room A", req: 6, avail: 6, status: "Good" },
-      { name: "Mattress", loc: "Room A", req: 6, avail: 5, status: "Low Stock" },
-      { name: "Bedsheets", loc: "Linen Closet", req: 18, avail: 15, status: "Low Stock" },
-    ],
-    "Bathroom Essentials": [
-      { name: "Towels", loc: "Linen Closet", req: 20, avail: 18, status: "Low Stock" },
-      { name: "Soap", loc: "Supply Cabinet", req: 15, avail: 8, status: "Low Stock" },
-      { name: "Toilet Paper", loc: "Storage Room", req: 48, avail: 24, status: "Low Stock" },
-    ],
-    "Kitchen Essentials": [
-      { name: "Plates", loc: "Kitchen Cabinet", req: 24, avail: 24, status: "Good" },
-      { name: "Cups", loc: "Kitchen Cabinet", req: 24, avail: 20, status: "Low Stock" },
-      { name: "Cutlery Set", loc: "Kitchen Drawer", req: 24, avail: 24, status: "Good" },
-    ],
-    "Safety Equipment": [
-      { name: "Fire Extinguisher", loc: "Hallway", req: 3, avail: 3, status: "Good" },
-      { name: "Smoke Detectors", loc: "Ceiling", req: 8, avail: 8, status: "Good" },
-      { name: "First Aid Kit", loc: "Office", req: 2, avail: 2, status: "Good" },
-    ],
-  };
-  const stStyle = (s) =>
-    s === "Good" ? { color: "#16a34a", bg: "#f0fdf4" }
-    : s === "Low Stock" ? { color: "#f59e0b", bg: "#fffbeb" }
-    : { color: "#dc2626", bg: "#fef2f2" };
+function InventoryTab({ house }) {
+  const categories = Array.isArray(house?.houseInventory) ? house.houseInventory : [];
+  const [expanded, setExpanded] = useState(() => {
+    const init = {};
+    if (categories[0]) init[categories[0].name] = true;
+    return init;
+  });
 
   return (
     <div className="space-y-3">
@@ -877,42 +873,43 @@ function InventoryTab() {
         <div className="px-4 py-3 border-b" style={{ borderColor: "#e5e7eb", backgroundColor: "#fafafa" }}>
           <h3 className="font-semibold" style={{ fontSize: 14, color: "#111827" }}>Household Inventory</h3>
         </div>
-        {Object.entries(categories).map(([cat, items]) => (
-          <div key={cat} className="border-b last:border-b-0" style={{ borderColor: "#e5e7eb" }}>
-            <button onClick={() => setExpanded((p) => ({ ...p, [cat]: !p[cat] }))} className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-2">
-                <ChevronDown size={16} style={{ color: "#6b7280", transform: expanded[cat] ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} strokeWidth={2} />
-                <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{cat}</span>
-                <span className="px-2 py-0.5 rounded-md font-medium" style={{ fontSize: 11, backgroundColor: "#f3f4f6", color: "#6b7280" }}>{items.length} items</span>
-              </div>
-            </button>
-            {expanded[cat] && (
-              <table className="w-full">
-                <thead className="bg-gray-50/80" style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  <tr>
-                    {["Item", "Location", "Required", "Available", "Status"].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left" style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const ss = stStyle(item.status);
-                    return (
-                      <tr key={item.name} className="border-t hover:bg-gray-50/80" style={{ borderColor: "#f3f4f6" }}>
+        {categories.length === 0 ? (
+          <div className="px-4 py-12 text-center" style={{ fontSize: 13, color: "#9ca3af" }}>No inventory data saved for this house.</div>
+        ) : categories.map((cat) => {
+          const isOpen = expanded[cat.name];
+          return (
+            <div key={cat.id || cat.name} className="border-b last:border-b-0" style={{ borderColor: "#e5e7eb" }}>
+              <button onClick={() => setExpanded((p) => ({ ...p, [cat.name]: !p[cat.name] }))} className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <ChevronDown size={16} style={{ color: "#6b7280", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }} strokeWidth={2} />
+                  <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{cat.name}</span>
+                  <span className="px-2 py-0.5 rounded-md font-medium" style={{ fontSize: 11, backgroundColor: "#f3f4f6", color: "#6b7280" }}>{cat.items?.length ?? 0} items</span>
+                </div>
+              </button>
+              {isOpen && (
+                <table className="w-full">
+                  <thead className="bg-gray-50/80" style={{ borderBottom: "1px solid #e5e7eb" }}>
+                    <tr>
+                      {["Item", "Location", "Qty", "Notes"].map((h) => (
+                        <th key={h} className="px-4 py-2.5 text-left" style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(cat.items || []).map((item, i) => (
+                      <tr key={i} className="border-t hover:bg-gray-50/80" style={{ borderColor: "#f3f4f6" }}>
                         <td className="px-4 py-3"><span style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>{item.name}</span></td>
-                        <td className="px-4 py-3"><span style={{ fontSize: 13, color: "#6b7280" }}>{item.loc}</span></td>
-                        <td className="px-4 py-3"><span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{item.req}</span></td>
-                        <td className="px-4 py-3"><span style={{ fontSize: 13, fontWeight: 600, color: item.avail < item.req ? "#dc2626" : "#16a34a" }}>{item.avail}</span></td>
-                        <td className="px-4 py-3"><span className="inline-flex items-center px-2.5 py-1 rounded-md font-medium" style={{ fontSize: 12, color: ss.color, backgroundColor: ss.bg }}>{item.status}</span></td>
+                        <td className="px-4 py-3"><span style={{ fontSize: 13, color: "#6b7280" }}>{item.location || "—"}</span></td>
+                        <td className="px-4 py-3"><span style={{ fontSize: 13, fontWeight: 600, color: item.qty > 0 ? "#16a34a" : "#dc2626" }}>{item.qty ?? 0}</span></td>
+                        <td className="px-4 py-3"><span style={{ fontSize: 13, color: "#6b7280" }}>{item.notes || "—"}</span></td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        ))}
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -921,14 +918,19 @@ function InventoryTab() {
 // ─── SHARPS TAB ───────────────────────────────────────────────────────────────
 function SharpsTab() {
   const [selected, setSelected] = useState(null);
-  const items = [
-    { id: 1, itemName: "Kitchen Knife Set",   type: "Kitchen",       location: "Locked Drawer A",   quantityExpected: 6, quantityPresent: 5, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-    { id: 2, itemName: "Scissors (Large)",    type: "Office",        location: "Cabinet B",          quantityExpected: 3, quantityPresent: 3, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-    { id: 3, itemName: "Utility Razor Blades",type: "Maintenance",   location: "Locked Toolbox",     quantityExpected: 10,quantityPresent: 9, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-    { id: 4, itemName: "Nail Clippers",       type: "Personal Care", location: "Bathroom Cabinet",   quantityExpected: 4, quantityPresent: 4, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-    { id: 5, itemName: "Sewing Needles",      type: "Craft",         location: "Craft Room Drawer",  quantityExpected: 8, quantityPresent: 8, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-    { id: 6, itemName: "Vegetable Peeler",    type: "Kitchen",       location: "Kitchen Drawer C",   quantityExpected: 2, quantityPresent: 2, lastChecked: "8:30 AM", checkedBy: "Jane Smith" },
-  ];
+  const items = Array.isArray(house?.sharpsInventory) && house.sharpsInventory.length > 0
+    ? house.sharpsInventory.map((it, idx) => ({
+        id: idx + 1,
+        itemName: it.name,
+        type: it.type || "Other",
+        location: it.location || "—",
+        quantityExpected: it.qty || 0,
+        quantityPresent: it.qty || 0,
+        lastChecked: "—",
+        checkedBy: "—",
+        notes: it.notes || "",
+      }))
+    : [];
   const missing = items.reduce((sum, i) => sum + Math.max(0, i.quantityExpected - i.quantityPresent), 0);
 
   return (

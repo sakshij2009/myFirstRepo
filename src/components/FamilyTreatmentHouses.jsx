@@ -215,7 +215,11 @@ const FamilyTreatmentHouses = () => {
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1.5">
                         <MapPin size={13} style={{ color: "#9ca3af" }} strokeWidth={2} />
-                        <span style={{ fontSize: 13, color: "#4b5563" }}>{house.address || "—"}</span>
+                        <span style={{ fontSize: 13, color: "#4b5563" }}>
+                          {house.address ||
+                            [house.streetAddress, house.city, house.province].filter(Boolean).join(", ") ||
+                            "—"}
+                        </span>
                       </div>
                     </td>
 
@@ -230,13 +234,15 @@ const FamilyTreatmentHouses = () => {
                         className="inline-flex items-center px-2.5 py-1 rounded-md font-medium"
                         style={{ fontSize: 12, color: "#1f7a3c", backgroundColor: "#f0fdf4" }}
                       >
-                        {house.activeClients || 0}
+                        {house.activeClients ?? house.assignedClients?.length ?? 0}
                       </span>
                     </td>
 
                     {/* Staff Count */}
                     <td className="px-4 py-3.5">
-                      <span style={{ fontSize: 13, color: "#4b5563", fontWeight: 500 }}>{house.staffCount || 0}</span>
+                      <span style={{ fontSize: 13, color: "#4b5563", fontWeight: 500 }}>
+                        {house.staffCount ?? house.assignedStaff?.length ?? 0}
+                      </span>
                     </td>
 
                     {/* Compliance */}
