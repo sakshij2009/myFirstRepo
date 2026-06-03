@@ -470,9 +470,9 @@ const AddHouse = () => {
     name: "",
     caseId: "",
     age: "",
-    serviceType: "Respite",
+    serviceType: "Respite Care",
     room: "",
-    supervisorId: "sarah_mitchell"
+    supervisorId: ""
   });
 
   const handleAddClientClick = () => {
@@ -481,9 +481,9 @@ const AddHouse = () => {
       name: "",
       caseId: "",
       age: "",
-      serviceType: "Respite",
+      serviceType: "Respite Care",
       room: "",
-      supervisorId: "sarah_mitchell"
+      supervisorId: ""
     });
     setIsClientModalOpen(true);
   };
@@ -492,18 +492,12 @@ const AddHouse = () => {
     setEditingClient(client);
     let supervisorId = "";
     if (client.supervisor) {
-      if (client.supervisor.name === "Sarah M." || client.supervisor.name === "Sarah Mitchell") {
-        supervisorId = "sarah_mitchell";
-      } else {
-        const staff = formData.assignedStaff.find(s => {
-          const nameParts = s.name.split(' ');
-          const shortName = nameParts.length > 1 ? `${nameParts[0]} ${nameParts[1][0]}.` : s.name;
-          return shortName === client.supervisor.name || s.name === client.supervisor.name;
-        });
-        if (staff) {
-          supervisorId = staff.id.toString();
-        }
-      }
+      const staff = firestoreStaff.find(s => {
+        const nameParts = s.name.split(' ');
+        const shortName = nameParts.length > 1 ? `${nameParts[0]} ${nameParts[1][0]}.` : s.name;
+        return shortName === client.supervisor.name || s.name === client.supervisor.name;
+      });
+      if (staff) supervisorId = staff.id;
     }
     setClientForm({
       name: client.name,
@@ -531,23 +525,16 @@ const AddHouse = () => {
     }
 
     let selectedSupervisor = null;
-    if (clientForm.supervisorId === "sarah_mitchell") {
-      selectedSupervisor = {
-        name: "Sarah M.",
-        initials: "SM",
-        color: "#fce7f3", // Pink
-        textColor: "#9d174d"
-      };
-    } else if (clientForm.supervisorId) {
-      const staff = formData.assignedStaff.find(s => s.id.toString() === clientForm.supervisorId);
+    if (clientForm.supervisorId) {
+      const staff = firestoreStaff.find(s => s.id === clientForm.supervisorId);
       if (staff) {
         const nameParts = staff.name.split(' ');
         const shortName = nameParts.length > 1 ? `${nameParts[0]} ${nameParts[1][0]}.` : staff.name;
         selectedSupervisor = {
           name: shortName,
-          initials: staff.initials || nameParts.map(n => n[0]).join('').toUpperCase().substring(0, 2),
-          color: staff.color || "#f3e8ff",
-          textColor: "#701a75"
+          initials: nameParts.map(n => n[0]).join('').toUpperCase().substring(0, 2),
+          color: getAvatarColor(staff.name),
+          textColor: "#374151"
         };
       }
     }
@@ -1120,8 +1107,23 @@ const AddHouse = () => {
                       const isSelected = formData.assignedClients.some(c => c.id === clientId);
                       const name = client.name || client.clientName || client.fullName || "Unknown";
                       const caseId = client.caseId || client.clientId || client.userId || "—";
-                      const age = client.age || client.dateOfBirth ? (client.age || "—") : "—";
-                      const serviceType = client.serviceType || client.category || "—";
+                      // Calculate age from dob
+                      const dobStr = client.dob || client.dateOfBirth || client.birthDate || "";
+                      let age = client.age || "";
+                      if (!age && dobStr) {
+                        const dob = new Date(dobStr);
+                        if (!isNaN(dob)) {
+                          const today = new Date();
+                          age = today.getFullYear() - dob.getFullYear() -
+                            (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0);
+                        }
+                      }
+                      // Service type from intake form fields
+                      const rawSvcArr = client.services?.serviceType;
+                      const rawSvc = Array.isArray(rawSvcArr) && rawSvcArr.length > 0
+                        ? rawSvcArr[0]
+                        : (client.serviceType || client.typeName || client.category || "Respite Care");
+                      const serviceType = rawSvc || "Respite Care";
                       const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
                       return (
                         <div key={clientId} onClick={() => {
@@ -1131,7 +1133,7 @@ const AddHouse = () => {
                             const avatarColors = [{ bg: '#fef3c7', text: '#b56d10' },{ bg: '#f3e8ff', text: '#701a75' },{ bg: '#dcfce7', text: '#14532e' },{ bg: '#e0f2fe', text: '#0369a1' }];
                             let hash = 0; for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
                             const color = avatarColors[hash % avatarColors.length];
-                            setFormData({ ...formData, assignedClients: [...formData.assignedClients, { id: clientId, name, caseId, age, serviceType, room: "N/A", initials, color: color.bg, textColor: color.text, supervisor: null }] });
+                            setFormData({ ...formData, assignedClients: [...formData.assignedClients, { id: clientId, name, caseId, age: age || "—", serviceType, room: "N/A", initials, color: color.bg, textColor: color.text, supervisor: null }] });
                           }
                         }} className="flex items-center gap-4 cursor-pointer transition-colors" style={{ height: 64, padding: '0 16px', borderBottom: index < arr.length - 1 ? '1px solid #F5F5F5' : 'none', backgroundColor: isSelected ? '#F1F8E9' : 'transparent', borderLeft: isSelected ? '2px solid #1D6033' : '2px solid transparent' }}
                           onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FAFAFA'; }}
@@ -1843,10 +1845,11 @@ const AddHouse = () => {
                       onChange={(e) => setClientForm({ ...clientForm, serviceType: e.target.value })}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#145228]/10 focus:border-[#145228] transition-all text-[14px] bg-white appearance-none"
                     >
-                      <option value="Respite">Respite</option>
-                      <option value="Family Treatment">Family Treatment</option>
-                      <option value="PDD">PDD</option>
-                      <option value="Child & Youth">Child & Youth</option>
+                      <option value="Respite Care">Respite Care</option>
+                      <option value="Emergent Care">Emergent Care</option>
+                      <option value="Transportation">Transportation</option>
+                      <option value="Supervised Visitation">Supervised Visitation</option>
+                      <option value="Supervised Visitation + Transportation">Supervised Visitation + Transportation</option>
                     </select>
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                       <ChevronDown size={16} className="text-gray-400" />
@@ -1879,13 +1882,12 @@ const AddHouse = () => {
                     onChange={(e) => setClientForm({ ...clientForm, supervisorId: e.target.value })}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#145228]/10 focus:border-[#145228] transition-all text-[14px] bg-white appearance-none"
                   >
-                    <option value="sarah_mitchell">Sarah Mitchell (Sarah M.) - System Default</option>
-                    {formData.assignedStaff.map(staff => (
-                      <option key={staff.id} value={staff.id.toString()}>
-                        {staff.name} ({staff.role || 'Staff'})
+                    <option value="">No supervisor assigned</option>
+                    {firestoreStaff.filter(s => selectedStaffIds.includes(s.id)).map(staff => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.name}{staff.role ? ` (${staff.role})` : ''}
                       </option>
                     ))}
-                    <option value="">No supervisor assigned</option>
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                     <ChevronDown size={16} className="text-gray-400" />
