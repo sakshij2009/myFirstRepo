@@ -231,10 +231,22 @@ const AddHouse = () => {
   // Step 3 Initial Clients
   const [wizardClients, setWizardClients] = useState([]);
   const [clientSearchQuery, setClientSearchQueryState] = useState('');
-  // Step 5 Inventory
+  // Step 5 Inventory — mutable state driven from constants
   const [activeInventorySection, setActiveInventorySection] = useState(0);
   const [expandedInventoryCategories, setExpandedInventoryCategories] = useState({ bedroom: true, water: true });
   const [sharpsConfirmed, setSharpsConfirmed] = useState(false);
+  const [houseInventory, setHouseInventory] = useState(() =>
+    HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))
+  );
+  const [emergencyInventory, setEmergencyInventory] = useState(() =>
+    EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))
+  );
+  const [sharpsInventory, setSharpsInventory] = useState(() =>
+    SHARPS_ITEMS.map(i => ({ ...i }))
+  );
+  // Add Custom Item modal
+  const [customItemModal, setCustomItemModal] = useState(null); // { section: 'house'|'emergency'|'sharps', categoryId: '' }
+  const [customItemForm, setCustomItemForm] = useState({ name: '', qty: 1, location: '', notes: '', type: 'Needle', expiry: '' });
 
   const [formData, setFormData] = useState({
     houseName: "",
@@ -1297,20 +1309,28 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}
+                        <button onClick={() => { setHouseInventory(HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))); toast.success("House inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}
                           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F1F8E9')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
                           <RotateCcw size={14} /> Reset to defaults
                         </button>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border transition-colors" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}>
+                        <button onClick={() => { setCustomItemModal({ section: 'house', categoryId: houseInventory[0]?.id || '' }); setCustomItemForm({ name: '', qty: 1, location: '', notes: '', type: 'Needle', expiry: '' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border transition-colors" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}>
                           <Plus size={14} /> Add Custom Item
                         </button>
                       </div>
                     </div>
                     <div>
-                      {HOUSE_INVENTORY_CATEGORIES.map((category) => {
+                      {houseInventory.map((category, catIdx) => {
                         const isExpanded = expandedInventoryCategories[category.id];
                         const IconMap = { Bed, Bath, Utensils, Sparkles, ShieldAlert, Wrench };
                         const CatIcon = IconMap[category.icon] || Package;
+                        const updateItem = (itemIdx, field, value) => {
+                          const next = houseInventory.map((c, ci) => ci !== catIdx ? c : { ...c, items: c.items.map((it, ii) => ii !== itemIdx ? it : { ...it, [field]: value }) });
+                          setHouseInventory(next);
+                        };
+                        const removeItem = (itemIdx) => {
+                          const next = houseInventory.map((c, ci) => ci !== catIdx ? c : { ...c, items: c.items.filter((_, ii) => ii !== itemIdx) });
+                          setHouseInventory(next);
+                        };
                         return (
                           <div key={category.id}>
                             <button onClick={() => setExpandedInventoryCategories({ ...expandedInventoryCategories, [category.id]: !isExpanded })} className="w-full flex items-center justify-between px-5 transition-colors" style={{ height: 56, borderBottom: '1px solid #F5F5F5', cursor: 'pointer' }}
@@ -1341,19 +1361,19 @@ const AddHouse = () => {
                                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAFAFA')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}>
                                     <div style={{ flex: '1.3 1 180px', fontSize: 14, fontWeight: 500, color: '#212121', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
                                     <div className="flex items-center justify-center gap-0" style={{ width: 130 }}>
-                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
-                                      <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }} />
-                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                                      <button onClick={() => updateItem(itemIdx, 'qty', Math.max(0, (item.qty || 0) - 1))} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                                      <input type="number" value={item.qty} onChange={e => updateItem(itemIdx, 'qty', Number(e.target.value))} className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD', borderLeft: 'none', borderRight: 'none', borderRadius: 0 }} />
+                                      <button onClick={() => updateItem(itemIdx, 'qty', (item.qty || 0) + 1)} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
                                     </div>
-                                    <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                                    <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: '1 1 160px', height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                                    <button className="flex items-center justify-center rounded transition-colors" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}
+                                    <input type="text" value={item.location} onChange={e => updateItem(itemIdx, 'location', e.target.value)} className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" value={item.notes || ''} onChange={e => updateItem(itemIdx, 'notes', e.target.value)} placeholder="—" className="px-3 rounded border" style={{ flex: '1 1 160px', height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <button onClick={() => removeItem(itemIdx)} className="flex items-center justify-center rounded transition-colors" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}
                                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FFEBEE')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                      <Trash2 size={14} style={{ color: '#BDBDBD' }} />
+                                      <Trash2 size={14} style={{ color: '#EF4444' }} />
                                     </button>
                                   </div>
                                 ))}
-                                <button className="w-full flex items-center justify-center gap-2 rounded transition-all" style={{ height: 36, border: '1.5px dashed #BDBDBD', backgroundColor: 'transparent', marginTop: 8 }}
+                                <button onClick={() => { setCustomItemModal({ section: 'house', categoryId: category.id }); setCustomItemForm({ name: '', qty: 1, location: category.items[0]?.location || '', notes: '', type: 'Needle', expiry: '' }); }} className="w-full flex items-center justify-center gap-2 rounded transition-all" style={{ height: 36, border: '1.5px dashed #BDBDBD', backgroundColor: 'transparent', marginTop: 8 }}
                                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#1D6033'; e.currentTarget.style.backgroundColor = '#F1F8E9'; }}
                                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#BDBDBD'; e.currentTarget.style.backgroundColor = 'transparent'; }}>
                                   <Plus size={14} style={{ color: '#1D6033' }} />
@@ -1380,8 +1400,8 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}><Plus size={14} /> Add Custom Item</button>
+                        <button onClick={() => { setEmergencyInventory(EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))); toast.success("Emergency kit reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button onClick={() => { setCustomItemModal({ section: 'emergency', categoryId: emergencyInventory[0]?.id || '' }); setCustomItemForm({ name: '', qty: 1, location: 'Emergency Storage', notes: '', type: 'Needle', expiry: '' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}><Plus size={14} /> Add Custom Item</button>
                       </div>
                     </div>
                     {/* Coverage calculator */}
@@ -1405,10 +1425,16 @@ const AddHouse = () => {
                       );
                     })()}
                     <div>
-                      {EMERGENCY_KIT_CATEGORIES.map((category) => {
+                      {emergencyInventory.map((category, catIdx) => {
                         const isExpanded = expandedInventoryCategories[category.id];
                         const IconMap2 = { Droplets, Apple, Package, Heart };
                         const CatIcon2 = IconMap2[category.icon] || Package;
+                        const updateItem = (itemIdx, field, value) => {
+                          setEmergencyInventory(emergencyInventory.map((c, ci) => ci !== catIdx ? c : { ...c, items: c.items.map((it, ii) => ii !== itemIdx ? it : { ...it, [field]: value }) }));
+                        };
+                        const removeItem = (itemIdx) => {
+                          setEmergencyInventory(emergencyInventory.map((c, ci) => ci !== catIdx ? c : { ...c, items: c.items.filter((_, ii) => ii !== itemIdx) }));
+                        };
                         return (
                           <div key={category.id}>
                             <button onClick={() => setExpandedInventoryCategories({ ...expandedInventoryCategories, [category.id]: !isExpanded })} className="w-full flex items-center justify-between px-5 transition-colors" style={{ height: 56, borderBottom: '1px solid #F5F5F5', cursor: 'pointer' }}
@@ -1434,14 +1460,17 @@ const AddHouse = () => {
                                   <div key={itemIdx} className="flex items-center gap-3 px-3 rounded" style={{ height: 48, backgroundColor: '#FFFFFF', marginBottom: 4 }}>
                                     <div style={{ flex: 1, fontSize: 14, fontWeight: 500, color: '#212121' }}>{item.name}</div>
                                     <div className="flex items-center gap-1" style={{ width: 90 }}>
-                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
-                                      <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 34, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
-                                      <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                                      <button onClick={() => updateItem(itemIdx, 'qty', Math.max(0, (item.qty || 0) - 1))} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                                      <input type="number" value={item.qty} onChange={e => updateItem(itemIdx, 'qty', Number(e.target.value))} className="text-center rounded border" style={{ width: 34, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
+                                      <button onClick={() => updateItem(itemIdx, 'qty', (item.qty || 0) + 1)} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
                                     </div>
-                                    <input type="date" className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                                    <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 180, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                                    <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                                    <button className="flex items-center justify-center rounded" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}><Trash2 size={14} style={{ color: '#BDBDBD' }} /></button>
+                                    <input type="date" value={item.expiry || ''} onChange={e => updateItem(itemIdx, 'expiry', e.target.value)} className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" value={item.location} onChange={e => updateItem(itemIdx, 'location', e.target.value)} className="px-3 rounded border" style={{ width: 180, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <input type="text" value={item.notes || ''} onChange={e => updateItem(itemIdx, 'notes', e.target.value)} placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                                    <button onClick={() => removeItem(itemIdx)} className="flex items-center justify-center rounded transition-colors" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FFEBEE')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                      <Trash2 size={14} style={{ color: '#EF4444' }} />
+                                    </button>
                                   </div>
                                 ))}
                               </div>
@@ -1465,8 +1494,8 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#C62828', borderColor: '#C62828', height: 32 }}><Plus size={14} /> Add Custom Sharp Item</button>
+                        <button onClick={() => { setSharpsInventory(SHARPS_ITEMS.map(i => ({ ...i }))); toast.success("Sharps inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button onClick={() => { setCustomItemModal({ section: 'sharps', categoryId: 'sharps' }); setCustomItemForm({ name: '', qty: 1, location: 'Locked Storage', notes: '', type: 'Needle', expiry: '' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#C62828', borderColor: '#C62828', height: 32 }}><Plus size={14} /> Add Custom Sharp Item</button>
                       </div>
                     </div>
                     <div className="border rounded-lg" style={{ margin: 20, padding: 16, borderColor: '#FFCDD2', backgroundColor: '#FFEBEE' }}>
@@ -1480,28 +1509,31 @@ const AddHouse = () => {
                         ))}
                         <div style={{ width: 40 }} />
                       </div>
-                      {SHARPS_ITEMS.map((item, idx) => (
+                      {sharpsInventory.map((item, idx) => (
                         <div key={idx} className="flex items-center gap-3 px-3 rounded transition-colors" style={{ height: 48, backgroundColor: '#FFFFFF', marginBottom: 4, border: '1px solid #F5F5F5' }}>
                           <div className="flex items-center gap-2" style={{ flex: 1 }}>
                             <AlertTriangle size={12} style={{ color: '#C62828' }} />
                             <span style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{item.name}</span>
                           </div>
-                          <select defaultValue={item.type} className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }}>
+                          <select value={item.type} onChange={e => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, type: e.target.value }))} className="px-3 rounded border" style={{ width: 140, height: 32, fontSize: 13, borderColor: '#BDBDBD' }}>
                             <option>Needle</option><option>Blade</option><option>Scissor</option><option>Knife</option><option>Razor</option><option>Other</option>
                           </select>
                           <div className="flex items-center gap-1" style={{ width: 120 }}>
-                            <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
-                            <input type="number" defaultValue={item.qty} readOnly className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
-                            <button className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
+                            <button onClick={() => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, qty: Math.max(0, (it.qty || 0) - 1) }))} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Minus size={12} style={{ color: '#757575' }} /></button>
+                            <input type="number" value={item.qty} onChange={e => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, qty: Number(e.target.value) }))} className="text-center rounded border" style={{ width: 60, height: 28, fontSize: 13, fontWeight: 600, borderColor: '#BDBDBD' }} />
+                            <button onClick={() => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, qty: (it.qty || 0) + 1 }))} className="flex items-center justify-center rounded" style={{ width: 28, height: 28, border: '1px solid #BDBDBD', backgroundColor: '#FFFFFF' }}><Plus size={12} style={{ color: '#757575' }} /></button>
                           </div>
-                          <input type="text" defaultValue={item.location} readOnly className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                          <input type="text" value={item.location} onChange={e => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, location: e.target.value }))} className="px-3 rounded border" style={{ width: 200, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
                           <div className="flex items-center justify-center" style={{ width: 100 }}>
                             <button className="relative inline-flex items-center rounded-full transition-colors flex-shrink-0" style={{ width: 40, height: 22, backgroundColor: '#1D6033' }}>
                               <span className="inline-block rounded-full bg-white transition-transform" style={{ width: 18, height: 18, transform: 'translateX(20px)', boxShadow: '0 1px 3px rgba(0,0,0,0.18)' }} />
                             </button>
                           </div>
-                          <input type="text" placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
-                          <button className="flex items-center justify-center rounded" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}><Trash2 size={14} style={{ color: '#BDBDBD' }} /></button>
+                          <input type="text" value={item.notes || ''} onChange={e => setSharpsInventory(sharpsInventory.map((it, i) => i !== idx ? it : { ...it, notes: e.target.value }))} placeholder="—" className="px-3 rounded border" style={{ flex: 1, height: 32, fontSize: 13, borderColor: '#BDBDBD' }} />
+                          <button onClick={() => setSharpsInventory(sharpsInventory.filter((_, i) => i !== idx))} className="flex items-center justify-center rounded transition-colors" style={{ width: 32, height: 32, backgroundColor: 'transparent' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FFEBEE')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                            <Trash2 size={14} style={{ color: '#EF4444' }} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1762,6 +1794,84 @@ const AddHouse = () => {
           </div>
         </div>
       </div>
+
+      {/* Add Custom Inventory Item Modal */}
+      {customItemModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-[460px] rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="font-bold text-[16px] text-[#0f172a]">
+                {customItemModal.section === 'sharps' ? 'Add Custom Sharp Item' : 'Add Custom Item'}
+              </h3>
+              <button onClick={() => setCustomItemModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {/* Category selector — only for house & emergency */}
+              {customItemModal.section !== 'sharps' && (
+                <div>
+                  <label className="block text-[13px] font-bold text-[#374151] mb-2">Category <span className="text-[#1D6033]">*</span></label>
+                  <select value={customItemModal.categoryId} onChange={e => setCustomItemModal({ ...customItemModal, categoryId: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px] bg-white">
+                    {(customItemModal.section === 'house' ? houseInventory : emergencyInventory).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Type selector — only for sharps */}
+              {customItemModal.section === 'sharps' && (
+                <div>
+                  <label className="block text-[13px] font-bold text-[#374151] mb-2">Type <span className="text-[#1D6033]">*</span></label>
+                  <select value={customItemForm.type} onChange={e => setCustomItemForm({ ...customItemForm, type: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px] bg-white">
+                    {['Needle','Blade','Scissor','Knife','Razor','Other'].map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-[13px] font-bold text-[#374151] mb-2">Item Name <span className="text-[#1D6033]">*</span></label>
+                <input type="text" value={customItemForm.name} onChange={e => setCustomItemForm({ ...customItemForm, name: e.target.value })}
+                  placeholder="e.g. Extra Blankets" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px]" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[13px] font-bold text-[#374151] mb-2">Quantity</label>
+                  <input type="number" min="0" value={customItemForm.qty} onChange={e => setCustomItemForm({ ...customItemForm, qty: Number(e.target.value) })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px]" />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-bold text-[#374151] mb-2">Storage Location</label>
+                  <input type="text" value={customItemForm.location} onChange={e => setCustomItemForm({ ...customItemForm, location: e.target.value })}
+                    placeholder="e.g. Closet A" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px]" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[13px] font-bold text-[#374151] mb-2">Notes</label>
+                <input type="text" value={customItemForm.notes} onChange={e => setCustomItemForm({ ...customItemForm, notes: e.target.value })}
+                  placeholder="Optional notes" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1D6033] text-[14px]" />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button onClick={() => setCustomItemModal(null)} className="px-4 py-2.5 rounded-xl border border-gray-200 text-[14px] font-semibold text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button onClick={() => {
+                if (!customItemForm.name.trim()) { toast.error("Item name is required."); return; }
+                const newItem = { name: customItemForm.name.trim(), qty: customItemForm.qty, location: customItemForm.location, notes: customItemForm.notes, type: customItemForm.type };
+                if (customItemModal.section === 'house') {
+                  setHouseInventory(houseInventory.map(c => c.id !== customItemModal.categoryId ? c : { ...c, items: [...c.items, newItem] }));
+                } else if (customItemModal.section === 'emergency') {
+                  setEmergencyInventory(emergencyInventory.map(c => c.id !== customItemModal.categoryId ? c : { ...c, items: [...c.items, newItem] }));
+                } else {
+                  setSharpsInventory([...sharpsInventory, newItem]);
+                }
+                toast.success(`"${newItem.name}" added.`);
+                setCustomItemModal(null);
+              }} className="px-5 py-2.5 rounded-xl text-[14px] font-semibold text-white" style={{ background: customItemModal.section === 'sharps' ? '#C62828' : '#1D6033' }}>
+                Add Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Client Dialog Modal */}
       {isClientModalOpen && (
