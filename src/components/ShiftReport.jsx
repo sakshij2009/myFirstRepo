@@ -1392,9 +1392,10 @@ const ShiftReport = ({ user }) => {
                     // Planned drop (from shift assignment)
                     const dropLoc = sp.dropLocation || shiftData?.dropLocation || "N/A";
                     const dropTime = sp.dropTime || shiftData?.dropTime || "N/A";
-                    // Actual drop (saved by mobile _ReportTransportationTab when staff confirms drop-off)
-                    const droppedOffLoc = sp.dropActualLocation || shiftData?.dropActualLocation || "N/A";
-                    const droppedOffTime = sp.dropDoneAt || shiftData?.dropDoneAt || "N/A";
+                    // Actual drop — complete-shift.jsx saves droppedTime/droppedLocation;
+                    // _ReportTransportationTab saves dropDoneAt/dropActualLocation. Check both.
+                    const droppedOffLoc = sp.droppedLocation || sp.dropActualLocation || shiftData?.droppedLocation || shiftData?.dropActualLocation || "N/A";
+                    const droppedOffTime = sp.droppedTime || sp.dropDoneAt || shiftData?.droppedTime || shiftData?.dropDoneAt || "N/A";
 
                     const mapLink = (addr) => addr && addr !== "N/A"
                       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
