@@ -85,15 +85,29 @@ const calcDuration = (start, end) => {
   return m > 0 ? `${h}h ${m}m` : `${h} hrs`;
 };
 
-const getRoundedTime = () => {
-  const coeff = 1000 * 60 * 15;
-  const rounded = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-  return rounded.toLocaleTimeString("en-US", { 
-    hour: "2-digit", 
-    minute: "2-digit", 
-    hour12: true,
-    timeZone: "America/Edmonton" 
-  });
+const toTimeStr = (d) =>
+  d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+
+// If actual time is within ±15 min of scheduledTimeStr ("9:00 AM"), snap to scheduled.
+// Otherwise return exact current time.
+const getSnappedTime = (scheduledTimeStr) => {
+  const now = new Date();
+  if (scheduledTimeStr) {
+    const str = String(scheduledTimeStr).trim();
+    const match = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      const period = match[3].toUpperCase();
+      if (period === "PM" && h !== 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+      const scheduled = new Date();
+      scheduled.setHours(h, m, 0, 0);
+      const diffMinutes = (now - scheduled) / 60000;
+      if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
+    }
+  }
+  return toTimeStr(now);
 };
 
 const getLocationString = async () => {
@@ -582,7 +596,7 @@ export default function Shifts() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        const roundedTime = getRoundedTime();
+        const roundedTime = getSnappedTime(shift.startTime);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockIn: serverTimestamp(),
@@ -611,7 +625,7 @@ export default function Shifts() {
           return;
         }
       } else if (type === "clockOut") {
-        const roundedTime = getRoundedTime();
+        const roundedTime = getSnappedTime(shift.endTime);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockOut: serverTimestamp(),

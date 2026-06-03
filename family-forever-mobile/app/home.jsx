@@ -86,9 +86,35 @@ const serviceTypeStyles = {
 const toEdmontonTimeStr = (d) =>
   d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
-// Always capture the exact current device time when clocking in/out
-const getClockInTimeHome = () => toEdmontonTimeStr(new Date());
-const getClockOutTimeHome = () => toEdmontonTimeStr(new Date());
+// Parse a "9:00 AM" / "09:00 AM" string into a Date object set to today's date.
+const parseScheduledTime = (timeStr) => {
+  if (!timeStr) return null;
+  const str = String(timeStr).trim();
+  const match = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === "PM" && h !== 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+};
+
+// If the actual time is within 15 min before or after the scheduled time, snap to scheduled.
+// Otherwise return the real current time string.
+const getSnappedTime = (scheduledTimeStr) => {
+  const now = new Date();
+  const scheduled = parseScheduledTime(scheduledTimeStr);
+  if (scheduled) {
+    const diffMinutes = (now - scheduled) / 60000; // positive = we're after scheduled
+    if (diffMinutes >= -15 && diffMinutes <= 15) {
+      return toEdmontonTimeStr(scheduled);
+    }
+  }
+  return toEdmontonTimeStr(now);
+};
 
 const getLocationString = async () => {
   try {
@@ -492,7 +518,7 @@ export default function Home() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        const roundedTime = getClockInTimeHome();
+        const roundedTime = getSnappedTime(shift.startTime);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockIn: serverTimestamp(),      // admin app reads this field
@@ -520,7 +546,7 @@ export default function Home() {
           return;
         }
       } else if (type === "clockOut") {
-        const roundedTime = getClockOutTimeHome();
+        const roundedTime = getSnappedTime(shift.endTime);
         const locationStr = await getLocationString();
         await updateDoc(ref, {
           clockOut: serverTimestamp(),     // admin app reads this field

@@ -755,11 +755,11 @@ const ShiftReport = ({ user }) => {
   );
 
   // ── Normalise ──
-  // Prefer clockIn/clockOut (Firestore Timestamp or ISO UTC string — authoritative UTC time)
-  // over clockInTime/clockOutTime (device-local AM/PM strings — may reflect wrong timezone).
-  // Falls back to the string fields if no UTC-based value exists (older shifts).
-  const clockInVal  = isUTCBased(shiftData.clockIn)  ? shiftData.clockIn  : (shiftData.clockInTime  || shiftData.clockIn  || null);
-  const clockOutVal = isUTCBased(shiftData.clockOut) ? shiftData.clockOut : (shiftData.clockOutTime || shiftData.clockOut || null);
+  // Always prefer clockInTime/clockOutTime (local AM/PM string saved by mobile app at device-local
+  // Edmonton time) over the Firestore serverTimestamp (stored in UTC — displays wrong when the
+  // device saving the record is not in Edmonton timezone, e.g. an IST tester).
+  const clockInVal  = shiftData.clockInTime  || shiftData.clockIn  || null;
+  const clockOutVal = shiftData.clockOutTime || shiftData.clockOut || null;
   const statusVal = clockInVal && clockOutVal ? "Completed" : clockInVal ? "Ongoing" : "Incomplete";
   const sc = {
     Completed: { bg: "#f0fdf4", text: "#15803d", dot: "#16a34a" },

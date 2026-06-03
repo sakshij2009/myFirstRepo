@@ -100,24 +100,21 @@ const getClockInTime = (startTimeStr, startDateStr) => {
   const now = new Date();
   const scheduled = parseShiftDateTime(startDateStr, startTimeStr);
   if (scheduled) {
-    const diffMs = scheduled.getTime() - now.getTime(); // positive = scheduled is still future
-    // Within 15 min BEFORE scheduled start → snap to scheduled start
-    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toTimeStr(scheduled);
+    const diffMinutes = (now - scheduled) / 60000; // positive = past scheduled start
+    if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
   }
-  return toTimeStr(roundToNearest15(now));
+  return toTimeStr(now);
 };
 
-// ── Helper: Clock-OUT time — snaps to scheduled end if within 15-min window ──
-// "if clocking out within 15 min after scheduled end, record as scheduled end"
+// ── Helper: Clock-OUT time — snaps to scheduled end if within ±15 min ────────
 const getClockOutTime = (endTimeStr, startDateStr) => {
   const now = new Date();
   const scheduled = parseShiftDateTime(startDateStr, endTimeStr);
   if (scheduled) {
-    const diffMs = now.getTime() - scheduled.getTime(); // positive = past scheduled end
-    // Within 15 min AFTER scheduled end → snap to scheduled end
-    if (diffMs >= 0 && diffMs <= 15 * 60 * 1000) return toTimeStr(scheduled);
+    const diffMinutes = (now - scheduled) / 60000; // positive = past scheduled end
+    if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
   }
-  return toTimeStr(roundToNearest15(now));
+  return toTimeStr(now);
 };
 
 // ── Helper: Get current location string ──────────────────────────────────────
