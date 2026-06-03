@@ -236,13 +236,13 @@ const AddHouse = () => {
   const [expandedInventoryCategories, setExpandedInventoryCategories] = useState({ bedroom: true, water: true });
   const [sharpsConfirmed, setSharpsConfirmed] = useState(false);
   const [houseInventory, setHouseInventory] = useState(() =>
-    HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))
+    HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i, qty: 0 })) }))
   );
   const [emergencyInventory, setEmergencyInventory] = useState(() =>
-    EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))
+    EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i, qty: 0 })) }))
   );
   const [sharpsInventory, setSharpsInventory] = useState(() =>
-    SHARPS_ITEMS.map(i => ({ ...i }))
+    SHARPS_ITEMS.map(i => ({ ...i, qty: 0 }))
   );
   // Add Custom Item modal
   const [customItemModal, setCustomItemModal] = useState(null); // { section: 'house'|'emergency'|'sharps', categoryId: '' }
@@ -1309,7 +1309,7 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => { setHouseInventory(HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))); toast.success("House inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}
+                        <button onClick={() => { setHouseInventory(HOUSE_INVENTORY_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i, qty: 0 })) }))); toast.success("House inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}
                           onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F1F8E9')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}>
                           <RotateCcw size={14} /> Reset to defaults
                         </button>
@@ -1400,7 +1400,7 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => { setEmergencyInventory(EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i })) }))); toast.success("Emergency kit reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button onClick={() => { setEmergencyInventory(EMERGENCY_KIT_CATEGORIES.map(c => ({ ...c, items: c.items.map(i => ({ ...i, qty: 0 })) }))); toast.success("Emergency kit reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
                         <button onClick={() => { setCustomItemModal({ section: 'emergency', categoryId: emergencyInventory[0]?.id || '' }); setCustomItemForm({ name: '', qty: 1, location: 'Emergency Storage', notes: '', type: 'Needle', expiry: '' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', height: 32 }}><Plus size={14} /> Add Custom Item</button>
                       </div>
                     </div>
@@ -1494,7 +1494,7 @@ const AddHouse = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => { setSharpsInventory(SHARPS_ITEMS.map(i => ({ ...i }))); toast.success("Sharps inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
+                        <button onClick={() => { setSharpsInventory(SHARPS_ITEMS.map(i => ({ ...i, qty: 0 }))); toast.success("Sharps inventory reset to defaults."); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded" style={{ fontSize: 12.5, fontWeight: 500, color: '#1D6033' }}><RotateCcw size={14} /> Reset to defaults</button>
                         <button onClick={() => { setCustomItemModal({ section: 'sharps', categoryId: 'sharps' }); setCustomItemForm({ name: '', qty: 1, location: 'Locked Storage', notes: '', type: 'Needle', expiry: '' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded border" style={{ fontSize: 13, fontWeight: 500, color: '#C62828', borderColor: '#C62828', height: 32 }}><Plus size={14} /> Add Custom Sharp Item</button>
                       </div>
                     </div>
