@@ -308,6 +308,8 @@ const ShiftReport = ({ user }) => {
   const [doctorName, setDoctorName] = useState("");
 
   // ── Transportation tab state ──
+  const OFFICE_ADDRESS_WEB = "#206, 10110 124 Street, Edmonton, AB T5N 1P6";
+  const MILEAGE_RATE_WEB = 0.72;
   const [stops, setStops] = useState([""]);
   const [totalKilometer, setTotalKm] = useState("");
   const [staffKilometer, setStaffKm] = useState("");
@@ -322,6 +324,9 @@ const ShiftReport = ({ user }) => {
   const [startPoint, setStartPoint] = useState("");
   const [endPoint, setEndPoint] = useState("");
   const [expenses, setExpenses] = useState([]);
+  const [officeToPickupKm, setOfficeToPickupKm] = useState(null);
+  const [dropToOfficeKm, setDropToOfficeKm] = useState(null);
+  const [kmCalcLoading, setKmCalcLoading] = useState(false);
   const [newExpense, setNewExpense] = useState({ type: EXPENSE_TYPES[0], amount: "", note: "" });
   const [transSubmitting, setTransSubmitting] = useState(false);
 
@@ -602,16 +607,49 @@ const ShiftReport = ({ user }) => {
   }, [shiftData]);
 
   useEffect(() => {
-    if (!shiftData?.extraShiftPoints?.length) return;
-    const last = shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1];
-    const rawTotal = parseFloat(last.totalKilometer || last.totalKM || 0);
-    const rawStaff = parseFloat(last.staffTraveledKM || last.staffKilometer || 0);
-    setTotalKm(rawTotal ? String(Math.round(rawTotal)) : "");
-    setStaffKm(rawStaff ? String(Math.round(rawStaff)) : "");
-    setApprovedKm(String(last.approvedKM || last.approvedKm || ""));
-    setApprovedBy(last.approvedBy || "");
-    setTravelComments(shiftData.travelComments || "");
+    const last = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
+    if (last.staffTraveledKM != null || last.totalKilometer != null) {
+      const rawStaff = parseFloat(last.staffTraveledKM || last.staffKilometer || 0);
+      setStaffKm(rawStaff ? rawStaff.toFixed(2) : "");
+    }
+    if (last.officeToPickupKm != null) setOfficeToPickupKm(parseFloat(last.officeToPickupKm));
+    if (last.dropToOfficeKm != null) setDropToOfficeKm(parseFloat(last.dropToOfficeKm));
+    if (last.approvedKM || last.approvedKm) setApprovedKm(String(last.approvedKM || last.approvedKm || ""));
+    if (last.approvedBy) setApprovedBy(last.approvedBy);
+    if (shiftData?.travelComments) setTravelComments(shiftData.travelComments);
   }, [shiftData]);
+
+  // Auto-calculate Office→Pickup and Drop→Office via Mapbox when shiftData loads
+  useEffect(() => {
+    if (!shiftData) return;
+    const sp = shiftData.shiftPoints?.[0] || {};
+    const pickupAddr = sp.pickupLocation || shiftData.pickupLocation;
+    const dropAddr = sp.dropLocation || shiftData.dropLocation;
+    if (!pickupAddr && !dropAddr) return;
+
+    // Check if already saved in extraShiftPoints
+    const last = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
+    const alreadyHasO2P = last.officeToPickupKm != null;
+    const alreadyHasD2O = last.dropToOfficeKm != null;
+    if (alreadyHasO2P && alreadyHasD2O) return;
+
+    (async () => {
+      setKmCalcLoading(true);
+      try {
+        const { calculateRouteDistance: calcDist } = await import("../utils/mapboxHelper.js");
+        const [o2p, d2o] = await Promise.all([
+          pickupAddr && !alreadyHasO2P ? calcDist([OFFICE_ADDRESS_WEB, pickupAddr]) : null,
+          dropAddr && !alreadyHasD2O ? calcDist([dropAddr, OFFICE_ADDRESS_WEB]) : null,
+        ]);
+        if (o2p?.km != null) setOfficeToPickupKm(parseFloat(o2p.km.toFixed(2)));
+        if (d2o?.km != null) setDropToOfficeKm(parseFloat(d2o.km.toFixed(2)));
+      } catch (e) {
+        console.warn("KM auto-calc failed:", e);
+      } finally {
+        setKmCalcLoading(false);
+      }
+    })();
+  }, [shiftData?.id]);
 
   // ── Transportation helpers ──
   const haversineKm = (lat1, lng1, lat2, lng2) => {
@@ -1461,16 +1499,38 @@ const ShiftReport = ({ user }) => {
                     );
                   })()}
 
-                  {/* KM by Staff */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>Total Route Kilometers (Mapbox)</label>
-                      <input className={inp} placeholder="0.00" value={totalKilometer} readOnly />
-                    </div>
-                    <div>
-                      <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>KM Traveled by Staff (Live)</label>
-                      <input className={inp} placeholder="0.00" value={staffKilometer} onChange={e => setStaffKm(e.target.value)} />
-                    </div>
+                  {/* KM Breakdown */}
+                  <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
+                    <p className="font-bold mb-2" style={{ fontSize: 13, color: "#14532D" }}>Kilometer Breakdown</p>
+                    {kmCalcLoading && (
+                      <p style={{ fontSize: 12, color: "#6b7280" }}>Calculating route distances…</p>
+                    )}
+                    {[
+                      { label: "Office → Pickup", value: officeToPickupKm != null ? `${officeToPickupKm.toFixed(2)} km` : "—" },
+                      { label: "Staff Traveled (Live GPS)", value: staffKilometer ? `${parseFloat(staffKilometer).toFixed(2)} km` : "0.00 km" },
+                      { label: "Drop → Office", value: dropToOfficeKm != null ? `${dropToOfficeKm.toFixed(2)} km` : "—" },
+                    ].map((row, i) => (
+                      <div key={i} className="flex justify-between items-center py-1.5 border-b" style={{ borderColor: "#d1fae5" }}>
+                        <span style={{ fontSize: 13, color: "#374151" }}>{row.label}</span>
+                        <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{row.value}</span>
+                      </div>
+                    ))}
+                    {(() => {
+                      const total = parseFloat(((officeToPickupKm || 0) + parseFloat(staffKilometer || 0) + (dropToOfficeKm || 0)).toFixed(2));
+                      const mileage = parseFloat((total * MILEAGE_RATE_WEB).toFixed(2));
+                      return (
+                        <>
+                          <div className="flex justify-between items-center pt-2" style={{ borderTop: "2px solid #14532D", marginTop: 4 }}>
+                            <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Total KM</span>
+                            <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>{total.toFixed(2)} km</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-1">
+                            <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>Mileage @ ${MILEAGE_RATE_WEB}/km</span>
+                            <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>${mileage.toFixed(2)}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Approved KM + By */}
