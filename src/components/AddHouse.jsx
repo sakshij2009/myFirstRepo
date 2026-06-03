@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { db, storage } from "../firebase";
-import { collection, doc, setDoc } from "firebase/firestore";
+import { collection, doc, setDoc, getDocs, query, where } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { 
   X, 
@@ -45,16 +45,7 @@ import {
   Lock
 } from "lucide-react";
 
-const MOCK_STAFF = [
-  { id: '1', name: 'Sarah Mitchell', role: 'Senior Caregiver', experience: '4 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
-  { id: '2', name: 'James Park',     role: 'Caregiver',        experience: '2 yrs', certifications: ['First Aid','CPR'], status: 'Available' },
-  { id: '3', name: 'Emily Chen',     role: 'Support Worker',   experience: '3 yrs', certifications: ['First Aid','CPR','Medication'], status: 'Available' },
-  { id: '4', name: 'Michael Torres', role: 'Senior Caregiver', experience: '6 yrs', certifications: ['First Aid','CPR','Medication','ASIST','Mental Health'], status: 'Available' },
-  { id: '5', name: 'Rachel Brown',   role: 'Caregiver',        experience: '1 yr',  certifications: ['First Aid','CPR'], status: 'Available' },
-  { id: '6', name: 'David Kim',      role: 'Support Worker',   experience: '5 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
-  { id: '7', name: 'Anna Garcia',    role: 'Senior Caregiver', experience: '7 yrs', certifications: ['First Aid','CPR','Medication','ASIST'], status: 'Available' },
-  { id: '8', name: 'Tom Anderson',   role: 'Caregiver',        experience: '2 yrs', certifications: ['First Aid','CPR'], status: 'Available' },
-];
+// Staff and clients are loaded from Firestore — see useEffect inside AddHouse component
 
 const getAvatarColor = (name) => {
   const colors = ['#FFCDD2','#F8BBD0','#E1BEE7','#C5CAE9','#BBDEFB','#B2DFDB','#DCEDC8','#FFF9C4'];
@@ -232,8 +223,14 @@ const AddHouse = () => {
   const [selectedStaffIds, setSelectedStaffIds] = useState([]);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [shiftAssignments, setShiftAssignments] = useState({ morning: [], evening: [], night: [], weekend: [] });
+  // Real staff + clients from Firestore
+  const [firestoreStaff, setFirestoreStaff] = useState([]);
+  const [firestoreClients, setFirestoreClients] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(true);
   // Step 3 Initial Clients
   const [wizardClients, setWizardClients] = useState([]);
+  const [clientSearchQuery, setClientSearchQueryState] = useState('');
   // Step 5 Inventory
   const [activeInventorySection, setActiveInventorySection] = useState(0);
   const [expandedInventoryCategories, setExpandedInventoryCategories] = useState({ bedroom: true, water: true });
@@ -264,25 +261,7 @@ const AddHouse = () => {
       night: [],
       weekend: [],
     },
-    assignedClients: [
-      {
-        id: "client_1",
-        name: "Joseph Tate",
-        caseId: "CVIM-001044",
-        age: 14,
-        serviceType: "Respite",
-        room: "A-101",
-        initials: "JT",
-        color: "#fef3c7", // light yellow
-        textColor: "#b56d10", // dark amber/yellow
-        supervisor: {
-          name: "Sarah M.",
-          initials: "SM",
-          color: "#fce7f3", // pink matching Sarah Mitchell
-          textColor: "#9d174d"
-        }
-      }
-    ],
+    assignedClients: [],
     clientSearchQuery: "",
     complianceSchedules: [
       { id: 1, title: 'Fire Safety Inspection',  frequency: 'Quarterly', enabled: true },
@@ -396,6 +375,42 @@ const AddHouse = () => {
       }
     }
   }, [draftKey]);
+
+  // Load real staff from Firestore (users collection, role != admin)
+  useEffect(() => {
+    (async () => {
+      try {
+        setStaffLoading(true);
+        const snap = await getDocs(collection(db, "users"));
+        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(u => u.name && u.role !== "admin")
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setFirestoreStaff(users);
+      } catch (e) {
+        console.warn("Failed to load staff:", e);
+      } finally {
+        setStaffLoading(false);
+      }
+    })();
+  }, []);
+
+  // Load real clients from Firestore
+  useEffect(() => {
+    (async () => {
+      try {
+        setClientsLoading(true);
+        const snap = await getDocs(collection(db, "clients"));
+        const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(c => c.name || c.clientName || c.fullName)
+          .sort((a, b) => ((a.name || a.clientName || "")).localeCompare((b.name || b.clientName || "")));
+        setFirestoreClients(clients);
+      } catch (e) {
+        console.warn("Failed to load clients:", e);
+      } finally {
+        setClientsLoading(false);
+      }
+    })();
+  }, []);
 
   // 2. Background Auto-save effect
   useEffect(() => {
@@ -886,7 +901,7 @@ const AddHouse = () => {
                   <div className="flex items-center justify-between" style={{ height: 56, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
                     <div className="flex items-center gap-3">
                       <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>AVAILABLE STAFF</h3>
-                      <div className="px-2 py-1 rounded-xl" style={{ fontSize: 11.5, fontWeight: 500, color: '#1D6033', backgroundColor: '#E8F5E9' }}>{MOCK_STAFF.length} available</div>
+                      <div className="px-2 py-1 rounded-xl" style={{ fontSize: 11.5, fontWeight: 500, color: '#1D6033', backgroundColor: '#E8F5E9' }}>{staffLoading ? "Loading…" : `${firestoreStaff.length} available`}</div>
                     </div>
                     <div className="relative" style={{ width: 240 }}>
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2" style={{ width: 16, height: 16, color: '#9E9E9E' }} />
@@ -894,10 +909,17 @@ const AddHouse = () => {
                     </div>
                   </div>
                   <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                    {MOCK_STAFF.filter(s => s.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) || s.role.toLowerCase().includes(staffSearchQuery.toLowerCase())).map((staff, index) => {
+                    {staffLoading ? (
+                      <div className="flex items-center justify-center" style={{ height: 120, color: '#9E9E9E', fontSize: 13 }}>Loading staff…</div>
+                    ) : firestoreStaff.filter(s => {
+                      const q = staffSearchQuery.toLowerCase();
+                      return (s.name || "").toLowerCase().includes(q) || (s.role || "").toLowerCase().includes(q) || (s.agencyName || "").toLowerCase().includes(q);
+                    }).map((staff, index, arr) => {
                       const isSelected = selectedStaffIds.includes(staff.id);
+                      const displayRole = staff.role || staff.userType || "Staff";
+                      const displaySub = [displayRole, staff.agencyName].filter(Boolean).join(" · ");
                       return (
-                        <div key={staff.id} onClick={() => setSelectedStaffIds(isSelected ? selectedStaffIds.filter(id => id !== staff.id) : [...selectedStaffIds, staff.id])} className="flex items-center gap-4 cursor-pointer transition-colors" style={{ height: 64, padding: '0 16px', borderBottom: index < MOCK_STAFF.length - 1 ? '1px solid #F5F5F5' : 'none', backgroundColor: isSelected ? '#F1F8E9' : 'transparent', borderLeft: isSelected ? '2px solid #1D6033' : '2px solid transparent' }}
+                        <div key={staff.id} onClick={() => setSelectedStaffIds(isSelected ? selectedStaffIds.filter(id => id !== staff.id) : [...selectedStaffIds, staff.id])} className="flex items-center gap-4 cursor-pointer transition-colors" style={{ height: 64, padding: '0 16px', borderBottom: index < arr.length - 1 ? '1px solid #F5F5F5' : 'none', backgroundColor: isSelected ? '#F1F8E9' : 'transparent', borderLeft: isSelected ? '2px solid #1D6033' : '2px solid transparent' }}
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FAFAFA'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                         >
@@ -909,7 +931,7 @@ const AddHouse = () => {
                           </div>
                           <div className="flex-1">
                             <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{staff.name}</div>
-                            <div style={{ fontSize: 12, color: '#757575' }}>{staff.role} · {staff.experience} experience</div>
+                            <div style={{ fontSize: 12, color: '#757575' }}>{displaySub}</div>
                           </div>
                           <div className="px-3 py-1 rounded flex items-center gap-1.5" style={{ fontSize: 11.5, fontWeight: 500, color: '#2E7D32', backgroundColor: '#E8F5E9' }}>
                             <div className="rounded-full" style={{ width: 6, height: 6, backgroundColor: '#2E7D32' }} />
@@ -921,7 +943,7 @@ const AddHouse = () => {
                   </div>
                   <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderTop: '1px solid #F5F5F5', backgroundColor: '#FAFAFA' }}>
                     <Info size={14} style={{ color: '#757575' }} />
-                    <p style={{ fontSize: 11.5, color: '#757575' }}>Showing {MOCK_STAFF.length} of 24 total staff. 16 staff are already assigned to other houses and not shown here.</p>
+                    <p style={{ fontSize: 11.5, color: '#757575' }}>{staffLoading ? "Loading staff from database…" : `Showing ${firestoreStaff.length} staff from your organization.`}</p>
                   </div>
                 </div>
 
@@ -934,7 +956,7 @@ const AddHouse = () => {
                     </div>
                     <div className="flex flex-wrap gap-2" style={{ marginBottom: 12 }}>
                       {selectedStaffIds.map(id => {
-                        const staff = MOCK_STAFF.find(s => s.id === id);
+                        const staff = firestoreStaff.find(s => s.id === id);
                         if (!staff) return null;
                         return (
                           <div key={id} className="flex items-center gap-2 px-1 pr-3 rounded-full border" style={{ height: 32, backgroundColor: '#FFFFFF', borderColor: '#C8E6C9' }}>
@@ -957,7 +979,7 @@ const AddHouse = () => {
                           <select className="w-full px-3 rounded-lg border" style={{ height: 40, borderColor: '#BDBDBD', fontSize: 14, backgroundColor: '#FFFFFF' }}>
                             <option value="">Select a lead...</option>
                             {selectedStaffIds.map(id => {
-                              const staff = MOCK_STAFF.find(s => s.id === id);
+                              const staff = firestoreStaff.find(s => s.id === id);
                               return staff ? <option key={id} value={id}>{staff.name}</option> : null;
                             })}
                           </select>
@@ -993,7 +1015,7 @@ const AddHouse = () => {
                             <div className="flex-1" style={{ minWidth: 0 }}>
                               <div className="border rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap" style={{ minHeight: 40, borderColor: '#BDBDBD', backgroundColor: '#FFFFFF' }}>
                                 {assigned.length > 0 ? assigned.map(staffId => {
-                                  const staff = MOCK_STAFF.find(s => s.id === staffId);
+                                  const staff = firestoreStaff.find(s => s.id === staffId);
                                   if (!staff) return null;
                                   return (
                                     <div key={staffId} className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ height: 24, backgroundColor: '#F5F5F5', fontSize: 12 }}>
@@ -1010,7 +1032,7 @@ const AddHouse = () => {
                               {selectedStaffIds.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-2">
                                   {selectedStaffIds.filter(id => !assigned.includes(id)).map(id => {
-                                    const staff = MOCK_STAFF.find(s => s.id === id);
+                                    const staff = firestoreStaff.find(s => s.id === id);
                                     return staff ? (
                                       <button key={id} onClick={() => setShiftAssignments({ ...shiftAssignments, [shift.id]: [...assigned, id] })} className="px-2 py-1 rounded border transition-colors" style={{ fontSize: 11, borderColor: '#BDBDBD', backgroundColor: '#FFFFFF', color: '#424242' }}
                                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F5F5F5')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}>
@@ -1071,35 +1093,78 @@ const AddHouse = () => {
                   </div>
                 </div>
 
-                {/* Clients In This House */}
-                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24 }}>
-                  <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+                {/* Pick clients from Firestore */}
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', overflow: 'hidden' }}>
+                  <div className="flex items-center justify-between" style={{ height: 56, padding: '0 20px', borderBottom: '1px solid #F5F5F5' }}>
                     <div className="flex items-center gap-3">
-                      <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>CLIENTS IN THIS HOUSE</h3>
-                      <div className="px-2 py-1 rounded" style={{ fontSize: 11.5, fontWeight: 500, color: formData.assignedClients.length > 0 ? '#1D6033' : '#757575', backgroundColor: formData.assignedClients.length > 0 ? '#E8F5E9' : '#F5F5F5' }}>{formData.assignedClients.length} added</div>
-                    </div>
-                    {formData.assignedClients.length > 0 && (
-                      <button onClick={handleAddClientClick} className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors" style={{ fontSize: 13, fontWeight: 500, backgroundColor: '#1D6033', color: '#FFFFFF' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1F6F43')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1D6033')}>
-                        <Plus size={14} /> Add New Client
-                      </button>
-                    )}
-                  </div>
-
-                  {formData.assignedClients.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center" style={{ padding: '40px 0' }}>
-                      <div className="rounded-full flex items-center justify-center" style={{ width: 64, height: 64, backgroundColor: '#F5F5F5', marginBottom: 16 }}>
-                        <UserPlus size={32} style={{ color: '#BDBDBD' }} />
+                      <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>AVAILABLE CLIENTS</h3>
+                      <div className="px-2 py-1 rounded-xl" style={{ fontSize: 11.5, fontWeight: 500, color: '#1D6033', backgroundColor: '#E8F5E9' }}>
+                        {clientsLoading ? "Loading…" : `${firestoreClients.length} clients`}
                       </div>
-                      <h4 style={{ fontSize: 15, fontWeight: 600, color: '#212121', marginBottom: 8 }}>No clients added yet</h4>
-                      <p style={{ fontSize: 13, color: '#757575', textAlign: 'center', maxWidth: 360, marginBottom: 20 }}>Use the existing Add Client flow to create new client records. Once created, they'll appear here.</p>
-                      <button onClick={handleAddClientClick} className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors" style={{ fontSize: 14, fontWeight: 500, backgroundColor: '#1D6033', color: '#FFFFFF' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1F6F43')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1D6033')}>
-                        <Plus size={16} /> Add New Client
-                      </button>
-                      <button style={{ fontSize: 12, color: '#1565C0', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', marginTop: 12 }}>Or browse pending intake requests →</button>
                     </div>
-                  ) : (
+                    <div className="relative" style={{ width: 240 }}>
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2" style={{ width: 16, height: 16, color: '#9E9E9E' }} />
+                      <input type="text" value={clientSearchQuery} onChange={e => setClientSearchQueryState(e.target.value)} placeholder="Search by name or ID…" className="w-full pl-10 pr-3 rounded-lg border" style={{ height: 32, borderColor: '#BDBDBD', fontSize: 13 }} />
+                    </div>
+                  </div>
+                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    {clientsLoading ? (
+                      <div className="flex items-center justify-center" style={{ height: 120, color: '#9E9E9E', fontSize: 13 }}>Loading clients…</div>
+                    ) : firestoreClients.filter(c => {
+                      const q = clientSearchQuery.toLowerCase();
+                      const name = (c.name || c.clientName || c.fullName || "").toLowerCase();
+                      const caseId = (c.caseId || c.clientId || c.id || "").toLowerCase();
+                      return name.includes(q) || caseId.includes(q);
+                    }).map((client, index, arr) => {
+                      const clientId = client.id;
+                      const isSelected = formData.assignedClients.some(c => c.id === clientId);
+                      const name = client.name || client.clientName || client.fullName || "Unknown";
+                      const caseId = client.caseId || client.clientId || client.userId || "—";
+                      const age = client.age || client.dateOfBirth ? (client.age || "—") : "—";
+                      const serviceType = client.serviceType || client.category || "—";
+                      const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                      return (
+                        <div key={clientId} onClick={() => {
+                          if (isSelected) {
+                            setFormData({ ...formData, assignedClients: formData.assignedClients.filter(c => c.id !== clientId) });
+                          } else {
+                            const avatarColors = [{ bg: '#fef3c7', text: '#b56d10' },{ bg: '#f3e8ff', text: '#701a75' },{ bg: '#dcfce7', text: '#14532e' },{ bg: '#e0f2fe', text: '#0369a1' }];
+                            let hash = 0; for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
+                            const color = avatarColors[hash % avatarColors.length];
+                            setFormData({ ...formData, assignedClients: [...formData.assignedClients, { id: clientId, name, caseId, age, serviceType, room: "N/A", initials, color: color.bg, textColor: color.text, supervisor: null }] });
+                          }
+                        }} className="flex items-center gap-4 cursor-pointer transition-colors" style={{ height: 64, padding: '0 16px', borderBottom: index < arr.length - 1 ? '1px solid #F5F5F5' : 'none', backgroundColor: isSelected ? '#F1F8E9' : 'transparent', borderLeft: isSelected ? '2px solid #1D6033' : '2px solid transparent' }}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#FAFAFA'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                          <div className="flex items-center justify-center rounded transition-colors" style={{ width: 18, height: 18, border: isSelected ? 'none' : '1.5px solid #BDBDBD', backgroundColor: isSelected ? '#1D6033' : '#FFFFFF', flexShrink: 0 }}>
+                            {isSelected && <Check size={12} style={{ color: '#FFFFFF' }} strokeWidth={3} />}
+                          </div>
+                          <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, backgroundColor: getAvatarColor(name) }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>{initials}</span>
+                          </div>
+                          <div className="flex-1">
+                            <div style={{ fontSize: 14, fontWeight: 500, color: '#212121' }}>{name}</div>
+                            <div style={{ fontSize: 12, color: '#757575' }}>{caseId}{serviceType !== "—" ? ` · ${serviceType}` : ""}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2" style={{ padding: '12px 20px', borderTop: '1px solid #F5F5F5', backgroundColor: '#FAFAFA' }}>
+                    <Info size={14} style={{ color: '#757575' }} />
+                    <p style={{ fontSize: 11.5, color: '#757575' }}>{formData.assignedClients.length} client{formData.assignedClients.length !== 1 ? 's' : ''} selected for this house.</p>
+                  </div>
+                </div>
+
+                {/* Selected clients summary table */}
+                {formData.assignedClients.length > 0 && (
+                <div className="border rounded-xl" style={{ borderColor: '#E0E0E0', padding: 24 }}>
+                  <div className="flex items-center gap-3" style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#424242' }}>CLIENTS IN THIS HOUSE</h3>
+                    <div className="px-2 py-1 rounded" style={{ fontSize: 11.5, fontWeight: 500, color: '#1D6033', backgroundColor: '#E8F5E9' }}>{formData.assignedClients.length} added</div>
+                  </div>
+                  {formData.assignedClients.length > 0 ? (
                     <div>
                       {/* Table Header */}
                       <div className="flex items-center gap-4" style={{ height: 40, padding: '0 16px', backgroundColor: '#FAFAFA', borderBottom: '1px solid #F5F5F5', borderRadius: '8px 8px 0 0' }}>
@@ -1153,13 +1218,11 @@ const AddHouse = () => {
                       })}
                       <div className="flex items-center justify-between" style={{ padding: 16, borderTop: '1px solid #F5F5F5', marginTop: 8 }}>
                         <p style={{ fontSize: 12.5, color: '#757575' }}>{formData.assignedClients.length} clients added · {Math.max(0, (Number(formData.maxCapacity) || 6) - formData.assignedClients.length)} beds remaining of {Number(formData.maxCapacity) || 6}</p>
-                        <button onClick={handleAddClientClick} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors" style={{ fontSize: 13, fontWeight: 500, color: '#1D6033', borderColor: '#1D6033', backgroundColor: 'transparent' }}>
-                          <Plus size={14} /> Add Another Client
-                        </button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
+                )}
               </div>
             ) : currentStep === 4 ? (
               <div>
