@@ -746,13 +746,14 @@ const AddUserShift = ({ mode = "add", user }) => {
                 const candidates = Array.isArray(rawCat) ? rawCat : [rawCat];
 
                 // Keyword aliases → allowed category name
+                // NOTE: "Supervised Visitation + Transportation" maps to "Supervised Visitation"
+                // because the dropdown merges both under a single option.
                 const aliasMap = [
-                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation"], name: "Supervised Visitation + Transportation" },
-                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation", "supervisedVisitation"], name: "Supervised Visitation" },
+                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation", "supervisedvisitation+trans"], name: "Supervised Visitation" },
+                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation", "supervisedVisitation", "supervised"], name: "Supervised Visitation" },
                   { keywords: ["transportation", "transport"], name: "Transportation" },
                   { keywords: ["respite care", "respite", "respitecare", "respiteCare"], name: "Respite Care" },
-                  { keywords: ["emergent care", "emergent", "emergentcare", "emergentCare", "emergency"], name: "Emergent Care" },
-                  { keywords: ["office admin", "officeadmin", "officeAdmin", "office"], name: "Office Admin" },
+                  { keywords: ["emergent care", "emergent", "emergentcare", "emergentCare", "emergency care", "emergency"], name: "Emergent Care" },
                 ];
 
                 for (const val of candidates) {
@@ -872,8 +873,12 @@ const AddUserShift = ({ mode = "add", user }) => {
 
         // Auto-fill shift category from intake form service type (only in add mode)
         if (mode !== "update" && foundCategory) {
-          formikRef.current?.setFieldValue("shiftCategory", foundCategory);
-          const catObj = shiftCategories.find((c) => c.name === foundCategory);
+          // Normalize: "Supervised Visitation + Transportation" → "Supervised Visitation"
+          const normalizedCategory = foundCategory === "Supervised Visitation + Transportation"
+            ? "Supervised Visitation"
+            : foundCategory;
+          formikRef.current?.setFieldValue("shiftCategory", normalizedCategory);
+          const catObj = shiftCategories.find((c) => c.name === normalizedCategory);
           if (catObj) setSelectedShiftCategory(catObj);
         }
 
