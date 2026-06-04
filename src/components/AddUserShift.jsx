@@ -193,6 +193,9 @@ const AddUserShift = ({ mode = "add", user }) => {
 
   const [shiftTypes, setShiftTypes] = useState([]);
   const [shiftCategories, setShiftCategories] = useState([]);
+  // Maps every raw Firestore category ID → its normalized display name.
+  // Built from ALL docs (before dedup), so IDs that get merged/dropped are still resolvable.
+  const allCategoryIdMapRef = useRef({});
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
 
@@ -301,6 +304,22 @@ const AddUserShift = ({ mode = "add", user }) => {
             .map((doc) => ({ id: doc.id, ...doc.data() }))
             .sort(sortByName)
         );
+
+        // Build a complete id→normalizedName map from every raw Firestore category doc
+        // so ID lookups work even for entries that get deduped out of the visible dropdown.
+        const NORMALIZE_NAME = (name) => {
+          if (!name) return "";
+          const n = name.trim();
+          if (n === "Supervised Visitation + Transportation") return "Supervised Visitation";
+          if (n === "Office Admin") return "";  // excluded
+          return n;
+        };
+        const idMap = {};
+        shiftCategorySnap.docs.forEach((d) => {
+          const normalized = NORMALIZE_NAME(d.data().name);
+          if (normalized) idMap[d.id] = normalized;
+        });
+        allCategoryIdMapRef.current = idMap;
 
         // Only 4 visible categories; "Supervised Visitation + Transportation" maps to "Supervised Visitation"
         const FOUR_CATEGORIES = ["Emergent Care", "Respite Care", "Transportation", "Supervised Visitation"];
@@ -752,40 +771,42 @@ const AddUserShift = ({ mode = "add", user }) => {
                 // Could be an array (of IDs or readable names) or a single string
                 const candidates = Array.isArray(rawCat) ? rawCat : [rawCat];
 
-                // Keyword aliases → allowed category name
-                // NOTE: "Supervised Visitation + Transportation" maps to "Supervised Visitation"
-                // because the dropdown merges both under a single option.
+                // Keyword aliases → normalized display name
                 const aliasMap = [
-                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation", "supervisedvisitation+trans"], name: "Supervised Visitation" },
-                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation", "supervisedVisitation", "supervised"], name: "Supervised Visitation" },
+                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation"], name: "Supervised Visitation" },
+                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation"], name: "Supervised Visitation" },
                   { keywords: ["transportation", "transport"], name: "Transportation" },
-                  { keywords: ["respite care", "respite", "respitecare", "respiteCare"], name: "Respite Care" },
-                  { keywords: ["emergent care", "emergent", "emergentcare", "emergentCare", "emergency care", "emergency"], name: "Emergent Care" },
+                  { keywords: ["respite care", "respite", "respitecare"], name: "Respite Care" },
+                  { keywords: ["emergent care", "emergent", "emergentcare", "emergency care", "emergency"], name: "Emergent Care" },
                 ];
 
-                for (const val of candidates) {
+                const resolveCandidate = (val) => {
                   const str = String(val).trim();
-                  if (!str) continue;
+                  if (!str) return "";
 
-                  // 1. Exact name match (case-insensitive)
-                  const exactMatch = shiftCategories.find(
-                    (c) => c.name.toLowerCase() === str.toLowerCase()
-                  );
-                  if (exactMatch) { foundCategory = exactMatch.name; break; }
+                  // 1. Full ID map lookup — handles IDs of merged/deduped entries (e.g. "Supervised Visitation + Transportation" ID)
+                  if (allCategoryIdMapRef.current[str]) return allCategoryIdMapRef.current[str];
 
-                  // 2. Exact ID match
-                  const idMatch = shiftCategories.find((c) => c.id === str);
-                  if (idMatch) { foundCategory = idMatch.name; break; }
+                  // 2. Exact name match against visible dropdown (case-insensitive)
+                  const exactMatch = shiftCategories.find((c) => c.name.toLowerCase() === str.toLowerCase());
+                  if (exactMatch) return exactMatch.name;
 
-                  // 3. Alias/keyword match
+                  // 3. Name match including "Supervised Visitation + Transportation" (may be stored as a name string)
+                  if (str.toLowerCase() === "supervised visitation + transportation") return "Supervised Visitation";
+
+                  // 4. Keyword/alias match — covers partial strings, camelCase, underscores
                   const strLower = str.toLowerCase();
                   for (const alias of aliasMap) {
                     if (alias.keywords.some((kw) => strLower.includes(kw) || kw.includes(strLower))) {
-                      foundCategory = alias.name;
-                      break;
+                      return alias.name;
                     }
                   }
-                  if (foundCategory) break;
+                  return "";
+                };
+
+                for (const val of candidates) {
+                  const resolved = resolveCandidate(val);
+                  if (resolved) { foundCategory = resolved; break; }
                 }
               }
             }
