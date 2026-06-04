@@ -208,6 +208,7 @@ const AddUserShift = ({ mode = "add", user }) => {
     startTime: "",
     endTime: "",
     description: "",
+    shiftAddress: "",
     accessToShiftReport: false,
     shiftDates: [],
   });
@@ -301,21 +302,29 @@ const AddUserShift = ({ mode = "add", user }) => {
             .sort(sortByName)
         );
 
-        // Use real Firestore IDs so Flutter can match categoryId on shifts
-        const allowedNames = new Set([
-          "Emergent Care", "Respite Care",
-          "Supervised Visitation", "Supervised Visitation + Transportation",
-          "Transportation", "Office Admin",
-        ]);
-        const realCategories = shiftCategorySnap.docs
+        // Only 4 visible categories; "Supervised Visitation + Transportation" maps to "Supervised Visitation"
+        const FOUR_CATEGORIES = ["Emergent Care", "Respite Care", "Transportation", "Supervised Visitation"];
+        const allowedNames = new Set([...FOUR_CATEGORIES, "Supervised Visitation + Transportation"]);
+        const rawCategories = shiftCategorySnap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((c) => allowedNames.has(c.name))
-          .sort(sortByName);
-        setShiftCategories(realCategories.length > 0 ? realCategories : [
-          { id: "emergent", name: "Emergent Care" },
-          { id: "respite", name: "Respite Care" },
-          { id: "supervised", name: "Supervised Visitation" },
-          { id: "transportation", name: "Transportation" },
+          .filter((c) => allowedNames.has(c.name));
+        // Merge "Supervised Visitation + Transportation" under "Supervised Visitation"
+        const seenNames = new Set();
+        const mergedCategories = rawCategories
+          .map((c) => c.name === "Supervised Visitation + Transportation"
+            ? { ...c, name: "Supervised Visitation" }
+            : c)
+          .filter((c) => {
+            if (seenNames.has(c.name)) return false;
+            seenNames.add(c.name);
+            return true;
+          })
+          .sort((a, b) => FOUR_CATEGORIES.indexOf(a.name) - FOUR_CATEGORIES.indexOf(b.name));
+        setShiftCategories(mergedCategories.length > 0 ? mergedCategories : [
+          { id: "emergent",      name: "Emergent Care" },
+          { id: "respite",       name: "Respite Care" },
+          { id: "transportation",name: "Transportation" },
+          { id: "supervised",    name: "Supervised Visitation" },
         ]);
 
         setClients(
@@ -539,6 +548,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             startTime: data.startTime || "",
             endTime: data.endTime || "",
             description: data.jobdescription || data.description || "",
+            shiftAddress: data.shiftAddress || "",
             accessToShiftReport: data.accessToShiftReport || false,
             shiftDates: calendarDates,
           }));
@@ -941,6 +951,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             secondaryUserDocId: secondaryStaff?.id || "",
             secondaryUserName: secondaryStaff?.name || "",
             vehicleType: values.vehicleType || "",
+            shiftAddress: values.shiftAddress || "",
             agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
             agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
             updatedAt: new Date(),
@@ -1068,6 +1079,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           secondaryUserDocId: secondaryStaff?.id || "",
           secondaryUserName: secondaryStaff?.name || "",
           vehicleType: values.vehicleType         || "",
+          shiftAddress: values.shiftAddress       || "",
 
           // ── Shift type & category (with real Firestore IDs) ───────
           typeName:      selectedShiftType?.name  || values.shiftType     || "",
@@ -1488,19 +1500,21 @@ const AddUserShift = ({ mode = "add", user }) => {
                         touched={touched.secondaryUser}
                       />
 
-                      {/* Vehicle Type */}
-                      <div className="relative">
-                        <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Vehicle Type</label>
-                        <Field as="select" name="vehicleType" className={selectCls(touched.vehicleType && errors.vehicleType, !values.vehicleType)}>
-                          <option value="">Select vehicle type</option>
-                          <option value="Personal">Personal</option>
-                          <option value="Agency">Agency</option>
-                        </Field>
-                        <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                        <ErrorMessage name="vehicleType" component="div" className="text-red-500 text-xs mt-1" />
-                      </div>
+                      {/* Vehicle Type — only for Transportation / Supervised Visitation */}
+                      {(values.shiftCategory || "").toLowerCase().match(/transportation|supervised/) && (
+                        <div className="relative">
+                          <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Vehicle Type</label>
+                          <Field as="select" name="vehicleType" className={selectCls(touched.vehicleType && errors.vehicleType, !values.vehicleType)}>
+                            <option value="">Select vehicle type</option>
+                            <option value="Personal">Personal</option>
+                            <option value="Agency">Agency</option>
+                          </Field>
+                          <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
+                            <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
+                          </span>
+                          <ErrorMessage name="vehicleType" component="div" className="text-red-500 text-xs mt-1" />
+                        </div>
+                      )}
 
                       {/* Start Time */}
                       <div>
@@ -1540,10 +1554,20 @@ const AddUserShift = ({ mode = "add", user }) => {
                       {/* Description */}
                       <div className="col-span-2">
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Description of Shift</label>
-                        <Field as="textarea" name="description" placeholder="Describe responsibilities, special instructions, or notes..." rows={3}
+                        <Field as="textarea" name="description" placeholder="Describe responsibilities, special instructions, or notes..." rows={6}
                           className={`${inputCls(touched.description && errors.description)} resize-none`} />
                         <ErrorMessage name="description" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
+
+                      {/* Shift Address — only for Emergent Care / Respite Care (non-transport) */}
+                      {values.shiftCategory && !(values.shiftCategory || "").toLowerCase().match(/transportation|supervised/) && (
+                        <div className="col-span-2">
+                          <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Address</label>
+                          <Field name="shiftAddress" type="text" placeholder="Enter the address where the shift will take place"
+                            className={inputCls(touched.shiftAddress && errors.shiftAddress)} />
+                          <ErrorMessage name="shiftAddress" component="div" className="text-red-500 text-xs mt-1" />
+                        </div>
+                      )}
 
                       {/* Service Dates Summary */}
                       <div className="col-span-2">
@@ -1728,8 +1752,8 @@ const AddUserShift = ({ mode = "add", user }) => {
                   </div>
                 </div>
 
-                {/* ── Family Members / Shift Points (only for family clients) ── */}
-                {selectedClient && shiftPoints.length > 0 && (
+                {/* ── Family Members / Shift Points — only for Transportation / Supervised Visitation ── */}
+                {selectedClient && shiftPoints.length > 0 && (values.shiftCategory || "").toLowerCase().match(/transportation|supervised/) && (
                   <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                     <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
                       <div>
