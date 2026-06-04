@@ -610,6 +610,13 @@ const AddUserShift = ({ mode = "add", user }) => {
       // Always clear stale data from the previous client before loading new one
       setShiftPoints([]);
       setRemovedShiftPoints([]);
+      // Clear category & description so the old client's values never bleed into the new client
+      if (mode !== "update") {
+        formikRef.current?.setFieldValue("shiftCategory", "");
+        setSelectedShiftCategory(null);
+        formikRef.current?.setFieldValue("description", "");
+        setIntakeDescription("");
+      }
 
       let pointsFound = [];
       // ── 1. If client has shiftPoints (family client), use those first ──
