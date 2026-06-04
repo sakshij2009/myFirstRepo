@@ -638,6 +638,57 @@ const AddUserShift = ({ mode = "add", user }) => {
       }
 
       let pointsFound = [];
+
+      // Helper: resolve any raw value (ID, name, array) to a normalized category name
+      const resolveCategory = (raw) => {
+        if (!raw) return "";
+        const candidates = Array.isArray(raw) ? raw : [raw];
+        const aliasMap = [
+          { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation"], name: "Supervised Visitation" },
+          { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation"], name: "Supervised Visitation" },
+          { keywords: ["transportation", "transport"], name: "Transportation" },
+          { keywords: ["respite care", "respite", "respitecare"], name: "Respite Care" },
+          { keywords: ["emergent care", "emergent", "emergentcare", "emergency care", "emergency"], name: "Emergent Care" },
+        ];
+        for (const val of candidates) {
+          const str = String(val).trim();
+          if (!str) continue;
+          // 1. Full Firestore ID map (catches IDs of merged/deduped entries)
+          if (allCategoryIdMapRef.current[str]) return allCategoryIdMapRef.current[str];
+          // 2. Exact name match against visible dropdown
+          const exact = shiftCategories.find((c) => c.name.toLowerCase() === str.toLowerCase());
+          if (exact) return exact.name;
+          // 3. Explicit "+Transportation" name string
+          if (str.toLowerCase() === "supervised visitation + transportation") return "Supervised Visitation";
+          // 4. Keyword alias
+          const strLower = str.toLowerCase();
+          for (const alias of aliasMap) {
+            if (alias.keywords.some((kw) => strLower.includes(kw) || kw.includes(strLower))) return alias.name;
+          }
+        }
+        return "";
+      };
+
+      // ── 0. Try to resolve category directly from the client document first ──
+      // The client record in Firestore often has serviceType / category / typeName
+      // This is the most reliable source and works even when no intake form matches.
+      if (mode !== "update") {
+        const clientRawCat =
+          selectedClient.serviceType ||
+          selectedClient.services?.serviceType ||
+          selectedClient.category ||
+          selectedClient.typeName ||
+          selectedClient.shiftCategory ||
+          selectedClient.categoryName ||
+          null;
+        const resolved = resolveCategory(clientRawCat);
+        if (resolved) {
+          formikRef.current?.setFieldValue("shiftCategory", resolved);
+          const catObj = shiftCategories.find((c) => c.name === resolved);
+          if (catObj) setSelectedShiftCategory(catObj);
+        }
+      }
+
       // ── 1. If client has shiftPoints (family client), use those first ──
       if (Array.isArray(selectedClient.shiftPoints) && selectedClient.shiftPoints.length > 0) {
         pointsFound = selectedClient.shiftPoints.map((sp) => ({
@@ -757,7 +808,7 @@ const AddUserShift = ({ mode = "add", user }) => {
               || "";
             if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
 
-            // Find Service Category — check all known field names
+            // Find Service Category from intake form fields (use same resolveCategory helper)
             if (!foundCategory) {
               const rawCat =
                 data.serviceRequired ||
@@ -766,49 +817,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                 data.serviceType ||
                 data.category ||
                 null;
-
-              if (rawCat) {
-                // Could be an array (of IDs or readable names) or a single string
-                const candidates = Array.isArray(rawCat) ? rawCat : [rawCat];
-
-                // Keyword aliases → normalized display name
-                const aliasMap = [
-                  { keywords: ["supervised visitation + transportation", "supervised + transportation", "supervisedvisitation+transportation"], name: "Supervised Visitation" },
-                  { keywords: ["supervised visitation", "supervisedvisitation", "supervised_visitation"], name: "Supervised Visitation" },
-                  { keywords: ["transportation", "transport"], name: "Transportation" },
-                  { keywords: ["respite care", "respite", "respitecare"], name: "Respite Care" },
-                  { keywords: ["emergent care", "emergent", "emergentcare", "emergency care", "emergency"], name: "Emergent Care" },
-                ];
-
-                const resolveCandidate = (val) => {
-                  const str = String(val).trim();
-                  if (!str) return "";
-
-                  // 1. Full ID map lookup — handles IDs of merged/deduped entries (e.g. "Supervised Visitation + Transportation" ID)
-                  if (allCategoryIdMapRef.current[str]) return allCategoryIdMapRef.current[str];
-
-                  // 2. Exact name match against visible dropdown (case-insensitive)
-                  const exactMatch = shiftCategories.find((c) => c.name.toLowerCase() === str.toLowerCase());
-                  if (exactMatch) return exactMatch.name;
-
-                  // 3. Name match including "Supervised Visitation + Transportation" (may be stored as a name string)
-                  if (str.toLowerCase() === "supervised visitation + transportation") return "Supervised Visitation";
-
-                  // 4. Keyword/alias match — covers partial strings, camelCase, underscores
-                  const strLower = str.toLowerCase();
-                  for (const alias of aliasMap) {
-                    if (alias.keywords.some((kw) => strLower.includes(kw) || kw.includes(strLower))) {
-                      return alias.name;
-                    }
-                  }
-                  return "";
-                };
-
-                for (const val of candidates) {
-                  const resolved = resolveCandidate(val);
-                  if (resolved) { foundCategory = resolved; break; }
-                }
-              }
+              if (rawCat) foundCategory = resolveCategory(rawCat);
             }
 
             // Find Siblings/Members for Shift Points if we don't have them yet
@@ -899,14 +908,10 @@ const AddUserShift = ({ mode = "add", user }) => {
           formikRef.current?.setFieldValue("description", foundDesc);
         }
 
-        // Auto-fill shift category from intake form service type (only in add mode)
+        // Auto-fill from intake form — override client-document value only if intake found something
         if (mode !== "update" && foundCategory) {
-          // Normalize: "Supervised Visitation + Transportation" → "Supervised Visitation"
-          const normalizedCategory = foundCategory === "Supervised Visitation + Transportation"
-            ? "Supervised Visitation"
-            : foundCategory;
-          formikRef.current?.setFieldValue("shiftCategory", normalizedCategory);
-          const catObj = shiftCategories.find((c) => c.name === normalizedCategory);
+          formikRef.current?.setFieldValue("shiftCategory", foundCategory);
+          const catObj = shiftCategories.find((c) => c.name === foundCategory);
           if (catObj) setSelectedShiftCategory(catObj);
         }
 
