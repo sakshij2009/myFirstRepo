@@ -30,7 +30,7 @@ import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { formatLocalISO } from "../utils/dateHelpers";
+import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
 
 
 // ---------------- OFFICE ADDRESS ----------------
@@ -365,28 +365,16 @@ const AddUserShift = ({ mode = "add", user }) => {
   }, []);
 
   // ---------------- DATE HELPERS ----------------
+  // Converts any Firestore date value to a LOCAL "YYYY-MM-DD" string.
+  // Uses parseLocalSafe so "YYYY-MM-DD" ISO strings are never treated as UTC midnight.
   const formatDateFromFirestore = (dateValue) => {
     if (!dateValue) return "";
-
-    if (dateValue.toDate) {
-      const d = dateValue.toDate();
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
-    }
-
-    if (typeof dateValue === "string") {
-      const parsed = new Date(dateValue);
-      if (!isNaN(parsed)) {
-        const year = parsed.getFullYear();
-        const month = String(parsed.getMonth() + 1).padStart(2, "0");
-        const day = String(parsed.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      }
-    }
-
-    return "";
+    const d = parseLocalSafe(dateValue);
+    if (!d) return "";
+    const year  = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day   = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
 
@@ -489,8 +477,32 @@ const AddUserShift = ({ mode = "add", user }) => {
           const startISO = formatDateFromFirestore(data.startDate);
           const endISO = formatDateFromFirestore(data.endDate);
 
+          // Load ALL dates from this batch so editing one shift shows all sibling dates
           const calendarDates = [];
-          if (startISO) calendarDates.push(new Date(startISO));
+          if (data.batchId) {
+            try {
+              const batchSnap = await getDocs(
+                query(collection(db, "shifts"), where("batchId", "==", data.batchId))
+              );
+              batchSnap.docs.forEach((bDoc) => {
+                const bData = bDoc.data();
+                const bISO = formatDateFromFirestore(bData.startDate);
+                if (bISO) {
+                  const bd = parseLocalSafe(bISO);
+                  if (bd) calendarDates.push(bd);
+                }
+              });
+              // Sort ascending
+              calendarDates.sort((a, b) => a - b);
+            } catch (e) {
+              console.warn("Batch load failed:", e);
+            }
+          }
+          // Fallback: just the current shift's date
+          if (calendarDates.length === 0 && startISO) {
+            const d = parseLocalSafe(startISO);
+            if (d) calendarDates.push(d);
+          }
 
           // ✅ Handle all shift point schema versions (old + new)
           let points = [];
@@ -1106,9 +1118,12 @@ const AddUserShift = ({ mode = "add", user }) => {
 
 
       // ---------- ADD MODE ----------
+      // Shared batchId so all shifts from this submission can be found when editing
+      const batchId = `batch_${Date.now()}`;
+
       for (const date of selectedDates) {
         const startDateObj = normalizeDate(date);
-        const newShiftId = Date.now().toString();
+        const newShiftId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
         const isOvernight = values.endTime < values.startTime;
         let endDateObj = new Date(startDateObj);
@@ -1139,6 +1154,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         await setDoc(doc(db, "shifts", newShiftId), {
           // ── Identity ──────────────────────────────────────────────
           id:            newShiftId,
+          batchId:       batchId,      // links all shifts created together
           createdAt:     new Date(),
 
           // ── Dates — Flutter expects "DD Mon YYYY" strings + "DD-MM-YYYY" dateKey ──
