@@ -663,7 +663,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           // 4. Keyword alias
           const strLower = str.toLowerCase();
           for (const alias of aliasMap) {
-            if (alias.keywords.some((kw) => strLower.includes(kw) || kw.includes(strLower))) return alias.name;
+            if (alias.keywords.some((kw) => strLower.includes(kw))) return alias.name;
           }
         }
         return "";
