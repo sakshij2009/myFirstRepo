@@ -669,22 +669,53 @@ const AddUserShift = ({ mode = "add", user }) => {
         return "";
       };
 
-      // ── 0. Try to resolve category directly from the client document first ──
-      // The client record in Firestore often has serviceType / category / typeName
-      // This is the most reliable source and works even when no intake form matches.
+      // ── 0. Try to resolve category directly from the client document ──
+      // Try every field that could contain the service type (string or array).
       if (mode !== "update") {
-        const clientRawCat =
-          selectedClient.serviceType ||
-          selectedClient.services?.serviceType ||
-          selectedClient.category ||
-          selectedClient.typeName ||
-          selectedClient.shiftCategory ||
-          selectedClient.categoryName ||
-          null;
-        const resolved = resolveCategory(clientRawCat);
-        if (resolved) {
-          formikRef.current?.setFieldValue("shiftCategory", resolved);
-          const catObj = shiftCategories.find((c) => c.name === resolved);
+        // Collect all candidate values from the client document
+        const clientCandidates = [
+          selectedClient.serviceType,
+          selectedClient.services?.serviceType,
+          selectedClient.services?.serviceRequired,
+          selectedClient.category,
+          selectedClient.typeName,
+          selectedClient.shiftCategory,
+          selectedClient.categoryName,
+          selectedClient.serviceCategory,
+          selectedClient.serviceRequired,
+          selectedClient.service,
+          selectedClient.shiftType,
+          selectedClient.type,
+        ].filter(Boolean);
+
+        // Also scan every string/array value inside selectedClient.services object
+        if (selectedClient.services && typeof selectedClient.services === "object") {
+          Object.values(selectedClient.services).forEach((v) => {
+            if (v && (typeof v === "string" || Array.isArray(v))) clientCandidates.push(v);
+          });
+        }
+
+        let resolvedFromClient = "";
+        for (const raw of clientCandidates) {
+          const r = resolveCategory(raw);
+          if (r) { resolvedFromClient = r; break; }
+        }
+
+        // Structural heuristic: if client has pickup/drop info (shiftPoints or direct fields)
+        // and no category found yet, it must be Transportation or Supervised Visitation
+        if (!resolvedFromClient) {
+          const pts = Array.isArray(selectedClient.shiftPoints) ? selectedClient.shiftPoints : [];
+          const hasPickupDrop = pts.some(sp => sp.pickupLocation || sp.dropLocation)
+            || selectedClient.pickupLocation || selectedClient.dropLocation;
+          const hasVisit = pts.some(sp => sp.visitLocation) || selectedClient.visitLocation;
+
+          if (hasPickupDrop && hasVisit) resolvedFromClient = "Supervised Visitation";
+          else if (hasPickupDrop) resolvedFromClient = "Transportation";
+        }
+
+        if (resolvedFromClient) {
+          formikRef.current?.setFieldValue("shiftCategory", resolvedFromClient);
+          const catObj = shiftCategories.find((c) => c.name === resolvedFromClient);
           if (catObj) setSelectedShiftCategory(catObj);
         }
       }
@@ -757,10 +788,18 @@ const AddUserShift = ({ mode = "add", user }) => {
 
           let isMatch = false;
           // ── Exact matches first ──
+          // Also match by client Firestore document ID
+          const idMatch = selectedClient.id && (
+            data.clientId === selectedClient.id ||
+            data.id === selectedClient.id ||
+            d.id === selectedClient.id
+          );
+
           if (
+            idMatch ||
             nameMatch(data.clientName) || nameMatch(data.name) ||
             nameMatch(data.nameOfPerson) || nameMatch(data.familyName) ||
-            nameMatch(data.nameInClientTable) || nameMatch(data.childsName)   // Flutter form fields
+            nameMatch(data.nameInClientTable) || nameMatch(data.childsName)
           ) {
             isMatch = true;
           }
@@ -808,16 +847,29 @@ const AddUserShift = ({ mode = "add", user }) => {
               || "";
             if (possibleDesc && !foundDesc) foundDesc = possibleDesc;
 
-            // Find Service Category from intake form fields (use same resolveCategory helper)
+            // Find Service Category — check every possible field in the intake form
             if (!foundCategory) {
-              const rawCat =
-                data.serviceRequired ||
-                data.services?.serviceRequired ||
-                data.services?.serviceType ||
-                data.serviceType ||
-                data.category ||
-                null;
-              if (rawCat) foundCategory = resolveCategory(rawCat);
+              const rawCatCandidates = [
+                data.serviceRequired,
+                data.services?.serviceRequired,
+                data.services?.serviceType,
+                data.services?.category,
+                data.serviceType,
+                data.category,
+                data.typeName,
+                data.shiftCategory,
+                data.categoryName,
+                data.shiftType,
+                data.type,
+                data.serviceCategory,
+                // Also check inside inTakeClients[0]
+                Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.serviceType,
+                Array.isArray(data.inTakeClients) && data.inTakeClients[0]?.category,
+              ].filter(Boolean);
+              for (const raw of rawCatCandidates) {
+                const r = resolveCategory(raw);
+                if (r) { foundCategory = r; break; }
+              }
             }
 
             // Find Siblings/Members for Shift Points if we don't have them yet
