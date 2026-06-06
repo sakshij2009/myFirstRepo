@@ -62,56 +62,80 @@ const serviceTypeStyles = {
 
 
 // ── Helper: Parse shift date + time string into a real Date ──────────────────
+// Handles: "9:00 AM", "09:00 AM", "14:00", "09:00", full ISO strings
 const parseShiftDateTime = (dateStr, timeStr) => {
   if (!timeStr) return null;
   try {
+    const tStr = String(timeStr).trim();
+
+    // Full ISO string (e.g. "2026-06-08T03:00:00.000Z") — parse & return directly
+    if (tStr.includes("T") || tStr.includes("Z")) {
+      const d = new Date(tStr);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    // Build base date (date-only, local midnight)
     let base = new Date();
     if (dateStr) {
-      const d = dateStr?.toDate ? dateStr.toDate() : new Date(dateStr);
-      if (!isNaN(d)) base = d;
+      const raw = dateStr?.toDate ? dateStr.toDate()
+        : dateStr?.seconds ? new Date(dateStr.seconds * 1000)
+        : new Date(dateStr);
+      if (!isNaN(raw?.getTime())) {
+        base = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
+      }
+    } else {
+      base = new Date(base.getFullYear(), base.getMonth(), base.getDate());
     }
-    const [timePart, period] = String(timeStr).trim().split(" ");
-    let [h, m] = timePart.split(":").map(Number);
-    if (period?.toUpperCase() === "PM" && h !== 12) h += 12;
-    if (period?.toUpperCase() === "AM" && h === 12) h = 0;
+
+    let h, m;
+
+    // "9:00 AM" / "09:30 PM"
+    if (/AM|PM/i.test(tStr)) {
+      const spaceIdx = tStr.lastIndexOf(" ");
+      const timePart = tStr.slice(0, spaceIdx);
+      const period   = tStr.slice(spaceIdx + 1).toUpperCase();
+      [h, m] = timePart.split(":").map(Number);
+      if (period === "PM" && h !== 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+    }
+    // "09:00" or "14:30" — plain 24-hour
+    else if (/^\d{1,2}:\d{2}$/.test(tStr)) {
+      [h, m] = tStr.split(":").map(Number);
+    } else {
+      return null;
+    }
+
+    if (isNaN(h) || isNaN(m)) return null;
     const result = new Date(base);
-    result.setHours(h, m || 0, 0, 0);
-    return result;
+    result.setHours(h, m, 0, 0);
+    return isNaN(result.getTime()) ? null : result;
   } catch { return null; }
 };
 
-// ── Helper: Round to nearest 15 min ──────────────────────────────────────────
-const roundToNearest15 = (date) => {
-  const coeff = 1000 * 60 * 15;
-  return new Date(Math.round(date.getTime() / coeff) * coeff);
-};
-
-// Store in device-local time. Staff in Edmonton will have Edmonton-timezone
-// devices, so local = Edmonton. Forcing a fixed timezone converts twice and
-// produces the wrong value for anyone not physically in Edmonton (e.g. IST testers).
+// Edmonton-local time string (what gets saved as clockInTime / clockOutTime)
 const toTimeStr = (date) =>
   date.toLocaleTimeString("en-US", {
     hour: "2-digit", minute: "2-digit", hour12: true,
+    timeZone: "America/Edmonton",
   });
 
-// ── Helper: Clock-IN time — snaps to scheduled start if within 15-min window ─
-// "if clocking in between 8:45 and 9:00, record as 9:00"
+// ── Helper: Clock-IN — snaps to scheduled start if clocking in within ±15 min
 const getClockInTime = (startTimeStr, startDateStr) => {
   const now = new Date();
   const scheduled = parseShiftDateTime(startDateStr, startTimeStr);
-  if (scheduled) {
-    const diffMinutes = (now - scheduled) / 60000; // positive = past scheduled start
+  if (scheduled && !isNaN(scheduled.getTime())) {
+    const diffMinutes = (now.getTime() - scheduled.getTime()) / 60000;
     if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
   }
   return toTimeStr(now);
 };
 
-// ── Helper: Clock-OUT time — snaps to scheduled end if within ±15 min ────────
+// ── Helper: Clock-OUT — snaps to scheduled end if clocking out within ±15 min
 const getClockOutTime = (endTimeStr, startDateStr) => {
   const now = new Date();
   const scheduled = parseShiftDateTime(startDateStr, endTimeStr);
-  if (scheduled) {
-    const diffMinutes = (now - scheduled) / 60000; // positive = past scheduled end
+  if (scheduled && !isNaN(scheduled.getTime())) {
+    const diffMinutes = (now.getTime() - scheduled.getTime()) / 60000;
     if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
   }
   return toTimeStr(now);
@@ -202,11 +226,13 @@ export default function ShiftDetails() {
   const [reportText, setReportText] = useState("");
   const [savingReport, setSavingReport] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
+  const [isEditingReport, setIsEditingReport] = useState(false);
 
   // ── Clock-in/out window state ─────────────────────────────────────────────
   const [clockInLocked, setClockInLocked] = useState(false);
   const [minutesUntilStart, setMinutesUntilStart] = useState(null); // null = not in 15-min window
   const notifsScheduledRef = useRef(false);
+  const autoClockOutFiredRef = useRef(false);
 
   // ── Transport report fields (shown after transportationCompleted) ──
   const [transComments, setTransComments] = useState("");
@@ -432,14 +458,16 @@ export default function ShiftDetails() {
     }
 
     // ── Real-time window check every 30 seconds ───────────────────────────
-    const checkWindow = () => {
+    const checkWindow = async () => {
       const now = new Date();
+
+      // Clock-in window countdown
       if (isUpcoming && startDT) {
         const mins = (startDT.getTime() - now.getTime()) / 60000; // positive = future
         if (mins > 0 && mins <= 15) {
           setMinutesUntilStart(Math.ceil(mins));
         } else if (mins <= 0 && mins >= -15) {
-          setMinutesUntilStart(0); // exactly at or just past start, still within window
+          setMinutesUntilStart(0);
         } else if (mins < -15) {
           setClockInLocked(true);
           setMinutesUntilStart(null);
@@ -447,12 +475,43 @@ export default function ShiftDetails() {
           setMinutesUntilStart(null);
         }
       }
+
+      // Auto-clock-out: if clocked in but not clocked out and 15+ min past shift end
+      if (isInProgress && endDT && !isNaN(endDT.getTime()) && !autoClockOutFiredRef.current) {
+        const minsPassedEnd = (now.getTime() - endDT.getTime()) / 60000;
+        if (minsPassedEnd >= 15) {
+          autoClockOutFiredRef.current = true; // prevent re-firing every 30s
+          try {
+            const scheduledEndTime = toTimeStr(endDT);
+            const locationStr = await getLocationString();
+            await updateDoc(doc(db, "shifts", shiftId), {
+              clockOut: serverTimestamp(),
+              clockOutTime: scheduledEndTime,
+              clockOutDate: new Date().toISOString(),
+              clockOutLocation: locationStr,
+              autoClockOut: true,
+            });
+            await sendNotification(user?.username || user?.userId, {
+              title: "Auto Clocked Out",
+              message: `You were automatically clocked out at ${scheduledEndTime} (shift end time).`,
+              type: "shift",
+              category: "Shifts",
+              icon: "time-outline",
+              iconColor: "#F59E0B",
+              iconBg: "#FFFBEB",
+            });
+          } catch (e) {
+            autoClockOutFiredRef.current = false; // allow retry on failure
+            console.warn("Auto clock-out failed:", e);
+          }
+        }
+      }
     };
 
     checkWindow();
     const timer = setInterval(checkWindow, 30000);
     return () => clearInterval(timer);
-  }, [shift?.id, shift?.shiftConfirmed, shift?.clockInTime, shift?.clockOutTime, shiftId]);
+  }, [shift?.id, shift?.shiftConfirmed, shift?.clockInTime, shift?.clockOutTime, shiftId, user?.username, user?.userId]);
 
   // ── Lightweight intake fetch — only when clientName looks like a numeric ID,
   // do a single targeted getDoc by clientId (no full collection scan).
@@ -955,7 +1014,7 @@ export default function ShiftDetails() {
               <TextInput
                 style={[
                   styles.reportInput,
-                  (shiftLocked || shift?.reportSubmitted) && { backgroundColor: "#F3F4F6", color: "#6B7280" }
+                  (shiftLocked || (shift?.reportSubmitted && !isEditingReport)) && { backgroundColor: "#F3F4F6", color: "#6B7280" }
                 ]}
                 placeholder="Type your shift report here..."
                 placeholderTextColor={GRAY_TEXT}
@@ -964,13 +1023,40 @@ export default function ShiftDetails() {
                 textAlignVertical="top"
                 value={reportText}
                 onChangeText={setReportText}
-                editable={!shiftLocked && !shift?.reportSubmitted}
+                editable={!shiftLocked && (!shift?.reportSubmitted || isEditingReport)}
               />
 
-              {shift?.reportSubmitted ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: -4, marginBottom: 10 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />
-                  <Text style={{ color: PRIMARY_GREEN, fontSize: 13, fontWeight: "700", fontFamily: "Inter-Bold" }}>Report submitted successfully</Text>
+              {shift?.reportSubmitted && !isEditingReport ? (
+                <View style={{ gap: 10, marginTop: -4, marginBottom: 10 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="checkmark-circle" size={16} color={PRIMARY_GREEN} />
+                    <Text style={{ color: PRIMARY_GREEN, fontSize: 13, fontWeight: "700", fontFamily: "Inter-Bold" }}>Report submitted successfully</Text>
+                  </View>
+                  {!shiftLocked && (
+                    <Pressable
+                      onPress={() => setIsEditingReport(true)}
+                      style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 1, borderColor: PRIMARY_GREEN, borderRadius: 10, paddingVertical: 10 }}
+                    >
+                      <Ionicons name="pencil-outline" size={15} color={PRIMARY_GREEN} />
+                      <Text style={{ color: PRIMARY_GREEN, fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" }}>Edit Report</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ) : isEditingReport ? (
+                <View style={styles.reportBtnRow}>
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]}
+                    onPress={() => setIsEditingReport(false)}
+                  >
+                    <Text style={[styles.reportBtnText, { color: DARK_TEXT }]}>Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]}
+                    onPress={async () => { await handleUpdateReport(true); setIsEditingReport(false); }}
+                    disabled={savingReport}
+                  >
+                    <Text style={[styles.reportBtnText, { color: "#FFF" }]}>{savingReport ? "Saving..." : "Save Changes"}</Text>
+                  </Pressable>
                 </View>
               ) : !shiftLocked && (
                 <View style={styles.reportBtnRow}>

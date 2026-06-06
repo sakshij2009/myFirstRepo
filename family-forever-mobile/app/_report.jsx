@@ -680,16 +680,33 @@ const fetchIntakeForm = async () => {
             )}
 
             {isSubmitted && (
-              <Text
-                style={{
-                  marginTop: 14,
-                  color: "#16A34A",
-                  fontWeight: "700",
-                  textAlign: "center",
-                }}
-              >
-                Report submitted
-              </Text>
+              <View style={{ marginTop: 14, alignItems: "center", gap: 10 }}>
+                <Text
+                  style={{
+                    color: "#16A34A",
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  Report submitted ✓
+                </Text>
+                <Pressable
+                  onPress={() => setIsSubmitted(false)}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "#14532D",
+                    paddingVertical: 10,
+                    paddingHorizontal: 24,
+                    borderRadius: 5,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={16} color="#14532D" />
+                  <Text style={{ color: "#14532D", fontWeight: "700" }}>Edit Report</Text>
+                </Pressable>
+              </View>
             )}
           
 

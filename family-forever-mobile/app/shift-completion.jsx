@@ -96,6 +96,7 @@ function getDuration(shift) {
 export default function ShiftCompletion() {
   const { shiftId, mode } = useLocalSearchParams();
   const isViewMode = mode === "view";
+  const [isEditing, setIsEditing] = useState(false);
 
   const [shift, setShift]     = useState(null);
   const [loading, setLoading] = useState(true);
@@ -194,7 +195,7 @@ export default function ShiftCompletion() {
         Object.assign(updateData, {
           approvedBy: approvedBy.trim() || null,
           reportAdminComments: adminComments.trim() || null,
-          receiptUrl,
+          ...(receiptUrl && { receiptUrl }),
           ...(isPersonalVehicle && {
             officeToPickupKm: officePickupNum || null,
             dropToOfficeKm: dropOfficeNum || null,
@@ -205,6 +206,11 @@ export default function ShiftCompletion() {
 
       if (shift?.ref) {
         await updateDoc(shift.ref, updateData);
+      }
+
+      if (isEditing) {
+        Alert.alert("Report Updated!", "Your changes have been saved successfully.");
+        return;
       }
 
       Alert.alert("Report Submitted!", "Your shift report has been saved successfully.", [
@@ -244,18 +250,20 @@ export default function ShiftCompletion() {
         {/* ── Success Header ─────────────────────────────────────────────── */}
         <View style={styles.successHeader}>
           <View style={styles.checkCircle}>
-            <Ionicons name={isViewMode ? "document-text" : "checkmark-circle"} size={56} color="#FFF" />
+            <Ionicons name={isViewMode && !isEditing ? "document-text" : "checkmark-circle"} size={56} color="#FFF" />
           </View>
-          <Text style={styles.successTitle}>{isViewMode ? "Shift Report" : "Shift Complete!"}</Text>
+          <Text style={styles.successTitle}>{isViewMode && !isEditing ? "Shift Report" : isEditing ? "Edit Report" : "Shift Complete!"}</Text>
           <Text style={styles.successSub}>
-            {isViewMode
+            {isViewMode && !isEditing
               ? `${shift?.clientName || shift?.name || "Client"} · ${shift?.startTime || ""} – ${shift?.endTime || ""}`
+              : isEditing
+              ? "Update your shift report details below."
               : "Great work! Please complete the shift report below."}
           </Text>
         </View>
 
         {/* ── View Mode: Read-only shift report ────────────────────────────── */}
-        {isViewMode && (
+        {isViewMode && !isEditing && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Shift Report</Text>
 
@@ -300,7 +308,7 @@ export default function ShiftCompletion() {
         )}
 
         {/* ── Transportation / Supervised Visit Report ───────────────────── */}
-        {isTransport && (
+        {isTransport && (!isViewMode || isEditing) && (
           <View style={[styles.card, { borderTopWidth: 3, borderTopColor: BLUE }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: BLUE_LT, alignItems: "center", justifyContent: "center" }}>
@@ -487,8 +495,8 @@ export default function ShiftCompletion() {
           ))}
         </View>
 
-        {/* ── Final Notes (editable — only in fill mode) ──────────────────── */}
-        {!isViewMode && (
+        {/* ── Final Notes (editable — only in fill/edit mode) ─────────────── */}
+        {(!isViewMode || isEditing) && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Final Notes</Text>
             <TextInput
@@ -507,15 +515,47 @@ export default function ShiftCompletion() {
 
       {/* ── Bottom Actions ───────────────────────────────────────────────── */}
       <View style={styles.bottomBar}>
-        {isViewMode ? (
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.submitBtn}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-back-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
-            <Text style={styles.submitBtnText}>Back to Shift</Text>
-          </Pressable>
+        {isViewMode && !isEditing ? (
+          <>
+            <Pressable
+              onPress={() => setIsEditing(true)}
+              style={[styles.submitBtn, { backgroundColor: "#1E5FA6" }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="pencil-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={styles.submitBtnText}>Edit Report</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.back()}
+              style={styles.skipBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipBtnText}>Back to Shift</Text>
+            </Pressable>
+          </>
+        ) : isEditing ? (
+          <>
+            <Pressable
+              onPress={async () => { await handleFinish(); setIsEditing(false); }}
+              disabled={saving}
+              style={[styles.submitBtn, saving && { opacity: 0.6 }]}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.submitBtnText}>
+                    {uploadingReceipt ? "Uploading..." : "Save Changes"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable onPress={() => setIsEditing(false)} style={styles.skipBtn} activeOpacity={0.7}>
+              <Text style={styles.skipBtnText}>Cancel</Text>
+            </Pressable>
+          </>
         ) : (
           <>
             <Pressable
