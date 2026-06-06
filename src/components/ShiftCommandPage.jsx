@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User,
   AlertTriangle, Calendar,
   LayoutList, Columns3, CalendarDays, Filter,
   CheckCircle2, XCircle, AlertCircle, History,
-  Eye, Edit2, MoreHorizontal,
+  Eye, Edit2, MoreHorizontal, Trash2,
 } from "lucide-react";
+import { parseLocalSafe } from "../utils/dateHelpers";
 
 // ─── Service Config ────────────────────────────────────────────────────────────
 const SERVICE_CFG = {
@@ -28,27 +29,20 @@ const STATUS_CFG = {
 };
 
 // ─── Normalise Firebase shift ──────────────────────────────────────────────────
+// Uses parseLocalSafe so all date formats (Flutter "DD Mon YYYY", ISO, Timestamp)
+// are parsed as LOCAL midnight — no UTC off-by-one shift.
 function normaliseDate(val) {
-  if (!val) return null;
-  if (typeof val?.toDate === "function") return val.toDate();
-  if (val instanceof Date) return val;
-  if (typeof val === "string") {
-    // Try ISO or common formats
-    const d = new Date(val);
-    if (!isNaN(d)) return d;
-    // "05 DEC 2024" style
-    const parts = val.trim().split(/\s+/);
-    if (parts.length >= 3) {
-      const d2 = new Date(`${parts[1]} ${parts[0]}, ${parts[2]}`);
-      if (!isNaN(d2)) return d2;
-    }
-  }
-  return null;
+  return parseLocalSafe(val);
 }
 
 function toDateStr(val) {
   const d = normaliseDate(val);
-  return d ? d.toISOString().slice(0, 10) : null;
+  if (!d) return null;
+  // Extract LOCAL date components to build "YYYY-MM-DD" without UTC conversion
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function normaliseCategoryKey(cat) {
@@ -86,13 +80,20 @@ function normaliseStatus(shift) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function addDays(dateStr, n) {
-  const d = new Date(dateStr);
+  const d = parseLocalSafe(dateStr) || new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function calcDuration(start, end) {
@@ -197,7 +198,18 @@ function ShiftGridHeader({ showDate }) {
   );
 }
 
-function ShiftGridRow({ shift, showDate, navigate }) {
+async function handleDeleteShift(shiftId, setRawShifts) {
+  if (!window.confirm("Delete this shift? This cannot be undone.")) return;
+  try {
+    await deleteDoc(doc(db, "shifts", shiftId));
+    if (setRawShifts) setRawShifts((prev) => prev.filter((s) => s.id !== shiftId));
+  } catch (e) {
+    console.error("Delete failed:", e);
+    alert("Failed to delete shift. Please try again.");
+  }
+}
+
+function ShiftGridRow({ shift, showDate, navigate, onDelete }) {
   const svc = SERVICE_CFG[shift.serviceKey] || SERVICE_CFG.other;
   const dur = calcDuration(shift.timeStart, shift.timeEnd);
   return (
@@ -277,16 +289,23 @@ function ShiftGridRow({ shift, showDate, navigate }) {
         <button
           className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
           style={{ width: 26, height: 26, background: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe" }}
-          onClick={() => navigate && navigate(`/admin-dashboard/shift-report/${shift.id}`)}
+          onClick={(e) => { e.stopPropagation(); navigate && navigate(`/admin-dashboard/shift-report/${shift.id}`); }}
           title="View report">
           <Eye size={12} strokeWidth={2} />
         </button>
         <button
           className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
           style={{ width: 26, height: 26, background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0" }}
-          onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`)}
+          onClick={(e) => { e.stopPropagation(); navigate && navigate(`/admin-dashboard/add/update-user-shift/${shift.id}`); }}
           title="Edit shift">
           <Edit2 size={12} strokeWidth={2} />
+        </button>
+        <button
+          className="flex items-center justify-center rounded-lg transition-all hover:brightness-95"
+          style={{ width: 26, height: 26, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
+          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(shift.id); }}
+          title="Delete shift">
+          <Trash2 size={12} strokeWidth={2} />
         </button>
       </div>
     </div>
@@ -589,7 +608,7 @@ function TodayView({ shifts, navigate }) {
 }
 
 // ─── Timeline View ────────────────────────────────────────────────────────────
-function TimelineView({ shifts, navigate }) {
+function TimelineView({ shifts, navigate, onDelete }) {
   const TODAY = todayStr();
   const tomorrow = addDays(TODAY, 1);
   const weekEnd = addDays(TODAY, 7);
@@ -621,7 +640,7 @@ function TimelineView({ shifts, navigate }) {
               <div className="flex-1 h-px" style={{ background: "#f3f4f6" }} />
             </div>
             {group.items.map((s) => (
-              <ShiftGridRow key={s.id} shift={s} showDate={needsDate} navigate={navigate} />
+              <ShiftGridRow key={s.id} shift={s} showDate={needsDate} navigate={navigate} onDelete={onDelete} />
             ))}
           </div>
         );
@@ -685,7 +704,7 @@ function UpcomingPanel({ shifts, navigate }) {
 }
 
 // ─── Past Shifts View ─────────────────────────────────────────────────────────
-function PastShiftsFullView({ shifts, navigate }) {
+function PastShiftsFullView({ shifts, navigate, onDelete }) {
   const TODAY = todayStr();
   const past = shifts
     .filter((s) => s.date < TODAY || ["completed", "cancelled", "missed"].includes(s.status))
@@ -750,7 +769,7 @@ function PastShiftsFullView({ shifts, navigate }) {
         {past.length === 0 ? (
           <p className="text-center py-10" style={{ fontSize: 13, color: "#9ca3af" }}>No past shifts found</p>
         ) : (
-          paginatedShifts.map((s) => <ShiftGridRow key={s.id} shift={s} showDate navigate={navigate} />)
+          paginatedShifts.map((s) => <ShiftGridRow key={s.id} shift={s} showDate navigate={navigate} onDelete={onDelete} />)
         )}
       </div>
       {renderPagination()}
@@ -1005,7 +1024,7 @@ export default function ShiftCommandPage() {
 
       {/* Past Shifts full view */}
       {isPastView && (
-        <PastShiftsFullView shifts={filteredShifts} navigate={navigate} />
+        <PastShiftsFullView shifts={filteredShifts} navigate={navigate} onDelete={(id) => handleDeleteShift(id, setRawShifts)} />
       )}
 
       {/* Main 2-pane area */}
@@ -1025,7 +1044,7 @@ export default function ShiftCommandPage() {
                 {view === "month"    && <MonthCalendar year={calYear} month={calMonth} shifts={filteredShifts} navigate={navigate} />}
                 {view === "week"     && <WeekView anchorDate={anchorDate} shifts={filteredShifts} navigate={navigate} />}
                 {view === "today"    && <TodayView shifts={filteredShifts} navigate={navigate} />}
-                {view === "timeline" && <TimelineView shifts={filteredShifts} navigate={navigate} />}
+                {view === "timeline" && <TimelineView shifts={filteredShifts} navigate={navigate} onDelete={(id) => handleDeleteShift(id, setRawShifts)} />}
               </>
             )}
           </div>

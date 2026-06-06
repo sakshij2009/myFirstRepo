@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { parseLocalSafe } from "../utils/dateHelpers";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 // ── URL param helpers ─────────────────────────────────────────────────────────
@@ -180,38 +181,9 @@ try {
     let shiftStart = null;
 
     // ✅ 1. Handle Firestore Timestamp
-    if (shift.startDate?.toDate) {
-      shiftStart = shift.startDate.toDate();
-
-    // ✅ 2. Handle already a Date object
-    } else if (shift.startDate instanceof Date) {
-      shiftStart = shift.startDate;
-
-    // ✅ 3. Handle string formats like "05 DEC 2024", "05 December 2024", "DEC 05 2024"
-    } else if (typeof shift.startDate === "string") {
-      // Normalize common formats before parsing
-      const cleaned = shift.startDate
-        .replace(/,/g, "") // remove commas
-        .replace(/\s+/g, " ") // normalize spaces
-        .trim();
-
-      // Try different possible date formats
-      const parsed = Date.parse(cleaned);
-
-      if (!isNaN(parsed)) {
-        shiftStart = new Date(parsed);
-      } else {
-        // Try manual parsing like "05 DEC 2024"
-        const parts = cleaned.split(" ");
-        if (parts.length >= 3) {
-          const [day, month, year] = parts;
-          const monthIndex = new Date(`${month} 1, ${year}`).getMonth();
-          if (!isNaN(monthIndex)) {
-            shiftStart = new Date(Number(year), monthIndex, Number(day));
-          }
-        }
-      }
-    }
+    // Use parseLocalSafe so all formats (Flutter "DD Mon YYYY", Timestamps, ISO strings)
+    // are consistently parsed to LOCAL midnight — no UTC timezone shift.
+    shiftStart = parseLocalSafe(shift.startDate);
 
     // ✅ Compare normalized day, month, and year
     if (shiftStart && !isNaN(shiftStart)) {
