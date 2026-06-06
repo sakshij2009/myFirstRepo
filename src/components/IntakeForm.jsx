@@ -1,6 +1,7 @@
 // IntakeForm.jsx
 
 import React, { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import FormikPhoneField from "./FormikPhoneField";
 import * as Yup from "yup";
@@ -1542,37 +1543,48 @@ const handleSubmit = async (values, { resetForm }) => {
     // In update mode use the existing document ID; in add mode generate a new timestamp ID
     const formId = mode === "update" && intakeFormId ? intakeFormId : Date.now().toString();
 
-    // 🔥 CREATE CLIENTS ONLY WHEN STATUS CHANGES TO ACCEPTED
-    if (
+    // 🔥 CREATE CLIENTS WHEN STATUS CHANGES TO ACCEPTED
+    const isNewlyAccepted =
       initialValues.status !== "Accepted" &&
       values.status === "Accepted" &&
-      !values.clientsCreated
-    ) {
-      // Inject runtime flags that createClientsFromIntake needs but aren't in Formik values
+      !values.clientsCreated;
+
+    if (isNewlyAccepted) {
       await createClientsFromIntake(
         { ...values, isCaseWorker: !!isCaseWorker },
         formId,
         db
       );
-      payload.clientsCreated = true; // mark processed
+      payload.clientsCreated = true;
     }
 
     await setDoc(doc(db, COLLECTION_NEW_INTAKES, formId), sanitizeForFirestore(payload));
 
     if (isDraft) {
-      alert("✅ Draft saved successfully");
+      toast.success("Draft saved successfully");
       if (mode !== "update") {
         resetForm();
         setAvatarPreview(null);
       } else {
-        // In update mode: keep the form as-is but sync initialValues to saved state
         setInitialValues(values);
       }
+    } else if (isNewlyAccepted) {
+      // Status just changed to Accepted → clients were created → show success + redirect
+      const clientCount = (values.clients?.length || 0) +
+        (values.shiftPoints?.length || 0) +
+        (values.inTakeClients?.length || 0);
+      const countLabel = clientCount > 0 ? `${clientCount} client${clientCount !== 1 ? "s" : ""}` : "Clients";
+
+      toast.success(`${countLabel} created successfully!`, {
+        description: "The intake form has been accepted and client records have been created.",
+        duration: 4000,
+      });
+
+      // Redirect to clients page after a short delay so user sees the toast
+      setTimeout(() => navigate("/admin-dashboard/clients"), 1800);
     } else {
-      alert("✅ Intake form updated successfully");
+      toast.success("Intake form updated successfully");
       if (mode === "update") {
-        // Stay on the form showing the saved data — just sync initialValues
-        // so that if the user edits again, the "old" baseline is the just-saved data
         setInitialValues(values);
       } else {
         resetForm();
@@ -1581,7 +1593,7 @@ const handleSubmit = async (values, { resetForm }) => {
     }
   } catch (err) {
     console.error(isDraft ? "❌ Draft save failed" : "❌ Intake submit failed", err);
-    alert("Something went wrong while " + (isDraft ? "saving draft" : "submitting the form"));
+    toast.error("Something went wrong while " + (isDraft ? "saving draft" : "submitting the form"));
   } finally {
     isSubmittingRef.current = false;
     isDraftSaveRef.current = false;
