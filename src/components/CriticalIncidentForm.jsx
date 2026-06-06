@@ -546,11 +546,21 @@ useEffect(() => {
             return acc;
           }, {});
 
+          // DOB from intake form — stored inside inTakeClients[0].birthDate
+          const dobFromIntake =
+            intakeDoc.dob ||
+            intakeDoc.dateOfBirth ||
+            (Array.isArray(intakeDoc.inTakeClients) && intakeDoc.inTakeClients[0]?.birthDate) ||
+            (Array.isArray(intakeDoc.inTakeClients) && intakeDoc.inTakeClients[0]?.dob) ||
+            (Array.isArray(intakeDoc.clients) && Object.values(intakeDoc.clients)[0]?.birthDate) ||
+            "";
+
           intakeInfo = {
             agencyName: intakeDoc.agencyName || intakeDoc.agency || intakeDoc.agencyDetails?.name || "",
             caseWorkerName: intakeDoc.caseWorkerName || intakeDoc.inTakeWorkerInfo || intakeDoc.intakeWorkerName || "",
             intakeCipPractitioner: intakeDoc.caseWorkerName || intakeDoc.inTakeWorkerInfo || "",
             cyimId: cyimFromIntake,
+            dob: dobFromIntake,
             cfg: Object.values(cfgFromIntake).some(Boolean) ? cfgFromIntake : undefined,
           };
         }
@@ -561,7 +571,7 @@ useEffect(() => {
       /* ---------------- 4️⃣ INCIDENT (if editing) ---------------- */
       let incidentData = null;
       try {
-        const ir = doc(db, "criticalIncidents", String(clientId));
+        const ir = doc(db, "criticalIncidents", String(clientDocId));
         const snap = await getDoc(ir);
         if (snap.exists()) incidentData = snap.data();
       } catch (err) {
