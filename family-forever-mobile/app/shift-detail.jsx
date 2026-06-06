@@ -62,127 +62,101 @@ const serviceTypeStyles = {
 
 
 // ── Clock snap helpers ────────────────────────────────────────────────────────
-// Use DEVICE local time for comparisons. Edmonton staff use Edmonton-timezone
-// phones so device time = Edmonton time in production. This also lets India-
-// based testers test against shifts they create for their local clock time.
-
-// Device local time as minutes since midnight
-const localNowMinutes = () => {
+// Single self-contained function. Parses the scheduled time string in every
+// known format, compares to DEVICE local time, and returns either the
+// scheduled time (if within ±15 min) or the actual current time.
+const snapTime = (scheduledStr) => {
   const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-};
+  const actualTimeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
 
-// Parse any stored time string → minutes since midnight
-// Handles ALL formats: Firestore Timestamp, ISO string, "9:30 PM", "21:30"
-const timeStrToMinutes = (timeStr) => {
-  if (timeStr === null || timeStr === undefined) return null;
+  if (!scheduledStr && scheduledStr !== 0) return actualTimeStr;
 
-  // Firestore Timestamp object (.toDate())
-  if (typeof timeStr?.toDate === "function") {
-    const d = timeStr.toDate();
-    return d.getHours() * 60 + d.getMinutes();
+  let sh = -1, sm = -1;
+
+  // Firestore Timestamp object
+  if (typeof scheduledStr?.toDate === "function") {
+    const d = scheduledStr.toDate();
+    sh = d.getHours(); sm = d.getMinutes();
   }
-
   // Firestore Timestamp raw {seconds, nanoseconds}
-  if (typeof timeStr === "object" && timeStr?.seconds !== undefined) {
-    const d = new Date(timeStr.seconds * 1000);
-    return d.getHours() * 60 + d.getMinutes();
+  else if (scheduledStr !== null && typeof scheduledStr === "object" && scheduledStr.seconds !== undefined) {
+    const d = new Date(scheduledStr.seconds * 1000);
+    sh = d.getHours(); sm = d.getMinutes();
+  }
+  else {
+    const s = String(scheduledStr).trim();
+
+    // "21:30" or "9:00" — plain HH:MM 24-hour
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      const parts = s.split(":");
+      sh = parseInt(parts[0], 10);
+      sm = parseInt(parts[1], 10);
+    }
+    // "9:30 PM" / "09:00 AM"
+    else if (/AM|PM/i.test(s)) {
+      const idx = s.lastIndexOf(" ");
+      const period = s.slice(idx + 1).toUpperCase();
+      const parts = s.slice(0, idx).split(":");
+      sh = parseInt(parts[0], 10);
+      sm = parseInt(parts[1], 10);
+      if (period === "PM" && sh !== 12) sh += 12;
+      if (period === "AM" && sh === 12) sh = 0;
+    }
+    // ISO string "2024-01-01T21:30:00..."
+    else if (s.includes("T") || s.includes("Z")) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) { sh = d.getHours(); sm = d.getMinutes(); }
+    }
   }
 
-  const tStr = String(timeStr).trim();
-  if (!tStr) return null;
-
-  // Full ISO string (contains "T" or "Z")
-  if (tStr.includes("T") || tStr.includes("Z")) {
-    const d = new Date(tStr);
-    if (isNaN(d.getTime())) return null;
-    return d.getHours() * 60 + d.getMinutes();
+  if (sh < 0 || isNaN(sh) || isNaN(sm)) {
+    console.warn("[clockSnap] could not parse scheduled time:", JSON.stringify(scheduledStr));
+    return actualTimeStr;
   }
 
-  // "9:30 PM" / "09:00 AM"
-  if (/AM|PM/i.test(tStr)) {
-    const spaceIdx = tStr.lastIndexOf(" ");
-    const period = tStr.slice(spaceIdx + 1).toUpperCase();
-    let [h, m] = tStr.slice(0, spaceIdx).split(":").map(Number);
-    if (period === "PM" && h !== 12) h += 12;
-    if (period === "AM" && h === 12) h = 0;
-    if (isNaN(h) || isNaN(m)) return null;
-    return h * 60 + m;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const schMins = sh * 60 + sm;
+  let diff = nowMins - schMins;
+  if (diff < -720) diff += 1440; // midnight crossover
+  if (diff > 720) diff -= 1440;
+
+  if (diff >= -15 && diff <= 15) {
+    // Snap to scheduled time
+    const ap = sh >= 12 ? "PM" : "AM";
+    const h12 = sh % 12 || 12;
+    return `${String(h12).padStart(2, "0")}:${String(sm).padStart(2, "0")} ${ap}`;
   }
 
-  // "21:30" or "09:00" — plain 24-hour string
-  if (/^\d{1,2}:\d{2}$/.test(tStr)) {
-    const [h, m] = tStr.split(":").map(Number);
-    if (isNaN(h) || isNaN(m)) return null;
-    return h * 60 + m;
-  }
-
-  console.warn("[clockSnap] unrecognised startTime format:", JSON.stringify(timeStr));
-  return null;
+  return actualTimeStr;
 };
 
-// Diff: positive = we are past the scheduled time. Handles midnight crossover.
-const diffFromScheduled = (timeStr) => {
-  const nowMins = localNowMinutes();
-  const scheduledMins = timeStrToMinutes(timeStr);
-  if (scheduledMins === null) return null;
-  let diff = nowMins - scheduledMins;
-  if (diff < -720) diff += 1440; // e.g. now=00:05, scheduled=23:50
-  return diff;
-};
-
-// Format stored time string as "09:30 PM"
+// Kept for auto clock-out formatting and display uses
 const formatStoredTime = (timeStr) => {
   if (timeStr === null || timeStr === undefined) return null;
-
-  // Firestore Timestamp
   if (typeof timeStr?.toDate === "function") {
     return timeStr.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
   }
   if (typeof timeStr === "object" && timeStr?.seconds !== undefined) {
     return new Date(timeStr.seconds * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
   }
-
   const tStr = String(timeStr).trim();
-
-  // Full ISO string → device local time display
   if (tStr.includes("T") || tStr.includes("Z")) {
     const d = new Date(tStr);
     if (isNaN(d.getTime())) return null;
     return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
   }
-
-  // Already "09:30 PM"
   if (/AM|PM/i.test(tStr)) return tStr.toUpperCase();
-
-  // "21:30" → "09:30 PM"
   if (/^\d{1,2}:\d{2}$/.test(tStr)) {
     const [h, m] = tStr.split(":").map(Number);
     const ampm = h >= 12 ? "PM" : "AM";
     const h12 = h % 12 || 12;
     return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
   }
-
   return tStr;
 };
 
-// Current device local time as "09:23 PM"
-const localNowStr = () =>
-  new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-
-// ── Clock-IN: snaps to scheduled start if within ±15 min ─────────────────────
-const getClockInTime = (startTimeStr) => {
-  const diff = diffFromScheduled(startTimeStr);
-  if (diff !== null && diff >= -15 && diff <= 15) return formatStoredTime(startTimeStr);
-  return localNowStr();
-};
-
-// ── Clock-OUT: snaps to scheduled end if within ±15 min ──────────────────────
-const getClockOutTime = (endTimeStr) => {
-  const diff = diffFromScheduled(endTimeStr);
-  if (diff !== null && diff >= -15 && diff <= 15) return formatStoredTime(endTimeStr);
-  return localNowStr();
-};
+const getClockInTime  = (startTimeStr) => snapTime(startTimeStr);
+const getClockOutTime = (endTimeStr)   => snapTime(endTimeStr);
 
 // Keep parseShiftDateTime for the auto-clock-out endDT reference only
 const parseShiftDateTime = (dateStr, timeStr) => {
@@ -647,6 +621,8 @@ export default function ShiftDetails() {
       } else if (type === "clockIn") {
         // Smart rounding: snaps to scheduled start if clocking in within 15-min window
         const roundedTime = getClockInTime(shift.startTime);
+        // DEBUG — remove after confirming snap works
+        Alert.alert("DEBUG clockIn", `startTime="${shift.startTime}" → saving "${roundedTime}"`);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
