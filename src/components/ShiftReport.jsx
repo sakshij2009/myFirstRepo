@@ -308,8 +308,10 @@ const ShiftReport = ({ user }) => {
   const [doctorName, setDoctorName] = useState("");
 
   // ── Transportation tab state ──
-  const OFFICE_ADDRESS_WEB = "#206, 10110 124 Street, Edmonton, AB T5N 1P6";
-  const MILEAGE_RATE_WEB = 0.72;
+  const OFFICE_ADDRESS_WEB = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
+  // Mileage rate is dynamic — pulled from staff user doc (rateBefore5000km / rateAfter5000km)
+  // Falls back to 0.72 if not set
+  const [mileageRate, setMileageRate] = useState(0.72);
   const [stops, setStops] = useState([""]);
   const [totalKilometer, setTotalKm] = useState("");
   const [staffKilometer, setStaffKm] = useState("");
@@ -592,7 +594,18 @@ const ShiftReport = ({ user }) => {
           staffId: ud?.id || ud?.userId || shiftData.userId || "N/A",
           category: shiftData.categoryName || shiftData.shiftCategory || "N/A",
           avatar: ud?.profilePhotoUrl || ud?.photoURL || null,
+          totalKMs: ud?.totalKMs ?? 0,
+          rateBefore5000km: ud?.rateBefore5000km ?? 0.72,
+          rateAfter5000km: ud?.rateAfter5000km ?? 0.565,
         });
+        // Set dynamic mileage rate based on staff's accumulated km
+        if (ud) {
+          const totalDriven = ud.totalKMs ?? 0;
+          const rate = totalDriven >= 5000
+            ? (ud.rateAfter5000km ?? 0.565)
+            : (ud.rateBefore5000km ?? 0.72);
+          setMileageRate(parseFloat(rate));
+        }
       } catch (e) { console.error(e); }
     })();
   }, [shiftData]);
@@ -1530,7 +1543,7 @@ const ShiftReport = ({ user }) => {
                     ))}
                     {(() => {
                       const total = parseFloat(((officeToPickupKm || 0) + parseFloat(staffKilometer || 0) + (dropToOfficeKm || 0)).toFixed(2));
-                      const mileage = parseFloat((total * MILEAGE_RATE_WEB).toFixed(2));
+                      const mileage = parseFloat((total * mileageRate).toFixed(2));
                       return (
                         <>
                           <div className="flex justify-between items-center pt-2" style={{ borderTop: "2px solid #14532D", marginTop: 4 }}>
@@ -1538,7 +1551,7 @@ const ShiftReport = ({ user }) => {
                             <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>{total.toFixed(2)} km</span>
                           </div>
                           <div className="flex justify-between items-center pt-1">
-                            <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>Mileage @ ${MILEAGE_RATE_WEB}/km</span>
+                            <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>Mileage @ ${mileageRate}/km</span>
                             <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>${mileage.toFixed(2)}</span>
                           </div>
                         </>

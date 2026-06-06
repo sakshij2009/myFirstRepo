@@ -34,7 +34,7 @@ import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
 
 
 // ---------------- OFFICE ADDRESS ----------------
-const OFFICE_ADDRESS = "10110 124 Street, Edmonton, AB T5N 1P6";
+const OFFICE_ADDRESS = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
 
 import { calculateRouteDistance } from "../utils/mapboxHelper";
 
@@ -1003,8 +1003,26 @@ const AddUserShift = ({ mode = "add", user }) => {
         return;
       }
 
+      // Auto-calculate Office→Pickup→Drop→Office km for any transportation/supervised shift
+      // that has pickup+drop but no km yet (or is being freshly created).
+      const isTransportShift = (values.shiftCategory || "").toLowerCase().match(/transportation|supervised/);
+      let pointsWithKm = shiftPoints;
+      if (isTransportShift) {
+        pointsWithKm = await Promise.all(
+          shiftPoints.map(async (fp) => {
+            if (fp.pickupLocation && fp.dropLocation) {
+              try {
+                const km = await calculateTotalDistance(fp);
+                return { ...fp, totalKilometers: km };
+              } catch { /* keep existing value */ }
+            }
+            return fp;
+          })
+        );
+      }
+
       // Build final shiftPoints array — array index IS the priority order (0 = first pickup)
-      const finalPoints = shiftPoints.map((fp, idx) => ({
+      const finalPoints = pointsWithKm.map((fp, idx) => ({
         name: fp.name || "",
         order: idx + 1,               // 1 = first pickup, 2 = second, etc.
         pickupLocation: fp.pickupLocation || "",
