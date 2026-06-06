@@ -569,7 +569,6 @@ export default function ShiftDetails() {
             await updateDoc(doc(db, "shifts", shiftId), {
               clockOut: serverTimestamp(),
               clockOutTime: scheduledEndTime,
-              clockOutDate: new Date().toISOString(),
               clockOutLocation: locationStr,
               autoClockOut: true,
             });
@@ -691,9 +690,8 @@ export default function ShiftDetails() {
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
-          clockIn: serverTimestamp(),      // admin app reads this field
-          clockInTime: roundedTime,        // mobile app display
-          clockInDate: new Date().toISOString(),
+          clockIn: serverTimestamp(),  // Firestore Timestamp — used by admin app
+          clockInTime: roundedTime,   // Snapped time string — used by mobile app
           clockInLocation: locationStr,
         });
 
@@ -744,9 +742,8 @@ export default function ShiftDetails() {
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
-          clockOut: serverTimestamp(),     // admin app reads this field
-          clockOutTime: roundedTime,       // mobile app display
-          clockOutDate: new Date().toISOString(),
+          clockOut: serverTimestamp(), // Firestore Timestamp — used by admin app
+          clockOutTime: roundedTime,   // Snapped time string — used by mobile app
           clockOutLocation: locationStr,
         });
 
