@@ -292,9 +292,13 @@ exports.autoClockOut = onSchedule(
       return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
     };
 
-    // Query: shifts that have a clockInTime but no clockOutTime and no autoClockOut flag
+    // Query: all shifts from the last 2 days (covers overnight shifts too).
+    // We intentionally avoid ".where('autoClockOut', '!=', true)" because Firestore
+    // excludes documents where the field doesn't exist, so brand-new shifts would
+    // never be found. Filter everything in JS instead.
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
     const snapshot = await db.collection("shifts")
-      .where("autoClockOut", "!=", true)
+      .where("clockIn", ">=", twoDaysAgo)
       .get();
 
     const batch = db.batch();
@@ -302,6 +306,9 @@ exports.autoClockOut = onSchedule(
 
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
+
+      // Skip if already auto-clocked-out
+      if (data.autoClockOut === true) continue;
 
       // Must be clocked in but not clocked out
       const clockedIn  = !!(data.clockInTime || data.clockIn || data.clockin);

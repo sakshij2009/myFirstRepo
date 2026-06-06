@@ -1261,7 +1261,7 @@ export default function ShiftDetails() {
               {isPersonalVehicle && (
                 <View style={{ marginBottom: 14 }}>
                   <Text style={{ fontSize: 12, color: "#6B7280", marginBottom: 6, fontWeight: "600" }}>OFFICE SEGMENTS (Personal Vehicle)</Text>
-                  <Text style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>Office: #206, 10110 124 Street, Edmonton, AB T5N 1P6</Text>
+                  <Text style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>Office: 3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada</Text>
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>Office → Pickup (km)</Text>

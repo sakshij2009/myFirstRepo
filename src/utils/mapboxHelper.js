@@ -1,13 +1,12 @@
 /**
  * Mapbox Routing Helper
- * Replaces Google Distance Matrix API with Mapbox Directions/Matrix API.
- * Mapbox offers a generous free tier of up to 100,000 free requests per month.
+ * Uses Mapbox Geocoding + Directions API for route distance and duration.
  */
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 /**
- * Geocode an address string to [lng, lat] coordinates using Mapbox.
+ * Geocode an address string to [lng, lat] using Mapbox.
  */
 export async function geocodeAddress(address) {
   if (!address || address === "—") return null;
@@ -48,24 +47,18 @@ export async function reverseGeocode(lng, lat) {
 
 /**
  * Calculate distance and duration for a sequence of addresses.
- * Replaces Google's DistanceMatrixService.
- * @param {string[]} addresses - List of address strings (e.g., [Office, Pickup, Drop, Office])
+ * @param {string[]} addresses - [origin, ...waypoints, destination]
  * @returns {Promise<{km: number, durationMin: number} | null>}
  */
 export async function calculateRouteDistance(addresses) {
   try {
-    // 1. Geocode all addresses to coordinates
     const coordPromises = addresses.map(addr => geocodeAddress(addr));
     const coords = await Promise.all(coordPromises);
 
-    // Filter out any failed geocoding results
     const validCoords = coords.filter(c => c !== null);
     if (validCoords.length < 2) return null;
 
-    // 2. Build coordinate string for Mapbox Directions API: "lng,lat;lng,lat;..."
     const coordString = validCoords.map(c => `${c[0]},${c[1]}`).join(";");
-
-    // 3. Call Mapbox Directions API (Optimized for sequence)
     const url = `https://api.mapbox.com/directions/v1/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
 
     const response = await fetch(url);
@@ -74,8 +67,8 @@ export async function calculateRouteDistance(addresses) {
     if (data.routes && data.routes.length > 0) {
       const route = data.routes[0];
       return {
-        km: Math.round(route.distance / 1000),         // distance is in meters
-        durationMin: Math.round(route.duration / 60)   // duration is in seconds
+        km: parseFloat((route.distance / 1000).toFixed(2)),
+        durationMin: Math.round(route.duration / 60),
       };
     }
     return null;
