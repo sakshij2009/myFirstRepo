@@ -401,10 +401,11 @@ export default function CriticalIncidentForm({
     [clientData, shiftData]
   );
 
-  const clientId =
-    clientData?.clientId || clientData?.cyimId || clientData?.id || null;
+  // Use shiftData.clientId as the primary key — it's the Firestore doc ID in the clients collection.
+  // clientData is already the document body but without its own doc ID included.
+  const clientDocId = shiftData?.clientId || shiftData?.client || shiftData?.clientDetails?.id || null;
 
-  /* ---------- Data Loading & Prefilling (UPDATED) ---------- */
+  /* ---------- Data Loading & Prefilling ---------- */
 useEffect(() => {
   let mounted = true;
 
@@ -412,95 +413,146 @@ useEffect(() => {
     setLoading(true);
 
     try {
-      if (!clientId) {
-        if (mounted) setInitialValues(defaults);
-        return;
-      }
+      /* ---------------- 0️⃣ CLIENT NAME + DOB (directly from clientData) ---------------- */
+      // clientData is already the client document — read fields directly
+      const clientNameDirect =
+        clientData?.clientName || clientData?.name || clientData?.fullName ||
+        shiftData?.clientName || shiftData?.jobname || "";
+      const dobDirect =
+        clientData?.dob || clientData?.dateOfBirth || clientData?.birthDate || "";
 
-      /* ---------------- 1️⃣ STAFF INFO (from shift's primary staff) ---------------- */
-      let staffInfo = {};
+      /* ---------------- 1️⃣ STAFF INFO (from shift's primary staff Firestore record) ---------------- */
+      let staffInfo = {
+        staffId: "",
+        staffName: shiftData?.primaryUserName || shiftData?.userName || shiftData?.name || "",
+        staffRole: "Staff",
+        staffAddress: "",
+      };
       try {
-        // Prefer shift's primary staff name/ID over client's userId
-        const staffIdFromShift =
-          shiftData?.primaryUserId || shiftData?.userId || clientData?.userId || null;
-        const staffNameFromShift =
-          shiftData?.primaryUserName || shiftData?.userName || shiftData?.name || "";
-
-        // If we already have the name from shiftData, use it directly
-        if (staffNameFromShift) {
-          staffInfo = {
-            staffId: staffIdFromShift || "",
-            staffName: staffNameFromShift,
-            staffRole: "Staff", // default role label
-            staffAddress: "",
-          };
-        }
-
-        // Try fetching full user record from Firestore to get address + role
-        const staffId = staffIdFromShift;
-        if (staffId) {
-          const qStaff = query(collection(db, "users"), where("userId", "==", staffId));
-          const snap = await getDocs(qStaff);
-          if (!snap.empty) {
-            const u = snap.docs[0].data();
+        // shiftData.primaryUserId may be the Firestore doc ID of the user — fetch by doc ID first
+        const staffDocId = shiftData?.primaryUserId || shiftData?.userId || null;
+        if (staffDocId) {
+          // Try direct doc lookup first (fastest)
+          const directSnap = await getDoc(doc(db, "users", staffDocId));
+          if (directSnap.exists()) {
+            const u = directSnap.data();
             staffInfo = {
-              staffId: staffId,
-              staffName: u.name || staffNameFromShift || "",
+              staffId: u.userId || u.staffId || staffDocId, // prefer the stored userId field
+              staffName: u.name || staffInfo.staffName,
               staffRole: u.role || u.position || "Staff",
-              staffAddress: u.address || u.homeAddress || "",
+              staffAddress: u.address || u.homeAddress || u.residentialAddress || "",
             };
+          } else {
+            // Fallback: query by userId field
+            const qStaff = query(collection(db, "users"), where("userId", "==", staffDocId));
+            const snap = await getDocs(qStaff);
+            if (!snap.empty) {
+              const u = snap.docs[0].data();
+              staffInfo = {
+                staffId: u.userId || staffDocId,
+                staffName: u.name || staffInfo.staffName,
+                staffRole: u.role || u.position || "Staff",
+                staffAddress: u.address || u.homeAddress || u.residentialAddress || "",
+              };
+            }
           }
         }
       } catch (err) {
         console.warn("Staff fetch error:", err);
       }
 
-      /* ---------------- 2️⃣ CLIENT DOB (always correct!) ---------------- */
-      let clientInfo = {};
-      try {
-        // fetch client by clientId field (NOT document ID)
-        const qClient = query(
-          collection(db, "clients"),
-          where("clientId", "==", clientId)
-        );
-        const snap = await getDocs(qClient);
+      if (!clientDocId) {
+        // No client ID — still build defaults from whatever we have
+        const seed = {
+          clientName: clientNameDirect,
+          dob: dobDirect,
+          ...staffInfo,
+          agencyName: shiftData?.agencyName || "",
+        };
+        if (mounted) setInitialValues(buildDefaultInitialValues(seed));
+        return;
+      }
 
-        if (!snap.empty) {
-          const cd = snap.docs[0].data();
+      /* ---------------- 2️⃣ CLIENT DOB + NAME (from clients collection via doc ID) ---------------- */
+      let clientInfo = {
+        clientName: clientNameDirect,
+        dob: dobDirect,
+        cyimId: "", // CYIM comes from intake form only (step 3)
+      };
+      try {
+        // clientDocId is the Firestore document ID in the clients collection
+        const directClient = await getDoc(doc(db, "clients", clientDocId));
+        if (directClient.exists()) {
+          const cd = directClient.data();
           clientInfo = {
-            dob: cd.dob || "",
-            clientName: cd.clientName || cd.name || "",
-            cyimId: cd.cyimId || cd.clientId || "",
+            clientName: cd.clientName || cd.name || cd.fullName || clientNameDirect,
+            dob: cd.dob || cd.dateOfBirth || cd.birthDate || dobDirect,
+            cyimId: "", // do NOT pull cyimId from clients doc — only from intake form
           };
+        } else {
+          // Fallback: query by clientId field
+          const qClient = query(collection(db, "clients"), where("clientId", "==", clientDocId));
+          const snap = await getDocs(qClient);
+          if (!snap.empty) {
+            const cd = snap.docs[0].data();
+            clientInfo = {
+              clientName: cd.clientName || cd.name || cd.fullName || clientNameDirect,
+              dob: cd.dob || cd.dateOfBirth || cd.birthDate || dobDirect,
+              cyimId: "",
+            };
+          }
         }
       } catch (err) {
         console.warn("Client fetch error:", err);
       }
 
-      /* ---------------- 3️⃣ INTAKE FORM (Agency + Case Worker + CYIM ID + CFG) ---------------- */
+      /* ---------------- 3️⃣ INTAKE FORM (CYIM ID + CFG + Agency + Case Worker) ---------------- */
       let intakeInfo = {};
       try {
-        // Try both collection name variants
+        // Try multiple lookup strategies across both collection name variants
+        let intakeDoc = null;
         for (const col of ["InTakeForms", "intakeForms"]) {
-          const q = query(collection(db, col), where("clientId", "==", clientId));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            const d = snap.docs[0].data();
-            // Build cfg status map from intake if stored as a field
-            const cfgFromIntake = cfgStatuses.reduce((acc, s) => {
-              acc[s] = d.cfg?.[s] || d.cfgStatus === s || false;
-              return acc;
-            }, {});
-            intakeInfo = {
-              agencyName: d.agencyName || d.agency || d.agencyDetails?.name || "",
-              caseWorkerName: d.caseWorkerName || d.inTakeWorkerInfo || "",
-              intakeCipPractitioner: d.caseWorkerName || d.inTakeWorkerInfo || "",
-              clientName: d.clientName || d.name || "",
-              cyimId: d.cyimId || d.cyimNumber || d.clientId || "",
-              cfg: Object.values(cfgFromIntake).some(Boolean) ? cfgFromIntake : undefined,
-            };
-            break;
+          if (intakeDoc) break;
+          // Strategy A: by clientId field
+          for (const field of ["clientId", "id"]) {
+            const q = query(collection(db, col), where(field, "==", clientDocId));
+            const snap = await getDocs(q);
+            if (!snap.empty) { intakeDoc = snap.docs[0].data(); break; }
           }
+          // Strategy B: by client name (fallback)
+          if (!intakeDoc && clientNameDirect) {
+            for (const field of ["clientName", "name", "nameInClientTable", "childsName"]) {
+              const q = query(collection(db, col), where(field, "==", clientNameDirect));
+              const snap = await getDocs(q);
+              if (!snap.empty) { intakeDoc = snap.docs[0].data(); break; }
+            }
+          }
+        }
+
+        if (intakeDoc) {
+          // CYIM: dedicated field in intake (set via the new CYIM ID field we added)
+          const cyimFromIntake =
+            intakeDoc.cyimId || intakeDoc.cyimNumber ||
+            // Also check inside inTakeClients array
+            (Array.isArray(intakeDoc.inTakeClients) && intakeDoc.inTakeClients[0]?.cyimId) || "";
+
+          // CFG status: stored as a string or object
+          const cfgFromIntake = cfgStatuses.reduce((acc, s) => {
+            acc[s] =
+              intakeDoc.cfg?.[s] ||
+              intakeDoc.cfgStatus === s ||
+              intakeDoc.cgfStatus === s ||
+              false;
+            return acc;
+          }, {});
+
+          intakeInfo = {
+            agencyName: intakeDoc.agencyName || intakeDoc.agency || intakeDoc.agencyDetails?.name || "",
+            caseWorkerName: intakeDoc.caseWorkerName || intakeDoc.inTakeWorkerInfo || intakeDoc.intakeWorkerName || "",
+            intakeCipPractitioner: intakeDoc.caseWorkerName || intakeDoc.inTakeWorkerInfo || "",
+            cyimId: cyimFromIntake,
+            cfg: Object.values(cfgFromIntake).some(Boolean) ? cfgFromIntake : undefined,
+          };
         }
       } catch (err) {
         console.warn("Intake fetch error:", err);
@@ -517,12 +569,27 @@ useEffect(() => {
       }
 
       /* ---------------- 5️⃣ MERGE EVERYTHING INTO SEED ---------------- */
-      const seed = {
-        ...clientData,
-        ...clientInfo,
-        ...intakeInfo,
-        ...staffInfo,
+      // Priority (highest first): intakeInfo → clientInfo → clientData → shiftData
+      // Never let an empty string overwrite a real value
+      const mergeNonEmpty = (...objs) => {
+        const result = {};
+        for (const obj of objs) {
+          if (!obj) continue;
+          for (const [k, v] of Object.entries(obj)) {
+            if (v !== undefined && v !== null && v !== "") result[k] = v;
+          }
+        }
+        return result;
       };
+
+      const seed = mergeNonEmpty(
+        clientData,                            // base client document
+        { clientName: clientNameDirect, dob: dobDirect }, // direct reads
+        clientInfo,                            // enriched from clients collection
+        intakeInfo,                            // from intake form (cyimId, cfg, agencyName)
+        staffInfo,                             // staff from shift
+        { agencyName: shiftData?.agencyName || "" },  // agency from shift as final fallback
+      );
 
       /* ---------------- 6️⃣ FIX DOB FORMAT ---------------- */
       if (seed.dob) {
@@ -568,7 +635,8 @@ useEffect(() => {
 
   load();
   return () => (mounted = false);
-}, [clientId, clientData, defaults]);
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [clientDocId, clientData, shiftData]);
 
 
 
