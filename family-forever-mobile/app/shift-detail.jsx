@@ -654,10 +654,40 @@ export default function ShiftDetails() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockIn") {
-        // Smart rounding: snaps to scheduled start if clocking in within 15-min window
-        const roundedTime = getClockInTime(shift.startTime);
-        // DEBUG — remove after confirming snap works
-        Alert.alert("DEBUG clockIn", `startTime="${shift.startTime}" → saving "${roundedTime}"`);
+        // ── Inline snap logic (no helpers) ──────────────────────────────────
+        // Parse shift.startTime into hours+minutes
+        let _snapH = -1, _snapM = -1;
+        const _st = shift.startTime;
+        if (_st && typeof _st.toDate === "function") {
+          const _d = _st.toDate(); _snapH = _d.getHours(); _snapM = _d.getMinutes();
+        } else if (_st && typeof _st === "object" && _st.seconds !== undefined) {
+          const _d = new Date(_st.seconds * 1000); _snapH = _d.getHours(); _snapM = _d.getMinutes();
+        } else if (_st) {
+          const _s = String(_st).trim();
+          if (/^\d{1,2}:\d{2}$/.test(_s)) {
+            _snapH = parseInt(_s.split(":")[0], 10); _snapM = parseInt(_s.split(":")[1], 10);
+          } else if (/AM|PM/i.test(_s)) {
+            const _i = _s.lastIndexOf(" "); const _p = _s.slice(_i+1).toUpperCase();
+            _snapH = parseInt(_s.split(":")[0], 10); _snapM = parseInt(_s.slice(_s.indexOf(":")+1, _i), 10);
+            if (_p === "PM" && _snapH !== 12) _snapH += 12;
+            if (_p === "AM" && _snapH === 12) _snapH = 0;
+          }
+        }
+        const _now = new Date();
+        const _nowMins = _now.getHours() * 60 + _now.getMinutes();
+        const _schMins = _snapH * 60 + _snapM;
+        let _diff = _nowMins - _schMins;
+        if (_diff < -720) _diff += 1440;
+        if (_diff > 720) _diff -= 1440;
+        let roundedTime;
+        if (_snapH >= 0 && !isNaN(_snapH) && !isNaN(_snapM) && _diff >= -15 && _diff <= 15) {
+          const _ap = _snapH >= 12 ? "PM" : "AM";
+          const _h12 = _snapH % 12 || 12;
+          roundedTime = `${String(_h12).padStart(2,"0")}:${String(_snapM).padStart(2,"0")} ${_ap}`;
+        } else {
+          roundedTime = _now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        }
+        Alert.alert("Clock Snap", `Scheduled: ${shift.startTime}\nNow mins: ${_nowMins}, Sched mins: ${_schMins}, Diff: ${_diff}\nSaving: ${roundedTime}`);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -678,8 +708,39 @@ export default function ShiftDetails() {
           iconBg: "#F0FDF4",
         });
       } else if (type === "clockOut") {
-        // Smart rounding: snaps to scheduled end if clocking out within 15-min window
-        const roundedTime = getClockOutTime(shift.endTime);
+        // ── Inline snap logic (no helpers) ──────────────────────────────────
+        let _snapH = -1, _snapM = -1;
+        const _et = shift.endTime;
+        if (_et && typeof _et.toDate === "function") {
+          const _d = _et.toDate(); _snapH = _d.getHours(); _snapM = _d.getMinutes();
+        } else if (_et && typeof _et === "object" && _et.seconds !== undefined) {
+          const _d = new Date(_et.seconds * 1000); _snapH = _d.getHours(); _snapM = _d.getMinutes();
+        } else if (_et) {
+          const _s = String(_et).trim();
+          if (/^\d{1,2}:\d{2}$/.test(_s)) {
+            _snapH = parseInt(_s.split(":")[0], 10); _snapM = parseInt(_s.split(":")[1], 10);
+          } else if (/AM|PM/i.test(_s)) {
+            const _i = _s.lastIndexOf(" "); const _p = _s.slice(_i+1).toUpperCase();
+            _snapH = parseInt(_s.split(":")[0], 10); _snapM = parseInt(_s.slice(_s.indexOf(":")+1, _i), 10);
+            if (_p === "PM" && _snapH !== 12) _snapH += 12;
+            if (_p === "AM" && _snapH === 12) _snapH = 0;
+          }
+        }
+        const _now = new Date();
+        const _nowMins = _now.getHours() * 60 + _now.getMinutes();
+        const _schMins = _snapH * 60 + _snapM;
+        let _diff = _nowMins - _schMins;
+        if (_diff < -720) _diff += 1440;
+        if (_diff > 720) _diff -= 1440;
+        let roundedTime;
+        if (_snapH >= 0 && !isNaN(_snapH) && !isNaN(_snapM) && _diff >= -15 && _diff <= 15) {
+          const _ap = _snapH >= 12 ? "PM" : "AM";
+          const _h12 = _snapH % 12 || 12;
+          roundedTime = `${String(_h12).padStart(2,"0")}:${String(_snapM).padStart(2,"0")} ${_ap}`;
+        } else {
+          roundedTime = _now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+        }
+        Alert.alert("Clock Snap", `Scheduled end: ${shift.endTime}\nNow mins: ${_nowMins}, Sched mins: ${_schMins}, Diff: ${_diff}\nSaving: ${roundedTime}`);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
