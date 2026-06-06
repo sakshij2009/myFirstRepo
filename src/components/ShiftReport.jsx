@@ -898,13 +898,11 @@ const ShiftReport = ({ user }) => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold border transition-all hover:bg-white"
-            style={{ borderColor: "#e5e7eb", fontSize: 12, color: "#374151" }}>
-            <Download size={14} /> Download PDF
-          </button>
-          <button className="flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-white transition-all hover:opacity-90"
+          <button
+            onClick={() => navigate(`/admin-dashboard/add/update-shift/${shiftId}`)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-white transition-all hover:opacity-90"
             style={{ backgroundColor: "#145228", fontSize: 12 }}>
-            <Edit size={14} /> Edit Report
+            <Edit size={14} /> Edit Shift
           </button>
         </div>
       </div>
