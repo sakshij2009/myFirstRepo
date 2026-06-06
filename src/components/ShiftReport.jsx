@@ -632,27 +632,40 @@ const ShiftReport = ({ user }) => {
     if (shiftData?.travelComments) setTravelComments(shiftData.travelComments);
   }, [shiftData]);
 
-  // Auto-calculate Office→Pickup and Drop→Office via Mapbox when shiftData loads
+  // Load Office→Pickup and Drop→Office km values.
+  // Priority: 1) saved on shiftPoint (set at shift creation), 2) extraShiftPoints, 3) live Mapbox fallback
   useEffect(() => {
     if (!shiftData) return;
-    const sp = shiftData.shiftPoints?.[0] || {};
+
+    // Use priority-sorted first shiftPoint (order field, same as mobile)
+    const sortedPts = Array.isArray(shiftData.shiftPoints)
+      ? [...shiftData.shiftPoints].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+      : [];
+    const sp = sortedPts[0] || {};
+
+    // 1. Best case: values already saved on the shiftPoint at creation time
+    if (sp.officeToPickupKm != null) setOfficeToPickupKm(parseFloat(sp.officeToPickupKm));
+    if (sp.dropToOfficeKm != null) setDropToOfficeKm(parseFloat(sp.dropToOfficeKm));
+    if (sp.officeToPickupKm != null && sp.dropToOfficeKm != null) return;
+
+    // 2. Fallback: values saved in extraShiftPoints
+    const last = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
+    if (last.officeToPickupKm != null) { setOfficeToPickupKm(parseFloat(last.officeToPickupKm)); }
+    if (last.dropToOfficeKm != null) { setDropToOfficeKm(parseFloat(last.dropToOfficeKm)); }
+    if (last.officeToPickupKm != null && last.dropToOfficeKm != null) return;
+
+    // 3. Last resort: calculate live via Mapbox (for older shifts not yet saved)
     const pickupAddr = sp.pickupLocation || shiftData.pickupLocation;
     const dropAddr = sp.dropLocation || shiftData.dropLocation;
     if (!pickupAddr && !dropAddr) return;
-
-    // Check if already saved in extraShiftPoints
-    const last = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
-    const alreadyHasO2P = last.officeToPickupKm != null;
-    const alreadyHasD2O = last.dropToOfficeKm != null;
-    if (alreadyHasO2P && alreadyHasD2O) return;
 
     (async () => {
       setKmCalcLoading(true);
       try {
         const { calculateRouteDistance: calcDist } = await import("../utils/mapboxHelper.js");
         const [o2p, d2o] = await Promise.all([
-          pickupAddr && !alreadyHasO2P ? calcDist([OFFICE_ADDRESS_WEB, pickupAddr]) : null,
-          dropAddr && !alreadyHasD2O ? calcDist([dropAddr, OFFICE_ADDRESS_WEB]) : null,
+          pickupAddr && sp.officeToPickupKm == null ? calcDist([OFFICE_ADDRESS_WEB, pickupAddr]) : null,
+          dropAddr && sp.dropToOfficeKm == null ? calcDist([dropAddr, OFFICE_ADDRESS_WEB]) : null,
         ]);
         if (o2p?.km != null) setOfficeToPickupKm(parseFloat(o2p.km.toFixed(2)));
         if (d2o?.km != null) setDropToOfficeKm(parseFloat(d2o.km.toFixed(2)));

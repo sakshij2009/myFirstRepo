@@ -39,17 +39,27 @@ const OFFICE_ADDRESS = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
 import { calculateRouteDistance } from "../utils/mapboxHelper";
 
 // ---------------- MAPBOX DISTANCE CALCULATOR ----------------
+// Returns { totalKm, officeToPickupKm, dropToOfficeKm }
 const calculateTotalDistance = async (shiftPoint) => {
   const locations = [OFFICE_ADDRESS, shiftPoint.pickupLocation];
   if (shiftPoint.visitLocation) locations.push(shiftPoint.visitLocation);
   locations.push(shiftPoint.dropLocation, OFFICE_ADDRESS);
 
   try {
-    const result = await calculateRouteDistance(locations);
-    return result ? result.km.toFixed(2) : "0.00";
+    // Calculate each leg separately so we can store them individually
+    const [total, o2p, d2o] = await Promise.all([
+      calculateRouteDistance(locations),
+      calculateRouteDistance([OFFICE_ADDRESS, shiftPoint.pickupLocation]),
+      calculateRouteDistance([shiftPoint.dropLocation, OFFICE_ADDRESS]),
+    ]);
+    return {
+      totalKm: total ? parseFloat(total.km.toFixed(2)) : 0,
+      officeToPickupKm: o2p ? parseFloat(o2p.km.toFixed(2)) : 0,
+      dropToOfficeKm: d2o ? parseFloat(d2o.km.toFixed(2)) : 0,
+    };
   } catch (err) {
     console.error("Mapbox Routing Error:", err);
-    return "0.00";
+    return { totalKm: 0, officeToPickupKm: 0, dropToOfficeKm: 0 };
   }
 };
 
@@ -1012,8 +1022,8 @@ const AddUserShift = ({ mode = "add", user }) => {
           shiftPoints.map(async (fp) => {
             if (fp.pickupLocation && fp.dropLocation) {
               try {
-                const km = await calculateTotalDistance(fp);
-                return { ...fp, totalKilometers: km };
+                const { totalKm, officeToPickupKm, dropToOfficeKm } = await calculateTotalDistance(fp);
+                return { ...fp, totalKilometers: totalKm, officeToPickupKm, dropToOfficeKm };
               } catch { /* keep existing value */ }
             }
             return fp;
@@ -1366,8 +1376,10 @@ const AddUserShift = ({ mode = "add", user }) => {
     }
 
     try {
-      const km = await calculateTotalDistance(shiftPoint);
-      setShiftPoints((prev) => prev.map((p, i) => i === index ? { ...p, totalKilometers: km } : p));
+      const { totalKm, officeToPickupKm, dropToOfficeKm } = await calculateTotalDistance(shiftPoint);
+      setShiftPoints((prev) => prev.map((p, i) =>
+        i === index ? { ...p, totalKilometers: totalKm, officeToPickupKm, dropToOfficeKm } : p
+      ));
     } catch (err) {
       console.error("Error calculating total distance:", err);
       alert("Failed to calculate total kilometers.");
