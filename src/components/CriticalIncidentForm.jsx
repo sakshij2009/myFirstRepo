@@ -607,12 +607,18 @@ useEffect(() => {
           let v = seed.dob;
 
           if (v instanceof Object && v.toDate) {
+            // Firestore Timestamp
             v = formatLocalISO(v.toDate());
-          } else if (
-            typeof v === "string" &&
-            /^\d{4}-\d{2}-\d{2}$/.test(v)
-          ) {
-            // already correct
+          } else if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            // Already YYYY-MM-DD — correct
+          } else if (typeof v === "string" && /^\d{2}-\d{2}-\d{4}$/.test(v)) {
+            // DD-MM-YYYY (stored by IntakeForm) → convert to YYYY-MM-DD
+            const [dd, mm, yyyy] = v.split("-");
+            v = `${yyyy}-${mm}-${dd}`;
+          } else if (typeof v === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+            // DD/MM/YYYY → YYYY-MM-DD
+            const [dd, mm, yyyy] = v.split("/");
+            v = `${yyyy}-${mm}-${dd}`;
           } else {
             v = formatLocalISO(v);
           }
