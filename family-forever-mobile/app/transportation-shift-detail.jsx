@@ -181,8 +181,9 @@ export default function TransportationShiftDetail() {
     );
   }
 
+  // Sort shiftPoints by admin-set priority order (order field, 1 = first pickup)
   const shiftPts = Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0
-    ? shift.shiftPoints
+    ? [...shift.shiftPoints].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
     : null;
   const pt = shiftPts?.[0] || null;
 
@@ -278,13 +279,15 @@ export default function TransportationShiftDetail() {
     });
     const result = [];
     Object.values(pickupGroups).forEach((g, i) => {
-      result.push({ label: `Pickup ${String.fromCharCode(65 + i)}`, address: g.address, time: g.time, color: GREEN, clients: g.clients });
+      const ordinal = i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`;
+      result.push({ label: `Pickup ${ordinal}`, address: g.address, time: g.time, color: GREEN, clients: g.clients });
     });
     if (visitAddr) {
       result.push({ label: "Visit Location", address: visitAddr, time: visitTime || "", color: "#1E5FA6", clients: clientsList.map(c => c.name) });
     }
     Object.values(dropGroups).forEach((g, i) => {
-      result.push({ label: `Drop-off ${String.fromCharCode(65 + i)}`, address: g.address, time: g.time, color: "#DC2626", clients: g.clients });
+      const ordinal = i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`;
+      result.push({ label: `Drop-off ${ordinal}`, address: g.address, time: g.time, color: "#DC2626", clients: g.clients });
     });
     return result;
   })();

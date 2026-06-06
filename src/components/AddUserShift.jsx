@@ -1003,9 +1003,10 @@ const AddUserShift = ({ mode = "add", user }) => {
         return;
       }
 
-      // Build final shiftPoints array from all active points (strip _edit flags)
-      const finalPoints = shiftPoints.map((fp) => ({
+      // Build final shiftPoints array — array index IS the priority order (0 = first pickup)
+      const finalPoints = shiftPoints.map((fp, idx) => ({
         name: fp.name || "",
+        order: idx + 1,               // 1 = first pickup, 2 = second, etc.
         pickupLocation: fp.pickupLocation || "",
         pickupTime: fp.pickupTime || "",
         pickupLatitude: fp.pickupLatitude || 0,
@@ -1900,12 +1901,44 @@ const AddUserShift = ({ mode = "add", user }) => {
                           {/* Member header */}
                           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: "#f9fafb", borderColor: "#f3f4f6" }}>
                             <div className="flex items-center gap-2">
+                              {/* Priority badge */}
+                              <div className="w-5 h-5 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0"
+                                style={{ background: "#145228", fontSize: 10 }}>
+                                {idx + 1}
+                              </div>
+                              {/* Up / Down reorder buttons */}
+                              <div className="flex flex-col gap-0.5">
+                                <button type="button" disabled={idx === 0}
+                                  onClick={() => setShiftPoints((prev) => {
+                                    const arr = [...prev];
+                                    [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                    return arr;
+                                  })}
+                                  className="leading-none text-gray-400 hover:text-[#145228] disabled:opacity-20 disabled:cursor-not-allowed"
+                                  title="Move up (higher priority)">
+                                  ▲
+                                </button>
+                                <button type="button" disabled={idx === shiftPoints.length - 1}
+                                  onClick={() => setShiftPoints((prev) => {
+                                    const arr = [...prev];
+                                    [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+                                    return arr;
+                                  })}
+                                  className="leading-none text-gray-400 hover:text-[#145228] disabled:opacity-20 disabled:cursor-not-allowed"
+                                  title="Move down (lower priority)">
+                                  ▼
+                                </button>
+                              </div>
                               <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
                                 style={{ background: "linear-gradient(135deg,#145228,#1f7a3c)" }}>
                                 {(pt.name || String.fromCharCode(65 + idx)).charAt(0).toUpperCase()}
                               </div>
                               <span className="font-semibold text-sm text-gray-900">{pt.name || `Member ${idx + 1}`}</span>
                               {pt.seatType && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#e0e7ff", color: "#4338ca" }}>{pt.seatType}</span>}
+                              {/* Pickup order label */}
+                              <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: "#fef9c3", color: "#854d0e" }}>
+                                {idx === 0 ? "Pickup 1st" : idx === 1 ? "Pickup 2nd" : idx === 2 ? "Pickup 3rd" : `Pickup ${idx + 1}th`}
+                              </span>
                             </div>
                             <button type="button"
                               onClick={() => {
