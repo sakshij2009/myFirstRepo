@@ -61,84 +61,148 @@ const serviceTypeStyles = {
 };
 
 
-// ── Helper: Parse shift date + time string into a real Date ──────────────────
-// Handles: "9:00 AM", "09:00 AM", "14:00", "09:00", full ISO strings
+// ── All time comparisons happen in Edmonton timezone to avoid device-tz issues ─
+
+// Current Edmonton time as minutes since midnight
+const edmontonNowMinutes = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Edmonton",
+    hour: "numeric", minute: "numeric", hour12: false,
+  }).formatToParts(new Date());
+  const h = parseInt(parts.find(p => p.type === "hour").value, 10);
+  const m = parseInt(parts.find(p => p.type === "minute").value, 10);
+  return h * 60 + (isNaN(m) ? 0 : m);
+};
+
+// Parse any stored time string → minutes since midnight (Edmonton)
+// Handles: "9:15 PM", "09:00 AM", "21:15", "09:00", full ISO strings
+const timeStrToMinutes = (timeStr) => {
+  if (!timeStr) return null;
+  const tStr = String(timeStr).trim();
+
+  // Full ISO string — convert to Edmonton time first
+  if (tStr.includes("T") || tStr.includes("Z")) {
+    const d = new Date(tStr);
+    if (isNaN(d.getTime())) return null;
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Edmonton",
+      hour: "numeric", minute: "numeric", hour12: false,
+    }).formatToParts(d);
+    const h = parseInt(parts.find(p => p.type === "hour").value, 10);
+    const m = parseInt(parts.find(p => p.type === "minute").value, 10);
+    return h * 60 + (isNaN(m) ? 0 : m);
+  }
+
+  // "9:15 PM" / "09:00 AM"
+  if (/AM|PM/i.test(tStr)) {
+    const spaceIdx = tStr.lastIndexOf(" ");
+    const period = tStr.slice(spaceIdx + 1).toUpperCase();
+    let [h, m] = tStr.slice(0, spaceIdx).split(":").map(Number);
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  }
+
+  // "21:15" or "09:00" — stored as Edmonton local 24h
+  if (/^\d{1,2}:\d{2}$/.test(tStr)) {
+    const [h, m] = tStr.split(":").map(Number);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  }
+
+  return null;
+};
+
+// Diff in minutes between now (Edmonton) and a scheduled time string, handling midnight crossover
+const diffFromScheduled = (timeStr) => {
+  const nowMins = edmontonNowMinutes();
+  const scheduledMins = timeStrToMinutes(timeStr);
+  if (scheduledMins === null) return null;
+  let diff = nowMins - scheduledMins;
+  if (diff < -720) diff += 1440; // handle overnight (e.g. now=00:05, end=23:50)
+  return diff;
+};
+
+// Format stored time string as "09:15 PM" for display/saving
+const formatStoredTime = (timeStr) => {
+  if (!timeStr) return null;
+  const tStr = String(timeStr).trim();
+
+  // Full ISO string → Edmonton display
+  if (tStr.includes("T") || tStr.includes("Z")) {
+    const d = new Date(tStr);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleTimeString("en-US", {
+      hour: "2-digit", minute: "2-digit", hour12: true,
+      timeZone: "America/Edmonton",
+    });
+  }
+
+  // Already has AM/PM
+  if (/AM|PM/i.test(tStr)) return tStr.toUpperCase();
+
+  // "21:15" → "09:15 PM"
+  if (/^\d{1,2}:\d{2}$/.test(tStr)) {
+    const [h, m] = tStr.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  return tStr;
+};
+
+// Current Edmonton time as "09:01 PM"
+const edmontonNowStr = () =>
+  new Date().toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", hour12: true,
+    timeZone: "America/Edmonton",
+  });
+
+// ── Clock-IN: snaps to scheduled start if within ±15 min (Edmonton time) ──────
+const getClockInTime = (startTimeStr) => {
+  const diff = diffFromScheduled(startTimeStr);
+  if (diff !== null && diff >= -15 && diff <= 15) return formatStoredTime(startTimeStr);
+  return edmontonNowStr();
+};
+
+// ── Clock-OUT: snaps to scheduled end if within ±15 min (Edmonton time) ───────
+const getClockOutTime = (endTimeStr) => {
+  const diff = diffFromScheduled(endTimeStr);
+  if (diff !== null && diff >= -15 && diff <= 15) return formatStoredTime(endTimeStr);
+  return edmontonNowStr();
+};
+
+// Keep parseShiftDateTime for the auto-clock-out endDT reference only
 const parseShiftDateTime = (dateStr, timeStr) => {
   if (!timeStr) return null;
   try {
     const tStr = String(timeStr).trim();
-
-    // Full ISO string (e.g. "2026-06-08T03:00:00.000Z") — parse & return directly
     if (tStr.includes("T") || tStr.includes("Z")) {
       const d = new Date(tStr);
       return isNaN(d.getTime()) ? null : d;
     }
-
-    // Build base date (date-only, local midnight)
+    const scheduledMins = timeStrToMinutes(tStr);
+    if (scheduledMins === null) return null;
+    const h = Math.floor(scheduledMins / 60);
+    const m = scheduledMins % 60;
+    // Build date in Edmonton timezone using a fixed offset approach
     let base = new Date();
     if (dateStr) {
       const raw = dateStr?.toDate ? dateStr.toDate()
         : dateStr?.seconds ? new Date(dateStr.seconds * 1000)
         : new Date(dateStr);
-      if (!isNaN(raw?.getTime())) {
-        base = new Date(raw.getFullYear(), raw.getMonth(), raw.getDate());
-      }
-    } else {
-      base = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+      if (!isNaN(raw?.getTime())) base = raw;
     }
-
-    let h, m;
-
-    // "9:00 AM" / "09:30 PM"
-    if (/AM|PM/i.test(tStr)) {
-      const spaceIdx = tStr.lastIndexOf(" ");
-      const timePart = tStr.slice(0, spaceIdx);
-      const period   = tStr.slice(spaceIdx + 1).toUpperCase();
-      [h, m] = timePart.split(":").map(Number);
-      if (period === "PM" && h !== 12) h += 12;
-      if (period === "AM" && h === 12) h = 0;
-    }
-    // "09:00" or "14:30" — plain 24-hour
-    else if (/^\d{1,2}:\d{2}$/.test(tStr)) {
-      [h, m] = tStr.split(":").map(Number);
-    } else {
-      return null;
-    }
-
-    if (isNaN(h) || isNaN(m)) return null;
-    const result = new Date(base);
-    result.setHours(h, m, 0, 0);
+    // Construct an Edmonton-time date string and parse it
+    const edmontonDateStr = base.toLocaleDateString("en-CA", { timeZone: "America/Edmonton" }); // "2026-06-10"
+    const combined = `${edmontonDateStr}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`;
+    // Parse as Edmonton time by appending the current Edmonton offset
+    const offsetMs = base.getTime() - new Date(base.toLocaleString("en-US", { timeZone: "America/Edmonton" })).getTime();
+    const result = new Date(new Date(combined).getTime() + offsetMs);
     return isNaN(result.getTime()) ? null : result;
   } catch { return null; }
-};
-
-// Edmonton-local time string (what gets saved as clockInTime / clockOutTime)
-const toTimeStr = (date) =>
-  date.toLocaleTimeString("en-US", {
-    hour: "2-digit", minute: "2-digit", hour12: true,
-    timeZone: "America/Edmonton",
-  });
-
-// ── Helper: Clock-IN — snaps to scheduled start if clocking in within ±15 min
-const getClockInTime = (startTimeStr, startDateStr) => {
-  const now = new Date();
-  const scheduled = parseShiftDateTime(startDateStr, startTimeStr);
-  if (scheduled && !isNaN(scheduled.getTime())) {
-    const diffMinutes = (now.getTime() - scheduled.getTime()) / 60000;
-    if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
-  }
-  return toTimeStr(now);
-};
-
-// ── Helper: Clock-OUT — snaps to scheduled end if clocking out within ±15 min
-const getClockOutTime = (endTimeStr, startDateStr) => {
-  const now = new Date();
-  const scheduled = parseShiftDateTime(startDateStr, endTimeStr);
-  if (scheduled && !isNaN(scheduled.getTime())) {
-    const diffMinutes = (now.getTime() - scheduled.getTime()) / 60000;
-    if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
-  }
-  return toTimeStr(now);
 };
 
 // ── Helper: Get current location string ──────────────────────────────────────
@@ -574,7 +638,7 @@ export default function ShiftDetails() {
         });
       } else if (type === "clockIn") {
         // Smart rounding: snaps to scheduled start if clocking in within 15-min window
-        const roundedTime = getClockInTime(shift.startTime, shift.startDate);
+        const roundedTime = getClockInTime(shift.startTime);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -596,7 +660,7 @@ export default function ShiftDetails() {
         });
       } else if (type === "clockOut") {
         // Smart rounding: snaps to scheduled end if clocking out within 15-min window
-        const roundedTime = getClockOutTime(shift.endTime, shift.startDate);
+        const roundedTime = getClockOutTime(shift.endTime);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -1433,7 +1497,7 @@ export default function ShiftDetails() {
                     <Ionicons name="log-in-outline" size={32} color="#1D4ED8" />
                   </View>
                   <Text style={styles.modalTitle}>
-                    Clock In at {getClockInTime(shift.startTime, shift.startDate)}?
+                    Clock In at {getClockInTime(shift.startTime)}?
                   </Text>
                   <Text style={styles.modalDesc}>
                     Your location will be recorded.{"\n"}
