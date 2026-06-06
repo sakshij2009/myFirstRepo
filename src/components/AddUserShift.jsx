@@ -249,6 +249,7 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
   // Track the client ID that was originally loaded from the saved shift (update mode)
   const initialLoadedClientIdRef = useRef(null);
+  const batchIdRef = useRef(null); // batchId of the shift being edited (null = single shift)
   // Ref to Formik instance so we can call setFieldValue from outside the render
   const formikRef = useRef(null);
   // Description pulled from the matched intake form
@@ -476,6 +477,9 @@ const AddUserShift = ({ mode = "add", user }) => {
           // ✅ Normalize dates
           const startISO = formatDateFromFirestore(data.startDate);
           const endISO = formatDateFromFirestore(data.endDate);
+
+          // Store batchId so the update handler can update all selected-date siblings
+          batchIdRef.current = data.batchId || null;
 
           // Load ALL dates from this batch so editing one shift shows all sibling dates
           const calendarDates = [];
@@ -1022,33 +1026,35 @@ const AddUserShift = ({ mode = "add", user }) => {
 
       // ---------- UPDATE MODE ----------
       if (mode === "update" && id) {
-        const shiftsRef = collection(db, "shifts");
-        const qShift = query(shiftsRef, where("id", "==", id));
-        const snap = await getDocs(qShift);
+        const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+        const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
-        if (!snap.empty) {
-          const docRef = snap.docs[0].ref;
+        // Build set of selected date strings (LOCAL "YYYY-MM-DD") for fast lookup
+        const selectedDateISOs = new Set(
+          selectedDates.map(d => formatLocalISO(normalizeDate(d)))
+        );
 
-          const primaryDate = normalizeDate(selectedDates[0]);
+        // Build the common field payload (everything except date-specific fields)
+        const buildPayload = (shiftDate) => {
           const isOvernight = values.endTime < values.startTime;
-          let endDateObj = new Date(primaryDate);
+          let endDateObj = new Date(shiftDate);
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
+          const day = shiftDate.getDay();
+          const isWeekend = day === 0 || day === 6;
+          const cat = (values.shiftCategory || "").toLowerCase();
+          const desc = (values.description || "").toLowerCase();
+          const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
 
-          const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
-          const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
-
-          await updateDoc(docRef, {
+          return {
             ...restValues,
             clientDetails: selectedClient,
             clientId: selectedClient?.id || values.client || "",
             clientName: selectedClient?.name || "",
-            // Primary Staff — userId MUST be the custom userId field (mobile queries by this)
             userId: primaryStaff?.userId ?? primaryStaff?.id ?? values.primaryUser ?? "",
             userName: primaryStaff?.name || "",
             name: primaryStaff?.name || "",
             primaryUserId: primaryStaff?.id || "",
             primaryUserName: primaryStaff?.name || "",
-            // Secondary Staff — use custom userId; fall back to doc ID if userId is empty
             secondaryUserId: secondaryStaff?.userId || secondaryStaff?.id || "",
             secondaryUserDocId: secondaryStaff?.id || "",
             secondaryUserName: secondaryStaff?.name || "",
@@ -1057,43 +1063,21 @@ const AddUserShift = ({ mode = "add", user }) => {
             agencyId: selectedClient?.agencyId || primaryStaff?.agencyId || "",
             agencyName: selectedClient?.agencyName || primaryStaff?.agencyName || "",
             updatedAt: new Date(),
-            // Ensure legacy top-level visit fields are cleared
-            visitLocation: "",
-            visitStartTime: "",
-            visitEndTime: "",
-            visitLatitude: 0,
-            visitLongitude: 0,
+            visitLocation: "", visitStartTime: "", visitEndTime: "",
+            visitLatitude: 0, visitLongitude: 0,
             shiftPoints: finalPoints.map(p => {
-              const day = primaryDate.getDay();
-              const isWeekend = day === 0 || day === 6;
-              const cat = (values.shiftCategory || "").toLowerCase();
-              const desc = (values.description || "").toLowerCase();
-              const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
-
-              // Respect manual clear/removal
               const vLoc = needsVisit ? (p.visitLocation || "").trim() : "";
-
-              return {
-                ...p,
-                visitLocation: vLoc,
+              return { ...p, visitLocation: vLoc,
                 visitStartTime: vLoc ? (p.visitStartTime || "") : "",
                 visitEndTime: vLoc ? (p.visitEndTime || "") : "",
                 visitLatitude: vLoc ? (p.visitLatitude || 0) : 0,
-                visitLongitude: vLoc ? (p.visitLongitude || 0) : 0,
-              };
+                visitLongitude: vLoc ? (p.visitLongitude || 0) : 0 };
             }),
-            // PRESERVE actual clock-in/out times recorded by Flutter worker app
-            // Never overwrite with scheduled times — Flutter sets these when worker clocks in
-            clockIn: originalClockIn || "",
-            clockOut: originalClockOut || "",
-            isRatified: false,
-            isCancelled: false,
-            shiftReportImageUrl: "",
-            expenseReceiptUrl: "",
-            profilePhotoUrl: "",
-            dateKey:     formatDDMMYYYY(primaryDate),       // "04-01-2025"
-            dateKey_iso: formatLocalISO(primaryDate),       // "2025-01-04"
-            startDate:   formatFlutterDate(primaryDate),    // "04 Jan 2025"
+            isRatified: false, isCancelled: false,
+            shiftReportImageUrl: "", expenseReceiptUrl: "", profilePhotoUrl: "",
+            dateKey:     formatDDMMYYYY(shiftDate),
+            dateKey_iso: formatLocalISO(shiftDate),
+            startDate:   formatFlutterDate(shiftDate),
             endDate:     formatFlutterDate(endDateObj),
             username:    primaryStaff?.username || primaryStaff?.name || "",
             phone:       primaryStaff?.phone    || "",
@@ -1103,15 +1087,54 @@ const AddUserShift = ({ mode = "add", user }) => {
             categoryId:  selectedShiftCategory?.id || "",
             jobname:     selectedClient?.name   || "",
             jobdescription: values.description  || "",
-          });
+          };
+        };
 
+        const batchId = batchIdRef.current;
 
+        if (batchId) {
+          // Batch update — find all sibling shifts and update those whose dates are still selected
+          const batchSnap = await getDocs(
+            query(collection(db, "shifts"), where("batchId", "==", batchId))
+          );
+          let updatedCount = 0;
+          for (const bDoc of batchSnap.docs) {
+            const bData = bDoc.data();
+            const shiftDateISO = formatDateFromFirestore(bData.startDate);
+            if (!shiftDateISO || !selectedDateISOs.has(shiftDateISO)) continue; // date was deselected — skip
+            const shiftDate = parseLocalSafe(shiftDateISO);
+            await updateDoc(bDoc.ref, {
+              ...buildPayload(shiftDate),
+              clockIn:  bData.clockIn  || "",
+              clockOut: bData.clockOut || "",
+            });
+            updatedCount++;
+          }
           setSlider({
             show: true,
-            title: "Shift Updated Successfully!",
-            subtitle: `${selectedClient?.name || ""} on ${primaryDate.toDateString()} at ${values.startTime}`,
+            title: `${updatedCount} Shift${updatedCount !== 1 ? "s" : ""} Updated!`,
+            subtitle: `${selectedClient?.name || ""} — ${updatedCount} date${updatedCount !== 1 ? "s" : ""} updated at ${values.startTime}`,
             redirectTo: "/admin-dashboard/dashboard",
           });
+        } else {
+          // Single shift update (no batchId)
+          const qShift = query(collection(db, "shifts"), where("id", "==", id));
+          const snap = await getDocs(qShift);
+          if (!snap.empty) {
+            const bData = snap.docs[0].data();
+            const shiftDate = normalizeDate(selectedDates[0]);
+            await updateDoc(snap.docs[0].ref, {
+              ...buildPayload(shiftDate),
+              clockIn:  bData.clockIn  || originalClockIn || "",
+              clockOut: bData.clockOut || originalClockOut || "",
+            });
+            setSlider({
+              show: true,
+              title: "Shift Updated Successfully!",
+              subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${values.startTime}`,
+              redirectTo: "/admin-dashboard/dashboard",
+            });
+          }
         }
         return;
       }
@@ -2177,7 +2200,11 @@ const AddUserShift = ({ mode = "add", user }) => {
                           {mode === "update" ? "Updating..." : `Creating ${values.shiftDates?.length > 1 ? `${values.shiftDates.length} Shifts` : "Shift"}...`}
                         </>
                       ) : (
-                        mode === "update" ? "Update Shift" : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`
+                        mode === "update"
+                          ? (batchIdRef.current && values.shiftDates?.length > 1
+                              ? `Update ${values.shiftDates.length} Shifts`
+                              : "Update Shift")
+                          : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`
                       )}
                     </button>
                   </div>
