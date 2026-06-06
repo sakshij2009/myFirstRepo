@@ -158,7 +158,21 @@ const formatStoredTime = (timeStr) => {
 const getClockInTime  = (startTimeStr) => snapTime(startTimeStr);
 const getClockOutTime = (endTimeStr)   => snapTime(endTimeStr);
 
-// Keep parseShiftDateTime for the auto-clock-out endDT reference only
+// Used only by parseShiftDateTime below for notification scheduling
+const timeStrToMinutes = (tStr) => {
+  if (!tStr) return null;
+  const s = String(tStr).trim();
+  if (/^\d{1,2}:\d{2}$/.test(s)) { const [h,m]=s.split(":").map(Number); return h*60+m; }
+  if (/AM|PM/i.test(s)) {
+    const idx=s.lastIndexOf(" "); const p=s.slice(idx+1).toUpperCase();
+    let [h,m]=s.slice(0,idx).split(":").map(Number);
+    if(p==="PM"&&h!==12)h+=12; if(p==="AM"&&h===12)h=0;
+    return h*60+m;
+  }
+  return null;
+};
+
+// Keep parseShiftDateTime for notification scheduling only
 const parseShiftDateTime = (dateStr, timeStr) => {
   if (!timeStr) return null;
   try {
@@ -525,11 +539,32 @@ export default function ShiftDetails() {
       }
 
       // Auto-clock-out: if clocked in but not clocked out and 15+ min past shift end
-      const minsPassedEnd = diffFromScheduled(shift.endTime); // positive = past end time
+      // Compute diff inline (diffFromScheduled was removed with helper refactor)
+      const _endSnap = snapTime(shift.endTime);
+      const _now = new Date();
+      const _nowMins = _now.getHours() * 60 + _now.getMinutes();
+      const _endStr = String(shift.endTime || "").trim();
+      let _endMins = null;
+      if (/^\d{1,2}:\d{2}$/.test(_endStr)) {
+        const [_h, _m] = _endStr.split(":").map(Number);
+        _endMins = _h * 60 + _m;
+      } else if (/AM|PM/i.test(_endStr)) {
+        const _idx = _endStr.lastIndexOf(" ");
+        const _p = _endStr.slice(_idx + 1).toUpperCase();
+        let [_h, _m] = _endStr.slice(0, _idx).split(":").map(Number);
+        if (_p === "PM" && _h !== 12) _h += 12;
+        if (_p === "AM" && _h === 12) _h = 0;
+        _endMins = _h * 60 + _m;
+      } else if (shift.endTime?.seconds) {
+        const _d = new Date(shift.endTime.seconds * 1000);
+        _endMins = _d.getHours() * 60 + _d.getMinutes();
+      }
+      let minsPassedEnd = _endMins !== null ? _nowMins - _endMins : null;
+      if (minsPassedEnd !== null && minsPassedEnd < -720) minsPassedEnd += 1440;
       if (isInProgress && minsPassedEnd !== null && minsPassedEnd >= 15 && !autoClockOutFiredRef.current) {
         autoClockOutFiredRef.current = true;
         try {
-            const scheduledEndTime = formatStoredTime(shift.endTime) || localNowStr();
+            const scheduledEndTime = formatStoredTime(shift.endTime) || _endSnap || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
             const locationStr = await getLocationString();
             await updateDoc(doc(db, "shifts", shiftId), {
               clockOut: serverTimestamp(),
