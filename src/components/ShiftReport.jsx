@@ -19,6 +19,7 @@ import {
   AlertTriangle, Stethoscope, CheckCircle2, Car,
 } from "lucide-react";
 import { calculateRouteDistance, reverseGeocode } from "../utils/mapboxHelper";
+import ShiftLockToggle from "./ShiftLockToggle";
 
 const PILL_COLORS = [
   { label: "Yellow", bg: "#fffae3", border: "#f1e19e" },
@@ -923,7 +924,8 @@ const ShiftReport = ({ user }) => {
             <p style={{ fontSize: 12, color: "#6b7280" }}>Daily records for {normalized.clientName}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <ShiftLockToggle shiftId={shiftId} initialValue={!!shiftData?.isRatify} />
           <button
             onClick={() => navigate(`/admin-dashboard/add/update-user-shift/${shiftId}`)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-white transition-all hover:opacity-90"

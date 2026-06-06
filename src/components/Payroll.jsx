@@ -76,6 +76,11 @@ function formatDateFull(val) {
   return `${day} ${month} ${year}`;
 }
 
+// Round hours to nearest quarter: 0.25, 0.50, 0.75, 1.00, etc.
+function roundToQuarter(h) {
+  return Math.round(h * 4) / 4;
+}
+
 function calculateShiftHours(shift, fallbackHrs) {
   // Check if cancelled
   const st = (shift.status || shift.shiftStatus || "").toLowerCase();
@@ -85,7 +90,7 @@ function calculateShiftHours(shift, fallbackHrs) {
     if (shift.clockIn) {
       // On-shift cancellation or clocked-in before cancel -> Record total scheduled hours (from fallback)
       const h = parseFloat(fallbackHrs);
-      return isNaN(h) || h === 0 ? 0 : Number(h.toFixed(2));
+      return isNaN(h) || h === 0 ? 0 : roundToQuarter(h);
     }
 
     const start = shift.startDate || shift.shiftDate || shift.date;
@@ -97,15 +102,13 @@ function calculateShiftHours(shift, fallbackHrs) {
 
       if (!isNaN(startTime) && !isNaN(cancelTime)) {
         const diffHours = (startTime - cancelTime) / (1000 * 60 * 60);
-        if (diffHours >= 24) return 0; // > 24 hours = 0 hrs
+        if (diffHours >= 24) return 0;
         if (diffHours > 0 && diffHours < 24) {
-          // < 24 hours = record 3 hrs (max limit of scheduled hrs)
           const sched = parseFloat(fallbackHrs);
-          return sched > 0 ? Number(Math.min(3, sched).toFixed(2)) : 3;
+          return sched > 0 ? roundToQuarter(Math.min(3, sched)) : 3;
         }
       }
     }
-    // Return 0 if we can't definitively prove it was within 24 hours
     return 0;
   }
 
@@ -115,11 +118,11 @@ function calculateShiftHours(shift, fallbackHrs) {
     const end = shift.clockOut?.toDate ? shift.clockOut.toDate() : new Date(shift.clockOut);
     if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
       const diffMs = end.getTime() - start.getTime();
-      return Number((Math.max(0, diffMs / (1000 * 60 * 60))).toFixed(2));
+      return roundToQuarter(Math.max(0, diffMs / (1000 * 60 * 60)));
     }
   }
   const h = parseFloat(fallbackHrs);
-  return isNaN(h) || h === 0 ? 0 : Number(h.toFixed(2));
+  return isNaN(h) || h === 0 ? 0 : roundToQuarter(h);
 }
 
 function serviceTypeBadge(type = "") {
@@ -362,7 +365,7 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                       </td>
                       {/* HRS */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", fontWeight: 500 }}>
-                        {shiftHrs}h
+                        {shiftHrs.toFixed(2)}h
                       </td>
                       {/* KMS */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151" }}>
@@ -538,7 +541,8 @@ export default function Payroll() {
 
       const cancelledShifts = userShifts.filter(isCancelled);
       const completedShifts = userShifts.filter((s) => s.clockIn && s.clockOut);
-      const activeShifts    = userShifts.filter((s) => !isCancelled(s));
+      // Only locked (isRatify) shifts count toward payroll
+      const activeShifts    = userShifts.filter((s) => !isCancelled(s) && s.isRatify === true);
 
       // 3. Totals from shifts
       let totalKms = 0;

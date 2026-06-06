@@ -22,6 +22,7 @@ import {
   Timestamp,
   setDoc,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { FaChevronDown, FaRegCalendarAlt } from "react-icons/fa";
@@ -523,6 +524,8 @@ const AddUserShift = ({ mode = "add", user }) => {
 
           if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
             points = data.shiftPoints.map((p) => ({
+              name: p.name || "",
+              order: p.order ?? 0,
               pickupLocation: p.pickupLocation || "",
               pickupTime: p.pickupTime || "",
               pickupLatitude: p.pickupLatitude || 0,
@@ -542,11 +545,12 @@ const AddUserShift = ({ mode = "add", user }) => {
               seatType: p.seatType || "",
               transportationMode: p.transportationMode || "",
 
-              // ✅ THIS IS THE KEY FIX
               totalKilometers:
                 p.totalKilometers !== undefined && p.totalKilometers !== null
                   ? Number(p.totalKilometers)
                   : 0,
+              officeToPickupKm: Number(p.officeToPickupKm) || 0,
+              dropToOfficeKm: Number(p.dropToOfficeKm) || 0,
             }));
           } else {
             points = [
@@ -1484,10 +1488,23 @@ const AddUserShift = ({ mode = "add", user }) => {
         {mode === "update" && (
           <button
             onClick={async () => {
-              if (window.confirm("Are you sure you want to delete this shift?")) {
+              const batchId = batchIdRef.current;
+              const isBatch = !!batchId;
+              const confirmMsg = isBatch
+                ? "This shift is part of a multi-date group. Delete ALL shifts in this group?"
+                : "Are you sure you want to delete this shift?";
+              if (window.confirm(confirmMsg)) {
                 try {
-                  await deleteDoc(doc(db, "shifts", id));
-                  alert("Shift deleted successfully!");
+                  if (isBatch) {
+                    const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
+                    const batch = writeBatch(db);
+                    snap.docs.forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                    alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
+                  } else {
+                    await deleteDoc(doc(db, "shifts", id));
+                    alert("Shift deleted successfully!");
+                  }
                   window.history.back();
                 } catch (err) {
                   console.error("Error deleting shift:", err);
