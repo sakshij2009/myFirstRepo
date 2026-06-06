@@ -73,19 +73,33 @@ const localNowMinutes = () => {
 };
 
 // Parse any stored time string → minutes since midnight
-// Handles: "9:15 PM", "09:00 AM", "21:15", "09:00", full ISO strings
+// Handles ALL formats: Firestore Timestamp, ISO string, "9:30 PM", "21:30"
 const timeStrToMinutes = (timeStr) => {
-  if (!timeStr) return null;
-  const tStr = String(timeStr).trim();
+  if (timeStr === null || timeStr === undefined) return null;
 
-  // Full ISO string → device local hours/minutes
+  // Firestore Timestamp object (.toDate())
+  if (typeof timeStr?.toDate === "function") {
+    const d = timeStr.toDate();
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  // Firestore Timestamp raw {seconds, nanoseconds}
+  if (typeof timeStr === "object" && timeStr?.seconds !== undefined) {
+    const d = new Date(timeStr.seconds * 1000);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  const tStr = String(timeStr).trim();
+  if (!tStr) return null;
+
+  // Full ISO string (contains "T" or "Z")
   if (tStr.includes("T") || tStr.includes("Z")) {
     const d = new Date(tStr);
     if (isNaN(d.getTime())) return null;
     return d.getHours() * 60 + d.getMinutes();
   }
 
-  // "9:15 PM" / "09:00 AM"
+  // "9:30 PM" / "09:00 AM"
   if (/AM|PM/i.test(tStr)) {
     const spaceIdx = tStr.lastIndexOf(" ");
     const period = tStr.slice(spaceIdx + 1).toUpperCase();
@@ -96,13 +110,14 @@ const timeStrToMinutes = (timeStr) => {
     return h * 60 + m;
   }
 
-  // "21:15" or "09:00" — plain 24-hour
+  // "21:30" or "09:00" — plain 24-hour string
   if (/^\d{1,2}:\d{2}$/.test(tStr)) {
     const [h, m] = tStr.split(":").map(Number);
     if (isNaN(h) || isNaN(m)) return null;
     return h * 60 + m;
   }
 
+  console.warn("[clockSnap] unrecognised startTime format:", JSON.stringify(timeStr));
   return null;
 };
 
@@ -118,7 +133,16 @@ const diffFromScheduled = (timeStr) => {
 
 // Format stored time string as "09:30 PM"
 const formatStoredTime = (timeStr) => {
-  if (!timeStr) return null;
+  if (timeStr === null || timeStr === undefined) return null;
+
+  // Firestore Timestamp
+  if (typeof timeStr?.toDate === "function") {
+    return timeStr.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  }
+  if (typeof timeStr === "object" && timeStr?.seconds !== undefined) {
+    return new Date(timeStr.seconds * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  }
+
   const tStr = String(timeStr).trim();
 
   // Full ISO string → device local time display
