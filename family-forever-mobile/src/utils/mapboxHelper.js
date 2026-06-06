@@ -3,7 +3,7 @@
  * Replaces Google Distance Matrix API with Mapbox Directions/Matrix API.
  */
 
-const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "";
+const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "MAPBOX_TOKEN_REMOVED";
 
 /**
  * Geocode an address string to [lng, lat] coordinates using Mapbox.
@@ -46,7 +46,7 @@ export async function calculateRouteDistance(addresses) {
     const coordString = validCoords.map(c => `${c[0]},${c[1]}`).join(";");
 
     // 3. Call Mapbox Directions API
-    const url = `https://api.mapbox.com/directions/v1/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
 
     const response = await fetch(url);
     const data = await response.json();

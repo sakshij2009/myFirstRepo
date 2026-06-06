@@ -63,12 +63,13 @@ export default function ReportTransportationTab({ shift, shiftId }) {
   const [endPoint, setEndPoint] = useState(saved.endLocation || "");
 
   /* OFFICE → PICKUP and DROP → OFFICE (Mapbox route calculations) */
-  const [officeToPickupKm, setOfficeToPickupKm] = useState(
-    saved.officeToPickupKm != null ? saved.officeToPickupKm : null
-  );
-  const [dropToOfficeKm, setDropToOfficeKm] = useState(
-    saved.dropToOfficeKm != null ? saved.dropToOfficeKm : null
-  );
+  // Priority: shiftPoints (saved at creation) → extraShiftPoints → null (triggers auto-calc)
+  const _o2p = planned.officeToPickupKm > 0 ? planned.officeToPickupKm
+    : saved.officeToPickupKm > 0 ? saved.officeToPickupKm : null;
+  const _d2o = planned.dropToOfficeKm > 0 ? planned.dropToOfficeKm
+    : saved.dropToOfficeKm > 0 ? saved.dropToOfficeKm : null;
+  const [officeToPickupKm, setOfficeToPickupKm] = useState(_o2p);
+  const [dropToOfficeKm, setDropToOfficeKm] = useState(_d2o);
   const [kmLoading, setKmLoading] = useState(false);
 
   /* MISC */
@@ -89,8 +90,8 @@ export default function ReportTransportationTab({ shift, shiftId }) {
     const pickupAddr = planned.pickupLocation || shift?.pickupLocation;
     const dropAddr = planned.dropLocation || shift?.dropLocation;
     if (!pickupAddr && !dropAddr) return;
-    // Skip if already saved
-    if (officeToPickupKm != null && dropToOfficeKm != null) return;
+    // Skip if already have positive values
+    if (officeToPickupKm > 0 && dropToOfficeKm > 0) return;
 
     (async () => {
       setKmLoading(true);

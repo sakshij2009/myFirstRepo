@@ -431,8 +431,15 @@ export default function ShiftDetails() {
         // Pre-fill transport report fields if already saved
         if (data.transComments) setTransComments(data.transComments);
         if (data.receiptUrl) setReceiptUrl(data.receiptUrl);
-        if (data.officeToPickupKm) setOfficeToPickup(String(data.officeToPickupKm));
-        if (data.dropToOfficeKm) setDropToOffice(String(data.dropToOfficeKm));
+        // Load from shiftPoints[0] first (saved at creation), then top-level fallback
+        const sp0 = Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0
+          ? data.shiftPoints[0] : null;
+        const o2p = sp0?.officeToPickupKm > 0 ? sp0.officeToPickupKm
+          : data.officeToPickupKm > 0 ? data.officeToPickupKm : null;
+        const d2o = sp0?.dropToOfficeKm > 0 ? sp0.dropToOfficeKm
+          : data.dropToOfficeKm > 0 ? data.dropToOfficeKm : null;
+        if (o2p) setOfficeToPickup(String(parseFloat(o2p).toFixed(2)));
+        if (d2o) setDropToOffice(String(parseFloat(d2o).toFixed(2)));
       }
       setLoading(false);
     });
@@ -1260,27 +1267,29 @@ export default function ShiftDetails() {
               {/* Personal vehicle office KMs */}
               {isPersonalVehicle && (
                 <View style={{ marginBottom: 14 }}>
-                  <Text style={{ fontSize: 12, color: "#6B7280", marginBottom: 6, fontWeight: "600" }}>OFFICE SEGMENTS (Personal Vehicle)</Text>
-                  <Text style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>Office: 3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada</Text>
+                  <Text style={{ fontSize: 12, color: "#374151", marginBottom: 6, fontWeight: "600" }}>OFFICE SEGMENTS (Personal Vehicle)</Text>
+                  <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Office: 3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada</Text>
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>Office → Pickup (km)</Text>
+                      <Text style={{ fontSize: 11, color: "#374151", marginBottom: 4, fontWeight: "600" }}>Office → Pickup (km)</Text>
                       <TextInput
                         value={officeToPickup}
                         onChangeText={setOfficeToPickup}
                         keyboardType="decimal-pad"
                         placeholder="0.0"
-                        style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, padding: 10, fontSize: 14 }}
+                        placeholderTextColor="#9CA3AF"
+                        style={{ borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 8, padding: 10, fontSize: 14, color: "#111827", backgroundColor: "#F9FAFB" }}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>Drop → Office (km)</Text>
+                      <Text style={{ fontSize: 11, color: "#374151", marginBottom: 4, fontWeight: "600" }}>Drop → Office (km)</Text>
                       <TextInput
                         value={dropToOffice}
                         onChangeText={setDropToOffice}
                         keyboardType="decimal-pad"
                         placeholder="0.0"
-                        style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 8, padding: 10, fontSize: 14 }}
+                        placeholderTextColor="#9CA3AF"
+                        style={{ borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 8, padding: 10, fontSize: 14, color: "#111827", backgroundColor: "#F9FAFB" }}
                       />
                     </View>
                   </View>
