@@ -541,8 +541,8 @@ export default function Payroll() {
 
       const cancelledShifts = userShifts.filter(isCancelled);
       const completedShifts = userShifts.filter((s) => s.clockIn && s.clockOut);
-      // Only locked (isRatify) shifts count toward payroll
-      const activeShifts    = userShifts.filter((s) => !isCancelled(s) && s.isRatify === true);
+      // Only locked shifts count toward payroll
+      const activeShifts    = userShifts.filter((s) => !isCancelled(s) && s.locked === true);
 
       // 3. Totals from shifts
       let totalKms = 0;

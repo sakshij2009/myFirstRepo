@@ -937,7 +937,7 @@ const ShiftReport = ({ user }) => {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <ShiftLockToggle shiftId={shiftId} initialValue={!!shiftData?.isRatify} />
+          <ShiftLockToggle shiftId={shiftId} initialValue={!!shiftData?.locked} />
           <button
             onClick={() => navigate(`/admin-dashboard/add/update-user-shift/${shiftId}`)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-white transition-all hover:opacity-90"

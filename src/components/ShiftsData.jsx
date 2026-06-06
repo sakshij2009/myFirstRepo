@@ -308,7 +308,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                   </button>
                 )}
 
-                <ShiftLockToggle shiftId={shift.id} initialValue={shift.isRatify ?? false} className="" />
+                <ShiftLockToggle shiftId={shift.id} initialValue={shift.locked ?? false} className="" />
 
                 <button
                   onClick={() => handleViewReport(shift.id)}

@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import AppToggle from "./ui/AppToggle";
 import { MiniCalendar } from "./ui/MiniCalendar";
+import ShiftLockToggle from "./ShiftLockToggle";
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -467,14 +468,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center justify-center">
-                      {row.locked ? (
-                        <button onClick={() => handleToggle(row)} className="inline-flex items-center gap-1 px-2 py-1 rounded-md transition-all"
-                          style={{ fontSize: 10, fontWeight: 700, background: isInvoiced ? "#f3f4f6" : row.billingStatus === "Billable" ? "#f0fdf4" : "#fef2f2", color: isInvoiced ? "#6b7280" : row.billingStatus === "Billable" ? "#166534" : "#991b1b", border: `1px solid ${isInvoiced ? "#e5e7eb" : row.billingStatus === "Billable" ? "#bbf7d0" : "#fecaca"}`, cursor: isInvoiced ? "not-allowed" : "pointer", opacity: isInvoiced ? 0.7 : 1 }}>
-                          <Lock size={9} strokeWidth={2.5} />{row.billingStatus === "Billable" ? "Billable" : isInvoiced ? "Invoiced" : "Locked"}
-                        </button>
-                      ) : (
-                        <AppToggle checked={false} onChange={() => handleToggle(row)} />
-                      )}
+                      <ShiftLockToggle shiftId={row.id} initialValue={row.locked} />
                     </div>
                   </td>
                   <td className="px-4 py-3">
