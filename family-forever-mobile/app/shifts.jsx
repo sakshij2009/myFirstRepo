@@ -85,29 +85,47 @@ const calcDuration = (start, end) => {
   return m > 0 ? `${h}h ${m}m` : `${h} hrs`;
 };
 
-const toTimeStr = (d) =>
-  d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-
-// If actual time is within ±15 min of scheduledTimeStr ("9:00 AM"), snap to scheduled.
-// Otherwise return exact current time.
-const getSnappedTime = (scheduledTimeStr) => {
+// Snap to scheduled time if within ±15 min.
+// Handles ALL formats: "21:30" (24h), "9:00 AM", Firestore Timestamp.
+const getSnappedTime = (scheduledStr) => {
   const now = new Date();
-  if (scheduledTimeStr) {
-    const str = String(scheduledTimeStr).trim();
-    const match = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (match) {
-      let h = parseInt(match[1], 10);
-      const m = parseInt(match[2], 10);
-      const period = match[3].toUpperCase();
-      if (period === "PM" && h !== 12) h += 12;
-      if (period === "AM" && h === 12) h = 0;
-      const scheduled = new Date();
-      scheduled.setHours(h, m, 0, 0);
-      const diffMinutes = (now - scheduled) / 60000;
-      if (diffMinutes >= -15 && diffMinutes <= 15) return toTimeStr(scheduled);
+  const actual = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  if (!scheduledStr) return actual;
+
+  let sh = -1, sm = -1;
+  if (typeof scheduledStr.toDate === "function") {
+    const d = scheduledStr.toDate(); sh = d.getHours(); sm = d.getMinutes();
+  } else if (typeof scheduledStr === "object" && scheduledStr.seconds !== undefined) {
+    const d = new Date(scheduledStr.seconds * 1000); sh = d.getHours(); sm = d.getMinutes();
+  } else {
+    const s = String(scheduledStr).trim();
+    if (/^\d{1,2}:\d{2}$/.test(s)) {
+      // "21:30" or "9:00" — 24-hour format
+      sh = parseInt(s.split(":")[0], 10);
+      sm = parseInt(s.split(":")[1], 10);
+    } else if (/AM|PM/i.test(s)) {
+      // "9:00 AM" or "09:30 PM"
+      const i = s.lastIndexOf(" "); const p = s.slice(i + 1).toUpperCase();
+      sh = parseInt(s.split(":")[0], 10);
+      sm = parseInt(s.slice(s.indexOf(":") + 1, i), 10);
+      if (p === "PM" && sh !== 12) sh += 12;
+      if (p === "AM" && sh === 12) sh = 0;
     }
   }
-  return toTimeStr(now);
+  if (sh < 0 || isNaN(sh) || isNaN(sm)) return actual;
+
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const schMins = sh * 60 + sm;
+  let diff = nowMins - schMins;
+  if (diff < -720) diff += 1440;
+  if (diff > 720) diff -= 1440;
+
+  if (diff >= -15 && diff <= 15) {
+    const ap = sh >= 12 ? "PM" : "AM";
+    const h12 = sh % 12 || 12;
+    return `${String(h12).padStart(2, "0")}:${String(sm).padStart(2, "0")} ${ap}`;
+  }
+  return actual;
 };
 
 const getLocationString = async () => {
@@ -601,7 +619,6 @@ export default function Shifts() {
         await updateDoc(ref, {
           clockIn: serverTimestamp(),
           clockInTime: roundedTime,
-          clockInDate: new Date().toISOString(),
           clockInLocation: locationStr,
         });
         // ── Optimistic UI update ─────────────────────────────────────────────
@@ -630,7 +647,6 @@ export default function Shifts() {
         await updateDoc(ref, {
           clockOut: serverTimestamp(),
           clockOutTime: roundedTime,
-          clockOutDate: new Date().toISOString(),
           clockOutLocation: locationStr,
         });
         // ── Optimistic UI update ─────────────────────────────────────────────
