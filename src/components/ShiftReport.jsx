@@ -1110,6 +1110,15 @@ const ShiftReport = ({ user }) => {
                           if (!shiftId) return;
                           setClockSaving(true);
                           try {
+                            // Convert "HH:mm" (24h input) → "hh:mm AM/PM" string (what mobile reads)
+                            const toTimeString = (timeStr) => {
+                              if (!timeStr) return null;
+                              const [h, m] = timeStr.split(":").map(Number);
+                              const ampm = h >= 12 ? "PM" : "AM";
+                              const h12 = h % 12 || 12;
+                              return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+                            };
+                            // Also save as UTC ISO for Firestore Timestamp field
                             const toISO = (timeStr) => {
                               if (!timeStr) return null;
                               const base = shiftData?.startDate?.toDate?.() || new Date();
@@ -1119,8 +1128,14 @@ const ShiftReport = ({ user }) => {
                               return d.toISOString();
                             };
                             const updates = {};
-                            if (editClockIn) updates.clockIn = toISO(editClockIn);
-                            if (editClockOut) updates.clockOut = toISO(editClockOut);
+                            if (editClockIn) {
+                              updates.clockIn = toISO(editClockIn);
+                              updates.clockInTime = toTimeString(editClockIn);
+                            }
+                            if (editClockOut) {
+                              updates.clockOut = toISO(editClockOut);
+                              updates.clockOutTime = toTimeString(editClockOut);
+                            }
                             await updateDoc(doc(db, "shifts", shiftId), updates);
                             setShiftData((prev) => ({ ...prev, ...updates }));
                             setEditingClock(false);
