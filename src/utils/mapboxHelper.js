@@ -4,6 +4,7 @@
  */
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
+if (!MAPBOX_ACCESS_TOKEN) console.error("❌ VITE_MAPBOX_TOKEN is not set — km calculation will not work. Restart the dev server after adding the token to .env");
 
 /**
  * Geocode an address string to [lng, lat] using Mapbox.

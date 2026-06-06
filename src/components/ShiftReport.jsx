@@ -626,8 +626,8 @@ const ShiftReport = ({ user }) => {
       const rawStaff = parseFloat(last.staffTraveledKM || last.staffKilometer || 0);
       setStaffKm(rawStaff ? rawStaff.toFixed(2) : "");
     }
-    if (last.officeToPickupKm != null) setOfficeToPickupKm(parseFloat(last.officeToPickupKm));
-    if (last.dropToOfficeKm != null) setDropToOfficeKm(parseFloat(last.dropToOfficeKm));
+    if (last.officeToPickupKm > 0) setOfficeToPickupKm(parseFloat(last.officeToPickupKm));
+    if (last.dropToOfficeKm > 0) setDropToOfficeKm(parseFloat(last.dropToOfficeKm));
     if (last.approvedKM || last.approvedKm) setApprovedKm(String(last.approvedKM || last.approvedKm || ""));
     if (last.approvedBy) setApprovedBy(last.approvedBy);
     if (shiftData?.travelComments) setTravelComments(shiftData.travelComments);
@@ -644,18 +644,18 @@ const ShiftReport = ({ user }) => {
       : [];
     const sp = sortedPts[0] || {};
 
-    // 1. Best case: values already saved on the shiftPoint at creation time
-    if (sp.officeToPickupKm != null) setOfficeToPickupKm(parseFloat(sp.officeToPickupKm));
-    if (sp.dropToOfficeKm != null) setDropToOfficeKm(parseFloat(sp.dropToOfficeKm));
-    if (sp.officeToPickupKm != null && sp.dropToOfficeKm != null) return;
+    // 1. Best case: values already saved on the shiftPoint at creation time (must be > 0)
+    if (sp.officeToPickupKm > 0) setOfficeToPickupKm(parseFloat(sp.officeToPickupKm));
+    if (sp.dropToOfficeKm > 0) setDropToOfficeKm(parseFloat(sp.dropToOfficeKm));
+    if (sp.officeToPickupKm > 0 && sp.dropToOfficeKm > 0) return;
 
-    // 2. Fallback: values saved in extraShiftPoints
+    // 2. Fallback: values saved in extraShiftPoints (must be > 0)
     const last = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
-    if (last.officeToPickupKm != null) { setOfficeToPickupKm(parseFloat(last.officeToPickupKm)); }
-    if (last.dropToOfficeKm != null) { setDropToOfficeKm(parseFloat(last.dropToOfficeKm)); }
-    if (last.officeToPickupKm != null && last.dropToOfficeKm != null) return;
+    if (last.officeToPickupKm > 0) { setOfficeToPickupKm(parseFloat(last.officeToPickupKm)); }
+    if (last.dropToOfficeKm > 0) { setDropToOfficeKm(parseFloat(last.dropToOfficeKm)); }
+    if (last.officeToPickupKm > 0 && last.dropToOfficeKm > 0) return;
 
-    // 3. Last resort: calculate live via Mapbox (for older shifts not yet saved)
+    // 3. Live Mapbox fallback — runs when saved values are 0/missing
     const pickupAddr = sp.pickupLocation || shiftData.pickupLocation;
     const dropAddr = sp.dropLocation || shiftData.dropLocation;
     if (!pickupAddr && !dropAddr) return;
@@ -665,11 +665,23 @@ const ShiftReport = ({ user }) => {
       try {
         const { calculateRouteDistance: calcDist } = await import("../utils/mapboxHelper.js");
         const [o2p, d2o] = await Promise.all([
-          pickupAddr && sp.officeToPickupKm == null ? calcDist([OFFICE_ADDRESS_WEB, pickupAddr]) : null,
-          dropAddr && sp.dropToOfficeKm == null ? calcDist([dropAddr, OFFICE_ADDRESS_WEB]) : null,
+          pickupAddr ? calcDist([OFFICE_ADDRESS_WEB, pickupAddr]) : null,
+          dropAddr ? calcDist([dropAddr, OFFICE_ADDRESS_WEB]) : null,
         ]);
-        if (o2p?.km != null) setOfficeToPickupKm(parseFloat(o2p.km.toFixed(2)));
-        if (d2o?.km != null) setDropToOfficeKm(parseFloat(d2o.km.toFixed(2)));
+        const o2pKm = o2p?.km != null ? parseFloat(o2p.km.toFixed(2)) : null;
+        const d2oKm = d2o?.km != null ? parseFloat(d2o.km.toFixed(2)) : null;
+        if (o2pKm != null) setOfficeToPickupKm(o2pKm);
+        if (d2oKm != null) setDropToOfficeKm(d2oKm);
+
+        // Save back to Firestore so future loads use saved values
+        if ((o2pKm != null || d2oKm != null) && shiftId && Array.isArray(shiftData.shiftPoints)) {
+          const updatedPoints = shiftData.shiftPoints.map((pt, idx) =>
+            idx === 0
+              ? { ...pt, officeToPickupKm: o2pKm ?? pt.officeToPickupKm ?? 0, dropToOfficeKm: d2oKm ?? pt.dropToOfficeKm ?? 0 }
+              : pt
+          );
+          updateDoc(doc(db, "shifts", shiftId), { shiftPoints: updatedPoints }).catch(() => {});
+        }
       } catch (e) {
         console.warn("KM auto-calc failed:", e);
       } finally {
