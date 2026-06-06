@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
+import FormikPhoneField from "./FormikPhoneField";
 import * as Yup from "yup";
 import {
   doc,
@@ -1786,7 +1787,7 @@ const handleSubmit = async (values, { resetForm }) => {
                       </div>
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                        <Field name="intakeworkerPhone" type="text" placeholder="Phone number" className={iCls(false)} />
+                        <FormikPhoneField name="intakeworkerPhone" placeholder="XXX-XXX-XXXX" className={iCls(false)} />
                       </div>
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
@@ -1835,7 +1836,7 @@ const handleSubmit = async (values, { resetForm }) => {
                                 </div>
                                 <div>
                                   <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone Number</label>
-                                  <Field name={`caseworkers.${index}.phone`} type="text" placeholder="Phone number" className={iCls(false)} />
+                                  <FormikPhoneField name={`caseworkers.${index}.phone`} placeholder="XXX-XXX-XXXX" className={iCls(false)} />
                                 </div>
                                 <div>
                                   <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>
@@ -2009,7 +2010,7 @@ const handleSubmit = async (values, { resetForm }) => {
                     <SectionTitle title="Client Info" />
                     <button type="button"
                       onClick={() => {
-                        setFieldValue("clients", [...values.clients, { fullName: "", gender: "", birthDate: "", address: "", apartmentUnit: "", latitude: "", longitude: "", startDate: "", clientInfo: "", phone: "", email: "", photos: [], cfsStatus: "", dfnaNumber: "", treatyNumber: "" }]);
+                        setFieldValue("clients", [...values.clients, { fullName: "", gender: "", birthDate: "", address: "", apartmentUnit: "", latitude: "", longitude: "", startDate: "", clientInfo: "", phone: "", email: "", photos: [], cfsStatus: "", cyimId: "", dfnaNumber: "", treatyNumber: "" }]);
                         setActiveClientIdx(values.clients.length);
                       }}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
@@ -2124,7 +2125,7 @@ const handleSubmit = async (values, { resetForm }) => {
 
                             <div>
                               <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone (Guardian)</label>
-                              <Field name={`clients.${idx}.phone`} type="text" placeholder="10-digit phone number"
+                              <FormikPhoneField name={`clients.${idx}.phone`} placeholder="XXX-XXX-XXXX"
                                 className={iCls(touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone)} />
                               {touched.clients?.[idx]?.phone && errors.clients?.[idx]?.phone && (
                                 <div className="text-red-500 text-xs mt-1">{errors.clients[idx]?.phone}</div>
@@ -2172,6 +2173,11 @@ const handleSubmit = async (values, { resetForm }) => {
                                 <option value="SFP">SFP</option>
                               </Field>
                               <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
+                            </div>
+
+                            <div>
+                              <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>CYIM ID / Number</label>
+                              <Field name={`clients.${idx}.cyimId`} type="text" placeholder="Enter CYIM ID" className={iCls(false)} />
                             </div>
 
                             <div>
@@ -2264,7 +2270,7 @@ const handleSubmit = async (values, { resetForm }) => {
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
-                                <Field name={`parentInfoList.${index}.parentPhone`} type="text" placeholder="Parent / Guardian phone" className={iCls(false)} />
+                                <FormikPhoneField name={`parentInfoList.${index}.parentPhone`} placeholder="XXX-XXX-XXXX" className={iCls(false)} />
                               </div>
                               <div>
                                 <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Email</label>

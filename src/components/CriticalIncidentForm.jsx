@@ -380,6 +380,7 @@ const validationSchema = Yup.object().shape({
 /* ---------- component ---------- */
 export default function CriticalIncidentForm({
   clientData,
+  shiftData,
   onSuccess,
   onCancel,
   user,
@@ -390,8 +391,14 @@ export default function CriticalIncidentForm({
   const [saving, setSaving] = useState(false);
 
   const defaults = useMemo(
-    () => buildDefaultInitialValues(clientData),
-    [clientData]
+    () => buildDefaultInitialValues({
+      ...clientData,
+      // Seed staff name from shift if available
+      staffName: shiftData?.primaryUserName || shiftData?.userName || shiftData?.name || clientData?.staffName || "",
+      staffRole: "Staff",
+      agencyName: shiftData?.agencyName || clientData?.agencyName || "",
+    }),
+    [clientData, shiftData]
   );
 
   const clientId =
@@ -410,26 +417,37 @@ useEffect(() => {
         return;
       }
 
-      /* ---------------- 1️⃣ STAFF INFO (user assigned to client) ---------------- */
+      /* ---------------- 1️⃣ STAFF INFO (from shift's primary staff) ---------------- */
       let staffInfo = {};
       try {
-        const staffId = clientData?.userId || null;
+        // Prefer shift's primary staff name/ID over client's userId
+        const staffIdFromShift =
+          shiftData?.primaryUserId || shiftData?.userId || clientData?.userId || null;
+        const staffNameFromShift =
+          shiftData?.primaryUserName || shiftData?.userName || shiftData?.name || "";
 
+        // If we already have the name from shiftData, use it directly
+        if (staffNameFromShift) {
+          staffInfo = {
+            staffId: staffIdFromShift || "",
+            staffName: staffNameFromShift,
+            staffRole: "Staff", // default role label
+            staffAddress: "",
+          };
+        }
+
+        // Try fetching full user record from Firestore to get address + role
+        const staffId = staffIdFromShift;
         if (staffId) {
-          // fetch user by userId, not by document ID
-          const qStaff = query(
-            collection(db, "users"),
-            where("userId", "==", staffId)
-          );
+          const qStaff = query(collection(db, "users"), where("userId", "==", staffId));
           const snap = await getDocs(qStaff);
-
           if (!snap.empty) {
             const u = snap.docs[0].data();
             staffInfo = {
               staffId: staffId,
-              staffName: u.name || "",
-              staffRole: u.role || u.position || "",
-              staffAddress: u.address || "",
+              staffName: u.name || staffNameFromShift || "",
+              staffRole: u.role || u.position || "Staff",
+              staffAddress: u.address || u.homeAddress || "",
             };
           }
         }
@@ -459,24 +477,30 @@ useEffect(() => {
         console.warn("Client fetch error:", err);
       }
 
-      /* ---------------- 3️⃣ INTAKE FORM (Agency + Case Worker) ---------------- */
+      /* ---------------- 3️⃣ INTAKE FORM (Agency + Case Worker + CYIM ID + CFG) ---------------- */
       let intakeInfo = {};
       try {
-        const q = query(
-          collection(db, "intakeForms"),
-          where("clientId", "==", clientId)
-        );
-        const snap = await getDocs(q);
-
-        if (!snap.empty) {
-          const d = snap.docs[0].data();
-          intakeInfo = {
-            agencyName: d.agencyName || "",
-            caseWorkerName: d.caseWorkerName || "",
-            intakeCipPractitioner: d.caseWorkerName || "",
-            clientName: d.clientName || d.name || "",
-            cyimId: d.cyimId || d.id || "",
-          };
+        // Try both collection name variants
+        for (const col of ["InTakeForms", "intakeForms"]) {
+          const q = query(collection(db, col), where("clientId", "==", clientId));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const d = snap.docs[0].data();
+            // Build cfg status map from intake if stored as a field
+            const cfgFromIntake = cfgStatuses.reduce((acc, s) => {
+              acc[s] = d.cfg?.[s] || d.cfgStatus === s || false;
+              return acc;
+            }, {});
+            intakeInfo = {
+              agencyName: d.agencyName || d.agency || d.agencyDetails?.name || "",
+              caseWorkerName: d.caseWorkerName || d.inTakeWorkerInfo || "",
+              intakeCipPractitioner: d.caseWorkerName || d.inTakeWorkerInfo || "",
+              clientName: d.clientName || d.name || "",
+              cyimId: d.cyimId || d.cyimNumber || d.clientId || "",
+              cfg: Object.values(cfgFromIntake).some(Boolean) ? cfgFromIntake : undefined,
+            };
+            break;
+          }
         }
       } catch (err) {
         console.warn("Intake fetch error:", err);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
+import FormikPhoneField from "./FormikPhoneField";
 import * as Yup from "yup";
 import { doc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -482,7 +483,7 @@ const AddUserForm = ({ mode = "add", user }) => {
                   </div>
                   <div>
                     <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone No</label>
-                    <Field name="phone" placeholder="Please enter the phone no" className={inputCls(touched.phone && errors.phone)} />
+                    <FormikPhoneField name="phone" placeholder="XXX-XXX-XXXX" className={inputCls(touched.phone && errors.phone)} />
                     <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
                   <div className="relative">
@@ -576,7 +577,7 @@ const AddUserForm = ({ mode = "add", user }) => {
                     </div>
                     <div>
                       <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Emergency Contact Phone</label>
-                      <Field name="emergencyContactPhone" placeholder="Enter Contact Phone" className={inputCls(touched.emergencyContactPhone && errors.emergencyContactPhone)} />
+                      <FormikPhoneField name="emergencyContactPhone" placeholder="XXX-XXX-XXXX" className={inputCls(touched.emergencyContactPhone && errors.emergencyContactPhone)} />
                       <ErrorMessage name="emergencyContactPhone" component="div" className="text-red-500 text-xs mt-1" />
                     </div>
                     <div>

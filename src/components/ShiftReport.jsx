@@ -879,7 +879,7 @@ const ShiftReport = ({ user }) => {
 
       {/* ── Modals ── */}
       {showFullReport && <FullReportModal shiftData={shiftData} normalized={normalized} primaryStaff={primaryStaff} onClose={() => setShowFullReport(false)} />}
-      {activeModal === "critical" && <CriticalIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} user={user} />}
+      {activeModal === "critical" && <CriticalIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} user={user} clientData={clientData} shiftData={shiftData} />}
       {activeModal === "medical" && <MedicalLogForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} shiftData={shiftData} user={user} />}
       {activeModal === "noteworthy" && <NoteworthyIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
       {activeModal === "followthrough" && <FollowThroughForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}

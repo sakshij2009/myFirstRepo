@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
+import FormikPhoneField from "./FormikPhoneField";
 import * as Yup from "yup";
 import { getDocs, collection, doc, setDoc, getDoc, query, where, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -357,7 +358,7 @@ const handleSubmit = async (values, { resetForm }) => {
                     {/* Phone */}
                     <div>
                       <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Phone</label>
-                      <Field name="phone" type="text" placeholder="Enter phone number" className={inputCls(touched.phone && errors.phone)} />
+                      <FormikPhoneField name="phone" placeholder="XXX-XXX-XXXX" className={inputCls(touched.phone && errors.phone)} />
                       <ErrorMessage name="phone" component="div" className="text-red-500 text-xs mt-1" />
                     </div>
 
