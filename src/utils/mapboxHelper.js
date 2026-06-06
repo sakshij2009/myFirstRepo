@@ -62,7 +62,7 @@ export async function calculateRouteDistance(addresses) {
     }
 
     const coordString = validCoords.map(c => `${c[0]},${c[1]}`).join(";");
-    const url = `https://api.mapbox.com/directions/v1/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
 
     const response = await fetch(url);
     const data = await response.json();
