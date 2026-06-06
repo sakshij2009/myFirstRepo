@@ -541,12 +541,12 @@ export default function ShiftDetails() {
       }
 
       // Auto-clock-out: if clocked in but not clocked out and 15+ min past shift end
-      if (isInProgress && endDT && !isNaN(endDT.getTime()) && !autoClockOutFiredRef.current) {
-        const minsPassedEnd = (now.getTime() - endDT.getTime()) / 60000;
-        if (minsPassedEnd >= 15) {
+      const minsPassedEnd = diffFromScheduled(shift.endTime); // positive = past end time
+      if (isInProgress && minsPassedEnd !== null && minsPassedEnd >= 15 && !autoClockOutFiredRef.current) {
+        if (true) {
           autoClockOutFiredRef.current = true; // prevent re-firing every 30s
           try {
-            const scheduledEndTime = toTimeStr(endDT);
+            const scheduledEndTime = formatStoredTime(shift.endTime) || edmontonNowStr();
             const locationStr = await getLocationString();
             await updateDoc(doc(db, "shifts", shiftId), {
               clockOut: serverTimestamp(),
