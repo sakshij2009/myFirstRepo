@@ -1051,6 +1051,8 @@ const AddUserShift = ({ mode = "add", user }) => {
         seatType: fp.seatType || "",
         transportationMode: fp.transportationMode || "",
         totalKilometers: Number(fp.totalKilometers) || 0,
+        officeToPickupKm: Number(fp.officeToPickupKm) || 0,
+        dropToOfficeKm: Number(fp.dropToOfficeKm) || 0,
       }));
 
       // ---------- UPDATE MODE ----------

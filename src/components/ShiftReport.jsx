@@ -1456,24 +1456,8 @@ const ShiftReport = ({ user }) => {
                     ))}
                   </div>
 
-                  {/* Shift Transportation Info (read-only from shift data) */}
+                  {/* Shift Transportation Info — one card per client, sorted by pickup priority */}
                   {(() => {
-                    const sp = shiftData?.shiftPoints?.[0] || shiftData?.clientDetails?.shiftPoints?.[0] || {};
-                    const pickupLoc = sp.pickupLocation || shiftData?.pickupLocation || "N/A";
-                    const pickupTime = sp.pickupTime || shiftData?.pickupTime || "N/A";
-                    const pickedUpTime = sp.pickedUpTime || shiftData?.pickedUpTime || "N/A";
-                    const pickedUpLoc = sp.pickedUpLocation || shiftData?.pickedUpLocation || "N/A";
-                    const visitLoc = sp.visitLocation || shiftData?.visitLocation || "N/A";
-                    const visitStartTime = sp.visitStartTime || shiftData?.visitStartOfficialTime || "N/A";
-                    const visitEndTime = sp.visitEndTime || shiftData?.visitEndOfficialTime || "N/A";
-                    // Planned drop (from shift assignment)
-                    const dropLoc = sp.dropLocation || shiftData?.dropLocation || "N/A";
-                    const dropTime = sp.dropTime || shiftData?.dropTime || "N/A";
-                    // Actual drop — complete-shift.jsx saves droppedTime/droppedLocation;
-                    // _ReportTransportationTab saves dropDoneAt/dropActualLocation. Check both.
-                    const droppedOffLoc = sp.droppedLocation || sp.dropActualLocation || shiftData?.droppedLocation || shiftData?.dropActualLocation || "N/A";
-                    const droppedOffTime = sp.droppedTime || sp.dropDoneAt || shiftData?.droppedTime || shiftData?.dropDoneAt || "N/A";
-
                     const mapLink = (addr) => addr && addr !== "N/A"
                       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
                       : null;
@@ -1482,7 +1466,7 @@ const ShiftReport = ({ user }) => {
                       <div>
                         <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>{label}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <p className="font-semibold" style={{ fontSize: 13, color: value === "N/A" ? "#9ca3af" : "#111827" }}>{value}</p>
+                          <p className="font-semibold" style={{ fontSize: 13, color: !value || value === "N/A" ? "#9ca3af" : "#111827" }}>{value || "N/A"}</p>
                           {mapUrl && (
                             <a href={mapUrl} target="_blank" rel="noreferrer"
                               className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-white font-semibold flex-shrink-0"
@@ -1494,48 +1478,82 @@ const ShiftReport = ({ user }) => {
                       </div>
                     );
 
-                    return (
-                      <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
-                        <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Transport Information</p>
+                    // Sort shiftPoints by order (same as mobile)
+                    const rawPts = Array.isArray(shiftData?.shiftPoints) && shiftData.shiftPoints.length > 0
+                      ? shiftData.shiftPoints
+                      : shiftData?.clientDetails?.shiftPoints?.length > 0
+                        ? shiftData.clientDetails.shiftPoints
+                        : [{}];
+                    const sortedPts = [...rawPts].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
-                        {/* Pickup */}
-                        <div>
-                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Pickup</p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Field label="Pickup Time" value={pickupTime} />
-                            <Field label="Pickup Location" value={pickupLoc} mapUrl={mapLink(pickupLoc)} />
-                            <Field label="Picked Up Time (Actual)" value={pickedUpTime} />
-                            <Field label="Picked Up Location (Actual)" value={pickedUpLoc} mapUrl={mapLink(pickedUpLoc)} />
+                    return sortedPts.map((sp, idx) => {
+                      const ordinal = idx === 0 ? "1st" : idx === 1 ? "2nd" : idx === 2 ? "3rd" : `${idx + 1}th`;
+                      const pickupLoc = sp.pickupLocation || (idx === 0 ? shiftData?.pickupLocation : null) || "N/A";
+                      const pickupTime = sp.pickupTime || (idx === 0 ? shiftData?.pickupTime : null) || "N/A";
+                      const pickedUpTime = sp.pickedUpTime || (idx === 0 ? shiftData?.pickedUpTime : null) || "N/A";
+                      const pickedUpLoc = sp.pickedUpLocation || (idx === 0 ? shiftData?.pickedUpLocation : null) || "N/A";
+                      const visitLoc = sp.visitLocation || (idx === 0 ? shiftData?.visitLocation : null) || "N/A";
+                      const visitStartTime = sp.visitStartTime || (idx === 0 ? shiftData?.visitStartOfficialTime : null) || "N/A";
+                      const visitEndTime = sp.visitEndTime || (idx === 0 ? shiftData?.visitEndOfficialTime : null) || "N/A";
+                      const dropLoc = sp.dropLocation || (idx === 0 ? shiftData?.dropLocation : null) || "N/A";
+                      const dropTime = sp.dropTime || (idx === 0 ? shiftData?.dropTime : null) || "N/A";
+                      const droppedOffLoc = sp.droppedLocation || sp.dropActualLocation || (idx === 0 ? (shiftData?.droppedLocation || shiftData?.dropActualLocation) : null) || "N/A";
+                      const droppedOffTime = sp.droppedTime || sp.dropDoneAt || (idx === 0 ? (shiftData?.droppedTime || shiftData?.dropDoneAt) : null) || "N/A";
+
+                      return (
+                        <div key={idx} className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
+                          {/* Header with client name + pickup order badge */}
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>
+                              Transport Information{sortedPts.length > 1 ? ` — ${sp.name || `Client ${idx + 1}`}` : ""}
+                            </p>
+                            {sortedPts.length > 1 && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: "#fef9c3", color: "#854d0e" }}>
+                                {ordinal} Pickup
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Pickup */}
+                          <div>
+                            <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Pickup</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Field label="Pickup Time" value={pickupTime} />
+                              <Field label="Pickup Location" value={pickupLoc} mapUrl={mapLink(pickupLoc)} />
+                              <Field label="Picked Up Time (Actual)" value={pickedUpTime} />
+                              <Field label="Picked Up Location (Actual)" value={pickedUpLoc} mapUrl={mapLink(pickedUpLoc)} />
+                            </div>
+                          </div>
+
+                          {visitLoc !== "N/A" && (<>
+                            <hr style={{ borderColor: "#e5e7eb" }} />
+                            {/* Visit */}
+                            <div>
+                              <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Visit</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <Field label="Visit Location" value={visitLoc} mapUrl={mapLink(visitLoc)} />
+                                <div />
+                                <Field label="Visit Start Time" value={visitStartTime} />
+                                <Field label="Visit End Time" value={visitEndTime} />
+                              </div>
+                            </div>
+                          </>)}
+
+                          <hr style={{ borderColor: "#e5e7eb" }} />
+
+                          {/* Drop Off */}
+                          <div>
+                            <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Drop Off</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Field label="Drop Off Time" value={dropTime} />
+                              <Field label="Drop Off Location" value={dropLoc} mapUrl={mapLink(dropLoc)} />
+                              <Field label="Dropped Off Time (Actual)" value={droppedOffTime} />
+                              <Field label="Dropped Off Location (Actual)" value={droppedOffLoc} mapUrl={mapLink(droppedOffLoc)} />
+                            </div>
                           </div>
                         </div>
-
-                        <hr style={{ borderColor: "#e5e7eb" }} />
-
-                        {/* Visit */}
-                        <div>
-                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Visit</p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Field label="Visit Location" value={visitLoc} mapUrl={mapLink(visitLoc)} />
-                            <div />
-                            <Field label="Visit Start Time" value={visitStartTime} />
-                            <Field label="Visit End Time" value={visitEndTime} />
-                          </div>
-                        </div>
-
-                        <hr style={{ borderColor: "#e5e7eb" }} />
-
-                        {/* Drop Off */}
-                        <div>
-                          <p className="font-semibold mb-2" style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Drop Off</p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Field label="Drop Off Time" value={dropTime} />
-                            <Field label="Drop Off Location" value={dropLoc} mapUrl={mapLink(dropLoc)} />
-                            <Field label="Dropped Off Time (Actual)" value={droppedOffTime} />
-                            <Field label="Dropped Off Location (Actual)" value={droppedOffLoc} mapUrl={mapLink(droppedOffLoc)} />
-                          </div>
-                        </div>
-                      </div>
-                    );
+                      );
+                    });
                   })()}
 
                   {/* KM Breakdown */}
