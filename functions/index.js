@@ -1,7 +1,9 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const sgMail = require("@sendgrid/mail");
 
 initializeApp();
@@ -224,5 +226,113 @@ exports.sendSignInEmail = onCall(
     }
 
     return { success: true };
+  }
+);
+
+// ── Auto Clock-Out: runs every 5 minutes ──────────────────────────────────────
+// Finds shifts that are in-progress (clocked in, not clocked out) and whose
+// scheduled end time passed more than 15 minutes ago, then clocks them out
+// at the scheduled end time.
+exports.autoClockOut = onSchedule(
+  { schedule: "every 5 minutes", timeZone: "America/Edmonton" },
+  async () => {
+    const db = getFirestore();
+    const now = new Date();
+
+    // Edmonton "minutes since midnight" for the current moment
+    const edmontonParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Edmonton",
+      hour: "numeric", minute: "numeric", hour12: false,
+    }).formatToParts(now);
+    const edmontonH = parseInt(edmontonParts.find(p => p.type === "hour").value, 10);
+    const edmontonM = parseInt(edmontonParts.find(p => p.type === "minute").value, 10);
+    const nowMins = edmontonH * 60 + edmontonM;
+
+    // Parse any stored time string → Edmonton minutes since midnight
+    const timeToMins = (timeStr) => {
+      if (!timeStr) return null;
+      const t = String(timeStr).trim();
+      // Full ISO string
+      if (t.includes("T") || t.includes("Z")) {
+        const d = new Date(t);
+        if (isNaN(d.getTime())) return null;
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Edmonton",
+          hour: "numeric", minute: "numeric", hour12: false,
+        }).formatToParts(d);
+        const h = parseInt(parts.find(p => p.type === "hour").value, 10);
+        const m = parseInt(parts.find(p => p.type === "minute").value, 10);
+        return h * 60 + m;
+      }
+      // "9:30 PM" / "09:00 AM"
+      if (/AM|PM/i.test(t)) {
+        const spaceIdx = t.lastIndexOf(" ");
+        const period = t.slice(spaceIdx + 1).toUpperCase();
+        let [h, m] = t.slice(0, spaceIdx).split(":").map(Number);
+        if (period === "PM" && h !== 12) h += 12;
+        if (period === "AM" && h === 12) h = 0;
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
+      }
+      // "21:30" or "09:00"
+      if (/^\d{1,2}:\d{2}$/.test(t)) {
+        const [h, m] = t.split(":").map(Number);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
+      }
+      return null;
+    };
+
+    // Format minutes-since-midnight as "09:30 PM"
+    const minsToTimeStr = (totalMins) => {
+      const h = Math.floor(totalMins / 60) % 24;
+      const m = totalMins % 60;
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+    };
+
+    // Query: shifts that have a clockInTime but no clockOutTime and no autoClockOut flag
+    const snapshot = await db.collection("shifts")
+      .where("autoClockOut", "!=", true)
+      .get();
+
+    const batch = db.batch();
+    let count = 0;
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+
+      // Must be clocked in but not clocked out
+      const clockedIn  = !!(data.clockInTime || data.clockIn || data.clockin);
+      const clockedOut = !!(data.clockOutTime || data.clockOut || data.clockout);
+      if (!clockedIn || clockedOut) continue;
+
+      const endMins = timeToMins(data.endTime);
+      if (endMins === null) continue;
+
+      // Diff: positive = we are past the end time
+      let diff = nowMins - endMins;
+      if (diff < -720) diff += 1440; // midnight crossover
+
+      if (diff >= 15) {
+        const scheduledEndTimeStr = minsToTimeStr(endMins);
+        batch.update(docSnap.ref, {
+          clockOut: FieldValue.serverTimestamp(),
+          clockOutTime: scheduledEndTimeStr,
+          clockOutDate: now.toISOString(),
+          clockOutLocation: "Auto clock-out (system)",
+          autoClockOut: true,
+        });
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Auto clock-out: processed ${count} shift(s).`);
+    } else {
+      console.log("Auto clock-out: no shifts needed clock-out.");
+    }
   }
 );
