@@ -3,8 +3,7 @@
  * Uses Mapbox Geocoding + Directions API for route distance and duration.
  */
 
-const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
-if (!MAPBOX_ACCESS_TOKEN) console.error("❌ VITE_MAPBOX_TOKEN is not set — km calculation will not work. Restart the dev server after adding the token to .env");
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "MAPBOX_TOKEN_REMOVED";
 
 /**
  * Geocode an address string to [lng, lat] using Mapbox.
@@ -57,13 +56,21 @@ export async function calculateRouteDistance(addresses) {
     const coords = await Promise.all(coordPromises);
 
     const validCoords = coords.filter(c => c !== null);
-    if (validCoords.length < 2) return null;
+    if (validCoords.length < 2) {
+      console.warn("Mapbox: not enough valid coordinates from addresses:", addresses, "→", coords);
+      return null;
+    }
 
     const coordString = validCoords.map(c => `${c[0]},${c[1]}`).join(";");
     const url = `https://api.mapbox.com/directions/v1/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
 
     const response = await fetch(url);
     const data = await response.json();
+
+    if (data.message) {
+      console.error("Mapbox Directions API error:", data.message, "| addresses:", addresses);
+      return null;
+    }
 
     if (data.routes && data.routes.length > 0) {
       const route = data.routes[0];
@@ -74,7 +81,7 @@ export async function calculateRouteDistance(addresses) {
     }
     return null;
   } catch (error) {
-    console.error("Mapbox Routing Error:", error);
+    console.error("Mapbox Routing Error:", error, "| addresses:", addresses);
     return null;
   }
 }
