@@ -1741,7 +1741,7 @@ const handleSubmit = async (values, { resetForm }) => {
 
       <EditableProvider isEditable={isEditable}>
         <Formik
-          ref={formikRef}
+          innerRef={formikRef}
           enableReinitialize={true}
           initialValues={initialValues}
           validate={validate}
