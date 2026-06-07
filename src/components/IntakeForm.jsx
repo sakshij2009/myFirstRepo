@@ -597,6 +597,7 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: pro
   const [headerStatus, setHeaderStatus] = useState("");
   const isSubmittingRef = useRef(false);
   const isDraftSaveRef = useRef(false);
+  const pendingStatusRef = useRef(null); // set before instant-submit so handleSubmit sees the new status
   const [activeClientIdx, setActiveClientIdx] = useState(0);
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
@@ -1321,6 +1322,12 @@ const handleSubmit = async (values, { resetForm }) => {
   const isDraft = isDraftSaveRef.current;
   if (isDraft) setIsSavingDraft(true);
 
+  // If status was changed via the header pill, override values.status with the ref value
+  if (pendingStatusRef.current) {
+    values = { ...values, status: pendingStatusRef.current };
+    pendingStatusRef.current = null;
+  }
+
   try {
     // ================== SIGNATURE ==================
     const signatureURL = values.workerInfo.signature || "";
@@ -1597,14 +1604,14 @@ const handleSubmit = async (values, { resetForm }) => {
       }
     } else if (isNewlyAccepted) {
       // Status just changed to Accepted → clients were created → show success + redirect
-      const clientCount = (values.clients?.length || 0) +
-        (values.shiftPoints?.length || 0) +
-        (values.inTakeClients?.length || 0);
-      const countLabel = clientCount > 0 ? `${clientCount} client${clientCount !== 1 ? "s" : ""}` : "Clients";
+      const familyOrClientName = values.familyName
+        || values.clients?.[0]?.fullName
+        || values.inTakeClients?.[0]?.fullName
+        || "Client";
 
-      toast.success(`${countLabel} created successfully!`, {
-        description: "The intake form has been accepted and client records have been created.",
-        duration: 4000,
+      toast.success(`✅ "${familyOrClientName}" has been accepted!`, {
+        description: "Client record has been created successfully.",
+        duration: 5000,
       });
 
       // Redirect to clients page after a short delay so user sees the toast
@@ -1691,10 +1698,22 @@ const handleSubmit = async (values, { resetForm }) => {
                   value={curStatus}
                   onChange={(e) => {
                     const newStatus = e.target.value;
-                    setHeaderStatus(newStatus);
                     if (!formikRef.current) return;
+
+                    if (newStatus === "Accepted") {
+                      const fv = formikRef.current.values;
+                      const clientName = fv.familyName
+                        || fv.clients?.[0]?.fullName
+                        || "this client";
+                      const confirmed = window.confirm(
+                        `Accept this intake form?\n\nA client record will be created for "${clientName}" immediately.`
+                      );
+                      if (!confirmed) return; // revert — don't change pill
+                    }
+
+                    setHeaderStatus(newStatus);
+                    pendingStatusRef.current = newStatus;
                     formikRef.current.setFieldValue("status", newStatus);
-                    // Submit immediately — client creation fires if newStatus === "Accepted"
                     setTimeout(() => {
                       if (formikRef.current) formikRef.current.submitForm();
                     }, 0);
