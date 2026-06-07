@@ -129,6 +129,8 @@ const createEmptyInitialValues = () => ({
     serviceEndTime: "",
     serviceDesc: "",
     safetyPlan: "",
+    transportationDays: [],       // weekday numbers (0=Sun…6=Sat) for Transportation
+    supervisedVisitationDays: [], // weekday numbers for Supervised Visitation
   },
 
   // Clients (siblings)
@@ -381,6 +383,8 @@ const mapOldIntakeToInitialValues = (raw) => {
         : [],
       serviceDesc: raw.services?.serviceDesc || raw.serviceDetail || primaryClient.serviceDetail || "",
       safetyPlan: raw.services?.safetyPlan || raw.servicePlanAndRisk || primaryClient.servicePlanAndRisk || "",
+      transportationDays: Array.isArray(raw.services?.transportationDays) ? raw.services.transportationDays : [],
+      supervisedVisitationDays: Array.isArray(raw.services?.supervisedVisitationDays) ? raw.services.supervisedVisitationDays : [],
     },
     clients,
     billingInfo: {
@@ -470,6 +474,12 @@ const mapDataToInitialValues = (data) => {
           : [],
         serviceDates: Array.isArray(data.services?.serviceDates)
           ? data.services.serviceDates.map(convertToISO)
+          : [],
+        transportationDays: Array.isArray(data.services?.transportationDays)
+          ? data.services.transportationDays
+          : [],
+        supervisedVisitationDays: Array.isArray(data.services?.supervisedVisitationDays)
+          ? data.services.supervisedVisitationDays
           : [],
       },
       clients,
@@ -1182,6 +1192,13 @@ const createFamilyClient = async (intake, intakeId, clients, db) => {
     createdAt: Timestamp.now(),
     intakeId,
     id: clientId,
+    services: {
+      serviceType: intake.services?.serviceType || [],
+      transportationDays: intake.services?.transportationDays || [],
+      supervisedVisitationDays: intake.services?.supervisedVisitationDays || [],
+    },
+    transportationInfoList: intake.transportationInfoList || [],
+    supervisedVisitations: intake.supervisedVisitations || [],
   });
 };
 
@@ -1280,6 +1297,13 @@ await setDoc(doc(db, "clients", clientId), {
   createdAt: Timestamp.now(),
   intakeId,
   id: clientId, // optional but matches old style
+  services: {
+    serviceType: intake.services?.serviceType || [],
+    transportationDays: intake.services?.transportationDays || [],
+    supervisedVisitationDays: intake.services?.supervisedVisitationDays || [],
+  },
+  transportationInfoList: intake.transportationInfoList || [],
+  supervisedVisitations: intake.supervisedVisitations || [],
 });
 
 };
@@ -1917,6 +1941,12 @@ const handleSubmit = async (values, { resetForm }) => {
                                       let updated = [...values.services.serviceType];
                                       updated = isSelected ? updated.filter(id => id !== item.id) : [...updated, item.id];
                                       setFieldValue("services.serviceType", updated);
+                                      // Clear weekday arrays when their service type is deselected
+                                      if (isSelected) {
+                                        const n = (item.name || "").toLowerCase();
+                                        if (n.includes("transportation")) setFieldValue("services.transportationDays", []);
+                                        if (n.includes("supervised")) setFieldValue("services.supervisedVisitationDays", []);
+                                      }
                                     }}>
                                     <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
                                       style={{ background: isSelected ? "#145228" : "white", border: isSelected ? "none" : "1.5px solid #d1d5db" }}>
@@ -1933,6 +1963,64 @@ const handleSubmit = async (values, { resetForm }) => {
                         <div className="text-red-500 text-xs mt-1">{errors.services.serviceType}</div>
                       )}
                     </div>
+
+                    {/* ── Weekday schedule pickers (Transportation / Supervised Visitation only) ── */}
+                    {(() => {
+                      const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                      // display Mon→Sun (index 1–6, then 0)
+                      const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+                      const selectedIds = values.services?.serviceType || [];
+                      const hasTransport = shiftCategories.some(c => selectedIds.includes(c.id) && c.name?.toLowerCase().includes("transportation"));
+                      const hasSupervised = shiftCategories.some(c => selectedIds.includes(c.id) && c.name?.toLowerCase().includes("supervised"));
+
+                      if (!hasTransport && !hasSupervised) return null;
+
+                      const WeekdayPicker = ({ label, fieldPath, value }) => (
+                        <div className="col-span-2">
+                          <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>{label}</label>
+                          <div className="flex gap-2 flex-wrap">
+                            {DAY_ORDER.map(dayIdx => {
+                              const isOn = (value || []).includes(dayIdx);
+                              return (
+                                <button key={dayIdx} type="button"
+                                  onClick={() => {
+                                    const cur = value || [];
+                                    const next = isOn ? cur.filter(d => d !== dayIdx) : [...cur, dayIdx];
+                                    setFieldValue(fieldPath, next);
+                                  }}
+                                  className="px-3 py-1.5 rounded-full text-xs font-bold border transition-all"
+                                  style={{
+                                    background: isOn ? "#145228" : "white",
+                                    color: isOn ? "white" : "#6b7280",
+                                    borderColor: isOn ? "#145228" : "#d1d5db",
+                                  }}>
+                                  {DAYS[dayIdx]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+
+                      return (
+                        <>
+                          {hasTransport && (
+                            <WeekdayPicker
+                              label="Transportation Days"
+                              fieldPath="services.transportationDays"
+                              value={values.services?.transportationDays}
+                            />
+                          )}
+                          {hasSupervised && (
+                            <WeekdayPicker
+                              label="Supervised Visitation Days"
+                              fieldPath="services.supervisedVisitationDays"
+                              value={values.services?.supervisedVisitationDays}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Service Dates */}
                     <div>

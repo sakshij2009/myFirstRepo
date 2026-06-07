@@ -31,6 +31,7 @@ import { useParams } from "react-router-dom";
 import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import PlacesAutocomplete from "./PlacesAutocomplete";
 import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
 
 
@@ -258,9 +259,18 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [shiftPoints, setShiftPoints] = useState([]);
   // removedShiftPoints: members removed from this shift (can be added back)
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
+  // Category warning when selected date doesn't match any configured weekday
+  const [categoryWarning, setCategoryWarning] = useState("");
+  // Return trip state (transportation only)
+  const [returnTrip, setReturnTrip] = useState(false);
+  const [returnStartTime, setReturnStartTime] = useState("");
+  const [returnEndTime, setReturnEndTime] = useState("");
+  const [returnShiftPoints, setReturnShiftPoints] = useState([]);
   // Track the client ID that was originally loaded from the saved shift (update mode)
   const initialLoadedClientIdRef = useRef(null);
   const batchIdRef = useRef(null); // batchId of the shift being edited (null = single shift)
+  // Weekday schedule from intake: { transportationDays: number[], supervisedVisitationDays: number[] }
+  const weekdayScheduleRef = useRef({ transportationDays: [], supervisedVisitationDays: [] });
   // Ref to Formik instance so we can call setFieldValue from outside the render
   const formikRef = useRef(null);
   // Description pulled from the matched intake form
@@ -902,6 +912,19 @@ const AddUserShift = ({ mode = "add", user }) => {
               }
             }
 
+            // Capture weekday schedule (transportationDays / supervisedVisitationDays)
+            if (
+              Array.isArray(data.services?.transportationDays) && data.services.transportationDays.length > 0 ||
+              Array.isArray(data.services?.supervisedVisitationDays) && data.services.supervisedVisitationDays.length > 0
+            ) {
+              weekdayScheduleRef.current = {
+                transportationDays: data.services?.transportationDays || [],
+                supervisedVisitationDays: data.services?.supervisedVisitationDays || [],
+                transportationInfoList: data.transportationInfoList || [],
+                supervisedVisitations: data.supervisedVisitations || [],
+              };
+            }
+
             // Find Siblings/Members for Shift Points if we don't have them yet
             if (intakePoints.length === 0) {
 
@@ -1002,9 +1025,65 @@ const AddUserShift = ({ mode = "add", user }) => {
       }
     };
 
+    weekdayScheduleRef.current = { transportationDays: [], supervisedVisitationDays: [], transportationInfoList: [], supervisedVisitations: [] };
+    setCategoryWarning("");
     loadFromClient();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClient, mode]);
+
+  // applyWeekdaySchedule: called from handleDatesChange (inside Formik render) whenever dates change.
+  const applyWeekdaySchedule = (dates, setFieldValue) => {
+    if (mode === "update") return;
+    const { transportationDays, supervisedVisitationDays, transportationInfoList, supervisedVisitations } = weekdayScheduleRef.current;
+    if (!transportationDays.length && !supervisedVisitationDays.length) return;
+    if (!dates.length) { setCategoryWarning(""); return; }
+
+    const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const resolutions = dates.map(d => {
+      const day = (d instanceof Date ? d : new Date(d)).getDay();
+      if (transportationDays.includes(day)) return { category: "Transportation", day };
+      if (supervisedVisitationDays.includes(day)) return { category: "Supervised Visitation", day };
+      return { category: null, day };
+    });
+
+    const unmatched = resolutions.filter(r => !r.category);
+    const matchedCategories = [...new Set(resolutions.filter(r => r.category).map(r => r.category))];
+
+    if (unmatched.length > 0) {
+      const unmatchedDayNames = [...new Set(unmatched.map(r => DAY_NAMES[r.day]))];
+      setCategoryWarning(`⚠ No service is scheduled on ${unmatchedDayNames.join(" or ")}s for this client. Please select the category manually.`);
+    } else {
+      setCategoryWarning("");
+    }
+
+    if (matchedCategories.length === 1) {
+      const resolved = matchedCategories[0];
+      setFieldValue("shiftCategory", resolved);
+      const catObj = shiftCategories.find(c => c.name === resolved);
+      if (catObj) setSelectedShiftCategory(catObj);
+
+      // Filter shift points to only clients in the relevant service list
+      setShiftPoints(prev => {
+        if (!prev.length) return prev;
+        let relevantNames = [];
+        if (resolved === "Transportation" && transportationInfoList.length > 0) {
+          relevantNames = transportationInfoList.map(t => (t.clientName || "").trim().toLowerCase()).filter(Boolean);
+        } else if (resolved === "Supervised Visitation" && supervisedVisitations.length > 0) {
+          relevantNames = supervisedVisitations.map(v => (v.clientName || "").trim().toLowerCase()).filter(Boolean);
+        }
+        if (!relevantNames.length) return prev;
+        const kept = prev.filter(p => relevantNames.includes((p.name || "").trim().toLowerCase()));
+        const removed = prev.filter(p => !relevantNames.includes((p.name || "").trim().toLowerCase()));
+        if (removed.length > 0) {
+          setRemovedShiftPoints(rp => {
+            const existing = new Set(rp.map(r => r.name));
+            return [...rp, ...removed.filter(r => !existing.has(r.name))];
+          });
+        }
+        return kept;
+      });
+    }
+  };
 
   // ---------------- SUBMIT HANDLER ----------------
   const handleSubmit = async (values, { resetForm }) => {
@@ -1021,6 +1100,7 @@ const AddUserShift = ({ mode = "add", user }) => {
       // that has pickup+drop but no km yet (or is being freshly created).
       const isTransportShift = (values.shiftCategory || "").toLowerCase().match(/transportation|supervised/);
       let pointsWithKm = shiftPoints;
+      let returnPointsWithKm = returnShiftPoints;
       if (isTransportShift) {
         pointsWithKm = await Promise.all(
           shiftPoints.map(async (fp) => {
@@ -1033,10 +1113,23 @@ const AddUserShift = ({ mode = "add", user }) => {
             return fp;
           })
         );
+        if (returnTrip && returnShiftPoints.length > 0) {
+          returnPointsWithKm = await Promise.all(
+            returnShiftPoints.map(async (fp) => {
+              if (fp.pickupLocation && fp.dropLocation) {
+                try {
+                  const { totalKm, officeToPickupKm, dropToOfficeKm } = await calculateTotalDistance(fp);
+                  return { ...fp, totalKilometers: totalKm, officeToPickupKm, dropToOfficeKm };
+                } catch { /* keep existing value */ }
+              }
+              return fp;
+            })
+          );
+        }
       }
 
       // Build final shiftPoints array — array index IS the priority order (0 = first pickup)
-      const finalPoints = pointsWithKm.map((fp, idx) => ({
+      const mapPoint = (fp, idx) => ({
         name: fp.name || "",
         order: idx + 1,               // 1 = first pickup, 2 = second, etc.
         pickupLocation: fp.pickupLocation || "",
@@ -1057,7 +1150,9 @@ const AddUserShift = ({ mode = "add", user }) => {
         totalKilometers: Number(fp.totalKilometers) || 0,
         officeToPickupKm: Number(fp.officeToPickupKm) || 0,
         dropToOfficeKm: Number(fp.dropToOfficeKm) || 0,
-      }));
+      });
+      const finalPoints = pointsWithKm.map(mapPoint);
+      const finalReturnPoints = returnPointsWithKm.map(mapPoint);
 
       // ---------- UPDATE MODE ----------
       if (mode === "update" && id) {
@@ -1351,6 +1446,73 @@ const AddUserShift = ({ mode = "add", user }) => {
             console.error("Error sending staff notification:", err);
           }
         }
+
+        // ── Return Trip shift (same date, swapped pickup/drop, own times) ──
+        if (returnTrip && finalReturnPoints.length > 0 && returnStartTime && returnEndTime) {
+          const returnShiftId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}_ret`;
+          const isReturnOvernight = returnEndTime < returnStartTime;
+          let returnEndDateObj = new Date(startDateObj);
+          if (isReturnOvernight) returnEndDateObj.setDate(returnEndDateObj.getDate() + 1);
+
+          await setDoc(doc(db, "shifts", returnShiftId), {
+            id:            returnShiftId,
+            batchId:       batchId,
+            isReturnTrip:  true,
+            createdAt:     new Date(),
+            startDate:     formatFlutterDate(startDateObj),
+            endDate:       formatFlutterDate(returnEndDateObj),
+            dateKey:       formatDDMMYYYY(startDateObj),
+            timeStampId:   startDateObj.getTime(),
+            startTime:     returnStartTime,
+            endTime:       returnEndTime,
+            clientId:      selectedClient?.id       || values.client || "",
+            clientName:    selectedClient?.name     || "",
+            jobname:       selectedClient?.name     || "",
+            clientDetails: selectedClient           || null,
+            userId:        primaryStaff?.userId     ?? primaryStaff?.id ?? "",
+            userName:      primaryStaff?.name       || "",
+            name:          primaryStaff?.name       || "",
+            username:      primaryStaff?.username   || primaryStaff?.name || "",
+            phone:         primaryStaff?.phone      || "",
+            email:         primaryStaff?.email      || "",
+            primaryUserId: primaryStaff?.id         || "",
+            primaryUserName: primaryStaff?.name     || "",
+            secondaryUserId: secondaryStaff?.userId || secondaryStaff?.id || "",
+            secondaryUserDocId: secondaryStaff?.id  || "",
+            secondaryUserName: secondaryStaff?.name || "",
+            vehicleType:   values.vehicleType       || "",
+            shiftAddress:  values.shiftAddress      || "",
+            typeName:      selectedShiftType?.name  || values.shiftType     || "",
+            typeId:        selectedShiftType?.id    || "",
+            categoryName:  selectedShiftCategory?.name || values.shiftCategory || "",
+            categoryId:    selectedShiftCategory?.id   || "",
+            shiftType:     values.shiftType         || "",
+            shiftCategory: values.shiftCategory     || "",
+            jobdescription: values.description      || "",
+            description:    values.description      || "",
+            agencyId:      selectedClient?.agencyId    || primaryStaff?.agencyId    || "",
+            agencyName:    selectedClient?.agencyName  || primaryStaff?.agencyName  || "",
+            clientRate:    clientRateEntry?.rate  || 0,
+            clientKMRate:  clientRateEntry?.kmRate || 0,
+            kms: 0, approvedKms: 0, expense: 0, approvedExpense: 0,
+            status:        "Confirmed",
+            isRatify:      false,
+            isCancelled:   false,
+            shiftConfirmed: false,
+            billingStatus: "Billable",
+            locked:        false,
+            accessToShiftReport: values.accessToShiftReport || false,
+            startLatitude: 0, startLongitude: 0,
+            endLatitude: 0, endLongitude: 0,
+            visitLocation: "", visitStartTime: "", visitEndTime: "",
+            visitLatitude: 0, visitLongitude: 0,
+            shiftPoints:   finalReturnPoints,
+            shiftReport: "", shiftReportImageUrl: "", expenseReceiptUrl: "",
+            expenseReceiptUrlList: [], profilePhotoUrl: "",
+            clockIn: "", clockOut: "",
+            dateKey_iso: formatLocalISO(startDateObj),
+          });
+        }
       }
 
       // ✅ SUCCESS SLIDER
@@ -1366,6 +1528,10 @@ const AddUserShift = ({ mode = "add", user }) => {
       resetForm();
       setShiftPoints([]);
       setRemovedShiftPoints([]);
+      setReturnTrip(false);
+      setReturnStartTime("");
+      setReturnEndTime("");
+      setReturnShiftPoints([]);
       setIntakeDescription("");
     } catch (error) {
       console.error("Error saving shift:", error);
@@ -1539,6 +1705,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                 setFieldValue("startDate", "");
                 setFieldValue("endDate", "");
               }
+              applyWeekdaySchedule(selected, setFieldValue);
             };
 
             return (
@@ -1621,7 +1788,9 @@ const AddUserShift = ({ mode = "add", user }) => {
                       {/* Shift Category */}
                       <div className="relative">
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Category</label>
-                        <Field as="select" name="shiftCategory" className={selectCls(touched.shiftCategory && errors.shiftCategory, !values.shiftCategory)}>
+                        <Field as="select" name="shiftCategory"
+                          className={selectCls(touched.shiftCategory && errors.shiftCategory, !values.shiftCategory)}
+                          onChange={e => { setFieldValue("shiftCategory", e.target.value); setCategoryWarning(""); }}>
                           <option value="">Please select the shift category</option>
                           {shiftCategories.map((item) => (
                             <option key={item.id} value={item.name}>{item.name}</option>
@@ -1631,6 +1800,14 @@ const AddUserShift = ({ mode = "add", user }) => {
                           <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
                         </span>
                         <ErrorMessage name="shiftCategory" component="div" className="text-red-500 text-xs mt-1" />
+                        {/* Weekday schedule warning */}
+                        {categoryWarning && (
+                          <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+                            style={{ background: "#fefce8", color: "#854d0e", border: "1px solid #fde68a" }}>
+                            <span className="flex-shrink-0 mt-0.5">⚠</span>
+                            <span>{categoryWarning.replace(/^⚠\s*/, "")}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Select Client */}
@@ -1742,8 +1919,12 @@ const AddUserShift = ({ mode = "add", user }) => {
                       {values.shiftCategory && !(values.shiftCategory || "").toLowerCase().match(/transportation|supervised/) && (
                         <div className="col-span-2">
                           <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Address</label>
-                          <Field name="shiftAddress" type="text" placeholder="Enter the address where the shift will take place"
-                            className={inputCls(touched.shiftAddress && errors.shiftAddress)} />
+                          <PlacesAutocomplete
+                            value={values.shiftAddress || ""}
+                            onChange={(val) => setFieldValue("shiftAddress", val)}
+                            placeholder="Enter the address where the shift will take place"
+                            className={inputCls(touched.shiftAddress && errors.shiftAddress)}
+                          />
                           <ErrorMessage name="shiftAddress" component="div" className="text-red-500 text-xs mt-1" />
                         </div>
                       )}
@@ -2146,6 +2327,116 @@ const AddUserShift = ({ mode = "add", user }) => {
                                   style={{ background: "#dcfce7", color: "#15803d" }}>
                                   Add back
                                 </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Add Return Trip button ── */}
+                      {!returnTrip && mode !== "update" && (
+                        <div className="flex justify-center mt-2">
+                          <button type="button"
+                            onClick={() => {
+                              const swapped = shiftPoints.map(p => ({
+                                ...p,
+                                pickupLocation: p.dropLocation || "",
+                                dropLocation: p.pickupLocation || "",
+                                pickupTime: "",
+                                dropTime: "",
+                                officeToPickupKm: 0,
+                                dropToOfficeKm: 0,
+                                totalKilometers: 0,
+                              }));
+                              setReturnShiftPoints(swapped);
+                              setReturnTrip(true);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg border font-semibold text-sm transition-all hover:bg-blue-50"
+                            style={{ borderColor: "#93c5fd", color: "#1d4ed8" }}>
+                            ↩ Add Return Trip
+                          </button>
+                        </div>
+                      )}
+
+                      {/* ── Return Trip section ── */}
+                      {returnTrip && (
+                        <div className="rounded-xl border overflow-hidden mt-2" style={{ borderColor: "#bfdbfe" }}>
+                          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: "#eff6ff", borderColor: "#bfdbfe" }}>
+                            <div>
+                              <h3 className="font-bold text-sm" style={{ color: "#1d4ed8" }}>↩ Return Trip</h3>
+                              <p className="text-xs text-blue-400 mt-0.5">Pickup and drop locations are swapped · set the return trip times below</p>
+                            </div>
+                            <button type="button"
+                              onClick={() => { setReturnTrip(false); setReturnShiftPoints([]); setReturnStartTime(""); setReturnEndTime(""); }}
+                              className="text-xs font-semibold px-3 py-1 rounded-lg border transition-all hover:bg-red-50"
+                              style={{ borderColor: "#fca5a5", color: "#ef4444" }}>
+                              Remove
+                            </button>
+                          </div>
+
+                          {/* Return trip start/end times */}
+                          <div className="px-4 py-3 grid grid-cols-2 gap-4 border-b" style={{ borderColor: "#bfdbfe", background: "#f8faff" }}>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: "#1d4ed8" }}>Return Start Time</label>
+                              <input type="text" placeholder="HH:MM"
+                                className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                                style={{ borderColor: "#93c5fd" }}
+                                value={returnStartTime}
+                                onChange={e => setReturnStartTime(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: "#1d4ed8" }}>Return End Time</label>
+                              <input type="text" placeholder="HH:MM"
+                                className="w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                                style={{ borderColor: "#93c5fd" }}
+                                value={returnEndTime}
+                                onChange={e => setReturnEndTime(e.target.value)} />
+                            </div>
+                          </div>
+
+                          {/* Return shift points */}
+                          <div className="p-4 flex flex-col gap-4">
+                            {returnShiftPoints.map((pt, idx) => (
+                              <div key={idx} className="rounded-lg border p-4 grid grid-cols-2 gap-x-6 gap-y-3" style={{ borderColor: "#dbeafe" }}>
+                                <div className="col-span-2 flex items-center gap-2 mb-1">
+                                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 text-xs"
+                                    style={{ background: "#1d4ed8" }}>
+                                    {(pt.name || String.fromCharCode(65 + idx)).charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="font-semibold text-sm text-gray-900">{pt.name || `Member ${idx + 1}`}</span>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Pickup Location</label>
+                                  <input type="text"
+                                    className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
+                                    value={pt.pickupLocation || ""}
+                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, pickupLocation: e.target.value } : p))}
+                                    placeholder="N/A" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Pickup Time</label>
+                                  <input type="text"
+                                    className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
+                                    value={pt.pickupTime || ""}
+                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
+                                    placeholder="N/A" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Drop Location</label>
+                                  <input type="text"
+                                    className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
+                                    value={pt.dropLocation || ""}
+                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, dropLocation: e.target.value } : p))}
+                                    placeholder="N/A" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Drop Time</label>
+                                  <input type="text"
+                                    className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
+                                    value={pt.dropTime || ""}
+                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, dropTime: e.target.value } : p))}
+                                    placeholder="N/A" />
+                                </div>
                               </div>
                             ))}
                           </div>
