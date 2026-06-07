@@ -594,6 +594,7 @@ const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: pro
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [headerStatus, setHeaderStatus] = useState("");
   const isSubmittingRef = useRef(false);
   const isDraftSaveRef = useRef(false);
   const [activeClientIdx, setActiveClientIdx] = useState(0);
@@ -692,6 +693,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
     if (existingData) {
       const nextVals = mapDataToInitialValues(existingData);
       setInitialValues(nextVals);
+      setHeaderStatus(nextVals.status || "Submitted");
       if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
       // for old structure
       if (existingData.photo) setAvatarPreview(existingData.photo);
@@ -894,6 +896,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           }
 
           setInitialValues(nextVals);
+          setHeaderStatus(nextVals.status || "Submitted");
 
           // For old-structure forms, stash the human-readable service names so
           // they can be resolved to IDs once shiftCategories finishes loading.
@@ -1610,6 +1613,7 @@ const handleSubmit = async (values, { resetForm }) => {
       toast.success("Intake form updated successfully");
       if (mode === "update") {
         setInitialValues(values);
+        setHeaderStatus(values.status || "Submitted");
       } else {
         resetForm();
         setAvatarPreview(null);
@@ -1670,7 +1674,44 @@ const handleSubmit = async (values, { resetForm }) => {
             <span className="font-semibold text-[16px] text-gray-400">({isCaseWorker ? "Intake Worker" : "Owner"})</span>
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Status selector — update mode only, lives in header for instant action */}
+          {mode === "update" && (() => {
+            const STATUS_STYLES = {
+              Accepted:  { bg: "#dcfce7", color: "#15803d", border: "#86efac" },
+              Submitted: { bg: "#fef3c7", color: "#d97706", border: "#fcd34d" },
+              Draft:     { bg: "#f3f4f6", color: "#6b7280", border: "#d1d5db" },
+              Rejected:  { bg: "#fee2e2", color: "#dc2626", border: "#fca5a5" },
+            };
+            const curStatus = headerStatus || initialValues.status || "Submitted";
+            const style = STATUS_STYLES[curStatus] || STATUS_STYLES["Submitted"];
+            return (
+              <div className="relative">
+                <select
+                  value={curStatus}
+                  onChange={(e) => {
+                    const newStatus = e.target.value;
+                    setHeaderStatus(newStatus);
+                    if (!formikRef.current) return;
+                    formikRef.current.setFieldValue("status", newStatus);
+                    // Submit immediately — client creation fires if newStatus === "Accepted"
+                    setTimeout(() => {
+                      if (formikRef.current) formikRef.current.submitForm();
+                    }, 0);
+                  }}
+                  className="appearance-none pl-3 pr-8 py-1.5 rounded-full text-xs font-bold border cursor-pointer focus:outline-none"
+                  style={{ background: style.bg, color: style.color, borderColor: style.border }}>
+                  <option value="Submitted">Submitted</option>
+                  <option value="Draft">Draft</option>
+                  <option value="Accepted">Accepted</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <FaChevronDown style={{ width: 9, height: 9, color: style.color }} />
+                </span>
+              </div>
+            );
+          })()}
           <button type="button" onClick={handleSaveDraft} disabled={isSavingDraft}
             className="px-4 py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
             style={{ borderColor: "#e5e7eb" }}>
@@ -1783,23 +1824,6 @@ const handleSubmit = async (values, { resetForm }) => {
                     </div>
                   </div>
 
-                  {/* Status (update mode) — shown at the very top */}
-                  {mode === "update" && (
-                    <div className="bg-white rounded-xl border p-7 flex items-center gap-4" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                      <label className="font-semibold text-sm text-gray-700">Status</label>
-                      <div className="relative">
-                        <Field as="select" name="status" disabled={!isEditable} className={sCls(false, !values.status)}>
-                          <option value="Submitted">Submitted</option>
-                          <option value="Draft">Draft</option>
-                          <option value="Accepted">Accepted</option>
-                          <option value="Rejected">Rejected</option>
-                        </Field>
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                 {/* ── Intake Worker Info ── */}
                 {isCaseWorker && (
