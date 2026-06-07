@@ -3,7 +3,7 @@
  * Replaces Google Distance Matrix API with Mapbox Directions/Matrix API.
  */
 
-const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || "MAPBOX_TOKEN_REMOVED";
+const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
 /**
  * Geocode an address string to [lng, lat] coordinates using Mapbox.

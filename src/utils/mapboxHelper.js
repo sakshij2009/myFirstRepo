@@ -3,7 +3,7 @@
  * Uses Mapbox Geocoding + Directions API for route distance and duration.
  */
 
-const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "MAPBOX_TOKEN_REMOVED";
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 /**
  * Geocode an address string to [lng, lat] using Mapbox.
