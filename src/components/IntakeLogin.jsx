@@ -19,6 +19,7 @@ const IntakeLogin = () => {
   // Sign Up
   const [name, setName] = useState("");
   const [role, setRole] = useState("Intake Worker");
+  const [roleLockedByInvite, setRoleLockedByInvite] = useState(false);
   const [email, setEmail] = useState("");
   const [agency, setAgency] = useState("");
   const [phone, setPhone] = useState("");
@@ -131,6 +132,7 @@ const IntakeLogin = () => {
       } else {
         setRole("Intake Worker");
       }
+      setRoleLockedByInvite(true); // role came from invite link — lock it
       setIsSignUp(true);
     }
   }, [searchParams]);
@@ -431,12 +433,23 @@ const IntakeLogin = () => {
                   <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
                     Role
                   </label>
-                  <input
-                    type="text"
-                    value={role}
-                    readOnly
-                    style={{ ...inputStyle(), paddingLeft: 14, background: "#F3F4F6", color: "#6B7280", cursor: "not-allowed" }}
-                  />
+                  {roleLockedByInvite ? (
+                    <input
+                      type="text"
+                      value={role === "Parent" ? "Private Family / Parent" : role}
+                      readOnly
+                      style={{ ...inputStyle(), background: "#F3F4F6", color: "#6B7280", cursor: "not-allowed" }}
+                    />
+                  ) : (
+                    <select
+                      value={role}
+                      onChange={(e) => { setRole(e.target.value); setError(""); }}
+                      style={{ ...inputStyle(), cursor: "pointer" }}
+                    >
+                      <option value="Intake Worker">Intake Worker</option>
+                      <option value="Parent">Private Family / Parent</option>
+                    </select>
+                  )}
                 </div>
 
                 {role === "Intake Worker" && (

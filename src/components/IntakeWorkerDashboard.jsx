@@ -224,7 +224,14 @@ function Header({ workerName, workerProfile, notifCount, navigate, isParent }) {
         <div className="flex items-center gap-2 pl-3 border-l" style={{ borderColor: "#e5e7eb" }}>
           <div className="text-right">
             <div className="text-sm font-semibold" style={{ color: "#111827" }}>{workerName || "Intake Worker"}</div>
-            <div className="text-xs" style={{ color: "#9ca3af" }}>{workerProfile?.role || "Worker"}</div>
+            <div className="text-xs" style={{ color: "#9ca3af" }}>
+              {(() => {
+                const r = (workerProfile?.role || "").toLowerCase();
+                if (r === "parent" || r === "private family") return "Private Family";
+                if (r === "intake worker") return "Intake Worker";
+                return workerProfile?.role || "Worker";
+              })()}
+            </div>
           </div>
           <div className="size-9 rounded-full flex items-center justify-center text-white font-semibold text-sm" style={{ background: "#145228" }}>
             {workerName ? workerName.charAt(0).toUpperCase() : "W"}
