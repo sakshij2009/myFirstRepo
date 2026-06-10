@@ -124,12 +124,15 @@ const ManagePrivateFamilies = () => {
         createdAt: getEdmontonToday(),
       });
 
-      await sendSignInEmail({ email: primaryEmail, role: "parent" });
+      // isInvitation: true → email links to the SIGN-UP page (not a Firebase
+      // magic link). The signup form reads role=parent from the URL and
+      // pre-fills the role as Private Family / Parent.
+      await sendSignInEmail({ email: primaryEmail, role: "parent", isInvitation: true });
 
       // Also send invite to second parent if provided
       if (secondParentEmail.trim()) {
         const secondEmail = secondParentEmail.trim().toLowerCase();
-        await sendSignInEmail({ email: secondEmail, role: "parent" });
+        await sendSignInEmail({ email: secondEmail, role: "parent", isInvitation: true });
       }
 
       const sentTo = secondParentEmail.trim()

@@ -184,7 +184,10 @@ const IntakeLogin = () => {
   const handleSignUp = async () => {
     setError("");
     setMessage("");
-    if (!name || !role || !email || !phone || !invoiceEmail) {
+    const isParentRole = role === "Parent";
+    // Private families only provide normal info (name, phone, email).
+    // Agency + invoice email apply to Intake Workers only.
+    if (!name || !role || !email || !phone || (!isParentRole && !invoiceEmail)) {
       setError("Please fill in all required fields.");
       return;
     }
@@ -499,32 +502,35 @@ const IntakeLogin = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
-                    Invoice E-mail
-                  </label>
-                  {isUPCSAgency ? (
-                    <select
-                      value={invoiceEmail}
-                      onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
-                      style={{ ...inputStyle(), cursor: "pointer" }}
-                    >
-                      <option value="">Select Invoice Email</option>
-                      {UPCS_EMAIL_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="email"
-                      value={invoiceEmail}
-                      placeholder="Enter invoice email"
-                      onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
-                      style={inputStyle()}
-                      onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
-                    />
-                  )}
-                </div>
+                {/* Invoice E-mail — Intake Workers only; private families don't bill */}
+                {role !== "Parent" && (
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
+                      Invoice E-mail
+                    </label>
+                    {isUPCSAgency ? (
+                      <select
+                        value={invoiceEmail}
+                        onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
+                        style={{ ...inputStyle(), cursor: "pointer" }}
+                      >
+                        <option value="">Select Invoice Email</option>
+                        {UPCS_EMAIL_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="email"
+                        value={invoiceEmail}
+                        placeholder="Enter invoice email"
+                        onChange={(e) => { setInvoiceEmail(e.target.value); setError(""); }}
+                        style={inputStyle()}
+                        onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
 
               <button

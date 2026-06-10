@@ -176,14 +176,19 @@ exports.sendSignInEmail = onCall(
 
     // ── Invitation emails (admin → new worker) ────────────────────────────────
     // Use a direct link to the signup page — no Firebase magic link needed.
+    // Carry email + role in the URL so the signup form pre-fills correctly
+    // (this is what tells a Private Family invite to show role = Parent).
     if (isInvitation) {
+      const inviteParams = new URLSearchParams({ email: normalizedEmail });
+      if (role) inviteParams.set("role", role);
+      const inviteLink = `${INTAKE_LOGIN_URL}?${inviteParams.toString()}`;
       try {
         await sgMail.send({
           to: normalizedEmail,
           from: { email: FROM_EMAIL, name: FROM_NAME },
           replyTo: FROM_EMAIL,
           subject: "You're invited to Family Forever Inc.",
-          html: buildEmailHTML(INTAKE_LOGIN_URL, role, true),
+          html: buildEmailHTML(inviteLink, role, true),
         });
       } catch (err) {
         console.error("SendGrid error:", err?.response?.body ?? err);
