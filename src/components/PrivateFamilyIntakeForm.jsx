@@ -431,9 +431,8 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             </div>
           </SectionCard>
           <SectionCard num={1} title="Initial Application Info">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <Input label="Date of Application" type="date" value={form.applicationDate} onChange={e => set("applicationDate", e.target.value)} />
-                <Input label="File Number (Internal)" placeholder="e.g. FF-2024-001" value={form.fileNumber} onChange={e => set("fileNumber", e.target.value)} />
                 <Select
                   label="Referral Source"
                   options={REFERRAL_SOURCES}

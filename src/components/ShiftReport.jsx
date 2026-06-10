@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { collection, doc, getDoc, getDocs, query, where, updateDoc, arrayUnion } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, storage, functions } from "../firebase";
+import { generateShiftReportPDF, getShiftReportPDFBase64 } from "./GenerateShiftReportPDF";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import CriticalIncidentForm from "./CriticalIncidentForm";
 import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
@@ -160,6 +162,55 @@ const FONT = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
   const reportText = shiftData?.shiftReport || "No shift report has been filed for this shift.";
   const staffName = primaryStaff?.name || normalized.clientName;
+
+  const [showShare, setShowShare] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [sharing, setSharing] = useState(false);
+
+  // Build the object the PDF generator expects from the normalized shift data.
+  const buildPdfShift = () => ({
+    clientName: normalized.clientName,
+    name: primaryStaff?.name || "N/A",
+    userId: primaryStaff?.id || shiftData?.userId || "N/A",
+    dateKey: normalized.displayDate || shiftData?.startDate || "",
+    startTime: normalized.startTime,
+    endTime: normalized.endTime,
+    clockIn: normalized.clockIn,
+    clockOut: normalized.clockOut,
+    shiftReport: reportText,
+  });
+
+  const handleDownload = () => {
+    generateShiftReportPDF(buildPdfShift());
+  };
+
+  const handleShare = async () => {
+    const email = shareEmail.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    setSharing(true);
+    try {
+      const pdfBase64 = await getShiftReportPDFBase64(buildPdfShift());
+      const sendShiftReport = httpsCallable(functions, "sendShiftReport");
+      await sendShiftReport({
+        toEmail: email,
+        clientName: normalized.clientName,
+        dateLabel: normalized.displayDate || "",
+        pdfBase64,
+      });
+      toast.success(`Shift report sent to ${email}`);
+      setShowShare(false);
+      setShareEmail("");
+    } catch (err) {
+      console.error("Share shift report error:", err);
+      toast.error("Failed to send the report. Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
@@ -181,8 +232,11 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-semibold" style={{ fontSize: 11, background: "#f0fdf4", color: "#15803d" }}>
               <CheckCircle size={11} /> Approved &amp; Filed
             </span>
-            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50" style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
-              <Printer size={13} /> Print
+            <button onClick={handleDownload} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50" style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
+              <Download size={13} /> Download
+            </button>
+            <button onClick={() => setShowShare(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-white transition-all" style={{ fontSize: 12, background: "#145228" }}>
+              <Mail size={13} /> Share
             </button>
             <button onClick={onClose} className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50 ml-1" style={{ width: 34, height: 34, borderColor: "#e5e7eb" }}>
               <X size={15} style={{ color: "#6b7280" }} />
@@ -262,6 +316,44 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t flex-shrink-0" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
           <button onClick={onClose} className="px-4 py-2 rounded-lg border font-semibold text-sm hover:bg-gray-50 transition-colors" style={{ borderColor: "#e5e7eb", color: "#374151" }}>Close</button>
         </div>
+
+        {/* Share popup */}
+        {showShare && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
+            onClick={e => { if (e.target === e.currentTarget) setShowShare(false); }}>
+            <div className="bg-white rounded-2xl p-6" style={{ width: 420, maxWidth: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+              <div className="flex items-center gap-2.5 mb-1">
+                <div className="rounded-lg p-2" style={{ background: "#f0fdf4" }}><Mail size={16} style={{ color: "#145228" }} /></div>
+                <p className="font-bold" style={{ fontSize: 16, color: "#111827" }}>Share Shift Report</p>
+              </div>
+              <p style={{ fontSize: 13, color: "#6b7280", margin: "8px 0 16px" }}>
+                Enter the email address to send this report for <b>{normalized.clientName}</b>. The PDF will be attached.
+              </p>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Recipient Email</label>
+              <input
+                type="email"
+                value={shareEmail}
+                onChange={e => setShareEmail(e.target.value)}
+                placeholder="recipient@example.com"
+                autoFocus
+                onKeyDown={e => { if (e.key === "Enter" && !sharing) handleShare(); }}
+                className="w-full rounded-lg border px-3 py-2.5 focus:outline-none"
+                style={{ fontSize: 14, borderColor: "#d1d5db" }}
+              />
+              <div className="flex items-center justify-end gap-2 mt-5">
+                <button onClick={() => setShowShare(false)} disabled={sharing}
+                  className="px-4 py-2 rounded-lg border font-semibold text-sm hover:bg-gray-50 disabled:opacity-60"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}>Cancel</button>
+                <button onClick={handleShare} disabled={sharing}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-60"
+                  style={{ background: "#145228" }}>
+                  {sharing ? "Sending…" : "Send Report"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -31,12 +31,11 @@ export const calculateTotalHours = (start, end) => {
   return ((24 - s) + e).toFixed(2);
 };
 
-export const generateShiftReportPDF = (shift) => {
-  const clockInFormatted = formatTime(shift.clockIn);
-  const clockOutFormatted = formatTime(shift.clockOut);
+// Build the shared HTML content for the report (used for both download & share)
+const buildReportContent = (shift) => {
   const totalHoursCalculated = calculateTotalHours(shift.startTime, shift.endTime);
 
-  const content = `
+  return `
     <div style="font-family: Arial; padding: 30px 35px; ">
       <div style="display: flex; gap: 24px; align-items: center;">
         <img src="/images/Logo2.png" style="width: 60px; height: 60px; display: flex;" />
@@ -92,50 +91,71 @@ export const generateShiftReportPDF = (shift) => {
 
     </div>
   `;
+};
 
-  const opt = {
-    margin: 10,
-    filename: `Shift_Report_${shift.clientName}.pdf`,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: "pt", format: "a4", orientation: "portrait" }
-  };
+const buildOpt = (shift) => ({
+  margin: 10,
+  filename: `Shift_Report_${shift.clientName}.pdf`,
+  image: { type: "jpeg", quality: 0.98 },
+  html2canvas: { scale: 2, useCORS: true },
+  jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
+});
 
+// Apply the centered Family Forever watermark + spacing to every page.
+const applyWatermark = (pdf) => {
+  const totalPages = pdf.internal.getNumberOfPages();
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  pdf.setLineHeightFactor(1.25); // prevents slicing text across pages
+
+  for (let i = 1; i <= totalPages; i++) {
+    pdf.setPage(i);
+
+    /* ⬆ Add top spacing */
+    pdf.setFontSize(4);
+    pdf.text(" ", 40, 60); // pushes content slightly down
+
+    /* ⬇ Add bottom spacing */
+    pdf.text(" ", 40, pageHeight - 60);
+
+    /* Add centered watermark */
+    pdf.setGState(pdf.GState({ opacity: 0.15 }));
+    pdf.addImage(
+      "/images/Logo2.png",
+      "PNG",
+      pageWidth / 2 - 150,
+      pageHeight / 2 - 150,
+      300,
+      300
+    );
+    pdf.setGState(pdf.GState({ opacity: 1 }));
+  }
+};
+
+// Download the watermarked shift report PDF.
+export const generateShiftReportPDF = (shift) => {
   html2pdf()
-  .from(content)
-  .set(opt)
-  .toPdf()
-  .get("pdf")
-  .then((pdf) => {
-    const totalPages = pdf.internal.getNumberOfPages();
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
+    .from(buildReportContent(shift))
+    .set(buildOpt(shift))
+    .toPdf()
+    .get("pdf")
+    .then(applyWatermark)
+    .save();
+};
 
-    pdf.setLineHeightFactor(1.25); // prevents slicing text across pages
-
-    for (let i = 1; i <= totalPages; i++) {
-      pdf.setPage(i);
-
-      /* ⬆ Add top spacing */
-      pdf.setFontSize(4);
-      pdf.text(" ", 40, 60);  // pushes content slightly down
-
-      /* ⬇ Add bottom spacing */
-      pdf.text(" ", 40, pageHeight - 60);
-
-      /* Add centered watermark */
-      pdf.setGState(pdf.GState({ opacity: 0.15 }));
-      pdf.addImage(
-        "/images/Logo2.png",
-        "PNG",
-        pageWidth / 2 - 150,
-        pageHeight / 2 - 150,
-        300,
-        300
-      );
-      pdf.setGState(pdf.GState({ opacity: 1 }));
-    }
-  })
-  .save();
-
+// Build the same watermarked PDF and return it as a base64 string (no data-URI
+// prefix) — used to email the report as an attachment via the cloud function.
+export const getShiftReportPDFBase64 = (shift) => {
+  return html2pdf()
+    .from(buildReportContent(shift))
+    .set(buildOpt(shift))
+    .toPdf()
+    .get("pdf")
+    .then((pdf) => {
+      applyWatermark(pdf);
+      // 'datauristring' → "data:application/pdf;base64,XXXX"; strip the prefix.
+      const dataUri = pdf.output("datauristring");
+      return dataUri.substring(dataUri.indexOf(",") + 1);
+    });
 };

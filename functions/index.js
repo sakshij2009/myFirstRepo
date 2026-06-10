@@ -234,6 +234,95 @@ exports.sendSignInEmail = onCall(
   }
 );
 
+// ── Share Shift Report via email (admin → recipient) ─────────────────────────
+// Receives a base64-encoded PDF from the client and emails it as an attachment.
+exports.sendShiftReport = onCall(
+  { secrets: [sendgridApiKey] },
+  async (request) => {
+    const { toEmail, clientName, dateLabel, pdfBase64 } = request.data || {};
+
+    if (!toEmail || typeof toEmail !== "string") {
+      throw new HttpsError("invalid-argument", "A valid recipient email is required.");
+    }
+    if (!pdfBase64 || typeof pdfBase64 !== "string") {
+      throw new HttpsError("invalid-argument", "Report PDF data is missing.");
+    }
+
+    // Accept either a raw base64 string or a full data URI; SendGrid needs raw base64.
+    const base64Content = pdfBase64.includes(",")
+      ? pdfBase64.substring(pdfBase64.indexOf(",") + 1)
+      : pdfBase64;
+
+    const safeClient = clientName || "Client";
+    const safeName = safeClient.replace(/[^a-z0-9]+/gi, "_");
+    const fileName = `Shift_Report_${safeName}.pdf`;
+
+    sgMail.setApiKey(sendgridApiKey.value());
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0"
+        style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(160deg,#1B5E37 0%,#14472A 100%);padding:32px 40px;text-align:center;">
+            <img src="${APP_URL}/images/logo.png" alt="Family Forever Inc." width="52" height="52"
+              style="border-radius:50%;display:block;margin:0 auto 14px;border:2px solid rgba(255,255,255,0.2);">
+            <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;">Family Forever Inc.</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0;font-size:13px;">From Humanity to Community</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 40px;">
+            <h2 style="color:#111827;font-size:17px;font-weight:700;margin:0 0 12px;">Daily Shift Report</h2>
+            <p style="color:#4B5563;font-size:14px;line-height:1.7;margin:0 0 16px;">
+              This is a system-generated shift report for <strong>${safeClient}</strong>${dateLabel ? ` (${dateLabel})` : ""}.
+              The full report is attached to this email as a PDF.
+            </p>
+            <p style="color:#9CA3AF;font-size:12px;line-height:1.7;margin:24px 0 0;">
+              This email was sent from the Family Forever Inc. admin portal.
+              If you received it in error, please disregard.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#F9FAFB;padding:18px 40px;border-top:1px solid #E5E7EB;text-align:center;">
+            <p style="color:#9CA3AF;font-size:12px;margin:0 0 4px;">Family Forever Inc.</p>
+            <a href="mailto:${FROM_EMAIL}" style="color:#1B5E37;font-size:12px;text-decoration:none;">${FROM_EMAIL}</a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+    try {
+      await sgMail.send({
+        to: toEmail.trim().toLowerCase(),
+        from: { email: FROM_EMAIL, name: FROM_NAME },
+        replyTo: FROM_EMAIL,
+        subject: `Shift Report — ${safeClient}${dateLabel ? ` (${dateLabel})` : ""}`,
+        html,
+        attachments: [
+          {
+            content: base64Content,
+            filename: fileName,
+            type: "application/pdf",
+            disposition: "attachment",
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("SendGrid sendShiftReport error:", err?.response?.body ?? err);
+      throw new HttpsError("internal", "Failed to send the shift report email.");
+    }
+
+    return { success: true };
+  }
+);
+
 // ── Auto Clock-Out: runs every 5 minutes ──────────────────────────────────────
 // Finds shifts that are in-progress (clocked in, not clocked out) and whose
 // scheduled end time passed more than 15 minutes ago, then clocks them out
