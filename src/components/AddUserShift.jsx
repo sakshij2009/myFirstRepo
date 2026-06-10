@@ -266,6 +266,9 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [returnStartTime, setReturnStartTime] = useState("");
   const [returnEndTime, setReturnEndTime] = useState("");
   const [returnShiftPoints, setReturnShiftPoints] = useState([]);
+  // Return-trip driver: "" = same driver as the main shift; otherwise a staff doc id
+  const [returnDriverId, setReturnDriverId] = useState("");
+  const [showReturnDriverPicker, setShowReturnDriverPicker] = useState(false);
   // Track the client ID that was originally loaded from the saved shift (update mode)
   const initialLoadedClientIdRef = useRef(null);
   const batchIdRef = useRef(null); // batchId of the shift being edited (null = single shift)
@@ -1454,6 +1457,12 @@ const AddUserShift = ({ mode = "add", user }) => {
           let returnEndDateObj = new Date(startDateObj);
           if (isReturnOvernight) returnEndDateObj.setDate(returnEndDateObj.getDate() + 1);
 
+          // Return trip driver — defaults to the main shift's primary staff,
+          // unless the admin picked a different driver for the return leg.
+          const returnStaff = returnDriverId
+            ? users.find(u => String(u.id) === String(returnDriverId) || String(u.userId) === String(returnDriverId)) || primaryStaff
+            : primaryStaff;
+
           await setDoc(doc(db, "shifts", returnShiftId), {
             id:            returnShiftId,
             batchId:       batchId,
@@ -1469,14 +1478,14 @@ const AddUserShift = ({ mode = "add", user }) => {
             clientName:    selectedClient?.name     || "",
             jobname:       selectedClient?.name     || "",
             clientDetails: selectedClient           || null,
-            userId:        primaryStaff?.userId     ?? primaryStaff?.id ?? "",
-            userName:      primaryStaff?.name       || "",
-            name:          primaryStaff?.name       || "",
-            username:      primaryStaff?.username   || primaryStaff?.name || "",
-            phone:         primaryStaff?.phone      || "",
-            email:         primaryStaff?.email      || "",
-            primaryUserId: primaryStaff?.id         || "",
-            primaryUserName: primaryStaff?.name     || "",
+            userId:        returnStaff?.userId      ?? returnStaff?.id ?? "",
+            userName:      returnStaff?.name        || "",
+            name:          returnStaff?.name        || "",
+            username:      returnStaff?.username    || returnStaff?.name || "",
+            phone:         returnStaff?.phone       || "",
+            email:         returnStaff?.email       || "",
+            primaryUserId: returnStaff?.id          || "",
+            primaryUserName: returnStaff?.name      || "",
             secondaryUserId: secondaryStaff?.userId || secondaryStaff?.id || "",
             secondaryUserDocId: secondaryStaff?.id  || "",
             secondaryUserName: secondaryStaff?.name || "",
@@ -1512,6 +1521,27 @@ const AddUserShift = ({ mode = "add", user }) => {
             clockIn: "", clockOut: "",
             dateKey_iso: formatLocalISO(startDateObj),
           });
+
+          // Notify the return-trip driver if they differ from the main shift's staff
+          const returnStaffNotifyId = returnStaff?.userId ?? returnStaff?.id;
+          const mainStaffNotifyId = primaryStaff?.userId ?? primaryStaff?.id;
+          if (returnStaffNotifyId && returnStaffNotifyId !== mainStaffNotifyId) {
+            try {
+              await sendNotification(returnStaffNotifyId, {
+                type: "info",
+                title: "New Shift Assigned",
+                message: `You have been assigned a return trip shift for ${selectedClient?.name || ""} on ${startDateObj.toDateString()}`,
+                senderId: user.name,
+                meta: {
+                  shiftId: returnShiftId,
+                  entity: "Shift",
+                  date: startDateObj.toDateString(),
+                },
+              });
+            } catch (err) {
+              console.error("Error sending return driver notification:", err);
+            }
+          }
         }
       }
 
@@ -1532,6 +1562,8 @@ const AddUserShift = ({ mode = "add", user }) => {
       setReturnStartTime("");
       setReturnEndTime("");
       setReturnShiftPoints([]);
+      setReturnDriverId("");
+      setShowReturnDriverPicker(false);
       setIntakeDescription("");
     } catch (error) {
       console.error("Error saving shift:", error);
@@ -2367,7 +2399,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                               <p className="text-xs text-blue-400 mt-0.5">Pickup and drop locations are swapped · set the return trip times below</p>
                             </div>
                             <button type="button"
-                              onClick={() => { setReturnTrip(false); setReturnShiftPoints([]); setReturnStartTime(""); setReturnEndTime(""); }}
+                              onClick={() => { setReturnTrip(false); setReturnShiftPoints([]); setReturnStartTime(""); setReturnEndTime(""); setReturnDriverId(""); setShowReturnDriverPicker(false); }}
                               className="text-xs font-semibold px-3 py-1 rounded-lg border transition-all hover:bg-red-50"
                               style={{ borderColor: "#fca5a5", color: "#ef4444" }}>
                               Remove
@@ -2392,6 +2424,63 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 value={returnEndTime}
                                 onChange={e => setReturnEndTime(e.target.value)} />
                             </div>
+                          </div>
+
+                          {/* Return trip driver */}
+                          <div className="px-4 py-3 border-b" style={{ borderColor: "#bfdbfe", background: "#f8faff" }}>
+                            <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: "#1d4ed8" }}>Return Trip Driver</label>
+                            {(() => {
+                              const mainDriver = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
+                              const pickedDriver = returnDriverId ? users.find(u => String(u.id) === String(returnDriverId)) : null;
+                              return (
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  {!showReturnDriverPicker ? (
+                                    <>
+                                      <span className="text-sm font-semibold" style={{ color: pickedDriver ? "#1d4ed8" : "#374151" }}>
+                                        {pickedDriver
+                                          ? pickedDriver.name
+                                          : `${mainDriver?.name || "Same as main shift"} (same as main shift)`}
+                                      </span>
+                                      <button type="button"
+                                        onClick={() => setShowReturnDriverPicker(true)}
+                                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:bg-blue-50"
+                                        style={{ borderColor: "#93c5fd", color: "#1d4ed8" }}>
+                                        Change Driver
+                                      </button>
+                                      {pickedDriver && (
+                                        <button type="button"
+                                          onClick={() => setReturnDriverId("")}
+                                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:bg-gray-50"
+                                          style={{ borderColor: "#d1d5db", color: "#6b7280" }}>
+                                          Reset to Same Driver
+                                        </button>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <select
+                                        className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                                        style={{ borderColor: "#93c5fd", minWidth: 260 }}
+                                        value={returnDriverId}
+                                        onChange={e => { setReturnDriverId(e.target.value); setShowReturnDriverPicker(false); }}>
+                                        <option value="">{mainDriver?.name ? `${mainDriver.name} (same as main shift)` : "Same as main shift"}</option>
+                                        {users
+                                          .filter(u => String(u.id) !== String(values.primaryUser))
+                                          .map(u => (
+                                            <option key={u.id} value={u.id}>{u.name}</option>
+                                          ))}
+                                      </select>
+                                      <button type="button"
+                                        onClick={() => setShowReturnDriverPicker(false)}
+                                        className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all hover:bg-gray-50"
+                                        style={{ borderColor: "#d1d5db", color: "#6b7280" }}>
+                                        Cancel
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Return shift points */}
