@@ -376,6 +376,8 @@ const ShiftReport = ({ user }) => {
   const [accessToggling, setAccessToggling] = useState(false);
   const [primaryStaff, setPrimaryStaff] = useState(null);
   const [showFullReport, setShowFullReport] = useState(false);
+  // Shift-history row whose report is being viewed in the popup (null = closed)
+  const [historyReportRow, setHistoryReportRow] = useState(null);
   const [activeModal, setActiveModal] = useState(null); // 'critical'|'medical'|'noteworthy'|'followthrough'
   const [agencyData, setAgencyData] = useState(null);
 
@@ -1010,6 +1012,47 @@ const ShiftReport = ({ user }) => {
 
       {/* ── Modals ── */}
       {showFullReport && <FullReportModal shiftData={shiftData} normalized={normalized} primaryStaff={primaryStaff} onClose={() => setShowFullReport(false)} />}
+
+      {/* Shift-history report popup */}
+      {historyReportRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+          onClick={e => { if (e.target === e.currentTarget) setHistoryReportRow(null); }}>
+          <div className="relative flex flex-col bg-white rounded-2xl overflow-hidden"
+            style={{ width: 720, maxWidth: "95vw", maxHeight: "85vh", boxShadow: "0 24px 80px rgba(0,0,0,0.22)", ...FONT }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 border-b" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, background: "linear-gradient(135deg,#145228,#1f7a3c)" }}>
+                  <PenLine size={17} style={{ color: "#fff" }} />
+                </div>
+                <div>
+                  <p className="font-bold" style={{ fontSize: 15, color: "#111827" }}>Shift Report</p>
+                  <p style={{ fontSize: 11, color: "#9ca3af" }}>
+                    {historyReportRow.staffName} · {historyReportRow.date?.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) || "—"}
+                    {historyReportRow.clockIn ? ` · ${formatClockDisplay(historyReportRow.clockIn)} – ${formatClockDisplay(historyReportRow.clockOut) || "—"}` : ""}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setHistoryReportRow(null)} className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50" style={{ width: 34, height: 34, borderColor: "#e5e7eb" }}>
+                <X size={15} style={{ color: "#6b7280" }} />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5" style={{ background: "#f9fafb" }}>
+              <div className="bg-white rounded-xl border p-6" style={{ borderColor: "#e5e7eb" }}>
+                <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>
+                  {historyReportRow.shiftReport}
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end px-6 py-4 border-t flex-shrink-0" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
+              <button onClick={() => setHistoryReportRow(null)} className="px-4 py-2 rounded-lg border font-semibold text-sm hover:bg-gray-50 transition-colors" style={{ borderColor: "#e5e7eb", color: "#374151" }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {activeModal === "critical" && <CriticalIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} user={user} clientData={clientData} shiftData={shiftData} />}
       {activeModal === "medical" && <MedicalLogForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} shiftData={shiftData} user={user} />}
       {activeModal === "noteworthy" && <NoteworthyIncidentForm onCancel={() => setActiveModal(null)} onSuccess={() => setActiveModal(null)} />}
@@ -1799,7 +1842,11 @@ const ShiftReport = ({ user }) => {
                         <td className="px-4 py-2.5"><span className="font-mono" style={{ fontSize: 12, color: "#374151" }}>{formatClockDisplay(row.clockOut)}</span></td>
                         <td className="px-4 py-2.5">
                           {row.shiftReport
-                            ? <span className="inline-flex items-center gap-1" style={{ fontSize: 11, color: "#15803d" }}><CheckCircle size={11} /> Filed</span>
+                            ? <button type="button" onClick={() => setHistoryReportRow(row)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border font-semibold transition-all hover:bg-green-50 cursor-pointer"
+                                style={{ fontSize: 11, color: "#15803d", borderColor: "#bbf7d0" }}>
+                                <FileText size={11} /> View Report
+                              </button>
                             : <span className="inline-flex items-center gap-1" style={{ fontSize: 11, color: "#f59e0b" }}><AlertCircle size={11} /> Missing</span>}
                         </td>
                         <td className="px-4 py-2.5">
