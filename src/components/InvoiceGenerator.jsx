@@ -336,6 +336,13 @@ export default function InvoiceGenerator({ agency, groups = [], preselectedClien
                                 <td className="px-3 py-3.5" style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{s.date}</td>
                                 <td className="px-3 py-3.5">
                                   <span style={{ fontSize: 12, fontWeight: 700, color: typeColor(s.type) }}>{s.type}</span>
+                                  {(s.type || "").toLowerCase().includes("transport") && (s.routePoints || []).map((rp, ri) => (
+                                    <p key={ri} style={{ fontSize: 9, color: "#6b7280", marginTop: 3, lineHeight: 1.4 }}>
+                                      <span style={{ fontWeight: 700, color: "#9ca3af" }}>Pickup:</span> {rp.pickup || "—"}
+                                      <br />
+                                      <span style={{ fontWeight: 700, color: "#9ca3af" }}>Drop:</span> {rp.drop || "—"}
+                                    </p>
+                                  ))}
                                 </td>
                                 <td className="px-3 py-3.5" style={{ fontSize: 12, fontWeight: 500, color: "#374151" }}>{s.staff}</td>
                                 <td className="px-3 py-3.5" style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{s.hours}h</td>

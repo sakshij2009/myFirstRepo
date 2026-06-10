@@ -99,12 +99,17 @@ export default function BillingAgencyDetails({ agency, onBack }) {
 
           const processedShifts = clientShifts.map((s, sIdx) => {
             
-            // 1) Extract Safe Display Date
+            // 1) Extract Safe Display Date (+ sortable timestamp for date ordering)
             let displayDate = "Unknown";
+            let sortTs = 0;
             if (s.startDate) {
               const d = typeof s.startDate?.toDate === "function" ? s.startDate.toDate() : new Date(s.startDate);
-              if (!isNaN(d)) displayDate = d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+              if (!isNaN(d)) {
+                displayDate = d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+                sortTs = d.getTime();
+              }
             }
+            if (!sortTs && typeof s.timeStampId === "number") sortTs = s.timeStampId;
 
             // 2) Extract Staff Member securely
             const staffMember = s.name || s.user || s.staffName || s.assignedUser || "Unknown";
@@ -184,9 +189,15 @@ export default function BillingAgencyDetails({ agency, onBack }) {
             shiftTotal += amt;
             transportTotal += tamt;
 
+            // 6) Pickup/drop route (shown on the invoice for transportation shifts)
+            const routePoints = (Array.isArray(s.shiftPoints) ? s.shiftPoints : [])
+              .filter(p => p.pickupLocation || p.dropLocation)
+              .map(p => ({ pickup: p.pickupLocation || "", drop: p.dropLocation || "" }));
+
             return {
               id: s.id,
               date: displayDate,
+              sortTs,
               type: rawCatKey,
               staff: staffMember,
               hours: h,
@@ -195,9 +206,13 @@ export default function BillingAgencyDetails({ agency, onBack }) {
               transportRate: trate,
               transportKm: tkms,
               transportAmount: tamt,
+              routePoints,
               status: s.billingStatus || (s.clockIn && s.clockOut ? "Billable" : "Locked")
             };
           });
+
+          // Show shifts in date order (earliest first)
+          processedShifts.sort((a, b) => (a.sortTs || 0) - (b.sortTs || 0));
 
           return {
             id: client.id,
