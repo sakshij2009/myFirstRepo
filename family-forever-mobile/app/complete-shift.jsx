@@ -403,8 +403,13 @@ export default function CompleteShift() {
   const locationSubRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const startTimeRef = useRef(Date.now());
-  const kmRef = useRef(null); // fallback simulation
+  const kmRef = useRef(null); // legacy interval handle (cleared on finish)
   const progressRestoredRef = useRef(false); // prevent double-restore
+  // Route km only counts between first pickup confirmation and the final drop:
+  // the watcher runs the whole time (so we always know the current position),
+  // but distance accumulates only while this flag is true.
+  const trackingActiveRef = useRef(false);
+  const stopsRef = useRef([]); // mirror of stops for use inside stable callbacks
 
   // GPS distance tracking
   useEffect(() => {
@@ -417,7 +422,7 @@ export default function CompleteShift() {
           { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 15 },
           (pos) => {
             if (!active) return;
-            if (lastCoordsRef.current) {
+            if (trackingActiveRef.current && lastCoordsRef.current) {
               const d = haversineKm(lastCoordsRef.current, pos.coords);
               if (d < 0.5) { // ignore GPS jumps > 500m
                 setTotalKm((k) => Math.round((k + d) * 100) / 100);
@@ -426,12 +431,9 @@ export default function CompleteShift() {
             lastCoordsRef.current = pos.coords;
           }
         );
-      } else {
-        // Fallback simulation when location denied
-        kmRef.current = setInterval(() => {
-          setTotalKm((k) => Math.round((k + 0.04) * 100) / 100);
-        }, 4000);
       }
+      // No location permission → km stays 0; the report screen falls back to
+      // the Mapbox route estimate instead of simulating fake kilometers.
     };
     startTracking();
     return () => {
@@ -450,6 +452,7 @@ export default function CompleteShift() {
         setShift(data);
         const builtStops = buildStops(data.shiftPoints, data);
         setStops(builtStops);
+        stopsRef.current = builtStops;
 
         // Restore saved progress (only once on first load)
         if (!progressRestoredRef.current) {
@@ -464,6 +467,15 @@ export default function CompleteShift() {
               if (typeof prog.totalKm === "number") setTotalKm(prog.totalKm);
               if (prog.completedTimes) setCompletedTimes(prog.completedTimes);
               if (prog.startedAt) startTimeRef.current = prog.startedAt;
+              // Resume km tracking if a pickup was already confirmed before the app closed
+              if (prog.clientStatus) {
+                const anyPickupConfirmed = Object.entries(prog.clientStatus).some(([key, st]) => {
+                  if (st !== "confirmed") return false;
+                  const si = parseInt(key.split("_")[0], 10);
+                  return builtStops[si]?.type === "pickup";
+                });
+                if (anyPickupConfirmed) trackingActiveRef.current = true;
+              }
             } else {
               // First time on this shift — init client statuses
               const init = {};
@@ -493,6 +505,10 @@ export default function CompleteShift() {
       const now = new Date();
       const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
       setClientConfirmedTimes((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: timeStr }));
+      // First pickup confirmed → start counting route kilometers from here
+      if (stopsRef.current[stopIdx]?.type === "pickup") {
+        trackingActiveRef.current = true;
+      }
     }
   }, []);
 
@@ -608,6 +624,7 @@ export default function CompleteShift() {
 
     if (currentIdx >= stops.length - 1) {
       // All stops done — stop tracking
+      trackingActiveRef.current = false;
       locationSubRef.current?.remove();
       clearInterval(kmRef.current);
       const totalTimeMinutes = Math.round((Date.now() - startTimeRef.current) / 60000);

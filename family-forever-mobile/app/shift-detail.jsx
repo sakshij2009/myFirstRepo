@@ -289,6 +289,9 @@ export default function ShiftDetails() {
   const [savingReport, setSavingReport] = useState(false);
   const [showIntakeModal, setShowIntakeModal] = useState(false);
   const [isEditingReport, setIsEditingReport] = useState(false);
+  // Previous shifts of this client in the 24h before this shift (date, staff, report)
+  const [prevShifts, setPrevShifts] = useState([]);
+  const [prevReportView, setPrevReportView] = useState(null); // shift whose report is open in the popup
 
   // ── Clock-in/out window state ─────────────────────────────────────────────
   const [clockInLocked, setClockInLocked] = useState(false);
@@ -465,6 +468,45 @@ export default function ShiftDetails() {
     };
     loadClient();
   }, [shift?.clientId]);
+
+  // ── Previous 24h shifts of this client (date, staff, shift report) ────────
+  useEffect(() => {
+    if (!shift?.clientId || !shiftId) return;
+    const loadPrevShifts = async () => {
+      try {
+        const q1 = query(collection(db, "shifts"), where("clientId", "==", shift.clientId));
+        const snap = await getDocs(q1);
+
+        // Reference point: this shift's start; fall back to now
+        let refTs = typeof shift.timeStampId === "number" ? shift.timeStampId : null;
+        if (!refTs && shift.startDate) {
+          const d = parseDate(shift.startDate);
+          if (d) refTs = d.getTime();
+        }
+        if (!refTs) refTs = Date.now();
+        const windowStart = refTs - 24 * 60 * 60 * 1000;
+
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((s) => {
+            if (s.id === shiftId) return false;
+            let ts = typeof s.timeStampId === "number" ? s.timeStampId : null;
+            if (!ts && s.startDate) {
+              const d = parseDate(s.startDate);
+              if (d) ts = d.getTime();
+            }
+            if (!ts) return false;
+            s._ts = ts;
+            return ts >= windowStart && ts <= refTs;
+          })
+          .sort((a, b) => b._ts - a._ts);
+        setPrevShifts(rows);
+      } catch (e) {
+        console.warn("Failed to load previous 24h shifts:", e);
+      }
+    };
+    loadPrevShifts();
+  }, [shift?.clientId, shiftId]);
 
   // ── Clock-window monitoring + local push-notification scheduling ─────────
   useEffect(() => {
@@ -1071,6 +1113,67 @@ export default function ShiftDetails() {
           </Text>
         </View>
 
+        {/* ── Previous Shifts (last 24 hours) ─────────────────────────────── */}
+        {prevShifts.length > 0 && (
+          <View style={[styles.sectionCard, { marginTop: 15 }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <Ionicons name="time-outline" size={18} color={PRIMARY_GREEN} />
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Previous Shifts</Text>
+              <View style={{ backgroundColor: GRAY_BORDER, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: GRAY_TEXT }}>Last 24 hours</Text>
+              </View>
+            </View>
+            {prevShifts.map((ps, i) => {
+              const psDate = ps._ts ? new Date(ps._ts) : null;
+              const dateLabel = psDate
+                ? psDate.toLocaleDateString("en-CA", { day: "2-digit", month: "short" })
+                : "—";
+              const psStaff = safeString(ps.name) || safeString(ps.userName) || "Unknown staff";
+              const hasReport = !!(ps.shiftReport && String(ps.shiftReport).trim());
+              return (
+                <View
+                  key={ps.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 12,
+                    borderTopWidth: i === 0 ? 0 : 1,
+                    borderTopColor: GRAY_BORDER,
+                    marginTop: i === 0 ? 8 : 0,
+                  }}
+                >
+                  <View style={{ width: 44, alignItems: "center", marginRight: 10 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "800", color: DARK_TEXT }}>{dateLabel.split(" ")[0]}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: "600", color: GRAY_TEXT }}>{dateLabel.split(" ")[1] || ""}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: DARK_TEXT }} numberOfLines={1}>{psStaff}</Text>
+                    <Text style={{ fontSize: 12, color: GRAY_TEXT, marginTop: 2 }} numberOfLines={1}>
+                      {safeString(ps.typeName) || safeString(ps.shiftType) || "Shift"}
+                      {ps.startTime && ps.endTime ? ` · ${safeString(ps.startTime)} – ${safeString(ps.endTime)}` : ""}
+                    </Text>
+                  </View>
+                  {hasReport ? (
+                    <Pressable
+                      onPress={() => setPrevReportView(ps)}
+                      style={{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        borderWidth: 1, borderColor: "#BBF7D0", backgroundColor: "#F0FDF4",
+                        borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+                      }}
+                    >
+                      <Ionicons name="document-text-outline" size={13} color={TEXT_GREEN} />
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: TEXT_GREEN }}>View Report</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={{ fontSize: 11, fontWeight: "600", color: "#D97706" }}>No report</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {/* ── Timeline ───────────────────────────────────────────────────── */}
         <View style={[styles.sectionCard, { marginTop: 15 }]}>
           <Text style={styles.sectionTitle}>Shift Timeline</Text>
@@ -1657,6 +1760,51 @@ export default function ShiftDetails() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
             <IntakeView intakeData={intakeData} />
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Previous shift report popup ── */}
+      <Modal visible={!!prevReportView} transparent animationType="fade" onRequestClose={() => setPrevReportView(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 20 }}>
+          <View style={{ backgroundColor: "#FFF", borderRadius: 20, maxHeight: "80%", overflow: "hidden" }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              paddingHorizontal: 18, paddingVertical: 14,
+              borderBottomWidth: 1, borderBottomColor: "#E5E7EB", backgroundColor: "#FAFAFA",
+            }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: PRIMARY_GREEN, alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="document-text" size={17} color="#FFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "800", color: DARK_TEXT }}>Shift Report</Text>
+                  <Text style={{ fontSize: 11, color: GRAY_TEXT }} numberOfLines={1}>
+                    {safeString(prevReportView?.name) || safeString(prevReportView?.userName) || "Staff"}
+                    {prevReportView?._ts ? ` · ${new Date(prevReportView._ts).toLocaleDateString("en-CA", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+                  </Text>
+                </View>
+              </View>
+              <Pressable onPress={() => setPrevReportView(null)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </Pressable>
+            </View>
+            {/* Body */}
+            <ScrollView style={{ paddingHorizontal: 18 }} contentContainerStyle={{ paddingVertical: 16 }}>
+              <Text style={{ fontSize: 14, color: "#374151", lineHeight: 23 }}>
+                {safeString(prevReportView?.shiftReport) || "No report text."}
+              </Text>
+            </ScrollView>
+            {/* Footer */}
+            <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: "#F3F4F6" }}>
+              <Pressable
+                onPress={() => setPrevReportView(null)}
+                style={{ backgroundColor: PRIMARY_GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 14 }}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
