@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
     View,
     Text,
@@ -16,9 +16,40 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     collection,
-    getDocs,
+    onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../../src/firebase/config";
+
+// Resolve any Firestore Timestamp / string / Date into a JS Date (or null)
+const toJsDate = (v) => {
+    if (!v) return null;
+    if (typeof v?.toDate === "function") return v.toDate();
+    const d = new Date(v);
+    return isNaN(d) ? null : d;
+};
+
+// Compute the [start, end] window for a period selection
+const getPeriodRange = (period, customFrom, customTo) => {
+    const now = new Date();
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    let start = new Date(now);
+    if (period === "Monthly") {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === "Yearly") {
+        start = new Date(now.getFullYear(), 0, 1);
+    } else if (period === "Custom") {
+        start = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
+        const e = customTo ? new Date(customTo) : new Date(now);
+        e.setHours(23, 59, 59, 999);
+        return { start, end: e };
+    } else {
+        // Weekly — current calendar week (Sunday → today)
+        start.setDate(start.getDate() - start.getDay());
+    }
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+};
 
 const { width } = Dimensions.get("window");
 
@@ -30,118 +61,66 @@ export default function DashboardScreen() {
     const [showBottomPeriodPicker, setShowBottomPeriodPicker] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    // Raw live collections
     const [shifts, setShifts] = useState([]);
-    const [stats, setStats] = useState({
-        totalClients: 0,
-        totalTransport: 0,
-        totalShifts: 0,
-        totalRevenue: 0,
-        totalExpenses: 0,
-        totalAgencies: 0,
-    });
+    const [clients, setClients] = useState([]);
+    const [agencies, setAgencies] = useState([]);
+    // Custom date range (only used when selectedPeriod === "Custom")
+    const [customFrom, setCustomFrom] = useState(null);
+    const [customTo, setCustomTo] = useState(null);
+    const [customPickerFor, setCustomPickerFor] = useState(null); // "from" | "to" | null
 
     useEffect(() => {
-        const load = async () => {
-            try {
-                const stored = await AsyncStorage.getItem("user");
-                if (stored) setUser(JSON.parse(stored));
-                await fetchDashboardData();
-            } catch (err) {
-                console.error("Dashboard load error:", err);
-            }
-        };
-        load();
+        AsyncStorage.getItem("user").then((stored) => {
+            if (stored) setUser(JSON.parse(stored));
+        }).catch(() => {});
+
+        // Live listeners — dashboard stays fresh as data changes
+        const unsubShifts = onSnapshot(collection(db, "shifts"), (snap) => {
+            setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        }, (e) => console.warn("shifts listener:", e));
+        const unsubClients = onSnapshot(collection(db, "clients"), (snap) => {
+            setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        }, (e) => console.warn("clients listener:", e));
+        const unsubAgencies = onSnapshot(collection(db, "agencies"), (snap) => {
+            setAgencies(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        }, (e) => console.warn("agencies listener:", e));
+
+        return () => { unsubShifts(); unsubClients(); unsubAgencies(); };
     }, []);
 
-    const fetchDashboardData = async () => {
-        try {
-            const [clientSnap, shiftSnap, agencySnap] = await Promise.all([
-                getDocs(collection(db, "clients")),
-                getDocs(collection(db, "shifts")),
-                getDocs(collection(db, "agencies")),
-            ]);
+    // ── Period-aware KPI metrics (recomputed live) ───────────────────────────
+    const metrics = useMemo(() => {
+        const { start, end } = getPeriodRange(selectedPeriod, customFrom, customTo);
+        const inRange = (d) => d && d >= start && d <= end;
 
-            let transportCount = 0;
-            shiftSnap.docs.forEach((doc) => {
-                const d = doc.data();
-                const cat = (d.shiftCategory || d.categoryName || "").toLowerCase();
-                if (cat.includes("transport")) transportCount++;
-            });
+        let shiftsCompleted = 0;
+        let transportCompleted = 0;
+        shifts.forEach((s) => {
+            const d = toJsDate(s.startDate);
+            if (!inRange(d)) return;
+            const isCompleted = !!(s.clockIn && s.clockOut) || !!s.transportationCompleted;
+            if (isCompleted && !s.isCancelled) shiftsCompleted++;
+            const cat = (s.shiftCategory || s.categoryName || s.typeName || "").toLowerCase();
+            if (cat.includes("transport") && (s.transportationCompleted || (s.clockIn && s.clockOut)) && !s.isCancelled) {
+                transportCompleted++;
+            }
+        });
 
-            setStats({
-                totalClients: clientSnap.size,
-                totalTransport: transportCount,
-                totalShifts: shiftSnap.size,
-                totalRevenue: 1200,
-                totalExpenses: 1000,
-                totalAgencies: agencySnap.size,
-            });
+        const newClients = clients.filter((c) => inRange(toJsDate(c.createdAt))).length;
+        const newAgencies = agencies.filter((a) => inRange(toJsDate(a.createdAt))).length;
 
-            const allFetchedShifts = shiftSnap.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .sort((a, b) => {
-                    const da = a.startDate?.toDate ? a.startDate.toDate() : new Date(a.startDate);
-                    const db2 = b.startDate?.toDate ? b.startDate.toDate() : new Date(b.startDate);
-                    return db2 - da;
-                });
+        return [
+            { icon: "checkmark-done", label: "Total Shifts Completed", value: String(shiftsCompleted) },
+            { icon: "people", label: "Total Clients", value: String(clients.length) },
+            { icon: "business", label: "New Agencies Added", value: String(newAgencies) },
+            { icon: "person-add", label: "New Clients Added", value: String(newClients) },
+            { icon: "car", label: "Total Transportation Completed", value: String(transportCompleted) },
+        ];
+    }, [shifts, clients, agencies, selectedPeriod, customFrom, customTo]);
 
-            setShifts(allFetchedShifts);
-        } catch (err) {
-            console.error("Error fetching dashboard data:", err);
-        }
-    };
-
-    const metrics = [
-        {
-            icon: "people",
-            label: "Total Clients",
-            value: String(stats.totalClients),
-            trend: "2.5%",
-            up: true,
-        },
-        {
-            icon: "car",
-            label: "Total Transportation this Week",
-            value: String(stats.totalTransport),
-            trend: "2.5%",
-            up: false,
-        },
-        {
-            icon: "calendar",
-            label: "Total Shift Completed",
-            value: String(stats.totalShifts),
-            trend: "2.5%",
-            up: true,
-        },
-        {
-            icon: "cash",
-            label: "Total Revenue Generated",
-            value: "$1,200",
-            trend: "10.5%",
-            up: true,
-        },
-        {
-            icon: "cash-outline",
-            label: "Total Expenses Made this week",
-            value: "$1,000",
-            trend: "5.5%",
-            up: false,
-        },
-        {
-            icon: "business",
-            label: "New Agency Added",
-            value: String(stats.totalAgencies).padStart(2, "0"),
-            trend: "7.5%",
-            up: true,
-        },
-        {
-            icon: "book",
-            label: "New Bootcamp Added",
-            value: "01",
-            trend: "1.0%",
-            up: true,
-        },
-    ];
+    const fmtRangeLabel = (d) =>
+        d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Select";
 
     const categories = [
         { id: "all", label: "All", color: "#2D5F3F" },
@@ -151,7 +130,7 @@ export default function DashboardScreen() {
         { id: "transport", label: "Transportations", color: "#9D4EDD" },
     ];
 
-    const periodOptions = ["Weekly", "Monthly", "Yearly"];
+    const periodOptions = ["Weekly", "Monthly", "Yearly", "Custom"];
 
     // Helper to check if two dates are same day
     const isSameDay = (d1, d2) => {
@@ -228,7 +207,7 @@ export default function DashboardScreen() {
                     <View style={s.headerTop}>
                         <View style={s.logoCircle}>
                             <Image
-                                source={require("../../../assets/logo.png")}
+                                source={require("../../../assets/Logo2.png")}
                                 style={s.logoImg}
                                 resizeMode="contain"
                             />
@@ -300,6 +279,23 @@ export default function DashboardScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* ========== CUSTOM DATE RANGE (Custom period only) ========== */}
+                {selectedPeriod === "Custom" && (
+                    <View style={s.customRangeRow}>
+                        <Pressable style={s.customDateBtn} onPress={() => setCustomPickerFor("from")}>
+                            <Ionicons name="calendar-outline" size={15} color="#2D5F3F" />
+                            <Text style={s.customDateLabel}>From</Text>
+                            <Text style={s.customDateValue}>{fmtRangeLabel(customFrom)}</Text>
+                        </Pressable>
+                        <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
+                        <Pressable style={s.customDateBtn} onPress={() => setCustomPickerFor("to")}>
+                            <Ionicons name="calendar-outline" size={15} color="#2D5F3F" />
+                            <Text style={s.customDateLabel}>To</Text>
+                            <Text style={s.customDateValue}>{fmtRangeLabel(customTo)}</Text>
+                        </Pressable>
+                    </View>
+                )}
 
                 {/* ========== METRICS CARDS - Horizontal Scroll ========== */}
                 <ScrollView
@@ -407,13 +403,25 @@ export default function DashboardScreen() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Custom Calendar Modal */}
+            {/* Custom Calendar Modal — picks the day for the shift list below */}
             <CalendarModal
                 isOpen={isCalendarOpen}
                 onClose={() => setIsCalendarOpen(false)}
                 selectedDate={selectedDate}
                 onSelectDate={setSelectedDate}
                 title="Select Date"
+            />
+
+            {/* Custom range From/To picker (for the KPI period) */}
+            <CalendarModal
+                isOpen={customPickerFor !== null}
+                onClose={() => setCustomPickerFor(null)}
+                selectedDate={customPickerFor === "to" ? customTo : customFrom}
+                onSelectDate={(d) => {
+                    if (customPickerFor === "to") setCustomTo(d);
+                    else setCustomFrom(d);
+                }}
+                title={customPickerFor === "to" ? "Select End Date" : "Select Start Date"}
             />
         </SafeAreaView>
     );
@@ -888,6 +896,30 @@ const s = StyleSheet.create({
     },
     periodOptionActive: { backgroundColor: "#2D5F3F" },
     periodOptionText: { fontSize: 14, fontWeight: "500", color: "#333" },
+
+    // Custom date range
+    customRangeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+    },
+    customDateBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#fff",
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        flex: 1,
+    },
+    customDateLabel: { fontSize: 12, fontWeight: "500", color: "#9CA3AF" },
+    customDateValue: { fontSize: 13, fontWeight: "700", color: "#1a1a1a", marginLeft: "auto" },
 
     // Metrics
     metricsRow: {
