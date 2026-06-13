@@ -16,7 +16,9 @@ export default function ClientsScreen() {
   // Filters State
   const [genderFilter, setGenderFilter] = useState('All');
   const [agencyFilter, setAgencyFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('Active');
+  const [statusFilter, setStatusFilter] = useState('All');
+  // Agency name expanded (full) for this client id, on tap
+  const [expandedAgencyId, setExpandedAgencyId] = useState(null);
 
   // Dropdown UI state (Modal instead of inline)
   const [activeDropdown, setActiveDropdown] = useState(null); // 'Gender', 'Agency', 'Status' or null
@@ -31,37 +33,82 @@ export default function ClientsScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Fetch Clients
-      const clientsSnap = await getDocs(collection(db, "clients"));
+
+      const [clientsSnap, intakeSnap, catSnap] = await Promise.all([
+        getDocs(collection(db, "clients")),
+        getDocs(collection(db, "InTakeForms")),
+        getDocs(collection(db, "shiftCategories")),
+      ]);
+
       const clientsList = clientsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-      // Fetch Agency Types
-      const agencySnap = await getDocs(collection(db, "AgencyTypes"));
-      setAgencyOptions(agencySnap.docs.map(doc => doc.data().name));
+      // Map shiftCategory id -> readable name (service type → category name)
+      const categoryMap = {};
+      catSnap.docs.forEach(d => {
+        const data = d.data();
+        categoryMap[d.id] = data.name || data.categoryName || data.label || "";
+        if (data.id) categoryMap[data.id] = categoryMap[d.id];
+      });
 
-      // Fetch Services mapping via IntakeForms
-      const intakeSnap = await getDocs(collection(db, "InTakeForms"));
-      const intakeForms = intakeSnap.docs.map(doc => doc.data());
-      const services = {};
+      // Intake lookup by client name → { cyimId, parentEmail, serviceRequired }
+      const intakeByName = {};
+      intakeSnap.docs.forEach(doc => {
+        const form = doc.data();
+        const arr = Array.isArray(form.inTakeClients) ? form.inTakeClients
+          : Array.isArray(form.clients) ? form.clients : [];
+        arr.forEach(c => {
+          const key = (c.name || c.fullName || "").trim().toLowerCase();
+          if (!key) return;
+          intakeByName[key] = {
+            cyimId: c.cyimId || c.CYIMId || "",
+            parentEmail: c.parentEmail || form.parentInfoList?.[0]?.parentEmail || "",
+            serviceRequired: Array.isArray(c.serviceRequired) ? c.serviceRequired.join(", ") : (c.serviceRequired || ""),
+          };
+        });
+      });
 
-      for (const client of clientsList) {
-        const matchedIntake = intakeForms.find(form =>
-          form.inTakeClients?.some(c => c.name?.trim() === client.name?.trim())
-        );
-        if (matchedIntake) {
-          const clientData = matchedIntake.inTakeClients.find(c => c.name?.trim() === client.name?.trim());
-          const service = Array.isArray(clientData?.serviceRequired)
-            ? clientData.serviceRequired.join(", ")
-            : clientData?.serviceRequired;
-          services[client.name?.trim()] = service || "Unknown";
-        } else {
-          services[client.name?.trim()] = "Unknown";
+      // Resolve a client's service-category label from serviceType ids → names
+      const serviceLabel = (client) => {
+        const ids = client.services?.serviceType;
+        if (Array.isArray(ids) && ids.length) {
+          const names = ids.map(id => categoryMap[id]).filter(Boolean);
+          if (names.length) return names.join(", ");
         }
-      }
+        const intake = intakeByName[(client.name || "").trim().toLowerCase()];
+        return intake?.serviceRequired || "—";
+      };
 
-      setServicesMap(services);
-      setClients(clientsList);
+      // CYIM: family clients store per-sibling cyimId in shiftPoints; singles in intake
+      const cyimFor = (client) => {
+        const sp = Array.isArray(client.shiftPoints) ? client.shiftPoints : [];
+        const fromSp = sp.map(p => p.cyimId).filter(Boolean);
+        if (fromSp.length) return fromSp.join(", ");
+        const intake = intakeByName[(client.name || "").trim().toLowerCase()];
+        return client.cyimId || intake?.cyimId || "—";
+      };
+
+      const parentEmailFor = (client) => {
+        if (client.parentEmail) return client.parentEmail;
+        const sp = Array.isArray(client.shiftPoints) ? client.shiftPoints : [];
+        const fromSp = sp.map(p => p.parentEmail).find(Boolean);
+        if (fromSp) return fromSp;
+        const intake = intakeByName[(client.name || "").trim().toLowerCase()];
+        return intake?.parentEmail || "N/A";
+      };
+
+      const enriched = clientsList.map(c => ({
+        ...c,
+        _cyim: cyimFor(c),
+        _service: serviceLabel(c),
+        _parentEmail: parentEmailFor(c),
+      }));
+
+      // Agency filter options from the actual client agency names (distinct)
+      const agencies = [...new Set(enriched.map(c => c.agencyName).filter(Boolean))].sort();
+      setAgencyOptions(agencies);
+
+      setClients(enriched);
     } catch (e) {
       console.error("Error fetching clients data", e);
       Alert.alert("Error", "Failed to load clients");
@@ -128,6 +175,7 @@ export default function ClientsScreen() {
       const searchLow = searchQuery.toLowerCase();
       const matchSearch = !searchQuery ||
         (client.name || '').toLowerCase().includes(searchLow) ||
+        (client._cyim || '').toString().toLowerCase().includes(searchLow) ||
         (client.clientCode || '').toString().toLowerCase().includes(searchLow);
 
       return matchGender && matchAgency && matchStatus && matchSearch;
@@ -231,9 +279,11 @@ export default function ClientsScreen() {
         <ScrollView contentContainerStyle={s.listContainer} showsVerticalScrollIndicator={false}>
           {filteredClients.map((client) => {
             const initials = client.name ? client.name.substring(0, 2).toUpperCase() : '??';
-            const serviceStr = servicesMap[client.name?.trim()] || 'Unknown';
+            const serviceStr = client._service || '—';
             const sColor = getServiceColor(serviceStr);
             const statusColor = client.clientStatus === 'Active' ? '#10B981' : '#9CA3AF';
+            const agencyName = client.agencyName || 'No Agency';
+            const agencyExpanded = expandedAgencyId === client.id;
 
             return (
               <View key={client.id} style={s.card}>
@@ -254,21 +304,27 @@ export default function ClientsScreen() {
                   </View>
                   <View style={s.nameContainer}>
                     <Text style={s.clientName}>{client.name || 'Unnamed Client'}</Text>
-                    <Text style={s.clientCode}>{client.clientCode || 'NO CODE'}</Text>
+                    <Text style={s.clientCode}>CYIM ID: {client._cyim || '—'}</Text>
                   </View>
                 </View>
 
                 {/* Badges */}
                 <View style={s.badgesRow}>
                   <View style={[s.badge, { backgroundColor: sColor }]}><Text style={s.badgeText}>{serviceStr}</Text></View>
-                  <View style={[s.badge, { backgroundColor: statusColor }]}><Text style={s.badgeText}>{client.clientStatus || 'Unknown'}</Text></View>
-                  <View style={[s.badge, { backgroundColor: '#3B82F6' }]}><Text style={s.badgeText}>{client.agencyName || 'No Agency'}</Text></View>
+                  <View style={[s.badge, { backgroundColor: statusColor }]}><Text style={s.badgeText}>{client.clientStatus || 'Active'}</Text></View>
+                  {/* Agency — truncate when long; tap to expand to full name */}
+                  <Pressable
+                    style={[s.badge, { backgroundColor: '#3B82F6', maxWidth: agencyExpanded ? undefined : 160 }]}
+                    onPress={() => setExpandedAgencyId(agencyExpanded ? null : client.id)}
+                  >
+                    <Text style={s.badgeText} numberOfLines={agencyExpanded ? undefined : 1}>{agencyName}</Text>
+                  </Pressable>
                 </View>
 
                 {/* Email Box */}
                 <View style={s.emailBox}>
                   <Text style={s.emailLabel}>Parent Email:</Text>
-                  <Text style={s.emailValue}>{client.email || 'N/A'}</Text>
+                  <Text style={s.emailValue}>{client._parentEmail || 'N/A'}</Text>
                 </View>
 
                 {/* File Closure */}
@@ -286,7 +342,7 @@ export default function ClientsScreen() {
                 </View>
 
                 {/* Intake Form Button */}
-                <Pressable style={s.intakeBtn} onPress={() => router.push(`/admin/intake-form-view?clientName=${encodeURIComponent(client.name || '')}`)}>
+                <Pressable style={s.intakeBtn} onPress={() => router.push(`/admin/intake-form-view?clientName=${encodeURIComponent(client.name || '')}&clientId=${encodeURIComponent(client.id || '')}`)}>
                   <Text style={s.intakeBtnText}>View Intake Form</Text>
                 </Pressable>
               </View>
