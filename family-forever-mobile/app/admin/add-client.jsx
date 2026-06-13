@@ -1,114 +1,134 @@
-﻿import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { collection, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../src/firebase/config';
 import * as ImagePicker from 'expo-image-picker';
+
+const SEAT_TYPES = ['Forward Facing Seat', 'Rear Facing Seat', 'Booster Seat', 'No Seat Required'];
+const GENDERS = ['Male', 'Female', 'Other'];
+const STATUSES = ['Active', 'Inactive'];
+
+const emptyShiftPoint = () => ({
+  name: '', seatType: 'Forward Facing Seat', gender: 'Male', dob: '',
+  pickupTime: '', dropTime: '', pickupLocation: '', dropLocation: '',
+  clientInfo: '', parentName: '', relationship: '', parentPhone: '',
+  parentEmail: '', parentAddress: '',
+});
+const emptyMedication = () => ({
+  medicationName: '', dosage: '', timing: '', medicineDescription: '',
+  reasonOfMedication: '', cautions: '',
+});
 
 export default function AddClientScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [agencies, setAgencies] = useState([]);
-
   const [avatarUri, setAvatarUri] = useState(null);
+  const [picker, setPicker] = useState(null); // { title, options, onSelect }
 
-  const [formData, setFormData] = useState({
-    name: '',
-    clientCode: '',
-    clientStatus: 'Active',
-    password: '',
-    parentEmail: '',
-    agency: '',
-    address: '',
-    dob: '',
-    description: '',
-
-    // Medications Array Match
-    medications: [{
-      medicationName: '',
-      dosage: '',
-      medicineDescription: '',
-      reasonOfMedication: '',
-      cautions: ''
-    }]
+  const [form, setForm] = useState({
+    name: '', clientCode: '', password: '', clientStatus: 'Active',
+    parentEmail: '', agency: '', address: '', dob: '',
+    kmRate: '', clientRate: '', isFamily: false, description: '',
+    shiftPoints: [],
+    medications: [emptyMedication()],
+    pharmacy: { pharmacyName: '', pharmacyEmail: '', pharmacyPhone: '', pharmacyAddress: '' },
   });
 
   useEffect(() => {
     const fetchAgencies = async () => {
       try {
-        const snap = await getDocs(collection(db, "AgencyTypes"));
-        setAgencies(snap.docs.map(doc => doc.data().name));
-      } catch (e) {
-        console.error("Failed to load agencies", e);
-      }
+        const snap = await getDocs(collection(db, 'agencies'));
+        const names = snap.docs.map(d => d.data().agencyName || d.data().name).filter(Boolean);
+        if (names.length) { setAgencies([...new Set(names)].sort()); return; }
+      } catch (e) { /* fall through */ }
+      try {
+        const snap = await getDocs(collection(db, 'AgencyTypes'));
+        setAgencies(snap.docs.map(d => d.data().name).filter(Boolean));
+      } catch (e) { console.error('Failed to load agencies', e); }
     };
     fetchAgencies();
   }, []);
 
-  const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
-  const handleMedChange = (field, value) => setFormData(prev => ({
+  const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+  const setPharmacy = (field, value) => setForm(prev => ({ ...prev, pharmacy: { ...prev.pharmacy, [field]: value } }));
+
+  // Shift points
+  const addShiftPoint = () => setForm(prev => ({ ...prev, shiftPoints: [...prev.shiftPoints, emptyShiftPoint()] }));
+  const removeShiftPoint = (i) => setForm(prev => ({ ...prev, shiftPoints: prev.shiftPoints.filter((_, idx) => idx !== i) }));
+  const setShiftPoint = (i, field, value) => setForm(prev => ({
     ...prev,
-    medications: [{ ...prev.medications[0], [field]: value }]
+    shiftPoints: prev.shiftPoints.map((sp, idx) => idx === i ? { ...sp, [field]: value } : sp),
   }));
 
+  // Medications
+  const addMedication = () => setForm(prev => ({ ...prev, medications: [...prev.medications, emptyMedication()] }));
+  const removeMedication = (i) => setForm(prev => ({ ...prev, medications: prev.medications.filter((_, idx) => idx !== i) }));
+  const setMedication = (i, field, value) => setForm(prev => ({
+    ...prev,
+    medications: prev.medications.map((m, idx) => idx === i ? { ...m, [field]: value } : m),
+  }));
+
+  const pickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) setAvatarUri(result.assets[0].uri);
+  };
+
   const handleSubmit = async () => {
-    if (!formData.name || !formData.clientCode || !formData.parentEmail) {
-      Alert.alert("Missing Fields", "Please fill in the Name, Client Code, and Parent Email.");
-      return;
-    }
+    if (!form.name) { Alert.alert('Missing Fields', 'Please enter the client / family name.'); return; }
+    if (!form.isFamily && !form.clientCode) { Alert.alert('Missing Fields', 'Client Code is required.'); return; }
+    if (!form.agency) { Alert.alert('Missing Fields', 'Please select an agency.'); return; }
 
     try {
       setLoading(true);
       const docId = Date.now().toString();
 
-      let photoURL = "";
+      let photoURL = '';
       if (avatarUri) {
         const response = await fetch(avatarUri);
         const blob = await response.blob();
-        const filename = `client-${docId}-${Date.now()}.jpg`;
-        const storageRef = ref(storage, `client-images/${filename}`);
+        const storageRef = ref(storage, `client-images/client-${docId}.jpg`);
         await uploadBytes(storageRef, blob);
         photoURL = await getDownloadURL(storageRef);
       }
 
       const payload = {
-        name: formData.name,
-        clientCode: formData.clientCode,
-        password: formData.password,
-        clientStatus: formData.clientStatus,
-        parentEmail: formData.parentEmail,
-        agency: formData.agency,
-        agencyName: formData.agency, // Web expects both sometimes
-        address: formData.address,
-        dob: formData.dob,
-        description: formData.description,
+        name: form.name,
+        clientCode: form.clientCode,
+        password: form.password,
+        clientStatus: form.isFamily ? 'Active' : form.clientStatus,
+        parentEmail: form.parentEmail,
+        agency: form.agency,
+        agencyName: form.agency,
+        address: form.address,
+        dob: form.dob || null,
+        kmRate: form.kmRate,
+        clientRate: form.clientRate,
+        isFamily: form.isFamily,
+        clientCount: form.isFamily ? form.shiftPoints.length : 1,
+        description: form.description,
         avatar: photoURL,
-        shiftPoints: [],
-        medications: [{
-          medicationName: formData.medications[0].medicationName,
-          dosage: formData.medications[0].dosage,
-          medicineDescription: formData.medications[0].medicineDescription,
-          reasonOfMedication: formData.medications[0].reasonOfMedication,
-          cautions: formData.medications[0].cautions,
-          timing: ""
-        }],
-        pharmacy: { pharmacyName: "", pharmacyEmail: "", pharmacyPhone: "", pharmacyAddress: "" },
+        shiftPoints: form.shiftPoints,
+        medications: form.medications,
+        pharmacy: form.pharmacy,
         createdAt: new Date(),
         fileClosed: false,
+        id: docId,
       };
 
-      await setDoc(doc(db, "clients", docId), payload);
-
-      Alert.alert("Success", "Client Added Successfully!", [
-        { text: "OK", onPress: () => router.replace('/admin/(tabs)/clients') }
+      await setDoc(doc(db, 'clients', docId), payload);
+      Alert.alert('Success', 'Client Added Successfully!', [
+        { text: 'OK', onPress: () => router.replace('/admin/(tabs)/clients') },
       ]);
-
     } catch (e) {
-      console.error("Error creating client", e);
-      Alert.alert("Error", "Failed to create client. Try again.");
+      console.error('Error creating client', e);
+      Alert.alert('Error', 'Failed to create client. Try again.');
     } finally {
       setLoading(false);
     }
@@ -116,7 +136,6 @@ export default function AddClientScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={["top"]}>
-      {/* Header */}
       <View style={s.header}>
         <Pressable onPress={() => router.back()} style={s.backBtn}>
           <Feather name="arrow-left" size={24} color="#333" />
@@ -126,35 +145,17 @@ export default function AddClientScreen() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView style={s.scrollArea} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView style={s.scrollArea} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-          {/* Avatar Upload */}
+          {/* Avatar */}
           <View style={s.card}>
             <View style={s.avatarWrapper}>
               <View style={s.avatarCircle}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={s.avatarImg} />
-                ) : (
-                  <Feather name="camera" size={32} color="#9CA3AF" />
-                )}
+                {avatarUri ? <Image source={{ uri: avatarUri }} style={s.avatarImg} /> : <Feather name="camera" size={32} color="#9CA3AF" />}
               </View>
               <View style={s.avatarBtns}>
-                <Pressable style={s.btnPrimary} onPress={async () => {
-                  const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    allowsEditing: true,
-                    aspect: [1, 1],
-                    quality: 0.8,
-                  });
-                  if (!result.canceled && result.assets[0]) {
-                    setAvatarUri(result.assets[0].uri);
-                  }
-                }}>
-                  <Text style={s.btnPrimaryText}>Change Avatar</Text>
-                </Pressable>
-                <Pressable style={s.btnSecondary} onPress={() => setAvatarUri(null)}>
-                  <Text style={s.btnSecondaryText}>Remove</Text>
-                </Pressable>
+                <Pressable style={s.btnPrimary} onPress={pickAvatar}><Text style={s.btnPrimaryText}>Change Avatar</Text></Pressable>
+                <Pressable style={s.btnSecondary} onPress={() => setAvatarUri(null)}><Text style={s.btnSecondaryText}>Remove</Text></Pressable>
               </View>
             </View>
           </View>
@@ -163,52 +164,127 @@ export default function AddClientScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>Basic Information</Text>
 
-            <FormField label="Name" placeholder="Enter client name" value={formData.name} onChange={(t) => handleChange('name', t)} />
-            <FormField label="Client Code" placeholder="Enter client code" value={formData.clientCode} onChange={(t) => handleChange('clientCode', t)} />
-
-            {/* Status Picker (Pseudo) */}
-            <Text style={s.label}>Client Status</Text>
-            <View style={s.pickerOutline}>
-              <Text style={s.pickerText}>{formData.clientStatus}</Text>
-              <Pressable style={s.pickerToggle} onPress={() => handleChange('clientStatus', formData.clientStatus === 'Active' ? 'Inactive' : 'Active')}>
-                <Feather name="refresh-cw" size={16} color="#2D5F3F" />
-              </Pressable>
+            {/* Family toggle */}
+            <View style={s.rowBetween}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.label}>Family Client</Text>
+                <Text style={s.hint}>Siblings are managed as Shift Points below</Text>
+              </View>
+              <Switch value={form.isFamily} onValueChange={(v) => set('isFamily', v)} trackColor={{ false: '#d1d5db', true: '#2D5F3F' }} thumbColor="#fff" />
             </View>
 
-            <FormField label="Password" placeholder="Enter password" value={formData.password} onChange={(t) => handleChange('password', t)} secure />
-            <FormField label="Parent E-Mail" placeholder="Enter parent email" value={formData.parentEmail} onChange={(t) => handleChange('parentEmail', t)} type="email-address" />
+            <Field label={form.isFamily ? 'Family Name' : 'Name'} placeholder={form.isFamily ? 'Enter family name' : 'Enter client name'} value={form.name} onChange={(t) => set('name', t)} />
 
-            <FormField label="Agency (Optional)" placeholder="Type Agency Name" value={formData.agency} onChange={(t) => handleChange('agency', t)} />
+            {!form.isFamily && (
+              <Field label="Client Code" placeholder="Enter a specific ID" value={form.clientCode} onChange={(t) => set('clientCode', t)} />
+            )}
+
+            {!form.isFamily && (
+              <PickerField label="Client Status" value={form.clientStatus} onPress={() => setPicker({ title: 'Client Status', options: STATUSES, onSelect: (v) => set('clientStatus', v) })} />
+            )}
+
+            <Field label="Password" placeholder="Enter a specific password" value={form.password} onChange={(t) => set('password', t)} secure />
+            <Field label="Parent E-Mail" placeholder="Enter the e-mail ID" value={form.parentEmail} onChange={(t) => set('parentEmail', t)} type="email-address" />
+
+            <PickerField label="Agency" value={form.agency || 'Select agency'} onPress={() => setPicker({ title: 'Select Agency', options: agencies, onSelect: (v) => set('agency', v) })} />
 
             <Text style={s.label}>Address</Text>
-            <TextInput style={[s.input, s.textArea]} placeholder="Enter address" multiline numberOfLines={3} value={formData.address} onChangeText={(t) => handleChange('address', t)} />
+            <TextInput style={[s.input, s.textArea]} placeholder="Enter the address" placeholderTextColor="#9CA3AF" multiline value={form.address} onChangeText={(t) => set('address', t)} />
 
-            <FormField label="Date of Birth" placeholder="YYYY-MM-DD" value={formData.dob} onChange={(t) => handleChange('dob', t)} />
+            {!form.isFamily && (
+              <Field label="Date of Birth" placeholder="YYYY-MM-DD" value={form.dob} onChange={(t) => set('dob', t)} />
+            )}
+
+            <Field label="Client KM Rate" placeholder="Enter the KM Rate" value={form.kmRate} onChange={(t) => set('kmRate', t)} type="numeric" />
+            <Field label="Client Rate" placeholder="Enter the Rate" value={form.clientRate} onChange={(t) => set('clientRate', t)} type="numeric" />
 
             <Text style={s.label}>Description of Client</Text>
-            <TextInput style={[s.input, s.textArea]} placeholder="Enter description" multiline numberOfLines={4} value={formData.description} onChangeText={(t) => handleChange('description', t)} />
+            <TextInput style={[s.input, s.textArea]} placeholder="Write the description of the client" placeholderTextColor="#9CA3AF" multiline value={form.description} onChangeText={(t) => set('description', t)} />
           </View>
 
-          {/* Medications Information */}
+          {/* Shift Points / Siblings */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Medications Information</Text>
-            <FormField label="Name of Medications" placeholder="Enter medication name" value={formData.medications[0].medicationName} onChange={(t) => handleMedChange('medicationName', t)} />
-            <FormField label="Dosage" placeholder="Enter dosage" value={formData.medications[0].dosage} onChange={(t) => handleMedChange('dosage', t)} />
+            <View style={s.rowBetween}>
+              <Text style={s.cardTitle}>{form.isFamily ? 'Siblings / Family Members' : 'Shift Points'}</Text>
+              <Pressable style={s.addInlineBtn} onPress={addShiftPoint}>
+                <Feather name="plus" size={16} color="#2D5F3F" />
+                <Text style={s.addInlineText}>Add</Text>
+              </Pressable>
+            </View>
+            {form.shiftPoints.length === 0 && <Text style={s.hint}>No shift points added yet.</Text>}
 
-            <Text style={s.label}>Description</Text>
-            <TextInput style={[s.input, s.textArea]} placeholder="Enter medication description" multiline numberOfLines={3} value={formData.medications[0].medicineDescription} onChangeText={(t) => handleMedChange('medicineDescription', t)} />
+            {form.shiftPoints.map((sp, i) => (
+              <View key={i} style={s.subCard}>
+                <View style={s.rowBetween}>
+                  <Text style={s.subCardTitle}>{sp.name?.trim() || `Shift Point #${i + 1}`}</Text>
+                  <Pressable onPress={() => removeShiftPoint(i)}><Feather name="trash-2" size={16} color="#EF4444" /></Pressable>
+                </View>
+                <Field label="Name" placeholder="Enter name" value={sp.name} onChange={(t) => setShiftPoint(i, 'name', t)} />
+                <PickerField label="Seat Type" value={sp.seatType} onPress={() => setPicker({ title: 'Seat Type', options: SEAT_TYPES, onSelect: (v) => setShiftPoint(i, 'seatType', v) })} />
+                <PickerField label="Gender" value={sp.gender} onPress={() => setPicker({ title: 'Gender', options: GENDERS, onSelect: (v) => setShiftPoint(i, 'gender', v) })} />
+                <Field label="Date of Birth" placeholder="YYYY-MM-DD" value={sp.dob} onChange={(t) => setShiftPoint(i, 'dob', t)} />
+                <Field label="Pickup Time" placeholder="e.g. 09:00 AM" value={sp.pickupTime} onChange={(t) => setShiftPoint(i, 'pickupTime', t)} />
+                <Field label="Drop Time" placeholder="e.g. 05:00 PM" value={sp.dropTime} onChange={(t) => setShiftPoint(i, 'dropTime', t)} />
+                <Text style={s.label}>Pickup Location</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter pickup location" placeholderTextColor="#9CA3AF" multiline value={sp.pickupLocation} onChangeText={(t) => setShiftPoint(i, 'pickupLocation', t)} />
+                <Text style={s.label}>Drop Location</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter drop location" placeholderTextColor="#9CA3AF" multiline value={sp.dropLocation} onChangeText={(t) => setShiftPoint(i, 'dropLocation', t)} />
+                <Text style={s.label}>Client Info / Service Notes</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Individual client notes" placeholderTextColor="#9CA3AF" multiline value={sp.clientInfo} onChangeText={(t) => setShiftPoint(i, 'clientInfo', t)} />
 
-            <Text style={s.label}>Reasons of Medications</Text>
-            <TextInput style={[s.input, s.textArea]} placeholder="Enter reasons" multiline numberOfLines={3} value={formData.medications[0].reasonOfMedication} onChangeText={(t) => handleMedChange('reasonOfMedication', t)} />
+                <Text style={s.parentHeading}>Parent / Guardian</Text>
+                <Field label="Name" placeholder="Parent name" value={sp.parentName} onChange={(t) => setShiftPoint(i, 'parentName', t)} />
+                <Field label="Relationship" placeholder="e.g. Mother, Father" value={sp.relationship} onChange={(t) => setShiftPoint(i, 'relationship', t)} />
+                <Field label="Phone" placeholder="Parent phone" value={sp.parentPhone} onChange={(t) => setShiftPoint(i, 'parentPhone', t)} type="phone-pad" />
+                <Field label="Email" placeholder="Parent email" value={sp.parentEmail} onChange={(t) => setShiftPoint(i, 'parentEmail', t)} type="email-address" />
+                <Field label="Address" placeholder="Parent address" value={sp.parentAddress} onChange={(t) => setShiftPoint(i, 'parentAddress', t)} />
+              </View>
+            ))}
+          </View>
 
-            <Text style={s.label}>Cautions</Text>
-            <TextInput style={[s.input, s.textArea]} placeholder="Enter cautions" multiline numberOfLines={3} value={formData.medications[0].cautions} onChangeText={(t) => handleMedChange('cautions', t)} />
+          {/* Medications */}
+          <View style={s.card}>
+            <View style={s.rowBetween}>
+              <Text style={s.cardTitle}>Medications Information</Text>
+              <Pressable style={s.addInlineBtn} onPress={addMedication}>
+                <Feather name="plus" size={16} color="#2D5F3F" />
+                <Text style={s.addInlineText}>Add</Text>
+              </Pressable>
+            </View>
+            {form.medications.map((m, i) => (
+              <View key={i} style={s.subCard}>
+                <View style={s.rowBetween}>
+                  <Text style={s.subCardTitle}>Medication #{i + 1}</Text>
+                  {form.medications.length > 1 && (
+                    <Pressable onPress={() => removeMedication(i)}><Feather name="trash-2" size={16} color="#EF4444" /></Pressable>
+                  )}
+                </View>
+                <Field label="Name of Medication" placeholder="Enter medication name" value={m.medicationName} onChange={(t) => setMedication(i, 'medicationName', t)} />
+                <Field label="Dosage" placeholder="Enter dosage" value={m.dosage} onChange={(t) => setMedication(i, 'dosage', t)} />
+                <Field label="Timing" placeholder="e.g. Morning, After meal" value={m.timing} onChange={(t) => setMedication(i, 'timing', t)} />
+                <Text style={s.label}>Description</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter medication description" placeholderTextColor="#9CA3AF" multiline value={m.medicineDescription} onChangeText={(t) => setMedication(i, 'medicineDescription', t)} />
+                <Text style={s.label}>Reasons of Medication</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter reasons" placeholderTextColor="#9CA3AF" multiline value={m.reasonOfMedication} onChangeText={(t) => setMedication(i, 'reasonOfMedication', t)} />
+                <Text style={s.label}>Cautions</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter cautions" placeholderTextColor="#9CA3AF" multiline value={m.cautions} onChangeText={(t) => setMedication(i, 'cautions', t)} />
+              </View>
+            ))}
+          </View>
+
+          {/* Pharmacy */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Pharmacy Information</Text>
+            <Field label="Pharmacy Name" placeholder="Enter pharmacy name" value={form.pharmacy.pharmacyName} onChange={(t) => setPharmacy('pharmacyName', t)} />
+            <Field label="Pharmacy Email" placeholder="Enter pharmacy email" value={form.pharmacy.pharmacyEmail} onChange={(t) => setPharmacy('pharmacyEmail', t)} type="email-address" />
+            <Field label="Pharmacy Phone" placeholder="Enter pharmacy phone" value={form.pharmacy.pharmacyPhone} onChange={(t) => setPharmacy('pharmacyPhone', t)} type="phone-pad" />
+            <Text style={s.label}>Pharmacy Address</Text>
+            <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter pharmacy address" placeholderTextColor="#9CA3AF" multiline value={form.pharmacy.pharmacyAddress} onChangeText={(t) => setPharmacy('pharmacyAddress', t)} />
           </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Footer Submit */}
       <View style={s.footer}>
         <Pressable style={s.submitBtn} onPress={handleSubmit} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.submitBtnText}>Submit</Text>}
@@ -217,28 +293,51 @@ export default function AddClientScreen() {
           <Text style={s.cancelBtnText}>Cancel</Text>
         </Pressable>
       </View>
+
+      {/* Picker bottom sheet */}
+      <Modal visible={!!picker} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+        <Pressable style={s.modalOverlay} onPress={() => setPicker(null)}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>{picker?.title}</Text>
+              <Pressable onPress={() => setPicker(null)}><Feather name="x" size={20} color="#666" /></Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {(picker?.options || []).length === 0 && <Text style={s.emptyOpt}>No options available</Text>}
+              {(picker?.options || []).map((opt) => (
+                <Pressable key={opt} style={s.modalItem} onPress={() => { picker.onSelect(opt); setPicker(null); }}>
+                  <Text style={s.modalItemText}>{opt}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function FormField({ label, placeholder, value, onChange, secure, type = "default" }) {
+function Field({ label, placeholder, value, onChange, secure, type = 'default' }) {
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={s.label}>{label}</Text>
-      <TextInput
-        style={s.input}
-        placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
-        value={value}
-        onChangeText={onChange}
-        secureTextEntry={secure}
-        keyboardType={type}
-      />
+      <TextInput style={s.input} placeholder={placeholder} placeholderTextColor="#9CA3AF" value={value} onChangeText={onChange} secureTextEntry={secure} keyboardType={type} autoCapitalize={type === 'email-address' ? 'none' : 'sentences'} />
     </View>
   );
 }
 
-/* ------------ STYLES ------------ */
+function PickerField({ label, value, onPress }) {
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={s.label}>{label}</Text>
+      <Pressable style={s.pickerOutline} onPress={onPress}>
+        <Text style={s.pickerText}>{value}</Text>
+        <Feather name="chevron-down" size={18} color="#2D5F3F" />
+      </Pressable>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9F7F4' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#F9F7F4', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', zIndex: 10 },
@@ -246,10 +345,17 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
 
   scrollArea: { flex: 1 },
-  scrollContent: { padding: 16, gap: 16, paddingBottom: 120 },
+  scrollContent: { padding: 16, gap: 16, paddingBottom: 140 },
 
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F3F4F6' },
   cardTitle: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 16 },
+  subCard: { backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#EEF0F2', marginBottom: 12 },
+  subCardTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 8 },
+  parentHeading: { fontSize: 13, fontWeight: '700', color: '#2D5F3F', marginTop: 4, marginBottom: 10 },
+
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12 },
+  addInlineBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#2D5F3F', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  addInlineText: { color: '#2D5F3F', fontSize: 13, fontWeight: '700' },
 
   avatarWrapper: { alignItems: 'center', marginVertical: 8 },
   avatarCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', marginBottom: 16, overflow: 'hidden' },
@@ -261,16 +367,25 @@ const s = StyleSheet.create({
   btnSecondaryText: { color: '#2D5F3F', fontSize: 13, fontWeight: '600' },
 
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 8 },
+  hint: { fontSize: 12, color: '#9CA3AF', marginBottom: 8 },
   input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, color: '#333' },
-  textArea: { height: 100, textAlignVertical: 'top' },
+  textArea: { height: 100, textAlignVertical: 'top', marginBottom: 16 },
+  textAreaSm: { height: 70, textAlignVertical: 'top', marginBottom: 16 },
 
-  pickerOutline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16 },
+  pickerOutline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 14 },
   pickerText: { fontSize: 14, color: '#333' },
-  pickerToggle: { padding: 4 },
 
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', elevation: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: -4 } },
   submitBtn: { backgroundColor: '#2D5F3F', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { paddingVertical: 8, alignItems: 'center' },
   cancelBtnText: { color: '#666', fontSize: 14, fontWeight: '600' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', backgroundColor: '#F9F7F4' },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
+  modalItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  modalItemText: { fontSize: 15, color: '#333', fontWeight: '500' },
+  emptyOpt: { padding: 20, textAlign: 'center', color: '#9CA3AF' },
 });
