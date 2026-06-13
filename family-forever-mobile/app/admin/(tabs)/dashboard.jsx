@@ -19,13 +19,22 @@ import {
     onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../../src/firebase/config";
+import { parseDate } from "../../../src/utils/date";
 
-// Resolve any Firestore Timestamp / string / Date into a JS Date (or null)
-const toJsDate = (v) => {
-    if (!v) return null;
-    if (typeof v?.toDate === "function") return v.toDate();
-    const d = new Date(v);
-    return isNaN(d) ? null : d;
+// Resolve any Firestore Timestamp / "04 Jan 2025" string / ISO / Date → JS Date
+const toJsDate = (v) => parseDate(v);
+
+// Shift date — prefer the reliable epoch (timeStampId), then the string fields.
+// startDate is stored as "14 Jun 2026", which native new Date() can't parse.
+const getShiftDate = (s) => {
+    if (typeof s?.timeStampId === "number") return new Date(s.timeStampId);
+    const fromStart = parseDate(s?.startDate);
+    if (fromStart) return fromStart;
+    if (typeof s?.dateKey === "string") {
+        const m = s.dateKey.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/); // DD-MM-YYYY
+        if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+    }
+    return null;
 };
 
 // Compute the [start, end] window for a period selection
@@ -98,7 +107,7 @@ export default function DashboardScreen() {
         let shiftsCompleted = 0;
         let transportCompleted = 0;
         shifts.forEach((s) => {
-            const d = toJsDate(s.startDate);
+            const d = getShiftDate(s);
             if (!inRange(d)) return;
             const isCompleted = !!(s.clockIn && s.clockOut) || !!s.transportationCompleted;
             if (isCompleted && !s.isCancelled) shiftsCompleted++;
@@ -158,7 +167,7 @@ export default function DashboardScreen() {
 
         // 2. Date filter — single day, or inclusive range when rangeEnd is set
         let dateMatch = false;
-        const shiftDate = toJsDate(s.startDate);
+        const shiftDate = getShiftDate(s);
         if (shiftDate) {
             const sd = new Date(shiftDate); sd.setHours(0, 0, 0, 0);
             const start = new Date(rangeStart); start.setHours(0, 0, 0, 0);
@@ -189,9 +198,8 @@ export default function DashboardScreen() {
     };
 
     const formatDate = (dateVal) => {
-        if (!dateVal) return "";
-        const d = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
-        if (isNaN(d)) return "";
+        const d = parseDate(dateVal);
+        if (!d) return "";
         return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
     };
 
@@ -319,20 +327,18 @@ export default function DashboardScreen() {
                     ))}
                 </ScrollView>
 
-                {/* ========== FILTER SECTION — calendar (single day or range) ========== */}
+                {/* ========== FILTER SECTION — date label + calendar icon at right ========== */}
                 <View style={s.filterRow}>
-                    <Pressable style={s.dateRangeBtn} onPress={() => setIsCalendarOpen(true)}>
-                        <Ionicons name="calendar-outline" size={18} color="#2D5F3F" />
-                        <Text style={s.dateRangeText}>{rangeLabel}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}>
+                        <Text style={s.filterDateLabel} numberOfLines={1}>{rangeLabel}</Text>
                         {rangeEnd && (
-                            <Pressable
-                                hitSlop={8}
-                                onPress={(e) => { e.stopPropagation?.(); setRangeEnd(null); }}
-                                style={s.clearRangeBtn}
-                            >
+                            <Pressable hitSlop={8} onPress={() => setRangeEnd(null)} style={s.clearRangeBtn}>
                                 <Ionicons name="close" size={14} color="#9CA3AF" />
                             </Pressable>
                         )}
+                    </View>
+                    <Pressable style={s.calendarBtn} onPress={() => setIsCalendarOpen(true)}>
+                        <Ionicons name="calendar-outline" size={20} color="#2D5F3F" />
                     </Pressable>
                 </View>
 
@@ -1059,6 +1065,7 @@ const s = StyleSheet.create({
         elevation: 1,
     },
     dateRangeText: { fontSize: 14, fontWeight: "600", color: "#333", flex: 1 },
+    filterDateLabel: { fontSize: 14, fontWeight: "700", color: "#333" },
     clearRangeBtn: {
         width: 22,
         height: 22,
