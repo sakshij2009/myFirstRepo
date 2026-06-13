@@ -7,6 +7,7 @@ export default function AdminLayout() {
             <Stack.Screen name="(tabs)" />
 
             {/* Push screens (no tab bar visible) */}
+            <Stack.Screen name="shift-detail" />
             <Stack.Screen name="add-client" />
             <Stack.Screen name="edit-client" />
             <Stack.Screen name="agencies" />

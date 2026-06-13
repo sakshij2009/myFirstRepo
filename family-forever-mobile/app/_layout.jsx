@@ -83,9 +83,8 @@ export default function Layout() {
   );
 
   // Admin/owner section has its own navigator + tab bar — hide the staff
-  // tab bar whenever we're inside an /admin route, or on the full-screen
-  // shift-detail (which admins reach via "View Report").
-  const isAdminRoute = pathname?.startsWith("/admin") || pathname === "/shift-detail";
+  // tab bar whenever we're inside an /admin route.
+  const isAdminRoute = pathname?.startsWith("/admin");
 
   return (
     <Tabs

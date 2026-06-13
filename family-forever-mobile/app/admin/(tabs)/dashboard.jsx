@@ -9,6 +9,7 @@ import {
     Modal,
     StyleSheet,
     Dimensions,
+    Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +21,19 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../src/firebase/config";
 import { parseDate } from "../../../src/utils/date";
+import { generateShiftReportPdf } from "../../../src/utils/shiftReportPdf";
+
+// Live status from Firebase fields: completion phase (clockIn/clockOut)
+// combined with confirmation (shiftConfirmed)
+const deriveStatus = (shift) => {
+    if (shift?.isCancelled) return { text: "Cancelled", bg: "#FEE2E2", color: "#DC2626" };
+    const confirmed = shift?.shiftConfirmed === true;
+    let phase, bg, color;
+    if (shift?.clockIn && shift?.clockOut) { phase = "Completed"; bg = "#ECFDF5"; color = "#059669"; }
+    else if (shift?.clockIn) { phase = "In Progress"; bg = "#DBEAFE"; color = "#2563EB"; }
+    else { phase = "Upcoming"; bg = "#FEF3C7"; color = "#D97706"; }
+    return { text: `${phase} • ${confirmed ? "Confirmed" : "Unconfirmed"}`, bg, color };
+};
 
 // Resolve any Firestore Timestamp / "04 Jan 2025" string / ISO / Date → JS Date
 const toJsDate = (v) => parseDate(v);
@@ -478,6 +492,26 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
         return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
     };
 
+    const status = deriveStatus(shift);
+
+    const handleDownload = async () => {
+        try {
+            const d = getShiftDate(shift);
+            const dateLabel = d ? d.toLocaleDateString("en-CA", { day: "2-digit", month: "short", year: "numeric" }) : "";
+            await generateShiftReportPdf({
+                dateLabel,
+                staffName,
+                staffId,
+                clientName,
+                startTime: shift.startTime,
+                endTime: shift.endTime,
+                reportText: shift.shiftReport,
+            });
+        } catch (e) {
+            Alert.alert("Download failed", e?.message || "Could not generate the PDF.");
+        }
+    };
+
     return (
         <View style={s.shiftCard}>
             {/* Client → Staff Assignment */}
@@ -500,7 +534,7 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
                         <Text style={s.avatarText}>{getInitials(staffName)}</Text>
                     </View>
                     <Text style={s.personName} numberOfLines={1}>{staffName}</Text>
-                    <Text style={s.personSub}>CYIM: {staffId}</Text>
+                    <Text style={s.personSub}>Staff ID: {staffId}</Text>
                 </View>
             </View>
 
@@ -528,36 +562,8 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
                 <View style={s.divider} />
                 <View style={s.detailRow}>
                     <Text style={s.detailLabel}>STATUS</Text>
-                    <View
-                        style={[
-                            s.statusBadge,
-                            {
-                                backgroundColor: shift.isCancelled
-                                    ? "#FEE2E2"
-                                    : shift.clockIn && shift.clockOut
-                                        ? "#ECFDF5"
-                                        : "#FEF3C7",
-                            },
-                        ]}
-                    >
-                        <Text
-                            style={[
-                                s.statusText,
-                                {
-                                    color: shift.isCancelled
-                                        ? "#DC2626"
-                                        : shift.clockIn && shift.clockOut
-                                            ? "#059669"
-                                            : "#D97706",
-                                },
-                            ]}
-                        >
-                            {shift.isCancelled
-                                ? "Cancelled"
-                                : shift.clockIn && shift.clockOut
-                                    ? "Active • Confirmed"
-                                    : "Upcoming"}
-                        </Text>
+                    <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
+                        <Text style={[s.statusText, { color: status.color }]}>{status.text}</Text>
                     </View>
                 </View>
             </View>
@@ -580,11 +586,11 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
             <View style={s.actionButtons}>
                 <Pressable
                     style={s.viewReportBtn}
-                    onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
+                    onPress={() => router.push({ pathname: "/admin/shift-detail", params: { shiftId: shift.id } })}
                 >
                     <Text style={s.viewReportText}>View Report</Text>
                 </Pressable>
-                <Pressable style={s.downloadBtn}>
+                <Pressable style={s.downloadBtn} onPress={handleDownload}>
                     <Ionicons name="download-outline" size={20} color="#2F6B4F" />
                 </Pressable>
             </View>

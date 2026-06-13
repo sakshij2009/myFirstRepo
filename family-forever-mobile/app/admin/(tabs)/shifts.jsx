@@ -1,11 +1,13 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Dimensions, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Dimensions, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Switch } from 'react-native';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../src/firebase/config';
+import { parseDate } from '../../../src/utils/date';
+import { generateShiftReportPdf } from '../../../src/utils/shiftReportPdf';
 
 const { width, height } = Dimensions.get('window');
 
@@ -69,7 +71,9 @@ export default function ShiftsScreen({ isDarkMode = false }) {
 
         let clientName = data.clientName || data.clientDetails?.name || "Unknown Client";
         let staffName = data.name || data.staffName || data.user || "Staff Node";
-        let dateObj = data.startDate?.toDate ? data.startDate.toDate() : new Date();
+        // Reliable date: epoch timeStampId first, then parseDate of "DD Mon YYYY" string
+        let dateObj = typeof data.timeStampId === "number" ? new Date(data.timeStampId) : parseDate(data.startDate);
+        if (!dateObj || isNaN(dateObj)) dateObj = new Date();
         let formattedDate = dateObj.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
         let category = data.shiftType || 'Regular Shift';
 
@@ -79,7 +83,7 @@ export default function ShiftsScreen({ isDarkMode = false }) {
           clientId: data.clientId || data.clientDetails?.id || "N/A",
           clientAvatar: clientName.substring(0, 2).toUpperCase(),
           staffName: staffName,
-          staffId: "N/A",
+          staffId: data.userId || data.primaryUserId || data.staffId || "N/A",
           staffAvatar: staffName.substring(0, 2).toUpperCase(),
           category: category,
           categoryId: category,
@@ -88,8 +92,12 @@ export default function ShiftsScreen({ isDarkMode = false }) {
           date: formattedDate,
           time: `${data.startTime || '00:00'} - ${data.endTime || '00:00'}`,
           status: getShiftStatus(data.clockIn, data.clockOut),
-          confirmed: !!data.clockIn,
+          confirmed: data.shiftConfirmed === true,
           locked: false,
+          // Raw fields for the PDF download
+          startTime: data.startTime || '',
+          endTime: data.endTime || '',
+          shiftReport: data.shiftReport || '',
           dayNum: dateObj.getDate().toString(),
           monthNum: dateObj.getMonth(),
           yearNum: dateObj.getFullYear()
@@ -547,11 +555,28 @@ function MinimalShiftCard({ shift, router }) {
       <View style={[s.row, { marginTop: 16, gap: 12 }]}>
         <Pressable
           style={s.viewReportBtn}
-          onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
+          onPress={() => router.push({ pathname: "/admin/shift-detail", params: { shiftId: shift.id } })}
         >
           <Text style={s.viewReportText}>View Report</Text>
         </Pressable>
-        <Pressable style={s.iconSquareBtn}><Feather name="download" size={20} color="#666" /></Pressable>
+        <Pressable
+          style={s.iconSquareBtn}
+          onPress={async () => {
+            try {
+              await generateShiftReportPdf({
+                dateLabel: shift.date,
+                staffName: shift.staffName,
+                staffId: shift.staffId,
+                clientName: shift.clientName,
+                startTime: shift.startTime,
+                endTime: shift.endTime,
+                reportText: shift.shiftReport,
+              });
+            } catch (e) {
+              Alert.alert("Download failed", e?.message || "Could not generate the PDF.");
+            }
+          }}
+        ><Feather name="download" size={20} color="#666" /></Pressable>
         <Pressable
           style={s.iconSquareBtn}
           onPress={() => router.push(`/admin/edit-shift?id=${shift.id}`)}
