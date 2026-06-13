@@ -49,12 +49,14 @@ export default function AdminTabsLayout() {
                     ),
                 }}
             />
+            {/* Finance hidden for now (code kept, just not shown in the tab bar) */}
+            <Tabs.Screen name="finance" options={{ href: null }} />
             <Tabs.Screen
-                name="finance"
+                name="intake-forms"
                 options={{
-                    title: "Finance",
+                    title: "Intake Forms",
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="cash" size={22} color={color} />
+                        <Ionicons name="document-text" size={22} color={color} />
                     ),
                 }}
             />
