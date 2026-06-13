@@ -58,9 +58,10 @@ export default function DashboardScreen() {
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [selectedPeriod, setSelectedPeriod] = useState("Weekly");
     const [showTopPeriodPicker, setShowTopPeriodPicker] = useState(false);
-    const [showBottomPeriodPicker, setShowBottomPeriodPicker] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    // Shift-list date filter: single day when rangeEnd is null, else an inclusive range
+    const [rangeStart, setRangeStart] = useState(new Date());
+    const [rangeEnd, setRangeEnd] = useState(null);
     // Raw live collections
     const [shifts, setShifts] = useState([]);
     const [clients, setClients] = useState([]);
@@ -155,17 +156,27 @@ export default function DashboardScreen() {
             else categoryMatch = true;
         }
 
-        // 2. Date filter
+        // 2. Date filter — single day, or inclusive range when rangeEnd is set
         let dateMatch = false;
-        if (s.startDate) {
-            const shiftDate = s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate);
-            if (!isNaN(shiftDate)) {
-                dateMatch = isSameDay(shiftDate, selectedDate);
+        const shiftDate = toJsDate(s.startDate);
+        if (shiftDate) {
+            const sd = new Date(shiftDate); sd.setHours(0, 0, 0, 0);
+            const start = new Date(rangeStart); start.setHours(0, 0, 0, 0);
+            if (rangeEnd) {
+                const end = new Date(rangeEnd); end.setHours(0, 0, 0, 0);
+                dateMatch = sd >= start && sd <= end;
+            } else {
+                dateMatch = sd.getTime() === start.getTime();
             }
         }
 
         return categoryMatch && dateMatch;
     });
+
+    // Label for the calendar button (single date or range)
+    const rangeLabel = rangeEnd
+        ? `${rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${rangeEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+        : rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
     const getCategoryColor = (category) => {
         const cat = (category || "").toLowerCase();
@@ -308,48 +319,20 @@ export default function DashboardScreen() {
                     ))}
                 </ScrollView>
 
-                {/* ========== FILTER SECTION ========== */}
-                <View style={[s.filterRow, { zIndex: 10 }]}>
-                    <View style={{ position: "relative", zIndex: 10 }}>
-                        <Pressable
-                            style={s.filterPeriodBtn}
-                            onPress={() => setShowBottomPeriodPicker(!showBottomPeriodPicker)}
-                        >
-                            <Text style={s.filterPeriodText}>{selectedPeriod}</Text>
-                            <Ionicons name="chevron-down" size={16} color="#2D5F3F" />
-                        </Pressable>
-
-                        {/* Period Dropdown for bottom */}
-                        {showBottomPeriodPicker && (
-                            <View style={[s.periodDropdown, { left: 0 }]}>
-                                {periodOptions.map((option) => (
-                                    <Pressable
-                                        key={option}
-                                        style={[
-                                            s.periodOption,
-                                            selectedPeriod === option && s.periodOptionActive,
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedPeriod(option);
-                                            setShowBottomPeriodPicker(false);
-                                        }}
-                                    >
-                                        <Text
-                                            style={[
-                                                s.periodOptionText,
-                                                selectedPeriod === option && { color: "#fff" },
-                                            ]}
-                                        >
-                                            {option}
-                                        </Text>
-                                    </Pressable>
-                                ))}
-                            </View>
+                {/* ========== FILTER SECTION — calendar (single day or range) ========== */}
+                <View style={s.filterRow}>
+                    <Pressable style={s.dateRangeBtn} onPress={() => setIsCalendarOpen(true)}>
+                        <Ionicons name="calendar-outline" size={18} color="#2D5F3F" />
+                        <Text style={s.dateRangeText}>{rangeLabel}</Text>
+                        {rangeEnd && (
+                            <Pressable
+                                hitSlop={8}
+                                onPress={(e) => { e.stopPropagation?.(); setRangeEnd(null); }}
+                                style={s.clearRangeBtn}
+                            >
+                                <Ionicons name="close" size={14} color="#9CA3AF" />
+                            </Pressable>
                         )}
-                    </View>
-
-                    <Pressable style={s.calendarBtn} onPress={() => setIsCalendarOpen(true)}>
-                        <Ionicons name="calendar-outline" size={20} color="#666" />
                     </Pressable>
                 </View>
 
@@ -403,13 +386,15 @@ export default function DashboardScreen() {
                 <View style={{ height: 40 }} />
             </ScrollView>
 
-            {/* Custom Calendar Modal — picks the day for the shift list below */}
+            {/* Shift-list calendar — pick a single day or tap two dates for a range */}
             <CalendarModal
                 isOpen={isCalendarOpen}
                 onClose={() => setIsCalendarOpen(false)}
-                selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
-                title="Select Date"
+                rangeMode
+                rangeStart={rangeStart}
+                rangeEnd={rangeEnd}
+                onSelectRange={(start, end) => { setRangeStart(start); setRangeEnd(end); }}
+                title="Select Date or Range"
             />
 
             {/* Custom range From/To picker (for the KPI period) */}
@@ -601,9 +586,14 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
     );
 }
 
-/* ========== CALENDAR MODAL ========== */
-function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "Select Date" }) {
-    const [currentMonth, setCurrentMonth] = useState(selectedDate || new Date());
+/* ========== CALENDAR MODAL (single date OR range) ========== */
+function CalendarModal({
+    isOpen, onClose, selectedDate, onSelectDate, title = "Select Date",
+    rangeMode = false, rangeStart, rangeEnd, onSelectRange,
+}) {
+    const [currentMonth, setCurrentMonth] = useState(
+        (rangeMode ? rangeStart : selectedDate) || new Date()
+    );
 
     if (!isOpen) return null;
 
@@ -625,18 +615,41 @@ function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "S
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
     };
 
+    const dayToDate = (day) => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    const sameDay = (a, b) =>
+        a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
     const handleDateClick = (day) => {
-        const newDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-        onSelectDate(newDate);
+        const newDate = dayToDate(day);
+        if (rangeMode) {
+            // First tap (or restart) → set start, clear end.
+            // Second tap → if after start, set end; if before/equal, restart at that day.
+            if (!rangeStart || rangeEnd) {
+                onSelectRange(newDate, null);
+            } else if (newDate > rangeStart) {
+                onSelectRange(rangeStart, newDate);
+            } else {
+                onSelectRange(newDate, null);
+            }
+        } else {
+            onSelectDate(newDate);
+        }
     };
 
     const isSelectedDate = (day) => {
-        if (!selectedDate) return false;
-        return (
-            selectedDate.getDate() === day &&
-            selectedDate.getMonth() === currentMonth.getMonth() &&
-            selectedDate.getFullYear() === currentMonth.getFullYear()
-        );
+        const d = dayToDate(day);
+        if (rangeMode) return sameDay(d, rangeStart) || sameDay(d, rangeEnd);
+        return sameDay(d, selectedDate);
+    };
+
+    // Day strictly between range endpoints (for the connecting highlight)
+    const isInRange = (day) => {
+        if (!rangeMode || !rangeStart || !rangeEnd) return false;
+        const d = dayToDate(day);
+        const a = new Date(rangeStart); a.setHours(0, 0, 0, 0);
+        const b = new Date(rangeEnd); b.setHours(0, 0, 0, 0);
+        d.setHours(0, 0, 0, 0);
+        return d > a && d < b;
     };
 
     const isToday = (day) => {
@@ -661,6 +674,7 @@ function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "S
         for (let day = 1; day <= daysInMonth; day++) {
             const isSelected = isSelectedDate(day);
             const isTodayDate = isToday(day);
+            const inRange = isInRange(day);
 
             let btnStyle = [s.calDayBtn]; // No longer applying s.calCell (which has flex: 1)
             let textStyle = [s.calDayText];
@@ -668,6 +682,9 @@ function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "S
             if (isSelected) {
                 btnStyle.push(s.calDaySelected);
                 textStyle.push(s.calDayTextSelected);
+            } else if (inRange) {
+                btnStyle.push(s.calDayInRange);
+                textStyle.push(s.calDayTextToday);
             } else if (isTodayDate) {
                 btnStyle.push(s.calDayToday);
                 textStyle.push(s.calDayTextToday);
@@ -739,6 +756,14 @@ function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "S
 
                         {/* Calendar Grid */}
                         <View style={s.calGrid}>{renderCalendarDays()}</View>
+
+                        {rangeMode && (
+                            <Text style={s.calHint}>
+                                {rangeStart && !rangeEnd
+                                    ? "Now tap an end date for a range (or Done for a single day)"
+                                    : "Tap a date, then tap another to select a range"}
+                            </Text>
+                        )}
                     </View>
 
                     {/* Footer */}
@@ -749,7 +774,7 @@ function CalendarModal({ isOpen, onClose, selectedDate, onSelectDate, title = "S
                         <Pressable
                             style={s.calDoneBtn}
                             onPress={() => {
-                                if (selectedDate) onClose();
+                                if (rangeMode ? rangeStart : selectedDate) onClose();
                             }}
                         >
                             <Text style={s.calDoneText}>Done</Text>
@@ -1017,6 +1042,31 @@ const s = StyleSheet.create({
         shadowRadius: 4,
         elevation: 1,
     },
+    dateRangeBtn: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        backgroundColor: "#fff",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        shadowColor: "#000",
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    dateRangeText: { fontSize: 14, fontWeight: "600", color: "#333", flex: 1 },
+    clearRangeBtn: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: "#f3f4f6",
+        justifyContent: "center",
+        alignItems: "center",
+    },
 
     // Categories
     catRow: {
@@ -1250,6 +1300,8 @@ const s = StyleSheet.create({
         elevation: 2,
     },
     calDayTextSelected: { color: "#fff" },
+    calDayInRange: { backgroundColor: "rgba(45, 95, 63, 0.12)" },
+    calHint: { fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 12, fontWeight: "500" },
     calFooter: {
         flexDirection: "row",
         paddingHorizontal: 20,
