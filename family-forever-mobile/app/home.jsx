@@ -37,7 +37,7 @@ import {
   formatEdmontonISO,
   parseDate
 } from "../src/utils/date";
-import { router } from "expo-router";
+import { router, Redirect } from "expo-router";
 import * as Location from "expo-location";
 
 const PRIMARY_GREEN = "#1F6F43";
@@ -231,6 +231,9 @@ function RoutePreview({ shift }) {
 
 export default function Home() {
   const [user, setUser] = useState(null);
+  // Auth/role gate — admins must never sit on the staff home. Start as "unknown"
+  // so we render nothing until we know the role (prevents a staff-page flash).
+  const [roleState, setRoleState] = useState("unknown"); // "unknown" | "admin" | "staff"
   const [shifts, setShifts] = useState([]);
   const [confirmAction, setConfirmAction] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -245,8 +248,11 @@ export default function Home() {
   useEffect(() => {
     const loadUser = async () => {
       const stored = await AsyncStorage.getItem("user");
-      if (!stored) return;
+      if (!stored) { setRoleState("staff"); return; }
       const parsed = JSON.parse(stored);
+      const r = parsed?.role?.toLowerCase();
+      if (r === "admin" || r === "owner") { setRoleState("admin"); return; }
+      setRoleState("staff");
       setUser(parsed);
       if (parsed?.userId) registerForPushNotifications(parsed.username);
     };
@@ -603,6 +609,10 @@ export default function Home() {
     statPeriod === "month" ? `This Month (${currentMonthLabel})` :
     statPeriod === "year"  ? `This Year (${currentYear})` :
     `${customFrom.toLocaleDateString("en-US",{month:"short",day:"numeric"})} – ${customTo.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`;
+
+  // Role gate: admins/owners belong in the admin app, never on the staff home.
+  if (roleState === "admin") return <Redirect href="/admin/dashboard" />;
+  if (roleState === "unknown") return null; // wait until role known — avoids staff-page flash
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F8F8F6" }}>
