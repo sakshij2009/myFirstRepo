@@ -82,13 +82,17 @@ export default function Layout() {
     </View>
   );
 
+  // Admin/owner section has its own navigator + tab bar — hide the staff
+  // tab bar entirely whenever we're inside an /admin route.
+  const isAdminRoute = pathname?.startsWith("/admin");
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: PRIMARY_GREEN,
         tabBarInactiveTintColor: GRAY_TEXT,
-        tabBarStyle: {
+        tabBarStyle: isAdminRoute ? { display: "none" } : {
           backgroundColor: "#FFFFFF",
           borderTopWidth: 0,
           height: 85,
@@ -148,6 +152,7 @@ export default function Layout() {
       />
 
       {/* Explicitly hide all auto-generated non-tab screens */}
+      <Tabs.Screen name="admin" options={{ href: null }} />
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="login" options={{ href: null }} />
       <Tabs.Screen name="_ActionCard" options={{ href: null }} />
