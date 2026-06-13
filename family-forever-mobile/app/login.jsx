@@ -123,14 +123,13 @@ export default function Login() {
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
-        const userData = snapshot.docs[0].data();
-        if (rememberMe) {
-          await AsyncStorage.setItem("user", JSON.stringify(userData));
-        } else {
-          await AsyncStorage.setItem("user", JSON.stringify(userData));
-        }
+        const userDoc = snapshot.docs[0];
+        const userData = { ...userDoc.data(), userId: userDoc.data().userId || userDoc.id, firestoreId: userDoc.id };
+        await AsyncStorage.setItem("user", JSON.stringify(userData));
         setSuccess(true);
-        setTimeout(() => router.replace("/home"), 800);
+        // Route based on role — admins/owners go to the admin dashboard
+        const isAdmin = userData.role?.toLowerCase() === "admin" || userData.role?.toLowerCase() === "owner";
+        setTimeout(() => router.replace(isAdmin ? "/admin/dashboard" : "/home"), 800);
       } else {
         setError("Invalid email or password");
       }

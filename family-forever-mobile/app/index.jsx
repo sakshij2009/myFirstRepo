@@ -12,8 +12,14 @@ export default function Index() {
         const storedUser = await AsyncStorage.getItem("user");
 
         if (storedUser) {
-          // ✅ User already logged in
-          router.replace("/home");
+          // ✅ User already logged in — route by role
+          let isAdmin = false;
+          try {
+            const u = JSON.parse(storedUser);
+            const r = u?.role?.toLowerCase();
+            isAdmin = r === "admin" || r === "owner";
+          } catch { /* fall back to staff home */ }
+          router.replace(isAdmin ? "/admin/dashboard" : "/home");
         } else {
           // ❌ No user found
           router.replace("/login");
