@@ -8,8 +8,8 @@ import { db } from '../../../../src/firebase/config';
 // import * as Print from 'expo-print';
 // import * as Sharing from 'expo-sharing';
 
-import MedicationTab from '../../../MedicationTab';
-import ReportTransportationTab from '../../../ReportTransportationTab';
+import MedicationTab from '../../../_MedicationTab';
+import ReportTransportationTab from '../../../_ReportTransportationTab';
 
 export default function ReportWritingScreen() {
   const router = useRouter();
