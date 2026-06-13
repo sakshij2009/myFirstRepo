@@ -34,6 +34,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Location from "expo-location";
 import { safeString, toDate, formatCanadaTime, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 import IntakeView from "./_IntakeView";
+import { generateShiftReportPdf } from "../src/utils/shiftReportPdf";
 
 import CriticalIncidentModel from "../src/components/CriticalIncidentModel";
 import MedicalContactLogModal from "../src/components/MedicalContactLogModal";
@@ -915,6 +916,28 @@ export default function ShiftDetails() {
     setSavingReport(false);
   };
 
+  // ── Download the shift report as a watermarked PDF (same format as web) ──
+  const handleDownloadReport = async () => {
+    try {
+      const d = parseDate(shift?.startDate);
+      const dateLabel = d
+        ? d.toLocaleDateString("en-CA", { day: "2-digit", month: "short", year: "numeric" })
+        : safeString(shift?.startDate);
+      await generateShiftReportPdf({
+        dateLabel,
+        staffName: safeString(shift?.name || shift?.userName || staffName),
+        staffId: safeString(shift?.userId || shift?.primaryUserId),
+        clientName,
+        startTime: safeString(shift?.startTime),
+        endTime: safeString(shift?.endTime),
+        reportText: reportText || safeString(shift?.shiftReport),
+      });
+    } catch (e) {
+      console.error("PDF download failed:", e);
+      Alert.alert("Download failed", e?.message || "Could not generate the PDF.");
+    }
+  };
+
   // ── Shift lock handler ────────────────────────────────────────────────────
 
   // ── Shift lock handler ────────────────────────────────────────────────────
@@ -1328,6 +1351,14 @@ export default function ShiftDetails() {
                 </View>
               )}
             </View>
+          )}
+
+          {/* Download the report as a watermarked PDF (admins + staff) */}
+          {shiftStatus !== "assigned" && shiftStatus !== "upcoming" && (
+            <Pressable onPress={handleDownloadReport} style={styles.downloadReportBtn}>
+              <Ionicons name="download-outline" size={16} color={PRIMARY_GREEN} />
+              <Text style={styles.downloadReportText}>Download Report (PDF)</Text>
+            </Pressable>
           )}
         </View>
 
@@ -1899,6 +1930,19 @@ const styles = StyleSheet.create({
 
   reportInput: { backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#F3F4F6", padding: 12, fontSize: 14, color: DARK_TEXT, fontFamily: "Inter", height: 120, marginBottom: 12 },
   reportBtnRow: { flexDirection: "row", gap: 10 },
+  downloadReportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: PRIMARY_GREEN,
+    backgroundColor: "#F0FDF4",
+  },
+  downloadReportText: { color: PRIMARY_GREEN, fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
   reportBtn: { flex: 1, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   reportBtnText: { fontSize: 14, fontWeight: "700", fontFamily: "Inter-Bold" },
 

@@ -580,7 +580,7 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
             <View style={s.actionButtons}>
                 <Pressable
                     style={s.viewReportBtn}
-                    onPress={() => router.push(`/admin/shift-report/${shift.id}/report`)}
+                    onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
                 >
                     <Text style={s.viewReportText}>View Report</Text>
                 </Pressable>

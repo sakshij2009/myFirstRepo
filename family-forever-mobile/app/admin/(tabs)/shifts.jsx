@@ -547,7 +547,7 @@ function MinimalShiftCard({ shift, router }) {
       <View style={[s.row, { marginTop: 16, gap: 12 }]}>
         <Pressable
           style={s.viewReportBtn}
-          onPress={() => router.push(`/admin/shift-report/${shift.id}/report`)}
+          onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId: shift.id } })}
         >
           <Text style={s.viewReportText}>View Report</Text>
         </Pressable>
