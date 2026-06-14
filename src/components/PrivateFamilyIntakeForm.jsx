@@ -14,13 +14,14 @@ const GREEN = "#1f6f43";
 
 // ── Step definitions ───────────────────────────────────────────────────────
 const STEPS = [
-  { id: 1,  label: "Welcome & Privacy",            short: "Contact Info" },
-  { id: 2,  label: "Part A: Case Information",      short: "Children & Service" },
-  { id: 3,  label: "Part B/C: Confidential Profile", short: "Profile" },
-  { id: 4,  label: "Part D: Payment Model",         short: "Payment" },
-  { id: 5,  label: "Reports & Documentation",       short: "Reports" },
-  { id: 6,  label: "Protocols & Confidentiality",   short: "Protocols" },
-  { id: 7,  label: "Sign & Complete",               short: "Review & Submit" },
+  { id: 1,  label: "Contact Info",          short: "Contact Info" },
+  { id: 2,  label: "Children & Service",    short: "Children & Service" },
+  { id: 3,  label: "Court & Welfare",       short: "Court & Welfare" },
+  { id: 4,  label: "Needs & Safety",        short: "Needs & Safety" },
+  { id: 5,  label: "Contacts & Info",       short: "Contacts & Info" },
+  { id: 6,  label: "Payment",               short: "Payment" },
+  { id: 7,  label: "Engagement Protocols",  short: "Protocols" },
+  { id: 8,  label: "Review & Submit",       short: "Review & Submit" },
 ];
 
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
@@ -251,6 +252,13 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     preferredTimes: "",
     preferredVisitDates: [],
 
+    // Needs & Safety
+    specialNeeds: "",
+    allergies: "",
+    currentMedications: "",
+    domesticViolence: "",
+    additionalInfo: "",
+
     // Part B/C: Party Confidential Profile (Dynamic) — Applicant Information
     fullName: "",
     address: "",
@@ -377,12 +385,14 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       if (!form.courtOrder) e.courtOrder = "Please answer the court order question";
       if (!form.childWelfareInvolvement) e.childWelfareInvolvement = "Please answer the child welfare question";
     }
-    if (step === 4) {
+    if (step === 6) {
       if (!form.paymentOption) e.paymentOption = "Please select a payment option";
     }
     if (step === 7) {
-      if (!form.signatureDataUrl) e.signature = "Signature is required";
       if (!form.protocolAcknowledged) e.protocol = "You must acknowledge the protocols";
+    }
+    if (step === 8) {
+      if (!form.signatureDataUrl) e.signature = "Signature is required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -475,6 +485,11 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         visitLocation: form.visitLocation,
         preferredTimes: form.preferredTimes,
         preferredVisitDates: form.preferredVisitDates,
+        specialNeeds: form.specialNeeds,
+        allergies: form.allergies,
+        currentMedications: form.currentMedications,
+        domesticViolence: form.domesticViolence,
+        additionalInfo: form.additionalInfo,
       };
 
       const payload = {
@@ -696,7 +711,45 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
       case 4: return (
         <div className="space-y-6">
-          <SectionCard num={4} title="Part D – Payment Model Section">
+          {/* 9. Special Needs & Accommodations */}
+          <SectionCard num={9} title="Special Needs & Accommodations">
+            <Textarea label="Child's Special Needs or Developmental Considerations" placeholder="Please describe any special needs, developmental delays, behavioral considerations, or support requirements..." value={form.specialNeeds} onChange={e => set("specialNeeds", e.target.value)} />
+            <Textarea label="Allergies (Food, Environmental, Medication)" placeholder="List any known allergies..." value={form.allergies} onChange={e => set("allergies", e.target.value)} />
+            <Textarea label="Current Medications" placeholder="List any medications the child is currently taking..." value={form.currentMedications} onChange={e => set("currentMedications", e.target.value)} />
+          </SectionCard>
+
+          {/* 10. Safety & Risk Assessment */}
+          <SectionCard num={10} title="Safety & Risk Assessment">
+            <Label>History of domestic violence or family violence?</Label>
+            <Radio options={["Yes", "No"]} value={form.domesticViolence} onChange={v => set("domesticViolence", v)} />
+            <div className="mt-3">
+              <Textarea label="Additional Safety Concerns or Risk Factors" placeholder="Please describe any other safety concerns, threats, or risk factors we should be aware of to ensure everyone's safety..." value={form.safetyConcerns} onChange={e => set("safetyConcerns", e.target.value)} />
+            </div>
+          </SectionCard>
+        </div>
+      );
+
+      case 5: return (
+        <div className="space-y-6">
+          {/* 11. Emergency Contact */}
+          <SectionCard num={11} title="Emergency Contact">
+            <Input label="Full Name" value={form.emergencyContact.fullName} onChange={e => updateEC("fullName", e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Relationship" value={form.emergencyContact.relationship} onChange={e => updateEC("relationship", e.target.value)} />
+              <Input label="Phone" value={form.emergencyContact.phone} onChange={e => updateEC("phone", e.target.value)} />
+            </div>
+          </SectionCard>
+
+          {/* 12. Additional Information */}
+          <SectionCard num={12} title="Additional Information">
+            <Textarea label="Anything else we should know?" placeholder="Add any additional details relevant to your case..." value={form.additionalInfo} onChange={e => set("additionalInfo", e.target.value)} />
+          </SectionCard>
+        </div>
+      );
+
+      case 6: return (
+        <div className="space-y-6">
+          <SectionCard num={13} title="Payment Model">
             <p className="text-sm text-gray-600 mb-6">Select how service costs will be handled for this case file.</p>
             
             <div className="space-y-4">
@@ -755,41 +808,9 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         </div>
       );
 
-      case 5: return (
-        <SectionCard num={5} title="Reports & Documentation">
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
-            <div className="flex items-start gap-4">
-              <FileText className="text-emerald-700 shrink-0 mt-1" size={20} />
-              <div>
-                <h4 className="text-sm font-bold text-gray-800">Standard Reports</h4>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  Reports are optional and are not included in standard visit fees. 
-                  Reports are available at <strong>$40 per report</strong>, per requesting party. 
-                  Reports will only be released after payment is received.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4 pt-4 border-t">
-              <CreditCard className="text-emerald-700 shrink-0 mt-1" size={20} />
-              <div>
-                <h4 className="text-sm font-bold text-gray-800">Billing Responsibility</h4>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  A party requesting a report is responsible for that report cost unless otherwise agreed in writing. 
-                  If both parties request the same report, each party is billed separately unless otherwise approved by Family Forever Inc.
-                </p>
-              </div>
-            </div>
-          </div>
-          <label className="flex items-start gap-3 mt-6 cursor-pointer border p-4 rounded-xl hover:bg-gray-50 transition-all">
-            <input type="checkbox" checked={form.reportAckPayable} onChange={e => set("reportAckPayable", e.target.checked)} className="mt-1 w-4 h-4 accent-emerald-700" />
-            <span className="text-sm text-gray-700 font-medium italic">I understand that reports are billed separately and available upon request for a fee of $40 per requesting party.</span>
-          </label>
-        </SectionCard>
-      );
-
-      case 6: return (
+      case 7: return (
         <div className="space-y-6">
-           <SectionCard num={6} title="Engagement Protocols">
+           <SectionCard num={14} title="Engagement Protocols">
              <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-4 bg-gray-50 text-[11px] text-gray-600 leading-relaxed mb-4">
                 <p className="font-bold text-gray-800 mb-2">FAMILY FOREVER INC. – ENGAGEMENT PROTOCOLS</p>
                 <div className="space-y-4">
@@ -810,20 +831,11 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
                 <span className="text-sm text-gray-700">I have read, understood, and agree to comply with the Engagement Protocols.</span>
              </label>
            </SectionCard>
-
-           <SectionCard title="SECTION – PARTY CONFIDENTIALITY">
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                 <p className="text-sm text-blue-800 font-medium mb-3">Confidential Information Policy</p>
-                 <p className="text-xs text-blue-700 leading-relaxed">
-                   Family Forever Inc. maintains one case file for administrative purposes. Personal contact information provided (address, phone, email, emergency contacts) will be kept confidential from the other party unless required by law.
-                 </p>
-              </div>
-           </SectionCard>
         </div>
       );
 
-      case 7: return (
-        <SectionCard num={7} title="Applicant Signature">
+      case 8: return (
+        <SectionCard num={15} title="Review & Submit">
           <p className="text-sm text-gray-600 mb-6">By signing below, you confirm that all information provided is accurate and you agree to the confidentiality and payment terms outlined.</p>
           <div className="grid grid-cols-2 gap-4 mb-6">
             <Input label="Name (Print)" required value={form.signerName} onChange={e => set("signerName", e.target.value)} />
