@@ -107,7 +107,12 @@ const isAddressCat = (label) => /emergent|emergency|respite/i.test(label || '');
 /* ─────────────────────────────────────────────────────────── */
 /*  Dropdown Sheet Component                                   */
 /* ─────────────────────────────────────────────────────────── */
-function DropdownSheet({ visible, title, items, selected, onSelect, onClose, labelKey = 'label', valueKey = 'value' }) {
+function DropdownSheet({ visible, title, items, selected, onSelect, onClose, labelKey = 'label', valueKey = 'value', searchable = false, renderBadge }) {
+    const [search, setSearch] = useState('');
+    useEffect(() => { if (!visible) setSearch(''); }, [visible]);
+    const q = search.trim().toLowerCase();
+    const filtered = q ? items.filter(it => String(it[labelKey] || '').toLowerCase().includes(q)) : items;
+
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <Pressable style={ds.overlay} onPress={onClose}>
@@ -118,20 +123,39 @@ function DropdownSheet({ visible, title, items, selected, onSelect, onClose, lab
                             <Feather name="x" size={22} color="#333" />
                         </Pressable>
                     </View>
+                    {searchable && (
+                        <View style={ds.searchWrap}>
+                            <Feather name="search" size={18} color="#9CA3AF" />
+                            <TextInput
+                                style={ds.searchInput}
+                                placeholder="Type a name to search..."
+                                placeholderTextColor="#9CA3AF"
+                                value={search}
+                                onChangeText={setSearch}
+                                autoCorrect={false}
+                                autoCapitalize="none"
+                            />
+                            {!!search && <Pressable onPress={() => setSearch('')}><Feather name="x-circle" size={16} color="#9CA3AF" /></Pressable>}
+                        </View>
+                    )}
                     <FlatList
-                        data={items}
+                        data={filtered}
+                        keyboardShouldPersistTaps="handled"
                         keyExtractor={(item, i) => item[valueKey]?.toString() ?? i.toString()}
+                        ListEmptyComponent={<Text style={ds.empty}>No matches</Text>}
                         renderItem={({ item }) => {
                             const isSelected = selected === item[valueKey];
+                            const badge = renderBadge ? renderBadge(item) : null;
                             return (
                                 <Pressable
                                     style={[ds.item, isSelected && ds.itemActive]}
                                     onPress={() => { onSelect(item); onClose(); }}
                                 >
-                                    <Text style={[ds.itemText, isSelected && ds.itemTextActive]}>
+                                    <Text style={[ds.itemText, isSelected && ds.itemTextActive, { flex: 1 }]} numberOfLines={1}>
                                         {item[labelKey]}
                                     </Text>
-                                    {isSelected && <Feather name="check" size={18} color="#2D5F3F" />}
+                                    {badge}
+                                    {isSelected && <Feather name="check" size={18} color="#2D5F3F" style={{ marginLeft: 8 }} />}
                                 </Pressable>
                             );
                         }}
@@ -140,6 +164,13 @@ function DropdownSheet({ visible, title, items, selected, onSelect, onClose, lab
             </Pressable>
         </Modal>
     );
+}
+
+function AvailabilityBadge({ avail }) {
+    if (!avail) return null;
+    if (avail.hasConflict) return <View style={[ds.badge, { backgroundColor: '#FEF2F2' }]}><Text style={[ds.badgeText, { color: '#EF4444' }]}>Conflict</Text></View>;
+    if (avail.count > 0) return <View style={[ds.badge, { backgroundColor: '#FFFBEB' }]}><Text style={[ds.badgeText, { color: '#D97706' }]}>{avail.count} assigned</Text></View>;
+    return <View style={[ds.badge, { backgroundColor: '#F0FDF4' }]}><Text style={[ds.badgeText, { color: '#16A34A' }]}>Available</Text></View>;
 }
 
 const ds = StyleSheet.create({
@@ -151,6 +182,11 @@ const ds = StyleSheet.create({
     itemActive: { backgroundColor: '#F0F9F5' },
     itemText: { fontSize: 14, color: '#333' },
     itemTextActive: { fontWeight: '600', color: '#2D5F3F' },
+    searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, backgroundColor: '#F9FAFB' },
+    searchInput: { flex: 1, fontSize: 14, color: '#333' },
+    empty: { textAlign: 'center', color: '#9CA3AF', padding: 24 },
+    badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+    badgeText: { fontSize: 11, fontWeight: '700' },
 });
 
 /* ─────────────────────────────────────────────────────────── */
@@ -164,6 +200,7 @@ export default function AddShiftScreen() {
     const [staff, setStaff] = useState([]);
     const [shiftTypes, setShiftTypes] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [allShifts, setAllShifts] = useState([]);
     const [loadingData, setLoadingData] = useState(true);
 
     // ── Form state ──────────────────────────────────────────────
@@ -202,19 +239,21 @@ export default function AddShiftScreen() {
             try {
                 // NOTE: no orderBy — Firestore orderBy silently drops docs missing the field
                 // (many clients store "name", not "fullName"), which left the dropdown empty.
-                const [clientsSnap, usersSnap, categoriesSnap, typesSnap] = await Promise.all([
+                const [clientsSnap, usersSnap, categoriesSnap, typesSnap, shiftsSnap] = await Promise.all([
                     getDocs(collection(db, 'clients')),
                     getDocs(collection(db, 'users')),
                     getDocs(collection(db, 'shiftCategories')),
                     getDocs(collection(db, 'shiftTypes')),
+                    getDocs(collection(db, 'shifts')),
                 ]);
+                setAllShifts(shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
                 const clientList = clientsSnap.docs.map(d => {
                     const data = d.data();
                     const nm = data.fullName || data.name || 'Unnamed';
                     return {
                         value: d.id,
-                        label: `${nm} (${data.clientCode || data.clientId || d.id.slice(0, 6)})`,
+                        label: nm, // name only — no bracket/id
                         fullName: nm,
                         clientId: data.clientId || d.id.slice(0, 6),
                         serviceType: Array.isArray(data.services?.serviceType) ? data.services.serviceType : [],
@@ -280,6 +319,27 @@ export default function AddShiftScreen() {
     const toTimeStr = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
     // ── Submit ──────────────────────────────────────────────────
+    // Staff availability across the selected service dates (ported from web)
+    const getAvailability = (userId) => {
+        if (!serviceDates.length) return null;
+        let count = 0, hasConflict = false;
+        const st = toTimeStr(startTime), et = toTimeStr(endTime);
+        for (const d of serviceDates) {
+            const dateISO = d.toISOString().split('T')[0];
+            const dayShifts = allShifts.filter(s => {
+                const isUser = s.primaryUserId === userId || s.userId === userId || s.secondaryUserDocId === userId;
+                if (!isUser) return false;
+                let iso = s.dateKey_iso;
+                if (!iso && s.dateKey) { const p = s.dateKey.split('-'); if (p.length === 3) iso = `${p[2]}-${p[1]}-${p[0]}`; }
+                if (!iso && typeof s.timeStampId === 'number') iso = new Date(s.timeStampId).toISOString().split('T')[0];
+                return iso === dateISO;
+            });
+            count += dayShifts.length;
+            if (st && et) dayShifts.forEach(s => { if (s.startTime && s.endTime && s.startTime < et && st < s.endTime) hasConflict = true; });
+        }
+        return { count, hasConflict };
+    };
+
     // Selecting a client auto-fills category + shift points / address (web behaviour)
     const handleSelectClient = (client) => {
         setSelectedClient(client);
@@ -315,6 +375,10 @@ export default function AddShiftScreen() {
 
         // 3. Address (for emergent/respite)
         setShiftAddress(data.address || '');
+
+        // 4. Auto-fill shift description from the client's intake (web behaviour)
+        const intakeDesc = data.description || data.jobDescription || data.services?.serviceDesc || '';
+        if (intakeDesc) setDescription(intakeDesc);
     };
 
     // Scheduled km = sum of office→pickup→drop→office across all points (via map)
@@ -823,6 +887,7 @@ export default function AddShiftScreen() {
                 selected={selectedClient?.value}
                 onSelect={handleSelectClient}
                 onClose={() => setOpenSheet(null)}
+                searchable
             />
             <DropdownSheet
                 visible={openSheet === 'user'}
@@ -831,6 +896,8 @@ export default function AddShiftScreen() {
                 selected={selectedUser?.value}
                 onSelect={setSelectedUser}
                 onClose={() => setOpenSheet(null)}
+                searchable
+                renderBadge={(u) => <AvailabilityBadge avail={getAvailability(u.value)} />}
             />
             <DropdownSheet
                 visible={openSheet === 'returnDriver'}
@@ -839,6 +906,8 @@ export default function AddShiftScreen() {
                 selected={returnDriverId}
                 onSelect={(u) => setReturnDriverId(u.value)}
                 onClose={() => setOpenSheet(null)}
+                searchable
+                renderBadge={(u) => <AvailabilityBadge avail={getAvailability(u.value)} />}
             />
         </SafeAreaView>
     );
