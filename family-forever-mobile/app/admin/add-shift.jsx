@@ -35,6 +35,52 @@ const _p2 = (n) => String(n).padStart(2, '0');
 const fmtFlutter = (d) => `${_p2(d.getDate())} ${MON3[d.getMonth()]} ${d.getFullYear()}`;
 const fmtDDMMYYYY = (d) => `${_p2(d.getDate())}-${_p2(d.getMonth() + 1)}-${d.getFullYear()}`;
 
+// ── Category resolution (ported from web AddUserShift.resolveCategory) ──
+const CAT_ALIAS = [
+    { kw: ['supervised visitation + transportation', 'supervised + transportation'], name: 'Supervised Visitation' },
+    { kw: ['supervised visitation', 'supervised'], name: 'Supervised Visitation' },
+    { kw: ['transportation', 'transport'], name: 'Transportation' },
+    { kw: ['respite care', 'respite'], name: 'Respite Care' },
+    { kw: ['emergent care', 'emergent', 'emergency care', 'emergency'], name: 'Emergent Care' },
+];
+
+// categories = [{ value: id, label: name }]
+const resolveCategoryName = (clientData, categories) => {
+    if (!clientData) return '';
+    const cands = [
+        clientData.services?.serviceType, clientData.serviceType, clientData.services?.serviceRequired,
+        clientData.category, clientData.typeName, clientData.shiftCategory, clientData.categoryName,
+        clientData.serviceCategory, clientData.serviceRequired, clientData.service, clientData.shiftType, clientData.type,
+    ].flat().filter(Boolean);
+
+    for (const v of cands) {
+        const str = String(v).trim();
+        if (!str) continue;
+        const byId = categories.find(c => c.value === str);
+        if (byId) return byId.label;
+        const byName = categories.find(c => c.label.toLowerCase() === str.toLowerCase());
+        if (byName) return byName.label;
+        const low = str.toLowerCase();
+        for (const a of CAT_ALIAS) {
+            if (a.kw.some(k => low.includes(k))) {
+                const m = categories.find(c => c.label === a.name);
+                if (m) return a.name;
+            }
+        }
+    }
+    // Structural heuristic: pickup/drop present → Transportation (or Supervised if visit)
+    const sp = Array.isArray(clientData.shiftPoints) ? clientData.shiftPoints : [];
+    const hasPickupDrop = sp.some(p => p.pickupLocation || p.dropLocation) || clientData.pickupLocation || clientData.dropLocation;
+    const hasVisit = sp.some(p => p.visitLocation) || clientData.visitLocation;
+    if (hasPickupDrop && hasVisit) { const m = categories.find(c => /supervised/i.test(c.label)); if (m) return m.label; }
+    if (hasPickupDrop) { const m = categories.find(c => /transport/i.test(c.label)); if (m) return m.label; }
+    return '';
+};
+
+const isTransportCat = (label) => /transport/i.test(label || '');
+const isSupervisedCat = (label) => /supervised|visitation/i.test(label || '');
+const isAddressCat = (label) => /emergent|emergency|respite/i.test(label || '');
+
 /* ─────────────────────────────────────────────────────────── */
 /*  Dropdown Sheet Component                                   */
 /* ─────────────────────────────────────────────────────────── */
@@ -104,6 +150,9 @@ export default function AddShiftScreen() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [serviceDates, setServiceDates] = useState([new Date()]);
     const [showServiceCal, setShowServiceCal] = useState(false);
+    // Transportation / Supervised → shift points; Emergent / Respite → single address
+    const [shiftPoints, setShiftPoints] = useState([]);
+    const [shiftAddress, setShiftAddress] = useState('');
     const [startTime, setStartTime] = useState(new Date());
     const [endTime, setEndTime] = useState(new Date());
     const [accessToReport, setAccessToReport] = useState(false);
@@ -138,6 +187,7 @@ export default function AddShiftScreen() {
                         clientId: data.clientId || d.id.slice(0, 6),
                         serviceType: Array.isArray(data.services?.serviceType) ? data.services.serviceType : [],
                         initials: nm.substring(0, 2).toUpperCase(),
+                        raw: data, // full client doc — for category + shift points derivation
                     };
                 }).sort((a, b) => a.fullName.localeCompare(b.fullName));
 
@@ -198,14 +248,46 @@ export default function AddShiftScreen() {
     const toTimeStr = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
     // ── Submit ──────────────────────────────────────────────────
-    // Selecting a client auto-fills the shift category from their service type (web behaviour)
+    // Selecting a client auto-fills category + shift points / address (web behaviour)
     const handleSelectClient = (client) => {
         setSelectedClient(client);
-        if (client?.serviceType?.length) {
-            const match = categories.find(c => client.serviceType.includes(c.value));
-            if (match) setSelectedCategory(match);
+        const data = client?.raw || {};
+
+        // 1. Resolve + set shift category
+        const catName = resolveCategoryName(data, categories);
+        const catObj = catName ? categories.find(c => c.label === catName) : null;
+        if (catObj) setSelectedCategory(catObj);
+
+        // 2. Derive shift points (pickup/drop) from the client's stored shiftPoints
+        const sp = Array.isArray(data.shiftPoints) ? data.shiftPoints : [];
+        const points = sp
+            .filter(p => p.name || p.pickupLocation || p.dropLocation)
+            .map(p => ({
+                name: p.name || '',
+                cyimId: p.cyimId || '',
+                pickupLocation: p.pickupLocation || '',
+                dropLocation: p.dropLocation || '',
+                pickupTime: p.pickupTime || '',
+                dropTime: p.dropTime || '',
+            }));
+        // Single-client transport with direct fields (no shiftPoints array)
+        if (points.length === 0 && (data.pickupLocation || data.dropLocation)) {
+            points.push({
+                name: client.fullName, cyimId: data.cyimId || '',
+                pickupLocation: data.pickupLocation || '', dropLocation: data.dropLocation || '',
+                pickupTime: data.pickupTime || '', dropTime: data.dropTime || '',
+            });
         }
+        setShiftPoints(points);
+
+        // 3. Address (for emergent/respite)
+        setShiftAddress(data.address || '');
     };
+
+    const updatePoint = (i, field, value) =>
+        setShiftPoints(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
+    const swapPoint = (i) =>
+        setShiftPoints(prev => prev.map((p, idx) => idx === i ? { ...p, pickupLocation: p.dropLocation, dropLocation: p.pickupLocation } : p));
 
     const handleSubmit = async () => {
         if (!selectedClient) { Alert.alert('Missing', 'Please select a client.'); return; }
@@ -250,7 +332,8 @@ export default function AddShiftScreen() {
                     isRatify: false,
                     isCancelled: false,
                     shiftReport: "",
-                    shiftPoints: [],
+                    shiftPoints: shiftPoints,
+                    shiftAddress: isAddressCat(selectedCategory?.label) ? shiftAddress : '',
                     createdAt: new Date(),
                     id: newShiftId,
                 });
@@ -407,6 +490,63 @@ export default function AddShiftScreen() {
                         </View>
                     </View>
 
+                    {/* Shift Address — Emergent / Respite Care */}
+                    {isAddressCat(selectedCategory?.label) && (
+                        <View style={s.inputContainer}>
+                            <Text style={s.label}>Shift Address</Text>
+                            <TextInput
+                                style={[s.inputBox, s.textArea]}
+                                placeholder="Enter the address where the shift will take place"
+                                placeholderTextColor="#999"
+                                multiline
+                                value={shiftAddress}
+                                onChangeText={setShiftAddress}
+                            />
+                        </View>
+                    )}
+
+                    {/* Shift Points — Transportation / Supervised Visitation */}
+                    {(isTransportCat(selectedCategory?.label) || isSupervisedCat(selectedCategory?.label)) && (
+                        <View style={{ marginBottom: 6 }}>
+                            <Text style={[s.label, { fontSize: 15, fontWeight: '700', marginBottom: 10 }]}>Shift Points</Text>
+                            {shiftPoints.length === 0 && (
+                                <Text style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>
+                                    No pickup/drop points found for this client.
+                                </Text>
+                            )}
+                            {shiftPoints.map((p, i) => (
+                                <View key={i} style={sp.card}>
+                                    <View style={sp.head}>
+                                        <View style={sp.avatar}><Text style={sp.avatarText}>{(p.name || String.fromCharCode(65 + i)).charAt(0).toUpperCase()}</Text></View>
+                                        <Text style={sp.name}>{p.name || `Member ${i + 1}`}</Text>
+                                    </View>
+
+                                    <Text style={sp.fieldLabel}>Pickup Location</Text>
+                                    <TextInput style={sp.input} placeholder="Pickup address" placeholderTextColor="#9CA3AF" value={p.pickupLocation} onChangeText={(t) => updatePoint(i, 'pickupLocation', t)} />
+
+                                    <Pressable style={sp.swapBtn} onPress={() => swapPoint(i)}>
+                                        <Feather name="repeat" size={14} color="#1d4ed8" />
+                                        <Text style={sp.swapText}>Swap pickup & drop</Text>
+                                    </Pressable>
+
+                                    <Text style={sp.fieldLabel}>Drop Location</Text>
+                                    <TextInput style={sp.input} placeholder="Drop address" placeholderTextColor="#9CA3AF" value={p.dropLocation} onChangeText={(t) => updatePoint(i, 'dropLocation', t)} />
+
+                                    <View style={sp.row}>
+                                        <View style={{ flex: 1, marginRight: 6 }}>
+                                            <Text style={sp.fieldLabel}>Pickup Time</Text>
+                                            <TextInput style={sp.input} placeholder="e.g. 09:00 AM" placeholderTextColor="#9CA3AF" value={p.pickupTime} onChangeText={(t) => updatePoint(i, 'pickupTime', t)} />
+                                        </View>
+                                        <View style={{ flex: 1, marginLeft: 6 }}>
+                                            <Text style={sp.fieldLabel}>Drop Time</Text>
+                                            <TextInput style={sp.input} placeholder="e.g. 05:00 PM" placeholderTextColor="#9CA3AF" value={p.dropTime} onChangeText={(t) => updatePoint(i, 'dropTime', t)} />
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
                     {/* Access Toggle */}
                     <View style={s.toggleContainer}>
                         <View>
@@ -547,4 +687,17 @@ const s = StyleSheet.create({
     footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 16, borderTopWidth: 1, borderTopColor: '#ECE8E3', paddingBottom: Platform.OS === 'ios' ? 34 : 16 },
     submitBtn: { backgroundColor: '#2D5F3F', paddingVertical: 16, borderRadius: 8, alignItems: 'center' },
     submitText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+});
+
+const sp = StyleSheet.create({
+    card: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#EEF0F2', borderRadius: 12, padding: 14, marginBottom: 12 },
+    head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+    avatar: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#1d4ed8', alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+    name: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+    fieldLabel: { fontSize: 11, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 },
+    input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333', marginBottom: 6 },
+    row: { flexDirection: 'row' },
+    swapBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 4 },
+    swapText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
 });
