@@ -14,13 +14,13 @@ const GREEN = "#1f6f43";
 
 // ── Step definitions ───────────────────────────────────────────────────────
 const STEPS = [
-  { id: 1,  label: "Welcome & Privacy" },
-  { id: 2,  label: "Part A: Case Information" },
-  { id: 3,  label: "Part B/C: Confidential Profile" },
-  { id: 4,  label: "Part D: Payment Model" },
-  { id: 5,  label: "Reports & Documentation" },
-  { id: 6,  label: "Protocols & Confidentiality" },
-  { id: 7,  label: "Sign & Complete" },
+  { id: 1,  label: "Welcome & Privacy",            short: "Contact Info" },
+  { id: 2,  label: "Part A: Case Information",      short: "Children & Service" },
+  { id: 3,  label: "Part B/C: Confidential Profile", short: "Profile" },
+  { id: 4,  label: "Part D: Payment Model",         short: "Payment" },
+  { id: 5,  label: "Reports & Documentation",       short: "Reports" },
+  { id: 6,  label: "Protocols & Confidentiality",   short: "Protocols" },
+  { id: 7,  label: "Sign & Complete",               short: "Review & Submit" },
 ];
 
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
@@ -135,7 +135,7 @@ const SectionCard = ({ num, title, subtitle, children, confidential }) => (
         </div>
       )}
       <div>
-        <h3 className="text-xl font-extrabold" style={{ color: num ? GREEN : "#1f2937" }}>{title}</h3>
+        <h3 className="text-lg font-semibold" style={{ color: num ? GREEN : "#1f2937" }}>{title}</h3>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5 whitespace-pre-line">{subtitle}</p>}
       </div>
     </div>
@@ -737,10 +737,10 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   const progress = (step / STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen bg-[#FDFEFE] font-sans text-gray-900">
+    <div className="min-h-screen bg-[#FDFEFE] text-gray-900" style={{ fontFamily: "Roboto, system-ui, sans-serif" }}>
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+        <div className="max-w-3xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-2">
              <div className="flex items-center gap-3">
                 <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-500"><ArrowLeft size={20} /></button>
@@ -757,19 +757,37 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
              </div>
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto py-2 no-scrollbar">
+          {/* Step indicator — evenly spread, labelled, click any step to switch */}
+          <div className="flex items-start py-2">
              {STEPS.map((s, i) => (
-                <div key={s.id} className="flex items-center shrink-0">
-                   <div 
-                    onClick={() => (completedSteps.includes(s.id) || s.id < step) && setStep(s.id)}
-                    className={`flex flex-col items-center gap-1 cursor-pointer transition-all ${s.id === step ? "opacity-100" : "opacity-40"}`}
+                <React.Fragment key={s.id}>
+                   <button
+                     type="button"
+                     onClick={() => { setErrors({}); setStep(s.id); }}
+                     className="flex flex-col items-center gap-1.5 flex-shrink-0 transition-all"
+                     style={{ width: 70 }}
                    >
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${s.id === step ? "bg-emerald-600 text-white" : completedSteps.includes(s.id) ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
-                        {completedSteps.includes(s.id) ? <Check size={14} /> : s.id}
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={
+                          s.id === step
+                            ? { background: GREEN, color: "#fff" }
+                            : completedSteps.includes(s.id)
+                              ? { background: "#d1fae5", color: "#047857" }
+                              : { background: "#f3f4f6", color: "#9ca3af" }
+                        }
+                      >
+                        {completedSteps.includes(s.id) && s.id !== step ? <Check size={14} /> : s.id}
                       </div>
-                   </div>
-                   {i < STEPS.length - 1 && <div className="w-8 h-[2px] bg-gray-100 mx-1" />}
-                </div>
+                      <span
+                        className="text-[10px] font-semibold text-center leading-tight"
+                        style={{ color: s.id === step ? GREEN : "#9ca3af" }}
+                      >
+                        {s.short}
+                      </span>
+                   </button>
+                   {i < STEPS.length - 1 && <div className="flex-1 h-[2px] bg-gray-200 mt-4" />}
+                </React.Fragment>
              ))}
           </div>
         </div>
