@@ -1,87 +1,78 @@
 /**
- * Mapbox Routing Helper
- * Uses Mapbox Geocoding + Directions API for route distance and duration.
+ * Routing Helper (Web)
+ *
+ * Works WITHOUT any API token by default using free OpenStreetMap services:
+ *   - Geocoding via Nominatim (nominatim.openstreetmap.org)
+ *   - Driving distance via OSRM (router.project-osrm.org)
+ * If VITE_MAPBOX_TOKEN is set, Mapbox is used instead (more accurate / higher
+ * rate limits). Distances are rounded to whole kilometres (.5 up, <.5 down).
  */
 
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const USE_MAPBOX = !!MAPBOX_ACCESS_TOKEN;
 
-/**
- * Geocode an address string to [lng, lat] using Mapbox.
- */
+// ── Geocode: address string → [lng, lat] ────────────────────────────────────
 export async function geocodeAddress(address) {
   if (!address || address === "—") return null;
-
   try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.features && data.features.length > 0) {
-      return data.features[0].center; // [longitude, latitude]
+    if (USE_MAPBOX) {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
+      const data = await (await fetch(url)).json();
+      return data.features?.[0]?.center || null;
     }
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+    const data = await (await fetch(url)).json();
+    if (Array.isArray(data) && data[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
     return null;
   } catch (error) {
-    console.error("Mapbox Geocoding Error:", error);
+    console.error("Geocoding error:", error);
     return null;
   }
 }
 
-/**
- * Reverse geocode [lng, lat] to an address string using Mapbox.
- */
+// ── Reverse geocode: [lng, lat] → address string ────────────────────────────
 export async function reverseGeocode(lng, lat) {
   try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.features && data.features.length > 0) {
-      return data.features[0].place_name;
+    if (USE_MAPBOX) {
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
+      const data = await (await fetch(url)).json();
+      return data.features?.[0]?.place_name || null;
     }
-    return null;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lon=${lng}&lat=${lat}`;
+    const data = await (await fetch(url)).json();
+    return data.display_name || null;
   } catch (error) {
-    console.error("Mapbox Reverse Geocoding Error:", error);
+    console.error("Reverse geocoding error:", error);
     return null;
   }
 }
 
-/**
- * Calculate distance and duration for a sequence of addresses.
- * @param {string[]} addresses - [origin, ...waypoints, destination]
- * @returns {Promise<{km: number, durationMin: number} | null>}
- */
+// ── Distance + duration for a sequence of addresses ─────────────────────────
+// Returns { km, durationMin } with km rounded to a whole number.
 export async function calculateRouteDistance(addresses) {
   try {
-    const coordPromises = addresses.map(addr => geocodeAddress(addr));
-    const coords = await Promise.all(coordPromises);
+    const coords = (await Promise.all(addresses.map((a) => geocodeAddress(a)))).filter(Boolean);
+    if (coords.length < 2) {
+      console.warn("Route: not enough geocoded coordinates from", addresses);
+      return null;
+    }
+    const coordString = coords.map((c) => `${c[0]},${c[1]}`).join(";");
 
-    const validCoords = coords.filter(c => c !== null);
-    if (validCoords.length < 2) {
-      console.warn("Mapbox: not enough valid coordinates from addresses:", addresses, "→", coords);
+    if (USE_MAPBOX) {
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false`;
+      const data = await (await fetch(url)).json();
+      const route = data.routes?.[0];
+      if (route) return { km: Math.round(route.distance / 1000), durationMin: Math.round(route.duration / 60) };
       return null;
     }
 
-    const coordString = validCoords.map(c => `${c[0]},${c[1]}`).join(";");
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false&geometries=geojson`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.message) {
-      console.error("Mapbox Directions API error:", data.message, "| addresses:", addresses);
-      return null;
-    }
-
-    if (data.routes && data.routes.length > 0) {
-      const route = data.routes[0];
-      return {
-        km: parseFloat((route.distance / 1000).toFixed(2)),
-        durationMin: Math.round(route.duration / 60),
-      };
-    }
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=false`;
+    const data = await (await fetch(url)).json();
+    const route = data.routes?.[0];
+    if (route) return { km: Math.round(route.distance / 1000), durationMin: Math.round(route.duration / 60) };
     return null;
   } catch (error) {
-    console.error("Mapbox Routing Error:", error, "| addresses:", addresses);
+    console.error("Routing error:", error, "| addresses:", addresses);
     return null;
   }
 }

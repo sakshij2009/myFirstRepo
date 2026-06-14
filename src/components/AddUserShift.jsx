@@ -259,6 +259,9 @@ const AddUserShift = ({ mode = "add", user }) => {
   const [shiftPoints, setShiftPoints] = useState([]);
   // removedShiftPoints: members removed from this shift (can be added back)
   const [removedShiftPoints, setRemovedShiftPoints] = useState([]);
+  // Scheduled km (office → pickup → drop → office), auto-calculated via map
+  const [scheduledKm, setScheduledKm] = useState(0);
+  const [kmCalculating, setKmCalculating] = useState(false);
   // Category warning when selected date doesn't match any configured weekday
   const [categoryWarning, setCategoryWarning] = useState("");
   // Return trip state (transportation only)
@@ -276,6 +279,29 @@ const AddUserShift = ({ mode = "add", user }) => {
   const weekdayScheduleRef = useRef({ transportationDays: [], supervisedVisitationDays: [] });
   // Ref to Formik instance so we can call setFieldValue from outside the render
   const formikRef = useRef(null);
+
+  // Auto-calculate scheduled km (office → pickup → drop → office) when points change
+  const recomputeScheduledKm = async () => {
+    const valid = shiftPoints.filter((p) => p.pickupLocation && p.dropLocation);
+    if (!valid.length) { setScheduledKm(0); return; }
+    setKmCalculating(true);
+    try {
+      const results = await Promise.all(valid.map((p) => calculateTotalDistance(p)));
+      setScheduledKm(results.reduce((s, r) => s + (r?.totalKm || 0), 0));
+    } catch (e) {
+      console.warn("scheduled km error", e);
+    } finally {
+      setKmCalculating(false);
+    }
+  };
+
+  useEffect(() => {
+    const valid = shiftPoints.filter((p) => p.pickupLocation && p.dropLocation);
+    if (!valid.length) { setScheduledKm(0); return; }
+    const t = setTimeout(() => { recomputeScheduledKm(); }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(shiftPoints.map((p) => [p.pickupLocation, p.dropLocation]))]);
   // Description pulled from the matched intake form
   const [intakeDescription, setIntakeDescription] = useState("");
 
@@ -1375,6 +1401,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           billingStatus:   "Billable",
           locked:          false,
           accessToShiftReport: values.accessToShiftReport || false,
+          totalScheduledKm: scheduledKm,
 
           // ── Location defaults ─────────────────────────────────────
           startLatitude:   0,
@@ -2282,18 +2309,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                               />
                             </div>
 
-                            {/* Conditionally show Visit fields */}
+                            {/* Visit fields — Supervised Visitation only (never for plain Transportation) */}
                             {(() => {
                               const cat = (values.shiftCategory || "").toLowerCase();
-                              const desc = (values.description || "").toLowerCase();
-                              const dates = values.shiftDates || [];
-                              const isSupervised = cat.includes("supervised") || desc.includes("supervised");
-                              const hasWeekend = dates.some((d) => {
-                                const dateObj = d instanceof Date ? d : new Date(d);
-                                const day = dateObj.getDay();
-                                return day === 0 || day === 6;
-                              });
-                              const showVisit = isSupervised || hasWeekend;
+                              const showVisit = cat.includes("supervised") || cat.includes("visitation");
 
                               if (!showVisit) return null;
 
@@ -2361,6 +2380,26 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 </button>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Scheduled Kilometers (office → pickup → drop → office) ── */}
+                      {shiftPoints.length > 0 && (
+                        <div className="flex items-center justify-between mt-4 px-4 py-3 rounded-xl"
+                          style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                          <div>
+                            <p className="font-bold text-sm" style={{ color: "#145228" }}>Scheduled Kilometers</p>
+                            <p className="text-xs" style={{ color: "#6b7280" }}>Office → Pickup → Drop → Office (via map)</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {kmCalculating
+                              ? <span className="text-sm font-semibold" style={{ color: "#6b7280" }}>Calculating…</span>
+                              : <span className="font-extrabold" style={{ fontSize: 20, color: "#145228" }}>{scheduledKm} km</span>}
+                            <button type="button" onClick={recomputeScheduledKm}
+                              className="p-2 rounded-lg hover:bg-green-100" title="Recalculate" style={{ color: "#145228" }}>
+                              ↻
+                            </button>
                           </div>
                         </div>
                       )}
