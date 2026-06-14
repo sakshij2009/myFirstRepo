@@ -844,14 +844,25 @@ export default function AddShiftScreen() {
                 </Pressable>
             </View>
 
-            {/* Date / Time Picker */}
-            {showPicker.visible && (
-                <DateTimePicker
-                    value={pickerDate}
-                    mode={showPicker.mode}
-                    display="default"
-                    onChange={handleDateChange}
-                />
+            {/* Time picker — Android shows the native dialog; iOS uses a bottom sheet */}
+            {showPicker.visible && Platform.OS === 'android' && (
+                <DateTimePicker value={pickerDate} mode={showPicker.mode} display="default" onChange={handleDateChange} />
+            )}
+            {Platform.OS === 'ios' && (
+                <Modal visible={showPicker.visible} transparent animationType="slide"
+                    onRequestClose={() => setShowPicker(p => ({ ...p, visible: false }))}>
+                    <Pressable style={tp.overlay} onPress={() => setShowPicker(p => ({ ...p, visible: false }))} />
+                    <View style={tp.sheet}>
+                        <View style={tp.header}>
+                            <Text style={tp.title}>{showPicker.field === 'startTime' ? 'Start Time' : 'End Time'}</Text>
+                            <Pressable onPress={() => setShowPicker(p => ({ ...p, visible: false }))}>
+                                <Text style={tp.done}>Done</Text>
+                            </Pressable>
+                        </View>
+                        <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner"
+                            onChange={handleDateChange} style={{ alignSelf: 'stretch' }} />
+                    </View>
+                </Modal>
             )}
 
             <ServiceDateCalendar
@@ -978,6 +989,14 @@ const rt = StyleSheet.create({
     changeBtn: { borderWidth: 1, borderColor: '#93c5fd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
     changeText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
     resetDriver: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 6 },
+});
+
+const tp = StyleSheet.create({
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+    sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0EDE8' },
+    title: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
+    done: { fontSize: 16, fontWeight: '700', color: '#2D5F3F' },
 });
 
 const km = StyleSheet.create({
