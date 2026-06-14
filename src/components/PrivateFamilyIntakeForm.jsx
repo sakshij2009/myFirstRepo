@@ -27,11 +27,10 @@ const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","Schoo
 const RELATIONSHIPS = ["Mother","Father","Grandmother","Grandfather","Aunt","Uncle","Legal Guardian","Foster Parent","Other"];
 const PROVINCES = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Nova Scotia","Ontario","Prince Edward Island","Quebec","Saskatchewan","Northwest Territories","Nunavut","Yukon"];
 const SERVICE_TYPES = [
-  { value: "Transportation", desc: "assistance with travel to and from visits" },
   { value: "Respite Care", desc: "temporary care for the child" },
-  { value: "Supervised Visits", desc: "visits monitored by trained staff" },
-  { value: "Supervised Exchanges", desc: "safe handoff of the child between parties" },
-  { value: "Virtual / Phone Visit Monitoring", desc: "monitored phone or video visits" },
+  { value: "Emergent Care", desc: "urgent / emergency care for the child" },
+  { value: "Transportation", desc: "assistance with travel to and from visits" },
+  { value: "Supervised Visitation", desc: "visits monitored by trained staff" },
 ];
 const VISIT_FREQUENCIES = ["Weekly", "Bi-weekly", "Monthly", "As needed", "Other"];
 const VISIT_DURATIONS = ["2 hours", "3 hours", "4 hours", "5 hours", "6 hours", "7 hours", "8 hours"];
