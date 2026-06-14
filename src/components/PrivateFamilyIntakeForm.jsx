@@ -25,6 +25,7 @@ const STEPS = [
 
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
 const RELATIONSHIPS = ["Mother","Father","Grandmother","Grandfather","Aunt","Uncle","Legal Guardian","Foster Parent","Other"];
+const PROVINCES = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Nova Scotia","Ontario","Prince Edward Island","Quebec","Saskatchewan","Northwest Territories","Nunavut","Yukon"];
 const GENDERS = ["Male","Female","Non-binary","Prefer not to say"];
 const CUSTODY_OPTIONS = ["Sole Custody","Shared Custody","Court-Ordered Visitation","Informal Arrangement","Other"];
 
@@ -186,14 +187,31 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     approvedVisitors: "",
     safetyConcerns: "",
     
-    // Part B/C: Party Confidential Profile (Dynamic)
+    // Part B/C: Party Confidential Profile (Dynamic) — Applicant Information
     fullName: "",
     address: "",
+    streetAddress: "",
+    streetAddress2: "",
+    city: "",
+    province: "Alberta",
+    postalCode: "",
     phone: "",
+    cellPhone: "",
     email: user?.email || "",
     relationship: "",
     relationshipOther: "",
     emergencyContact: emptyEmergency(),
+
+    // Other Parent / Guardian Information
+    otherParentName: "",
+    otherParentStreetAddress: "",
+    otherParentStreet2: "",
+    otherParentCity: "",
+    otherParentProvince: "Alberta",
+    otherParentPostalCode: "",
+    otherParentCellPhone: "",
+    otherParentEmail: "",
+    otherParentRelationship: "",
     
     // Part D: Payment
     paymentOption: "",
@@ -335,16 +353,38 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         courtOrderDocUrl = await getDownloadURL(coRef);
       }
 
+      // Combined single-line address (for legacy readers) from the split fields
+      const combinedAddress = [form.streetAddress, form.streetAddress2, form.city, form.province, form.postalCode]
+        .filter(Boolean).join(", ") || form.address;
+
       const partyData = {
         fullName: form.fullName,
-        address: form.address,
-        phone: form.phone,
+        address: combinedAddress,
+        streetAddress: form.streetAddress,
+        streetAddress2: form.streetAddress2,
+        city: form.city,
+        province: form.province,
+        postalCode: form.postalCode,
+        phone: form.cellPhone || form.phone,
+        cellPhone: form.cellPhone,
         email: form.email,
         relationship: form.relationship,
         relationshipOther: form.relationshipOther,
         emergencyContact: form.emergencyContact,
         signature: form.signatureDataUrl,
         signedAt: serverTimestamp(),
+        // Other parent / guardian
+        otherParent: {
+          fullName: form.otherParentName,
+          streetAddress: form.otherParentStreetAddress,
+          streetAddress2: form.otherParentStreet2,
+          city: form.otherParentCity,
+          province: form.otherParentProvince,
+          postalCode: form.otherParentPostalCode,
+          cellPhone: form.otherParentCellPhone,
+          email: form.otherParentEmail,
+          relationship: form.otherParentRelationship,
+        },
       };
 
       const sharedData = {
@@ -430,11 +470,23 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
                </div>
             </div>
           </SectionCard>
-          <SectionCard num={1} title="Initial Application Info">
+          {/* Important Notice */}
+          <div className="bg-[#f7fbf8] border border-emerald-100 rounded-2xl p-5">
+            <h4 className="text-sm font-bold mb-3" style={{ color: GREEN }}>IMPORTANT NOTICE</h4>
+            <ul className="space-y-2 text-sm text-gray-600 list-disc pl-5">
+              <li>Intake processing time is <strong>1-3 weeks</strong> from receipt of a complete intake package.</li>
+              <li>Please omit personal opinions. We remain a <strong>neutral, child-focused service provider</strong> and follow all applicable <strong>court orders and legal directions</strong>.</li>
+              <li>If you have questions, contact: <strong>visits@familyforever.ca</strong> or <strong>admin@familyforever.ca</strong></li>
+            </ul>
+          </div>
+
+          {/* 1. Application Information */}
+          <SectionCard num={1} title="Application Information">
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Date of Application" type="date" value={form.applicationDate} onChange={e => set("applicationDate", e.target.value)} />
+                <Input label="Date of Application" required type="date" value={form.applicationDate} onChange={e => set("applicationDate", e.target.value)} />
                 <Select
-                  label="Referral Source"
+                  label="Referral Source" required
+                  placeholder="Select referral source"
                   options={REFERRAL_SOURCES}
                   value={form.referralSource}
                   onChange={v => set("referralSource", v)}
@@ -443,6 +495,43 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
               {form.referralSource === "Other" && (
                 <Input label="Specify Referral Source" value={form.referralSourceOther} onChange={e => set("referralSourceOther", e.target.value)} />
               )}
+          </SectionCard>
+
+          {/* 2. Applicant Information */}
+          <SectionCard num={2} title="Applicant Information" subtitle="Person completing this form and requesting services.">
+              <Input label="Full Legal Name" required placeholder="First Name, Middle Name, Last Name" value={form.fullName} onChange={e => set("fullName", e.target.value)} />
+              <Input label="Street Address" required placeholder="Street number and name" value={form.streetAddress} onChange={e => set("streetAddress", e.target.value)} />
+              <Input label="Street Address Line 2 (Optional)" placeholder="Suite, Apartment, or Building Number" value={form.streetAddress2} onChange={e => set("streetAddress2", e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="City" required placeholder="City" value={form.city} onChange={e => set("city", e.target.value)} />
+                <Select label="Province" required options={PROVINCES} value={form.province} onChange={v => set("province", v)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Postal Code" required placeholder="A1A 1A1" value={form.postalCode} onChange={e => set("postalCode", e.target.value)} />
+                <Input label="Cell Phone" required placeholder="(780) 123-4567" value={form.cellPhone} onChange={e => set("cellPhone", e.target.value)} />
+              </div>
+              <Input label="Email Address" required type="email" placeholder="your.email@example.com" value={form.email} onChange={e => set("email", e.target.value)} />
+              <Select label="Relationship to Child/Children" required placeholder="Select relationship" options={RELATIONSHIPS} value={form.relationship} onChange={v => set("relationship", v)} />
+              {form.relationship === "Other" && (
+                <Input label="Specify Relationship" value={form.relationshipOther} onChange={e => set("relationshipOther", e.target.value)} />
+              )}
+          </SectionCard>
+
+          {/* 3. Other Parent / Guardian Information */}
+          <SectionCard num={3} title="Other Parent/Guardian Information">
+              <Input label="Full Legal Name" placeholder="First Name, Middle Name, Last Name" value={form.otherParentName} onChange={e => set("otherParentName", e.target.value)} />
+              <Input label="Street Address" placeholder="Street number and name" value={form.otherParentStreetAddress} onChange={e => set("otherParentStreetAddress", e.target.value)} />
+              <Input label="Street Address Line 2 (Optional)" placeholder="Suite, Apartment, or Building Number" value={form.otherParentStreet2} onChange={e => set("otherParentStreet2", e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="City" placeholder="City" value={form.otherParentCity} onChange={e => set("otherParentCity", e.target.value)} />
+                <Select label="Province" options={PROVINCES} value={form.otherParentProvince} onChange={v => set("otherParentProvince", v)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Postal Code" placeholder="A1A 1A1" value={form.otherParentPostalCode} onChange={e => set("otherParentPostalCode", e.target.value)} />
+                <Input label="Cell Phone" placeholder="(780) 123-4567" value={form.otherParentCellPhone} onChange={e => set("otherParentCellPhone", e.target.value)} />
+              </div>
+              <Input label="Email Address" type="email" placeholder="email@example.com" value={form.otherParentEmail} onChange={e => set("otherParentEmail", e.target.value)} />
+              <Select label="Relationship to Child/Children" placeholder="Select relationship" options={RELATIONSHIPS} value={form.otherParentRelationship} onChange={v => set("otherParentRelationship", v)} />
           </SectionCard>
         </div>
       );
