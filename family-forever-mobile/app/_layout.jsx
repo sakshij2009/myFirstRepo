@@ -43,6 +43,8 @@ const GRAY_TEXT = "#9CA3AF";
 export default function Layout() {
   const [isLoggedIn, setIsLoggedIn] = useState(null);
   const pathname = usePathname();
+  // Must be called unconditionally (before any early return) — Rules of Hooks
+  const insets = useSafeAreaInsets();
 
   const [fontsLoaded] = useFonts({
     Poppins: Poppins_400Regular,
@@ -102,8 +104,6 @@ export default function Layout() {
   // Admin/owner section has its own navigator + tab bar — hide the staff
   // tab bar whenever we're inside an /admin route.
   const isAdminRoute = pathname?.startsWith("/admin");
-  // Respect the device's bottom inset (Android nav buttons, iOS home indicator)
-  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
