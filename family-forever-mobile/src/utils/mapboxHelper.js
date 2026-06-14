@@ -85,14 +85,14 @@ async function osrmRoute(addresses) {
 }
 
 // ── Distance + duration for a sequence of addresses ─────────────────────────
-// Priority: Google Directions (exact Google match, if API enabled) →
-//           Mapbox Directions (token) → OSRM (free fallback)
+// Priority: Mapbox Directions (token) → Google Directions (if enabled) → OSRM.
+// (Mapbox first by choice; switch to Google later if the client enables it.)
 export async function calculateRouteDistance(addresses) {
   try {
-    const google = await googleRoute(addresses);
-    if (google) return google;
     const mb = await mapboxRoute(addresses);
     if (mb) return mb;
+    const google = await googleRoute(addresses);
+    if (google) return google;
     return await osrmRoute(addresses);
   } catch (error) {
     console.error("Routing error:", error, "| addresses:", addresses);
