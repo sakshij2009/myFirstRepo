@@ -12,6 +12,14 @@ import {
     query, orderBy, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../src/firebase/config';
+import { parseDate } from '../../src/utils/date';
+import ServiceDateCalendar from '../../src/components/ServiceDateCalendar';
+
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const p2 = (n) => String(n).padStart(2, '0');
+const fmtFlutter = (d) => `${p2(d.getDate())} ${MON3[d.getMonth()]} ${d.getFullYear()}`;     // "14 Jun 2026"
+const fmtDDMMYYYY = (d) => `${p2(d.getDate())}-${p2(d.getMonth() + 1)}-${d.getFullYear()}`;   // "14-06-2026"
+const fmtServiceLabel = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Select date';
 
 /* ─── Dropdown Sheet ─────────────────────────────────────── */
 function DropdownSheet({ visible, title, items, selected, onSelect, onClose }) {
@@ -95,8 +103,8 @@ export default function EditShiftScreen() {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date());
+    const [serviceDate, setServiceDate] = useState(new Date());
+    const [showServiceCal, setShowServiceCal] = useState(false);
     const [startTime, setStartTime] = useState(new Date());
     const [endTime, setEndTime] = useState(new Date());
     const [accessToReport, setAccessToReport] = useState(false);
@@ -158,10 +166,10 @@ export default function EditShiftScreen() {
                     setSelectedCategory(catMatch || (data.shiftCategory ? { value: data.shiftCategory, label: data.shiftCategory } : null));
                     setSelectedShiftType(typeMatch || (data.shiftType ? { value: data.shiftType, label: data.shiftType } : null));
 
-                    const sDate = data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate || Date.now());
-                    const eDate = data.endDate?.toDate ? data.endDate.toDate() : new Date(data.endDate || Date.now());
-                    setStartDate(sDate);
-                    setEndDate(eDate);
+                    // Service date — reliable: epoch timeStampId, else parse the "14 Jun 2026" string
+                    let sDate = typeof data.timeStampId === 'number' ? new Date(data.timeStampId) : parseDate(data.startDate);
+                    if (!sDate || isNaN(sDate)) sDate = new Date();
+                    setServiceDate(sDate);
                     setStartTime(parseTimeStr(data.startTime));
                     setEndTime(parseTimeStr(data.endTime));
                     setAccessToReport(!!data.accessToShiftReport);
@@ -182,17 +190,12 @@ export default function EditShiftScreen() {
         setShowPicker((p) => ({ ...p, visible: Platform.OS === 'ios' }));
         if (selectedDate && event.type !== 'dismissed') {
             const field = showPicker.field;
-            if (field === 'startDate') setStartDate(selectedDate);
-            else if (field === 'endDate') setEndDate(selectedDate);
-            else if (field === 'startTime') setStartTime(selectedDate);
+            if (field === 'startTime') setStartTime(selectedDate);
             else setEndTime(selectedDate);
         }
     };
 
-    const pickerDate =
-        showPicker.field === 'startDate' ? startDate :
-            showPicker.field === 'endDate' ? endDate :
-                showPicker.field === 'startTime' ? startTime : endTime;
+    const pickerDate = showPicker.field === 'startTime' ? startTime : endTime;
 
     // ── Save changes ─────────────────────────────────────────
     const handleSave = async () => {
@@ -201,9 +204,9 @@ export default function EditShiftScreen() {
 
         setSaving(true);
         try {
-            // Sync Overnight Logic
+            // Overnight → end date rolls to next day
             const isOvernight = toHHMM(endTime) < toHHMM(startTime);
-            let endDateObj = new Date(startDate);
+            const endDateObj = new Date(serviceDate);
             if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
             await updateDoc(doc(db, 'shifts', id), {
@@ -217,14 +220,16 @@ export default function EditShiftScreen() {
                 shiftCategory: selectedCategory?.label || '',
                 typeName: selectedShiftType?.label || 'Regular',
                 shiftType: selectedShiftType?.label || 'Regular',
-                startDate: startDate,
-                endDate: endDateObj,
+                // Same string format the web app + lists expect
+                startDate: fmtFlutter(serviceDate),
+                endDate: fmtFlutter(endDateObj),
+                dateKey: fmtDDMMYYYY(serviceDate),
+                timeStampId: serviceDate.getTime(),
                 startTime: toHHMM(startTime),
                 endTime: toHHMM(endTime),
                 accessToShiftReport: accessToReport,
                 description: description,
                 updatedAt: serverTimestamp(),
-                dateKey: startDate.toISOString().split("T")[0],
             });
             Alert.alert('✅ Updated', 'Shift updated successfully.', [
                 { text: 'OK', onPress: () => router.back() },
@@ -299,22 +304,13 @@ export default function EditShiftScreen() {
                     {/* Staff */}
                     <FieldRow label="Staff Member" value={selectedUser?.label} placeholder="Select staff" onPress={() => setOpenSheet('user')} />
 
-                    {/* Dates */}
-                    <View style={s.row}>
-                        <View style={[s.inputContainer, { flex: 1, marginRight: 8 }]}>
-                            <Text style={s.label}>Start Date</Text>
-                            <Pressable style={s.inputBox} onPress={() => setShowPicker({ visible: true, mode: 'date', field: 'startDate' })}>
-                                <Text style={s.inputText}>{formatDate(startDate)}</Text>
-                                <Feather name="calendar" size={16} color="#666" />
-                            </Pressable>
-                        </View>
-                        <View style={[s.inputContainer, { flex: 1, marginLeft: 8 }]}>
-                            <Text style={s.label}>End Date</Text>
-                            <Pressable style={s.inputBox} onPress={() => setShowPicker({ visible: true, mode: 'date', field: 'endDate' })}>
-                                <Text style={s.inputText}>{formatDate(endDate)}</Text>
-                                <Feather name="calendar" size={16} color="#666" />
-                            </Pressable>
-                        </View>
+                    {/* Service Date */}
+                    <View style={s.inputContainer}>
+                        <Text style={s.label}>Service Date</Text>
+                        <Pressable style={s.inputBox} onPress={() => setShowServiceCal(true)}>
+                            <Text style={s.inputText}>{fmtServiceLabel(serviceDate)}</Text>
+                            <Feather name="calendar" size={16} color="#666" />
+                        </Pressable>
                     </View>
 
                     {/* Times */}
@@ -366,6 +362,15 @@ export default function EditShiftScreen() {
             {showPicker.visible && (
                 <DateTimePicker value={pickerDate} mode={showPicker.mode} display="default" onChange={handleDateChange} />
             )}
+
+            <ServiceDateCalendar
+                visible={showServiceCal}
+                onClose={() => setShowServiceCal(false)}
+                mode="single"
+                selectedDates={serviceDate ? [serviceDate] : []}
+                onChange={(dates) => { if (dates[0]) setServiceDate(dates[0]); }}
+                title="Select Service Date"
+            />
 
             {/* Dropdown Sheets */}
             <DropdownSheet visible={openSheet === 'shiftType'} title="Shift Type" items={shiftTypes}

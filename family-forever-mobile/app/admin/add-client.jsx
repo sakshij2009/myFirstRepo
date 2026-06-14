@@ -29,13 +29,14 @@ export default function AddClientScreen() {
   const [agencies, setAgencies] = useState([]);
   const [avatarUri, setAvatarUri] = useState(null);
   const [picker, setPicker] = useState(null); // { title, options, onSelect }
+  const [showPharmacy, setShowPharmacy] = useState(false);
 
   const [form, setForm] = useState({
     name: '', clientCode: '', password: '', clientStatus: 'Active',
     parentEmail: '', agency: '', address: '', dob: '',
     kmRate: '', clientRate: '', isFamily: false, description: '',
     shiftPoints: [],
-    medications: [emptyMedication()],
+    medications: [],
     pharmacy: { pharmacyName: '', pharmacyEmail: '', pharmacyPhone: '', pharmacyAddress: '' },
   });
 
@@ -251,6 +252,7 @@ export default function AddClientScreen() {
                 <Text style={s.addInlineText}>Add</Text>
               </Pressable>
             </View>
+            {form.medications.length === 0 && <Text style={s.hint}>No medications added. Tap “Add” to add one.</Text>}
             {form.medications.map((m, i) => (
               <View key={i} style={s.subCard}>
                 <View style={s.rowBetween}>
@@ -274,12 +276,27 @@ export default function AddClientScreen() {
 
           {/* Pharmacy */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Pharmacy Information</Text>
-            <Field label="Pharmacy Name" placeholder="Enter pharmacy name" value={form.pharmacy.pharmacyName} onChange={(t) => setPharmacy('pharmacyName', t)} />
-            <Field label="Pharmacy Email" placeholder="Enter pharmacy email" value={form.pharmacy.pharmacyEmail} onChange={(t) => setPharmacy('pharmacyEmail', t)} type="email-address" />
-            <Field label="Pharmacy Phone" placeholder="Enter pharmacy phone" value={form.pharmacy.pharmacyPhone} onChange={(t) => setPharmacy('pharmacyPhone', t)} type="phone-pad" />
-            <Text style={s.label}>Pharmacy Address</Text>
-            <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter pharmacy address" placeholderTextColor="#9CA3AF" multiline value={form.pharmacy.pharmacyAddress} onChangeText={(t) => setPharmacy('pharmacyAddress', t)} />
+            <View style={s.rowBetween}>
+              <Text style={[s.cardTitle, { marginBottom: 0 }]}>Pharmacy Information</Text>
+              {!showPharmacy ? (
+                <Pressable style={s.addInlineBtn} onPress={() => setShowPharmacy(true)}>
+                  <Feather name="plus" size={16} color="#2D5F3F" /><Text style={s.addInlineText}>Add</Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => { setShowPharmacy(false); setForm(prev => ({ ...prev, pharmacy: { pharmacyName: '', pharmacyEmail: '', pharmacyPhone: '', pharmacyAddress: '' } })); }}>
+                  <Feather name="trash-2" size={18} color="#EF4444" />
+                </Pressable>
+              )}
+            </View>
+            {showPharmacy && (
+              <View style={{ marginTop: 16 }}>
+                <Field label="Pharmacy Name" placeholder="Enter pharmacy name" value={form.pharmacy.pharmacyName} onChange={(t) => setPharmacy('pharmacyName', t)} />
+                <Field label="Pharmacy Email" placeholder="Enter pharmacy email" value={form.pharmacy.pharmacyEmail} onChange={(t) => setPharmacy('pharmacyEmail', t)} type="email-address" />
+                <Field label="Pharmacy Phone" placeholder="Enter pharmacy phone" value={form.pharmacy.pharmacyPhone} onChange={(t) => setPharmacy('pharmacyPhone', t)} type="phone-pad" />
+                <Text style={s.label}>Pharmacy Address</Text>
+                <TextInput style={[s.input, s.textAreaSm]} placeholder="Enter pharmacy address" placeholderTextColor="#9CA3AF" multiline value={form.pharmacy.pharmacyAddress} onChangeText={(t) => setPharmacy('pharmacyAddress', t)} />
+              </View>
+            )}
           </View>
 
         </ScrollView>

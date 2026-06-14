@@ -28,6 +28,12 @@ import {
     orderBy,
 } from 'firebase/firestore';
 import { db } from '../../src/firebase/config';
+import ServiceDateCalendar from '../../src/components/ServiceDateCalendar';
+
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _p2 = (n) => String(n).padStart(2, '0');
+const fmtFlutter = (d) => `${_p2(d.getDate())} ${MON3[d.getMonth()]} ${d.getFullYear()}`;
+const fmtDDMMYYYY = (d) => `${_p2(d.getDate())}-${_p2(d.getMonth() + 1)}-${d.getFullYear()}`;
 
 /* ─────────────────────────────────────────────────────────── */
 /*  Dropdown Sheet Component                                   */
@@ -96,8 +102,8 @@ export default function AddShiftScreen() {
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date());
+    const [serviceDates, setServiceDates] = useState([new Date()]);
+    const [showServiceCal, setShowServiceCal] = useState(false);
     const [startTime, setStartTime] = useState(new Date());
     const [endTime, setEndTime] = useState(new Date());
     const [accessToReport, setAccessToReport] = useState(false);
@@ -174,9 +180,7 @@ export default function AddShiftScreen() {
         setShowPicker(p => ({ ...p, visible: Platform.OS === 'ios' }));
         if (selectedDate && event.type !== 'dismissed') {
             const field = showPicker.field;
-            if (field === 'startDate') setStartDate(selectedDate);
-            else if (field === 'endDate') setEndDate(selectedDate);
-            else if (field === 'startTime') setStartTime(selectedDate);
+            if (field === 'startTime') setStartTime(selectedDate);
             else if (field === 'endTime') setEndTime(selectedDate);
         }
     };
@@ -193,46 +197,52 @@ export default function AddShiftScreen() {
         if (!selectedClient) { Alert.alert('Missing', 'Please select a client.'); return; }
         if (!selectedUser) { Alert.alert('Missing', 'Please select a staff member.'); return; }
         if (!selectedCategory) { Alert.alert('Missing', 'Please select a shift category.'); return; }
+        if (!serviceDates.length) { Alert.alert('Missing', 'Please select at least one service date.'); return; }
 
         setSubmitting(true);
         try {
-            const newShiftId = Date.now().toString();
-
-            // Sync Overnight Logic
             const isOvernight = toTimeStr(endTime) < toTimeStr(startTime);
-            let endDateObj = new Date(startDate);
-            if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-            const payload = {
-                clientId: selectedClient.value,
-                clientName: selectedClient.fullName,
-                clientDetails: selectedClient, // From web
-                name: selectedUser.name,
-                userId: selectedUser.value,
-                userName: selectedUser.name, // From web
-                categoryName: selectedCategory.label,
-                shiftCategory: selectedCategory.label,
-                typeName: selectedShiftType?.label || 'Regular',
-                shiftType: selectedShiftType?.label || 'Regular',
-                startDate: startDate, // Web uses Timestamp.fromDate or Javascript Date, let's keep JS Date as it converts fine
-                endDate: endDateObj,
-                startTime: toTimeStr(startTime),
-                endTime: toTimeStr(endTime),
-                accessToShiftReport: accessToReport,
-                description: description,
-                clockIn: "",
-                clockOut: "",
-                shiftConfirmed: false,
-                isRatify: false,
-                isCancelled: false, // from web
-                shiftReport: "", // from web
-                shiftPoints: [], // Important for sync
-                createdAt: new Date(),
-                id: newShiftId,
-            };
+            // One shift per selected service date (web app behaviour)
+            const sorted = [...serviceDates].sort((a, b) => a - b);
+            for (let i = 0; i < sorted.length; i++) {
+                const sDate = sorted[i];
+                const endDateObj = new Date(sDate);
+                if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
+                const newShiftId = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
 
-            await setDoc(doc(db, 'shifts', newShiftId), payload);
-            Alert.alert('✅ Success', 'Shift added successfully.', [
+                await setDoc(doc(db, 'shifts', newShiftId), {
+                    clientId: selectedClient.value,
+                    clientName: selectedClient.fullName,
+                    clientDetails: selectedClient,
+                    name: selectedUser.name,
+                    userId: selectedUser.value,
+                    userName: selectedUser.name,
+                    categoryName: selectedCategory.label,
+                    shiftCategory: selectedCategory.label,
+                    typeName: selectedShiftType?.label || 'Regular',
+                    shiftType: selectedShiftType?.label || 'Regular',
+                    startDate: fmtFlutter(sDate),
+                    endDate: fmtFlutter(endDateObj),
+                    dateKey: fmtDDMMYYYY(sDate),
+                    timeStampId: sDate.getTime(),
+                    startTime: toTimeStr(startTime),
+                    endTime: toTimeStr(endTime),
+                    accessToShiftReport: accessToReport,
+                    description: description,
+                    clockIn: "",
+                    clockOut: "",
+                    shiftConfirmed: false,
+                    isRatify: false,
+                    isCancelled: false,
+                    shiftReport: "",
+                    shiftPoints: [],
+                    createdAt: new Date(),
+                    id: newShiftId,
+                });
+            }
+
+            Alert.alert('✅ Success', `${sorted.length} shift${sorted.length !== 1 ? 's' : ''} added successfully.`, [
                 { text: 'OK', onPress: () => router.back() }
             ]);
         } catch (err) {
@@ -244,12 +254,8 @@ export default function AddShiftScreen() {
     };
 
 
-    // helper: the current date field being picked
-    const pickerDate =
-        showPicker.field === 'startDate' ? startDate :
-            showPicker.field === 'endDate' ? endDate :
-                showPicker.field === 'startTime' ? startTime :
-                    endTime;
+    // helper: the current time field being picked
+    const pickerDate = showPicker.field === 'startTime' ? startTime : endTime;
 
     return (
         <SafeAreaView style={s.container} edges={['top']}>
@@ -356,22 +362,17 @@ export default function AddShiftScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Dates */}
-                    <View style={s.row}>
-                        <View style={[s.inputContainer, { flex: 1, marginRight: 8 }]}>
-                            <Text style={s.label}>Start Date</Text>
-                            <Pressable style={s.inputBox} onPress={() => openPicker('date', 'startDate')}>
-                                <Text style={s.inputText}>{formatDate(startDate)}</Text>
-                                <Feather name="calendar" size={16} color="#666" />
-                            </Pressable>
-                        </View>
-                        <View style={[s.inputContainer, { flex: 1, marginLeft: 8 }]}>
-                            <Text style={s.label}>End Date</Text>
-                            <Pressable style={s.inputBox} onPress={() => openPicker('date', 'endDate')}>
-                                <Text style={s.inputText}>{formatDate(endDate)}</Text>
-                                <Feather name="calendar" size={16} color="#666" />
-                            </Pressable>
-                        </View>
+                    {/* Service Date(s) — pick one or multiple */}
+                    <View style={s.inputContainer}>
+                        <Text style={s.label}>Service Date</Text>
+                        <Pressable style={s.inputBox} onPress={() => setShowServiceCal(true)}>
+                            <Text style={s.inputText} numberOfLines={1}>
+                                {serviceDates.length === 0 ? 'Select date(s)'
+                                    : serviceDates.length === 1 ? formatDate(serviceDates[0])
+                                        : `${serviceDates.length} dates selected`}
+                            </Text>
+                            <Feather name="calendar" size={16} color="#666" />
+                        </Pressable>
                     </View>
 
                     {/* Times */}
@@ -448,6 +449,15 @@ export default function AddShiftScreen() {
                     onChange={handleDateChange}
                 />
             )}
+
+            <ServiceDateCalendar
+                visible={showServiceCal}
+                onClose={() => setShowServiceCal(false)}
+                mode="multi"
+                selectedDates={serviceDates}
+                onChange={setServiceDates}
+                title="Select Service Date(s)"
+            />
 
             {/* ── Dropdown Sheets ── */}
             <DropdownSheet
