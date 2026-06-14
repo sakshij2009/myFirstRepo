@@ -374,7 +374,7 @@ export default function EditShiftScreen() {
                             </Pressable>
                         </View>
                         <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner"
-                            onChange={handleDateChange} style={{ alignSelf: 'stretch' }} />
+                            onChange={handleDateChange} textColor="#111827" style={{ height: 216, width: '100%' }} />
                     </View>
                 </Modal>
             )}

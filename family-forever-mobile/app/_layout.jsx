@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { View, Text, Pressable } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Expo Router uses this to catch render errors in any route → friendly screen
 // instead of a blank white screen.
@@ -101,6 +102,8 @@ export default function Layout() {
   // Admin/owner section has its own navigator + tab bar — hide the staff
   // tab bar whenever we're inside an /admin route.
   const isAdminRoute = pathname?.startsWith("/admin");
+  // Respect the device's bottom inset (Android nav buttons, iOS home indicator)
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -111,8 +114,8 @@ export default function Layout() {
         tabBarStyle: isAdminRoute ? { display: "none" } : {
           backgroundColor: "#FFFFFF",
           borderTopWidth: 0,
-          height: 85,
-          paddingBottom: 25,
+          height: 64 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 12),
           paddingTop: 10,
           elevation: 15,
           shadowColor: "#000",

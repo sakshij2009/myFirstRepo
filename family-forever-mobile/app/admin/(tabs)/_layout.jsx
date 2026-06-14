@@ -1,7 +1,11 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AdminTabsLayout() {
+    // Respect the device's bottom inset (Android nav buttons / gesture bar, iOS home indicator)
+    const insets = useSafeAreaInsets();
+    const bottomInset = insets.bottom || 0;
     return (
         <Tabs
             screenOptions={{
@@ -12,8 +16,8 @@ export default function AdminTabsLayout() {
                     backgroundColor: "#fff",
                     borderTopWidth: 1,
                     borderTopColor: "#e5e7eb",
-                    height: 65,
-                    paddingBottom: 8,
+                    height: 60 + bottomInset,
+                    paddingBottom: 8 + bottomInset,
                     paddingTop: 6,
                 },
                 tabBarLabelStyle: {
@@ -54,7 +58,7 @@ export default function AdminTabsLayout() {
             <Tabs.Screen
                 name="intake-forms"
                 options={{
-                    title: "Intake Forms",
+                    title: "Intake",
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="document-text" size={22} color={color} />
                     ),

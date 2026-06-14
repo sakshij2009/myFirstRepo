@@ -10,6 +10,7 @@ import {
     StyleSheet,
     Dimensions,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -91,6 +92,7 @@ export default function DashboardScreen() {
     const [shifts, setShifts] = useState([]);
     const [clients, setClients] = useState([]);
     const [agencies, setAgencies] = useState([]);
+    const [loading, setLoading] = useState(true);
     // Custom date range (only used when selectedPeriod === "Custom")
     const [customFrom, setCustomFrom] = useState(null);
     const [customTo, setCustomTo] = useState(null);
@@ -104,7 +106,8 @@ export default function DashboardScreen() {
         // Live listeners — dashboard stays fresh as data changes
         const unsubShifts = onSnapshot(collection(db, "shifts"), (snap) => {
             setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        }, (e) => console.warn("shifts listener:", e));
+            setLoading(false);
+        }, (e) => { console.warn("shifts listener:", e); setLoading(false); });
         const unsubClients = onSnapshot(collection(db, "clients"), (snap) => {
             setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         }, (e) => console.warn("clients listener:", e));
@@ -387,7 +390,12 @@ export default function DashboardScreen() {
 
                 {/* ========== SHIFT LIST ========== */}
                 <View style={s.shiftSection}>
-                    {filteredShifts.length === 0 ? (
+                    {loading ? (
+                        <View style={s.emptyBox}>
+                            <ActivityIndicator size="large" color="#2D5F3F" />
+                            <Text style={s.emptyText}>Loading shifts…</Text>
+                        </View>
+                    ) : filteredShifts.length === 0 ? (
                         <View style={s.emptyBox}>
                             <Ionicons name="calendar-outline" size={48} color="#ccc" />
                             <Text style={s.emptyText}>No shifts found</Text>
