@@ -32,7 +32,7 @@ import { db } from "../src/firebase/config";
 import { safeString, parseDate } from "../src/utils/date";
 
 // ── Office address (for personal vehicle KM) ─────────────────────────────────
-const OFFICE_ADDRESS = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
+const OFFICE_ADDRESS = "10110 124 St NW, Edmonton, AB T5N 1P6, Canada";
 
 // ── GPS distance helper ───────────────────────────────────────────────────────
 function haversineKm(c1, c2) {

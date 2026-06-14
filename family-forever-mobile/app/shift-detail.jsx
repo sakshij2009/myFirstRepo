@@ -1120,6 +1120,41 @@ export default function ShiftDetails() {
           </View>
         )}
 
+        {/* ── Scheduled Distance (shown before confirming) ────────────────── */}
+        {(() => {
+          const p0 = Array.isArray(shift?.shiftPoints) ? shift.shiftPoints[0] : null;
+          const o2p = p0?.officeToPickupKm ?? shift?.officeToPickupKm ?? 0;
+          const d2o = p0?.dropToOfficeKm ?? shift?.dropToOfficeKm ?? 0;
+          const route = p0?.scheduledRouteKm ?? 0;
+          const total = shift?.totalScheduledKm ?? (o2p + route + d2o);
+          const isTransport = /transport|supervised|visitation/i.test(shift?.shiftCategory || shift?.categoryName || "");
+          if (!isTransport || (!o2p && !d2o && !total)) return null;
+          return (
+            <View style={[styles.sectionCard, { marginTop: 15 }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <Ionicons name="speedometer-outline" size={18} color={PRIMARY_GREEN} />
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Scheduled Distance</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, color: GRAY_TEXT }}>Office → Pickup</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT }}>{o2p} km</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                <Text style={{ fontSize: 13, color: GRAY_TEXT }}>Pickup → Drop</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT }}>{route} km</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, color: GRAY_TEXT }}>Drop → Office</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: DARK_TEXT }}>{d2o} km</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", paddingTop: 12, borderTopWidth: 1, borderTopColor: GRAY_BORDER }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: PRIMARY_GREEN }}>Total Scheduled KM</Text>
+                <Text style={{ fontSize: 16, fontWeight: "800", color: PRIMARY_GREEN }}>{total} km</Text>
+              </View>
+            </View>
+          );
+        })()}
+
         {/* ── Shift Description ──────────────────────────────────────────── */}
         <View style={[styles.sectionCard, { marginTop: 15 }]}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -1402,7 +1437,7 @@ export default function ShiftDetails() {
               {isPersonalVehicle && (
                 <View style={{ marginBottom: 14 }}>
                   <Text style={{ fontSize: 12, color: "#374151", marginBottom: 6, fontWeight: "600" }}>OFFICE SEGMENTS (Personal Vehicle)</Text>
-                  <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Office: 3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada</Text>
+                  <Text style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Office: 10110 124 St NW, Edmonton, AB T5N 1P6, Canada</Text>
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 11, color: "#374151", marginBottom: 4, fontWeight: "600" }}>Office → Pickup (km)</Text>

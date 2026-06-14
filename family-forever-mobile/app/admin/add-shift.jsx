@@ -31,7 +31,7 @@ import { db } from '../../src/firebase/config';
 import ServiceDateCalendar from '../../src/components/ServiceDateCalendar';
 import { calculateRouteDistance } from '../../src/utils/mapboxHelper';
 
-const OFFICE_ADDRESS = '3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada';
+const OFFICE_ADDRESS = '10110 124 St NW, Edmonton, AB T5N 1P6, Canada';
 
 // Scheduled km for one shift point (office → pickup → drop → office), all rounded.
 // Returns the individual legs so the user app can show office→pickup + drop→office.
@@ -182,6 +182,9 @@ export default function AddShiftScreen() {
     const [returnEndTime, setReturnEndTime] = useState('');
     const [returnShiftPoints, setReturnShiftPoints] = useState([]);
     const [returnDriverId, setReturnDriverId] = useState(''); // '' = same as main staff
+    // Scheduled km (office→pickup→drop→office), auto-calculated via map
+    const [scheduledKm, setScheduledKm] = useState(0);
+    const [kmCalculating, setKmCalculating] = useState(false);
     const [startTime, setStartTime] = useState(new Date());
     const [endTime, setEndTime] = useState(new Date());
     const [accessToReport, setAccessToReport] = useState(false);
@@ -308,9 +311,26 @@ export default function AddShiftScreen() {
             });
         }
         setShiftPoints(points);
+        recomputeScheduledKm(points);
 
         // 3. Address (for emergent/respite)
         setShiftAddress(data.address || '');
+    };
+
+    // Scheduled km = sum of office→pickup→drop→office across all points (via map)
+    const recomputeScheduledKm = async (points) => {
+        const list = points || shiftPoints;
+        const valid = list.filter(p => p.pickupLocation && p.dropLocation);
+        if (!valid.length) { setScheduledKm(0); return; }
+        setKmCalculating(true);
+        try {
+            const results = await Promise.all(valid.map(p => computePointKm(p)));
+            setScheduledKm(results.reduce((s, r) => s + (r.totalKilometers || 0), 0));
+        } catch (e) {
+            console.warn('scheduled km error', e);
+        } finally {
+            setKmCalculating(false);
+        }
     };
 
     const updatePoint = (i, field, value) =>
@@ -378,6 +398,7 @@ export default function AddShiftScreen() {
                     isCancelled: false,
                     shiftReport: "",
                     shiftAddress: isAddressCat(selectedCategory?.label) ? shiftAddress : '',
+                    totalScheduledKm: scheduledKm,
                     createdAt: new Date(),
                     batchId,
                 };
@@ -629,6 +650,22 @@ export default function AddShiftScreen() {
                                     </View>
                                 </View>
                             ))}
+
+                            {/* Scheduled Kilometers (office → pickup → drop → office) */}
+                            {shiftPoints.length > 0 && (
+                                <View style={km.box}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={km.label}>Scheduled Kilometers</Text>
+                                        <Text style={km.sub}>Office → Pickup → Drop → Office (via map)</Text>
+                                    </View>
+                                    {kmCalculating
+                                        ? <ActivityIndicator color="#145228" />
+                                        : <Text style={km.value}>{scheduledKm} km</Text>}
+                                    <Pressable style={km.recalc} onPress={() => recomputeScheduledKm()}>
+                                        <Feather name="refresh-cw" size={16} color="#145228" />
+                                    </Pressable>
+                                </View>
+                            )}
                         </View>
                     )}
 
@@ -872,4 +909,12 @@ const rt = StyleSheet.create({
     changeBtn: { borderWidth: 1, borderColor: '#93c5fd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
     changeText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
     resetDriver: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 6 },
+});
+
+const km = StyleSheet.create({
+    box: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 12, padding: 14, marginTop: 4 },
+    label: { fontSize: 14, fontWeight: '700', color: '#145228' },
+    sub: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+    value: { fontSize: 18, fontWeight: '800', color: '#145228' },
+    recalc: { padding: 6 },
 });

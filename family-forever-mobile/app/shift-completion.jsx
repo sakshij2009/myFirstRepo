@@ -49,7 +49,7 @@ const SUCCESS    = "#10B981";
 const AMBER      = "#D97706";
 const AMBER_LT   = "#FFFBEB";
 
-const OFFICE_ADDRESS = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
+const OFFICE_ADDRESS = "10110 124 St NW, Edmonton, AB T5N 1P6, Canada";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMinutes(mins) {

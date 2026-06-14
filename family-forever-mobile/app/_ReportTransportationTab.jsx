@@ -17,7 +17,7 @@ import { db, storage } from "../src/firebase/config";
 import { Ionicons } from "@expo/vector-icons";
 import { calculateRouteDistance, reverseGeocode } from "../src/utils/mapboxHelper";
 
-const OFFICE_ADDRESS = "3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada";
+const OFFICE_ADDRESS = "10110 124 St NW, Edmonton, AB T5N 1P6, Canada";
 const MILEAGE_RATE = 0.72; // $0.72 per km
 
 /* ---------------- GPS haversine (for live tracking) ---------------- */
