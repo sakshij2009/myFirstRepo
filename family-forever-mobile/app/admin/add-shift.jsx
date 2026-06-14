@@ -29,6 +29,29 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../src/firebase/config';
 import ServiceDateCalendar from '../../src/components/ServiceDateCalendar';
+import { calculateRouteDistance } from '../../src/utils/mapboxHelper';
+
+const OFFICE_ADDRESS = '3040 142 Ave NW, Edmonton, AB T5Y 1J2, Canada';
+
+// Scheduled km for one shift point (office → pickup → drop → office), all rounded.
+// Returns the individual legs so the user app can show office→pickup + drop→office.
+const computePointKm = async (p) => {
+    if (!p?.pickupLocation || !p?.dropLocation) return {};
+    try {
+        const [o2p, d2o, p2d] = await Promise.all([
+            calculateRouteDistance([OFFICE_ADDRESS, p.pickupLocation]),
+            calculateRouteDistance([p.dropLocation, OFFICE_ADDRESS]),
+            calculateRouteDistance([p.pickupLocation, p.dropLocation]),
+        ]);
+        const officeToPickupKm = o2p?.km || 0;   // helper already Math.rounds km
+        const dropToOfficeKm = d2o?.km || 0;
+        const routeKm = p2d?.km || 0;            // scheduled pickup→drop
+        return { officeToPickupKm, dropToOfficeKm, scheduledRouteKm: routeKm, totalKilometers: officeToPickupKm + routeKm + dropToOfficeKm };
+    } catch (e) {
+        console.warn('computePointKm error', e);
+        return {};
+    }
+};
 
 const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const _p2 = (n) => String(n).padStart(2, '0');
@@ -321,6 +344,12 @@ export default function AddShiftScreen() {
             const wantReturn = returnTrip && returnShiftPoints.length > 0 && returnStartTime && returnEndTime;
             const returnStaff = returnDriverId ? (staff.find(u => u.value === returnDriverId) || selectedUser) : selectedUser;
 
+            // Scheduled km via Mapbox (office→pickup→drop→office) — computed once, stored on each point
+            const enrichedPoints = await Promise.all(shiftPoints.map(async p => ({ ...p, ...(await computePointKm(p)) })));
+            const enrichedReturnPoints = wantReturn
+                ? await Promise.all(returnShiftPoints.map(async p => ({ ...p, ...(await computePointKm(p)) })))
+                : [];
+
             // One shift per selected service date (web app behaviour)
             const sorted = [...serviceDates].sort((a, b) => a - b);
             for (let i = 0; i < sorted.length; i++) {
@@ -363,7 +392,9 @@ export default function AddShiftScreen() {
                     endDate: fmtFlutter(endDateObj),
                     startTime: toTimeStr(startTime),
                     endTime: toTimeStr(endTime),
-                    shiftPoints: shiftPoints,
+                    shiftPoints: enrichedPoints,
+                    officeToPickupKm: enrichedPoints[0]?.officeToPickupKm || 0,
+                    dropToOfficeKm: enrichedPoints[0]?.dropToOfficeKm || 0,
                     isReturnTrip: false,
                     id: newShiftId,
                 });
@@ -383,7 +414,9 @@ export default function AddShiftScreen() {
                         endDate: fmtFlutter(retEnd),
                         startTime: returnStartTime,
                         endTime: returnEndTime,
-                        shiftPoints: returnShiftPoints,
+                        shiftPoints: enrichedReturnPoints,
+                        officeToPickupKm: enrichedReturnPoints[0]?.officeToPickupKm || 0,
+                        dropToOfficeKm: enrichedReturnPoints[0]?.dropToOfficeKm || 0,
                         isReturnTrip: true,
                         id: retId,
                     });
