@@ -60,6 +60,19 @@ export async function geocodeAddress(address) {
   return null;
 }
 
+// ── Mapbox Directions (accurate, ~Google) — used when a token is set ────────
+async function mapboxRoute(addresses) {
+  if (!MAPBOX_ACCESS_TOKEN) return null;
+  const coords = (await Promise.all(addresses.map((a) => geocodeAddress(a)))).filter(Boolean);
+  if (coords.length < 2) return null;
+  const coordString = coords.map((c) => `${c[0]},${c[1]}`).join(";");
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordString}?access_token=${MAPBOX_ACCESS_TOKEN}&overview=false`;
+  const data = await (await fetch(url)).json();
+  const route = data.routes?.[0];
+  if (route) return { km: Math.round(route.distance / 1000), durationMin: Math.round(route.duration / 60) };
+  return null;
+}
+
 async function osrmRoute(addresses) {
   const coords = (await Promise.all(addresses.map((a) => geocodeAddress(a)))).filter(Boolean);
   if (coords.length < 2) return null;
@@ -72,11 +85,15 @@ async function osrmRoute(addresses) {
 }
 
 // ── Distance + duration for a sequence of addresses ─────────────────────────
+// Priority: Google Directions (exact Google match, if API enabled) →
+//           Mapbox Directions (token) → OSRM (free fallback)
 export async function calculateRouteDistance(addresses) {
   try {
     const google = await googleRoute(addresses);
     if (google) return google;
-    return await osrmRoute(addresses); // fallback
+    const mb = await mapboxRoute(addresses);
+    if (mb) return mb;
+    return await osrmRoute(addresses);
   } catch (error) {
     console.error("Routing error:", error, "| addresses:", addresses);
     return null;
