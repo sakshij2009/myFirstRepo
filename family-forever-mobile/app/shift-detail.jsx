@@ -485,7 +485,6 @@ export default function ShiftDetails() {
           if (d) refTs = d.getTime();
         }
         if (!refTs) refTs = Date.now();
-        const windowStart = refTs - 24 * 60 * 60 * 1000;
 
         const rows = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
@@ -498,10 +497,11 @@ export default function ShiftDetails() {
             }
             if (!ts) return false;
             s._ts = ts;
-            return ts >= windowStart && ts <= refTs;
+            return ts <= refTs; // any earlier shift for this client
           })
           .sort((a, b) => b._ts - a._ts);
-        setPrevShifts(rows);
+        // Only the single most recent previous shift for this client
+        setPrevShifts(rows.slice(0, 1));
       } catch (e) {
         console.warn("Failed to load previous 24h shifts:", e);
       }
@@ -1171,15 +1171,12 @@ export default function ShiftDetails() {
           </Text>
         </View>
 
-        {/* ── Previous Shifts (last 24 hours) ─────────────────────────────── */}
+        {/* ── Last Shift for this client ──────────────────────────────────── */}
         {prevShifts.length > 0 && (
           <View style={[styles.sectionCard, { marginTop: 15 }]}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
               <Ionicons name="time-outline" size={18} color={PRIMARY_GREEN} />
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Previous Shifts</Text>
-              <View style={{ backgroundColor: GRAY_BORDER, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 10, fontWeight: "700", color: GRAY_TEXT }}>Last 24 hours</Text>
-              </View>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Last Shift</Text>
             </View>
             {prevShifts.map((ps, i) => {
               const psDate = ps._ts ? new Date(ps._ts) : null;

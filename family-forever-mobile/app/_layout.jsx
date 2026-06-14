@@ -2,7 +2,23 @@ import { Stack, Tabs, usePathname } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
+
+// Expo Router uses this to catch render errors in any route → friendly screen
+// instead of a blank white screen.
+export function ErrorBoundary({ error, retry }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#F9FAFB", alignItems: "center", justifyContent: "center", padding: 28 }}>
+      <Text style={{ fontSize: 20, fontWeight: "800", color: "#111827", marginBottom: 8 }}>Something went wrong</Text>
+      <Text style={{ fontSize: 14, color: "#6B7280", textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
+        The screen ran into a problem. Please try again.
+      </Text>
+      <Pressable onPress={retry} style={{ backgroundColor: "#1F6F43", borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 }}>
+        <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Try Again</Text>
+      </Pressable>
+    </View>
+  );
+}
 import * as SplashScreen from "expo-splash-screen";
 import { 
   useFonts, 

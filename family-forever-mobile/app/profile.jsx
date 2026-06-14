@@ -58,10 +58,23 @@ export default function Profile() {
         return;
       }
       const parsed = JSON.parse(stored);
-      const userRef = doc(db, "users", parsed.username || parsed.userId);
+      // Always show the logged-in user immediately (prevents a wrong/blank profile)
+      setUser(parsed);
+      setLoading(false);
+
+      // Live-update from Firestore, but ONLY if it's the same person (guard against
+      // a stale/colliding doc id showing someone else's profile)
+      const docId = parsed.id || parsed.firestoreId || parsed.username || parsed.userId;
+      if (!docId) return;
+      const userRef = doc(db, "users", String(docId));
       unsub = onSnapshot(userRef, (snap) => {
-        if (snap.exists()) setUser({ id: snap.id, ...snap.data() });
-        setLoading(false);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const sameUser =
+          (parsed.email && data.email && parsed.email === data.email) ||
+          (parsed.userId && data.userId && String(parsed.userId) === String(data.userId)) ||
+          (!parsed.email && !parsed.userId); // no identifier to compare → trust it
+        if (sameUser) setUser({ id: snap.id, ...data });
       });
     };
     loadUser();
