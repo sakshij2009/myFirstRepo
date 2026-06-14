@@ -41,23 +41,33 @@ function googleRoute(addresses) {
   });
 }
 
-// ── Geocode (used only for the OSRM fallback) ───────────────────────────────
+// ── Geocode → [lng, lat] (Google JS Geocoder is enabled & accurate) ─────────
 export async function geocodeAddress(address) {
   if (!address || address === "—") return null;
+  // 1. Google Maps JS Geocoder (accurate, corrects typos — same as Google Maps)
+  if (window.google?.maps?.Geocoder) {
+    try {
+      const geocoder = new window.google.maps.Geocoder();
+      const res = await geocoder.geocode({ address });
+      const l = res.results?.[0]?.geometry?.location;
+      if (l) return [l.lng(), l.lat()];
+    } catch (e) { /* fall through */ }
+  }
+  // 2. Mapbox (if a token is set)
   try {
     if (MAPBOX_ACCESS_TOKEN) {
       const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`;
       const data = await (await fetch(url)).json();
-      return data.features?.[0]?.center || null;
+      if (data.features?.[0]?.center) return data.features[0].center;
     }
+  } catch (e) { /* fall through */ }
+  // 3. Nominatim (free)
+  try {
     const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
     const data = await (await fetch(url)).json();
     if (Array.isArray(data) && data[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
-    return null;
-  } catch (error) {
-    console.error("Geocoding error:", error);
-    return null;
-  }
+  } catch (e) { /* fall through */ }
+  return null;
 }
 
 async function osrmRoute(addresses) {
