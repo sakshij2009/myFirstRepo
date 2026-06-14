@@ -153,6 +153,12 @@ export default function AddShiftScreen() {
     // Transportation / Supervised → shift points; Emergent / Respite → single address
     const [shiftPoints, setShiftPoints] = useState([]);
     const [shiftAddress, setShiftAddress] = useState('');
+    // Return trip (transportation): swapped pickup/drop, own times, optional different driver
+    const [returnTrip, setReturnTrip] = useState(false);
+    const [returnStartTime, setReturnStartTime] = useState('');
+    const [returnEndTime, setReturnEndTime] = useState('');
+    const [returnShiftPoints, setReturnShiftPoints] = useState([]);
+    const [returnDriverId, setReturnDriverId] = useState(''); // '' = same as main staff
     const [startTime, setStartTime] = useState(new Date());
     const [endTime, setEndTime] = useState(new Date());
     const [accessToReport, setAccessToReport] = useState(false);
@@ -289,6 +295,20 @@ export default function AddShiftScreen() {
     const swapPoint = (i) =>
         setShiftPoints(prev => prev.map((p, idx) => idx === i ? { ...p, pickupLocation: p.dropLocation, dropLocation: p.pickupLocation } : p));
 
+    // ── Return trip ──────────────────────────────────────────────
+    const enableReturnTrip = () => {
+        setReturnTrip(true);
+        // Start from the main points with pickup/drop swapped
+        setReturnShiftPoints(shiftPoints.map(p => ({ ...p, pickupLocation: p.dropLocation, dropLocation: p.pickupLocation })));
+    };
+    const disableReturnTrip = () => {
+        setReturnTrip(false); setReturnShiftPoints([]); setReturnStartTime(''); setReturnEndTime(''); setReturnDriverId('');
+    };
+    const updateReturnPoint = (i, field, value) =>
+        setReturnShiftPoints(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
+    const swapReturnPoint = (i) =>
+        setReturnShiftPoints(prev => prev.map((p, idx) => idx === i ? { ...p, pickupLocation: p.dropLocation, dropLocation: p.pickupLocation } : p));
+
     const handleSubmit = async () => {
         if (!selectedClient) { Alert.alert('Missing', 'Please select a client.'); return; }
         if (!selectedUser) { Alert.alert('Missing', 'Please select a staff member.'); return; }
@@ -298,6 +318,8 @@ export default function AddShiftScreen() {
         setSubmitting(true);
         try {
             const isOvernight = toTimeStr(endTime) < toTimeStr(startTime);
+            const wantReturn = returnTrip && returnShiftPoints.length > 0 && returnStartTime && returnEndTime;
+            const returnStaff = returnDriverId ? (staff.find(u => u.value === returnDriverId) || selectedUser) : selectedUser;
 
             // One shift per selected service date (web app behaviour)
             const sorted = [...serviceDates].sort((a, b) => a - b);
@@ -306,24 +328,18 @@ export default function AddShiftScreen() {
                 const endDateObj = new Date(sDate);
                 if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
                 const newShiftId = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+                const batchId = newShiftId; // links the outgoing + return trip for this date
 
-                await setDoc(doc(db, 'shifts', newShiftId), {
+                const baseShift = {
                     clientId: selectedClient.value,
                     clientName: selectedClient.fullName,
                     clientDetails: selectedClient,
-                    name: selectedUser.name,
-                    userId: selectedUser.value,
-                    userName: selectedUser.name,
                     categoryName: selectedCategory.label,
                     shiftCategory: selectedCategory.label,
                     typeName: selectedShiftType?.label || 'Regular',
                     shiftType: selectedShiftType?.label || 'Regular',
-                    startDate: fmtFlutter(sDate),
-                    endDate: fmtFlutter(endDateObj),
                     dateKey: fmtDDMMYYYY(sDate),
                     timeStampId: sDate.getTime(),
-                    startTime: toTimeStr(startTime),
-                    endTime: toTimeStr(endTime),
                     accessToShiftReport: accessToReport,
                     description: description,
                     clockIn: "",
@@ -332,14 +348,50 @@ export default function AddShiftScreen() {
                     isRatify: false,
                     isCancelled: false,
                     shiftReport: "",
-                    shiftPoints: shiftPoints,
                     shiftAddress: isAddressCat(selectedCategory?.label) ? shiftAddress : '',
                     createdAt: new Date(),
+                    batchId,
+                };
+
+                // Outgoing shift
+                await setDoc(doc(db, 'shifts', newShiftId), {
+                    ...baseShift,
+                    name: selectedUser.name,
+                    userId: selectedUser.value,
+                    userName: selectedUser.name,
+                    startDate: fmtFlutter(sDate),
+                    endDate: fmtFlutter(endDateObj),
+                    startTime: toTimeStr(startTime),
+                    endTime: toTimeStr(endTime),
+                    shiftPoints: shiftPoints,
+                    isReturnTrip: false,
                     id: newShiftId,
                 });
+
+                // Return trip shift (swapped points, own times, possibly different driver)
+                if (wantReturn) {
+                    const retOvernight = returnEndTime < returnStartTime;
+                    const retEnd = new Date(sDate);
+                    if (retOvernight) retEnd.setDate(retEnd.getDate() + 1);
+                    const retId = `${newShiftId}_ret`;
+                    await setDoc(doc(db, 'shifts', retId), {
+                        ...baseShift,
+                        name: returnStaff.name,
+                        userId: returnStaff.value,
+                        userName: returnStaff.name,
+                        startDate: fmtFlutter(sDate),
+                        endDate: fmtFlutter(retEnd),
+                        startTime: returnStartTime,
+                        endTime: returnEndTime,
+                        shiftPoints: returnShiftPoints,
+                        isReturnTrip: true,
+                        id: retId,
+                    });
+                }
             }
 
-            Alert.alert('✅ Success', `${sorted.length} shift${sorted.length !== 1 ? 's' : ''} added successfully.`, [
+            const total = sorted.length * (wantReturn ? 2 : 1);
+            Alert.alert('✅ Success', `${total} shift${total !== 1 ? 's' : ''} added successfully.`, [
                 { text: 'OK', onPress: () => router.back() }
             ]);
         } catch (err) {
@@ -547,6 +599,70 @@ export default function AddShiftScreen() {
                         </View>
                     )}
 
+                    {/* Return Trip — Transportation / Supervised with points */}
+                    {(isTransportCat(selectedCategory?.label) || isSupervisedCat(selectedCategory?.label)) && shiftPoints.length > 0 && (
+                        <>
+                            {!returnTrip ? (
+                                <Pressable style={rt.addBtn} onPress={enableReturnTrip}>
+                                    <Feather name="corner-down-left" size={16} color="#1d4ed8" />
+                                    <Text style={rt.addText}>Add Return Trip</Text>
+                                </Pressable>
+                            ) : (
+                                <View style={rt.section}>
+                                    <View style={rt.header}>
+                                        <Text style={rt.title}>↩ Return Trip</Text>
+                                        <Pressable onPress={disableReturnTrip}><Text style={rt.remove}>Remove</Text></Pressable>
+                                    </View>
+                                    <Text style={rt.note}>Pickup & drop are swapped · set the return times</Text>
+
+                                    <View style={sp.row}>
+                                        <View style={{ flex: 1, marginRight: 6 }}>
+                                            <Text style={sp.fieldLabel}>Return Start Time</Text>
+                                            <TextInput style={sp.input} placeholder="e.g. 02:00 PM" placeholderTextColor="#9CA3AF" value={returnStartTime} onChangeText={setReturnStartTime} />
+                                        </View>
+                                        <View style={{ flex: 1, marginLeft: 6 }}>
+                                            <Text style={sp.fieldLabel}>Return End Time</Text>
+                                            <TextInput style={sp.input} placeholder="e.g. 03:00 PM" placeholderTextColor="#9CA3AF" value={returnEndTime} onChangeText={setReturnEndTime} />
+                                        </View>
+                                    </View>
+
+                                    {/* Return driver */}
+                                    <Text style={sp.fieldLabel}>Return Trip Driver</Text>
+                                    <View style={rt.driverRow}>
+                                        <Text style={rt.driverName}>
+                                            {(returnDriverId ? (staff.find(u => u.value === returnDriverId)?.name) : selectedUser?.name) || 'Same as main shift'}
+                                            {!returnDriverId ? ' (same as main)' : ''}
+                                        </Text>
+                                        <Pressable style={rt.changeBtn} onPress={() => setOpenSheet('returnDriver')}>
+                                            <Text style={rt.changeText}>Change Driver</Text>
+                                        </Pressable>
+                                    </View>
+                                    {!!returnDriverId && (
+                                        <Pressable onPress={() => setReturnDriverId('')}><Text style={rt.resetDriver}>Reset to same driver</Text></Pressable>
+                                    )}
+
+                                    {/* Return points */}
+                                    {returnShiftPoints.map((p, i) => (
+                                        <View key={i} style={[sp.card, { backgroundColor: '#eef4ff', borderColor: '#dbeafe', marginTop: 10 }]}>
+                                            <View style={sp.head}>
+                                                <View style={sp.avatar}><Text style={sp.avatarText}>{(p.name || String.fromCharCode(65 + i)).charAt(0).toUpperCase()}</Text></View>
+                                                <Text style={sp.name}>{p.name || `Member ${i + 1}`}</Text>
+                                            </View>
+                                            <Text style={sp.fieldLabel}>Pickup Location</Text>
+                                            <TextInput style={sp.input} placeholder="Pickup address" placeholderTextColor="#9CA3AF" value={p.pickupLocation} onChangeText={(t) => updateReturnPoint(i, 'pickupLocation', t)} />
+                                            <Pressable style={sp.swapBtn} onPress={() => swapReturnPoint(i)}>
+                                                <Feather name="repeat" size={14} color="#1d4ed8" />
+                                                <Text style={sp.swapText}>Swap pickup & drop</Text>
+                                            </Pressable>
+                                            <Text style={sp.fieldLabel}>Drop Location</Text>
+                                            <TextInput style={sp.input} placeholder="Drop address" placeholderTextColor="#9CA3AF" value={p.dropLocation} onChangeText={(t) => updateReturnPoint(i, 'dropLocation', t)} />
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </>
+                    )}
+
                     {/* Access Toggle */}
                     <View style={s.toggleContainer}>
                         <View>
@@ -646,6 +762,14 @@ export default function AddShiftScreen() {
                 onSelect={setSelectedUser}
                 onClose={() => setOpenSheet(null)}
             />
+            <DropdownSheet
+                visible={openSheet === 'returnDriver'}
+                title="Return Trip Driver"
+                items={staff}
+                selected={returnDriverId}
+                onSelect={(u) => setReturnDriverId(u.value)}
+                onClose={() => setOpenSheet(null)}
+            />
         </SafeAreaView>
     );
 }
@@ -700,4 +824,19 @@ const sp = StyleSheet.create({
     row: { flexDirection: 'row' },
     swapBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 4 },
     swapText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
+});
+
+const rt = StyleSheet.create({
+    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#1d4ed8', borderRadius: 10, paddingVertical: 12, marginBottom: 14, backgroundColor: '#eef4ff' },
+    addText: { color: '#1d4ed8', fontSize: 14, fontWeight: '700' },
+    section: { borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 12, padding: 14, marginBottom: 14, backgroundColor: '#f8faff' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    title: { fontSize: 15, fontWeight: '700', color: '#1d4ed8' },
+    remove: { color: '#ef4444', fontSize: 13, fontWeight: '700' },
+    note: { fontSize: 12, color: '#60a5fa', marginTop: 2, marginBottom: 10 },
+    driverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 },
+    driverName: { flex: 1, fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
+    changeBtn: { borderWidth: 1, borderColor: '#93c5fd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+    changeText: { color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
+    resetDriver: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 6 },
 });
