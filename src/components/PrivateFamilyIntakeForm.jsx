@@ -26,6 +26,16 @@ const STEPS = [
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
 const RELATIONSHIPS = ["Mother","Father","Grandmother","Grandfather","Aunt","Uncle","Legal Guardian","Foster Parent","Other"];
 const PROVINCES = ["Alberta","British Columbia","Manitoba","New Brunswick","Newfoundland and Labrador","Nova Scotia","Ontario","Prince Edward Island","Quebec","Saskatchewan","Northwest Territories","Nunavut","Yukon"];
+const SERVICE_TYPES = [
+  { value: "Transportation", desc: "assistance with travel to and from visits" },
+  { value: "Respite Care", desc: "temporary care for the child" },
+  { value: "Supervised Visits", desc: "visits monitored by trained staff" },
+  { value: "Supervised Exchanges", desc: "safe handoff of the child between parties" },
+  { value: "Virtual / Phone Visit Monitoring", desc: "monitored phone or video visits" },
+];
+const VISIT_FREQUENCIES = ["Weekly", "Bi-weekly", "Monthly", "As needed", "Other"];
+const VISIT_DURATIONS = ["2 hours", "3 hours", "4 hours", "5 hours", "6 hours", "7 hours", "8 hours"];
+const VISIT_LOCATIONS = ["Family Forever Office", "Community Location", "Client Home", "Public Place", "Other"];
 const GENDERS = ["Male","Female","Non-binary","Prefer not to say"];
 const CUSTODY_OPTIONS = ["Sole Custody","Shared Custody","Court-Ordered Visitation","Informal Arrangement","Other"];
 
@@ -156,6 +166,53 @@ const calcAge = (dob) => {
   return m > 0 ? `${y}y ${m}m` : `${y}y`;
 };
 
+// ── Visit Dates Calendar (multi-select, next 6 months) ─────────────────────
+const CAL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const CAL_DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+const VisitDatesCalendar = ({ selected = [], onToggle }) => {
+  const [view, setView] = useState(new Date());
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const maxDate = new Date(); maxDate.setMonth(maxDate.getMonth() + 6); maxDate.setHours(23, 59, 59, 999);
+  const y = view.getFullYear(), m = view.getMonth();
+  const firstDay = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const iso = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={() => setView(new Date(y, m - 1, 1))}
+          className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50">‹</button>
+        <span className="text-sm font-semibold text-gray-700">{CAL_MONTHS[m]} {y}</span>
+        <button type="button" onClick={() => setView(new Date(y, m + 1, 1))}
+          className="w-7 h-7 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50">›</button>
+      </div>
+      <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-gray-400 mb-1">
+        {CAL_DAYS.map(d => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={`e${i}`} />;
+          const dateObj = new Date(y, m, d); dateObj.setHours(0, 0, 0, 0);
+          const di = iso(d);
+          const disabled = dateObj < today || dateObj > maxDate;
+          const sel = selected.includes(di);
+          return (
+            <button key={di} type="button" disabled={disabled} onClick={() => onToggle(di)}
+              className={`h-9 rounded-lg text-sm transition-colors ${disabled ? "text-gray-300 cursor-not-allowed" : sel ? "text-white" : "text-gray-700 hover:bg-gray-100"}`}
+              style={sel ? { background: GREEN } : {}}>
+              {d}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // ── Main Form Component ────────────────────────────────────────────────────
 const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   const navigate = useNavigate();
@@ -186,7 +243,15 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     schedulingPreferences: "",
     approvedVisitors: "",
     safetyConcerns: "",
-    
+
+    // Type of Service Required + Requested Visit Schedule
+    serviceTypes: [],
+    requestedFrequency: "",
+    requestedDuration: "",
+    visitLocation: "",
+    preferredTimes: "",
+    preferredVisitDates: [],
+
     // Part B/C: Party Confidential Profile (Dynamic) — Applicant Information
     fullName: "",
     address: "",
@@ -401,6 +466,12 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         schedulingPreferences: form.schedulingPreferences,
         approvedVisitors: form.approvedVisitors,
         safetyConcerns: form.safetyConcerns,
+        serviceTypes: form.serviceTypes,
+        requestedFrequency: form.requestedFrequency,
+        requestedDuration: form.requestedDuration,
+        visitLocation: form.visitLocation,
+        preferredTimes: form.preferredTimes,
+        preferredVisitDates: form.preferredVisitDates,
       };
 
       const payload = {
@@ -513,42 +584,85 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
       case 2: return (
         <div className="space-y-6">
-          <SectionCard num={2} title="Part A – Case Information" subtitle="This section is shared internal case information used by Family Forever Inc.">
-            <div className="mb-8">
-              <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                <Users size={16} /> Child(ren) Information
-              </h4>
-              {form.children.map((child, i) => (
-                <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 relative">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Child #{i+1}</span>
-                    {form.children.length > 1 && <button onClick={() => removeChild(i)} className="text-red-400 hover:text-red-600"><X size={14}/></button>}
+          {/* 4. Children's Information */}
+          <SectionCard num={4} title="Children's Information">
+            <div className="flex items-center justify-between mb-4">
+              <Label required>Child/Children Details</Label>
+              <button type="button" onClick={addChild}
+                className="flex items-center gap-1.5 text-sm font-semibold border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50" style={{ color: GREEN }}>
+                <Plus size={15} /> Add Child
+              </button>
+            </div>
+            {form.children.map((child, i) => (
+              <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 relative">
+                {form.children.length > 1 && (
+                  <button type="button" onClick={() => removeChild(i)} className="absolute top-3 right-3 text-red-400 hover:text-red-600"><X size={16} /></button>
+                )}
+                <div className="grid grid-cols-12 gap-4">
+                  <div className="col-span-12 sm:col-span-5">
+                    <Input label="Child's Full Name" placeholder="Full legal name" value={child.fullName} onChange={e => updateChild(i, "fullName", e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <Input label="Full Legal Name" required value={child.fullName} onChange={e => updateChild(i, "fullName", e.target.value)} />
-                    <Input label="Date of Birth" type="date" required value={child.dob} onChange={e => updateChild(i, "dob", e.target.value)} />
+                  <div className="col-span-7 sm:col-span-4">
+                    <Input label="Date of Birth" type="date" value={child.dob} onChange={e => updateChild(i, "dob", e.target.value)} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-5 sm:col-span-3">
+                    <Input label="Age" placeholder="—" value={calcAge(child.dob)} disabled readOnly />
+                  </div>
+                  <div className="col-span-6">
                     <Select label="Gender" options={GENDERS} value={child.gender} onChange={v => updateChild(i, "gender", v)} />
-                    <Select label="Custody Status" options={CUSTODY_OPTIONS} value={child.custody} onChange={v => updateChild(i, "custody", v)} />
+                  </div>
+                  <div className="col-span-6">
+                    <Select label="Custody" options={CUSTODY_OPTIONS} value={child.custody} onChange={v => updateChild(i, "custody", v)} />
+                  </div>
+                  <div className="col-span-12">
+                    <Label>Child's Picture (Optional)</Label>
+                    <input type="file" accept="image/*"
+                      onChange={e => updateChild(i, "photo", e.target.files[0])}
+                      className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:bg-white file:text-gray-700 file:text-sm file:cursor-pointer" />
+                    <p className="text-xs text-gray-400 mt-1">Upload a recent photo of the child (JPG, PNG, or other image formats)</p>
                   </div>
                 </div>
-              ))}
-              <button onClick={addChild} className="flex items-center gap-2 text-xs font-bold text-emerald-700 hover:text-emerald-800"><Plus size={14}/> Add Another Child</button>
-              {errors.child0 && <p className="text-red-500 text-xs mt-2">{errors.child0}</p>}
-            </div>
+              </div>
+            ))}
+            {errors.child0 && <p className="text-red-500 text-xs mt-2">{errors.child0}</p>}
+          </SectionCard>
 
-            <div className="space-y-4">
-              <Radio label="Court Order Status" options={["Yes", "No", "Pending"]} value={form.courtOrder} onChange={v => set("courtOrder", v)} />
-              {form.courtOrder === "Yes" && (
-                <FileUpload label="Upload Court Order" fileRef={courtOrderFileRef} file={form.courtOrderFile} onChange={f => set("courtOrderFile", f)} />
-              )}
-              <Radio label="Child Welfare Involvement?" options={["Yes", "No"]} value={form.childWelfareInvolvement} onChange={v => set("childWelfareInvolvement", v)} />
-              <Input label="Visit Type (e.g. Supervised, Exchange)" value={form.visitType} onChange={e => set("visitType", e.target.value)} />
-              <Textarea label="Visit Goals" placeholder="What are your goals for these visits?" value={form.visitGoals} onChange={e => set("visitGoals", e.target.value)} />
-              <Textarea label="Scheduling Preferences" placeholder="Days/times that work best for visits..." value={form.schedulingPreferences} onChange={e => set("schedulingPreferences", e.target.value)} />
-              <Textarea label="Approved Visitors" placeholder="Names of individuals approved to participate..." value={form.approvedVisitors} onChange={e => set("approvedVisitors", e.target.value)} />
-              <Textarea label="Shared Safety Concerns" placeholder="Non-confidential safety details relevant to visitation..." value={form.safetyConcerns} onChange={e => set("safetyConcerns", e.target.value)} />
+          {/* 5. Type of Service Required */}
+          <SectionCard num={5} title="Type of Service Required">
+            <Label required>Service Type</Label>
+            <div className="space-y-2.5 mt-1">
+              {SERVICE_TYPES.map(s => {
+                const checked = form.serviceTypes.includes(s.value);
+                return (
+                  <label key={s.value} className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={checked}
+                      onChange={() => set("serviceTypes", checked ? form.serviceTypes.filter(v => v !== s.value) : [...form.serviceTypes, s.value])}
+                      className="mt-1 w-4 h-4 accent-green-700" />
+                    <span className="text-sm text-gray-700">{s.value} <span className="text-gray-400">({s.desc})</span></span>
+                  </label>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          {/* 6. Requested Visit Schedule */}
+          <SectionCard num={6} title="Requested Visit Schedule">
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Requested Frequency" placeholder="Select frequency" options={VISIT_FREQUENCIES} value={form.requestedFrequency} onChange={v => set("requestedFrequency", v)} />
+              <div>
+                <Select label="Requested Duration per Visit" placeholder="Select duration" options={VISIT_DURATIONS} value={form.requestedDuration} onChange={v => set("requestedDuration", v)} />
+                <p className="text-xs text-gray-400 -mt-2">Maximum 8 hours. Minimum 2-hour charge applies to all visits.</p>
+              </div>
+            </div>
+            <Select label="Visit Location" placeholder="Select location" options={VISIT_LOCATIONS} value={form.visitLocation} onChange={v => set("visitLocation", v)} />
+            <Input label="Preferred Time(s) of Day" placeholder="e.g., Morning (9am-12pm), Afternoon (1pm-4pm)" value={form.preferredTimes} onChange={e => set("preferredTimes", e.target.value)} />
+            <div className="mb-2">
+              <Label>Select Preferred Visit Dates (Optional)</Label>
+              <p className="text-xs text-gray-500 mb-3">Click on dates in the calendar below to select your preferred visit dates. You can select dates over the next 6 months.</p>
+              <VisitDatesCalendar
+                selected={form.preferredVisitDates}
+                onToggle={(di) => set("preferredVisitDates", form.preferredVisitDates.includes(di) ? form.preferredVisitDates.filter(x => x !== di) : [...form.preferredVisitDates, di])}
+              />
             </div>
           </SectionCard>
         </div>
