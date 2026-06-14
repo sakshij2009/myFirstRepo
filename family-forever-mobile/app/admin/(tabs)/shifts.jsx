@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Switch } from 'react-native';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../src/firebase/config';
 import { parseDate } from '../../../src/utils/date';
 import { generateShiftReportPdf } from '../../../src/utils/shiftReportPdf';
@@ -363,7 +363,7 @@ export default function ShiftsScreen({ isDarkMode = false }) {
 
             <View style={{ gap: 12, paddingBottom: 40 }}>
               {filteredShifts.map((shift) => (
-                <MinimalShiftCard key={shift.id} shift={shift} router={router} />
+                <MinimalShiftCard key={shift.id} shift={shift} router={router} onDeleted={fetchShifts} />
               ))}
             </View>
 
@@ -492,8 +492,20 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-function MinimalShiftCard({ shift, router }) {
+function MinimalShiftCard({ shift, router, onDeleted }) {
   const [locked, setLocked] = useState(shift.locked);
+
+  const handleDelete = () => {
+    Alert.alert("Delete Shift", "Are you sure you want to delete this shift? This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive", onPress: async () => {
+          try { await deleteDoc(doc(db, "shifts", shift.id)); onDeleted?.(); }
+          catch (e) { Alert.alert("Error", "Could not delete the shift."); }
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={s.shiftCard}>
@@ -561,26 +573,12 @@ function MinimalShiftCard({ shift, router }) {
         </Pressable>
         <Pressable
           style={s.iconSquareBtn}
-          onPress={async () => {
-            try {
-              await generateShiftReportPdf({
-                dateLabel: shift.date,
-                staffName: shift.staffName,
-                staffId: shift.staffId,
-                clientName: shift.clientName,
-                startTime: shift.startTime,
-                endTime: shift.endTime,
-                reportText: shift.shiftReport,
-              });
-            } catch (e) {
-              Alert.alert("Download failed", e?.message || "Could not generate the PDF.");
-            }
-          }}
-        ><Feather name="download" size={20} color="#666" /></Pressable>
-        <Pressable
-          style={s.iconSquareBtn}
           onPress={() => router.push(`/admin/edit-shift?id=${shift.id}`)}
-        ><Feather name="edit-2" size={20} color="#666" /></Pressable>
+        ><Feather name="edit-2" size={20} color="#2F6B4F" /></Pressable>
+        <Pressable
+          style={[s.iconSquareBtn, { borderColor: '#FCA5A5' }]}
+          onPress={handleDelete}
+        ><Feather name="trash-2" size={20} color="#EF4444" /></Pressable>
       </View>
     </View>
   );
@@ -743,9 +741,9 @@ const s = StyleSheet.create({
   boldValueSmall: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
   boldValue: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
 
-  viewReportBtn: { flex: 1, height: 48, borderRadius: 16, backgroundColor: '#2F6B4F', justifyContent: 'center', alignItems: 'center' },
+  viewReportBtn: { flex: 1, height: 42, borderRadius: 12, backgroundColor: '#2F6B4F', justifyContent: 'center', alignItems: 'center' },
   viewReportText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  iconSquareBtn: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, borderColor: '#E5E1DC', justifyContent: 'center', alignItems: 'center' },
+  iconSquareBtn: { width: 42, height: 42, borderRadius: 12, borderWidth: 1.5, borderColor: '#2F6B4F', justifyContent: 'center', alignItems: 'center' },
 
   capsuleTag: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   capsuleTagText: { color: '#fff', fontSize: 12, fontWeight: '600' },

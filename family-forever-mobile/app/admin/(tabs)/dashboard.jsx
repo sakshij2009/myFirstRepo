@@ -18,6 +18,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     collection,
     onSnapshot,
+    doc,
+    deleteDoc,
 } from "firebase/firestore";
 import { db } from "../../../src/firebase/config";
 import { parseDate } from "../../../src/utils/date";
@@ -512,6 +514,18 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
         }
     };
 
+    const handleDeleteShift = () => {
+        Alert.alert("Delete Shift", "Are you sure you want to delete this shift? This cannot be undone.", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete", style: "destructive", onPress: async () => {
+                    try { await deleteDoc(doc(db, "shifts", shift.id)); }
+                    catch (e) { Alert.alert("Error", "Could not delete the shift."); }
+                },
+            },
+        ]);
+    };
+
     return (
         <View style={s.shiftCard}>
             {/* Client → Staff Assignment */}
@@ -590,8 +604,11 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
                 >
                     <Text style={s.viewReportText}>View Report</Text>
                 </Pressable>
-                <Pressable style={s.downloadBtn} onPress={handleDownload}>
-                    <Ionicons name="download-outline" size={20} color="#2F6B4F" />
+                <Pressable style={s.iconBtn} onPress={() => router.push(`/admin/edit-shift?id=${shift.id}`)}>
+                    <Ionicons name="create-outline" size={20} color="#2F6B4F" />
+                </Pressable>
+                <Pressable style={[s.iconBtn, { borderColor: "#FCA5A5" }]} onPress={handleDeleteShift}>
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
                 </Pressable>
             </View>
         </View>
@@ -1211,25 +1228,21 @@ const s = StyleSheet.create({
     lockText: { fontSize: 13, fontWeight: "500", color: "#333" },
 
     // Actions
-    actionButtons: { flexDirection: "row", gap: 12 },
+    actionButtons: { flexDirection: "row", gap: 10, alignItems: "center" },
     viewReportBtn: {
         flex: 1,
         backgroundColor: "#2F6B4F",
-        paddingVertical: 14,
-        borderRadius: 14,
+        paddingVertical: 11,
+        borderRadius: 12,
         alignItems: "center",
         justifyContent: "center",
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
     },
-    viewReportText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-    downloadBtn: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        borderWidth: 2,
+    viewReportText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+    iconBtn: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        borderWidth: 1.5,
         borderColor: "#2F6B4F",
         justifyContent: "center",
         alignItems: "center",
