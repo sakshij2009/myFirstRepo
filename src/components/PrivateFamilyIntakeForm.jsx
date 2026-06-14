@@ -365,13 +365,17 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
   // ── Validation per step ─────────────────────────────────────────────────
   const validate = () => {
     const e = {};
+    if (step === 1) {
+      if (!form.fullName.trim()) e.fullName = "Full legal name is required";
+      if (!form.email.trim()) e.email = "Email is required";
+      if (!form.relationship) e.relationship = "Relationship is required";
+    }
     if (step === 2) {
       if (!form.children[0].fullName.trim()) e.child0 = "At least one child name is required";
     }
     if (step === 3) {
-      if (!form.fullName.trim()) e.fullName = "Full name is required";
-      if (!form.phone.trim()) e.phone = "Phone is required";
-      if (!form.relationship) e.relationship = "Relationship is required";
+      if (!form.courtOrder) e.courtOrder = "Please answer the court order question";
+      if (!form.childWelfareInvolvement) e.childWelfareInvolvement = "Please answer the child welfare question";
     }
     if (step === 4) {
       if (!form.paymentOption) e.paymentOption = "Please select a payment option";
@@ -668,29 +672,26 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       );
 
       case 3: return (
-        <SectionCard num={3} confidential title={`Part ${partyType === "A" ? "B" : "C"} – Personal Confidential Section`} subtitle="This information belongs only to you and will not be shared with the other party.">
-            <Input label="Full Name" required value={form.fullName} onChange={e => set("fullName", e.target.value)} />
-            <div className="mb-4">
-              <Label>Home Address</Label>
-              <PlacesAutocomplete value={form.address} onChange={v => set("address", v)} placeholder="Type address..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Phone Number" required value={form.phone} onChange={e => set("phone", e.target.value)} />
-              <Input label="Email Address" required readOnly value={form.email} className="bg-gray-50 text-gray-500 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <Select label="Relationship to Child" required options={RELATIONSHIPS} value={form.relationship} onChange={v => set("relationship", v)} />
-            {form.relationship === "Other" && <Input label="Specify Relationship" value={form.relationshipOther} onChange={e => set("relationshipOther", e.target.value)} />}
-            
-            <div className="mt-8 pt-6 border-t">
-              <h4 className="text-sm font-bold text-gray-700 mb-4">Emergency Contact Details</h4>
-              <Input label="Full Name" value={form.emergencyContact.fullName} onChange={e => updateEC("fullName", e.target.value)} />
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Relationship" value={form.emergencyContact.relationship} onChange={e => updateEC("relationship", e.target.value)} />
-                <Input label="Phone" value={form.emergencyContact.phone} onChange={e => updateEC("phone", e.target.value)} />
+        <div className="space-y-6">
+          {/* 7. Court Order Information */}
+          <SectionCard num={7} title="Court Order Information">
+            <Label required>Is there a court order in place?</Label>
+            <Radio options={["Yes", "No", "Pending"]} value={form.courtOrder} onChange={v => set("courtOrder", v)} />
+            {errors.courtOrder && <p className="text-red-500 text-xs mt-1">{errors.courtOrder}</p>}
+            {form.courtOrder === "Yes" && (
+              <div className="mt-3">
+                <FileUpload label="Upload Court Order (Optional)" fileRef={courtOrderFileRef} file={form.courtOrderFile} onChange={f => set("courtOrderFile", f)} />
               </div>
-            </div>
-            {errors.fullName && <p className="text-red-500 text-xs mt-2">{errors.fullName}</p>}
-        </SectionCard>
+            )}
+          </SectionCard>
+
+          {/* 8. Child Welfare Involvement */}
+          <SectionCard num={8} title="Child Welfare Involvement">
+            <Label required>Is there current child welfare involvement?</Label>
+            <Radio options={["Yes", "No"]} value={form.childWelfareInvolvement} onChange={v => set("childWelfareInvolvement", v)} />
+            {errors.childWelfareInvolvement && <p className="text-red-500 text-xs mt-1">{errors.childWelfareInvolvement}</p>}
+          </SectionCard>
+        </div>
       );
 
       case 4: return (
