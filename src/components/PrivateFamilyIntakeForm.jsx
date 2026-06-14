@@ -128,15 +128,15 @@ const SectionCard = ({ num, title, subtitle, children, confidential }) => (
         <Lock size={12} /> Confidential – Not disclosed to the other party
       </div>
     )}
-    <div className="flex items-start gap-3 mb-4">
+    <div className="flex items-center gap-3 mb-5">
       {num && (
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ background: GREEN }}>
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-base font-bold flex-shrink-0" style={{ background: GREEN }}>
           {num}
         </div>
       )}
       <div>
-        <h3 className="text-base font-bold text-gray-800">{title}</h3>
-        {subtitle && <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{subtitle}</p>}
+        <h3 className="text-xl font-extrabold" style={{ color: num ? GREEN : "#1f2937" }}>{title}</h3>
+        {subtitle && <p className="text-sm text-gray-500 mt-0.5 whitespace-pre-line">{subtitle}</p>}
       </div>
     </div>
     {children}
@@ -445,31 +445,6 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     switch (step) {
       case 1: return (
         <div className="space-y-6">
-          <SectionCard title="SECTION – PARTY INFORMATION & CONFIDENTIALITY">
-            <div className="bg-emerald-50 border-l-4 border-emerald-600 p-4 rounded-r-lg mb-6">
-               <p className="text-sm text-emerald-800 leading-relaxed">
-                This intake is maintained as one case file for the purpose of service coordination, scheduling, safety planning, and documentation. 
-                Each party shall complete only their own section. Personal contact information provided by one party will not be disclosed 
-                to the other party unless required by law, court order, or written consent.
-               </p>
-            </div>
-            <div className="space-y-4">
-               <div className="flex items-start gap-3">
-                  <ShieldCheck className="text-emerald-600 shrink-0 mt-0.5" size={18} />
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800">Your Privacy is Protected</h4>
-                    <p className="text-xs text-gray-500 mt-1">Your personal contact details like address, phone, and email stay hidden from the other party.</p>
-                  </div>
-               </div>
-               <div className="flex items-start gap-3">
-                  <FileText className="text-emerald-600 shrink-0 mt-0.5" size={18} />
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800">Unified Case Management</h4>
-                    <p className="text-xs text-gray-500 mt-1">We maintain one file for the family to ensure seamless scheduling and safety coordination.</p>
-                  </div>
-               </div>
-            </div>
-          </SectionCard>
           {/* Important Notice */}
           <div className="bg-[#f7fbf8] border border-emerald-100 rounded-2xl p-5">
             <h4 className="text-sm font-bold mb-3" style={{ color: GREEN }}>IMPORTANT NOTICE</h4>
