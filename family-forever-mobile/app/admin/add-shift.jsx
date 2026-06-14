@@ -119,34 +119,39 @@ export default function AddShiftScreen() {
     useEffect(() => {
         const fetchAll = async () => {
             try {
+                // NOTE: no orderBy — Firestore orderBy silently drops docs missing the field
+                // (many clients store "name", not "fullName"), which left the dropdown empty.
                 const [clientsSnap, usersSnap, categoriesSnap, typesSnap] = await Promise.all([
-                    getDocs(query(collection(db, 'clients'), orderBy('fullName'))).catch(() => getDocs(collection(db, 'clients'))),
-                    getDocs(query(collection(db, 'users'), orderBy('name'))).catch(() => getDocs(collection(db, 'users'))),
+                    getDocs(collection(db, 'clients')),
+                    getDocs(collection(db, 'users')),
                     getDocs(collection(db, 'shiftCategories')),
                     getDocs(collection(db, 'shiftTypes')),
                 ]);
 
                 const clientList = clientsSnap.docs.map(d => {
                     const data = d.data();
+                    const nm = data.fullName || data.name || 'Unnamed';
                     return {
                         value: d.id,
-                        label: `${data.fullName || data.name || 'Unnamed'} (${data.clientId || data.id || d.id.slice(0, 6)})`,
-                        fullName: data.fullName || data.name || 'Unnamed',
+                        label: `${nm} (${data.clientCode || data.clientId || d.id.slice(0, 6)})`,
+                        fullName: nm,
                         clientId: data.clientId || d.id.slice(0, 6),
-                        initials: (data.fullName || data.name || 'UN').substring(0, 2).toUpperCase(),
+                        serviceType: Array.isArray(data.services?.serviceType) ? data.services.serviceType : [],
+                        initials: nm.substring(0, 2).toUpperCase(),
                     };
-                });
+                }).sort((a, b) => a.fullName.localeCompare(b.fullName));
 
                 const userList = usersSnap.docs.map(d => {
                     const data = d.data();
+                    const nm = data.name || data.fullName || 'Unknown';
                     return {
                         value: d.id,
-                        label: `${data.name || data.fullName || 'Unknown'} (${data.cymId || data.employeeId || d.id.slice(0, 6)})`,
-                        name: data.name || data.fullName || 'Unknown',
+                        label: nm, // staff dropdown shows the name only (no bracket)
+                        name: nm,
                         cymId: data.cymId || data.employeeId || d.id.slice(0, 6),
-                        initials: (data.name || data.fullName || 'UN').substring(0, 2).toUpperCase(),
+                        initials: nm.substring(0, 2).toUpperCase(),
                     };
-                });
+                }).sort((a, b) => a.name.localeCompare(b.name));
 
                 const categoryList = categoriesSnap.docs
                     .map(d => ({ value: d.id, label: d.data().name || d.id }))
@@ -193,6 +198,15 @@ export default function AddShiftScreen() {
     const toTimeStr = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
     // ── Submit ──────────────────────────────────────────────────
+    // Selecting a client auto-fills the shift category from their service type (web behaviour)
+    const handleSelectClient = (client) => {
+        setSelectedClient(client);
+        if (client?.serviceType?.length) {
+            const match = categories.find(c => client.serviceType.includes(c.value));
+            if (match) setSelectedCategory(match);
+        }
+    };
+
     const handleSubmit = async () => {
         if (!selectedClient) { Alert.alert('Missing', 'Please select a client.'); return; }
         if (!selectedUser) { Alert.alert('Missing', 'Please select a staff member.'); return; }
@@ -481,7 +495,7 @@ export default function AddShiftScreen() {
                 title="Select Client"
                 items={clients}
                 selected={selectedClient?.value}
-                onSelect={setSelectedClient}
+                onSelect={handleSelectClient}
                 onClose={() => setOpenSheet(null)}
             />
             <DropdownSheet
