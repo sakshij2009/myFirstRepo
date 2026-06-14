@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp, doc, setDoc, getDocs, query, where
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, COLLECTION_NEW_INTAKES } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLeft, ShieldCheck, Lock, CreditCard, FileText, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLeft, ShieldCheck, Lock, CreditCard, FileText, Users, AlertCircle } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { formatLocalISO } from "../utils/dateHelpers";
@@ -14,14 +14,14 @@ const GREEN = "#1f6f43";
 
 // ── Step definitions ───────────────────────────────────────────────────────
 const STEPS = [
-  { id: 1,  label: "Contact Info",          short: "Contact Info" },
-  { id: 2,  label: "Children & Service",    short: "Children & Service" },
-  { id: 3,  label: "Court & Welfare",       short: "Court & Welfare" },
-  { id: 4,  label: "Needs & Safety",        short: "Needs & Safety" },
-  { id: 5,  label: "Contacts & Info",       short: "Contacts & Info" },
-  { id: 6,  label: "Payment",               short: "Payment" },
-  { id: 7,  label: "Engagement Protocols",  short: "Protocols" },
-  { id: 8,  label: "Review & Submit",       short: "Review & Submit" },
+  { id: 1,  short: "Contact Info",          sub: "Your details & other parent" },
+  { id: 2,  short: "Children & Service",    sub: "Children info & visit details" },
+  { id: 3,  short: "Court & Welfare",       sub: "Legal & caseworker info" },
+  { id: 4,  short: "Needs & Safety",        sub: "Special needs & safety" },
+  { id: 5,  short: "Contacts & Info",       sub: "Emergency & additional" },
+  { id: 6,  short: "Payment",               sub: "Rates & payment details" },
+  { id: 7,  short: "Engagement Protocols",  sub: "Visit protocols & guidelines" },
+  { id: 8,  short: "Review & Submit",       sub: "Review & sign application" },
 ];
 
 const REFERRAL_SOURCES = ["Self-referral","CFS / Child & Family Services","School","Healthcare Provider","Court Order","Legal Aid","Community Organization","Other"];
@@ -272,7 +272,8 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     email: user?.email || "",
     relationship: "",
     relationshipOther: "",
-    emergencyContact: emptyEmergency(),
+    emergencyContact: emptyEmergency(),   // #1 — custodial parent (required)
+    emergencyContact2: emptyEmergency(),  // #2 — optional backup
 
     // Other Parent / Guardian Information
     otherParentName: "",
@@ -385,6 +386,10 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       if (!form.courtOrder) e.courtOrder = "Please answer the court order question";
       if (!form.childWelfareInvolvement) e.childWelfareInvolvement = "Please answer the child welfare question";
     }
+    if (step === 5) {
+      if (!form.emergencyContact.fullName.trim() || !form.emergencyContact.relationship.trim() || !form.emergencyContact.phone.trim())
+        e.emergencyContact = "Custodial parent emergency contact (name, relationship, phone) is required";
+    }
     if (step === 6) {
       if (!form.paymentOption) e.paymentOption = "Please select a payment option";
     }
@@ -449,6 +454,7 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         relationship: form.relationship,
         relationshipOther: form.relationshipOther,
         emergencyContact: form.emergencyContact,
+        emergencyContact2: form.emergencyContact2,
         signature: form.signatureDataUrl,
         signedAt: serverTimestamp(),
         // Other parent / guardian
@@ -731,18 +737,44 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
       case 5: return (
         <div className="space-y-6">
-          {/* 11. Emergency Contact */}
-          <SectionCard num={11} title="Emergency Contact">
-            <Input label="Full Name" value={form.emergencyContact.fullName} onChange={e => updateEC("fullName", e.target.value)} />
-            <div className="grid grid-cols-2 gap-4">
-              <Input label="Relationship" value={form.emergencyContact.relationship} onChange={e => updateEC("relationship", e.target.value)} />
-              <Input label="Phone" value={form.emergencyContact.phone} onChange={e => updateEC("phone", e.target.value)} />
+          {/* 11. Emergency Contacts */}
+          <SectionCard num={11} title="Emergency Contacts">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 flex items-start gap-3">
+              <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={18} />
+              <div>
+                <h4 className="text-sm font-bold text-blue-800 mb-1">Important: Custodial Parent Information</h4>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  The <strong>first emergency contact must always be the custodial parent</strong> (the parent who has primary custody of the child/children). This ensures we can reach the legal guardian immediately in case of any emergency during visits or services. The second contact is optional and can be another trusted individual in case the custodial parent is unavailable.
+                </p>
+              </div>
+            </div>
+
+            {/* Emergency Contact #1 (Custodial Parent) */}
+            <div className="border border-gray-200 rounded-xl p-4 mb-4">
+              <h4 className="text-sm font-bold text-gray-700 mb-4">Emergency Contact #1 (Custodial Parent) <span className="text-red-500">*</span></h4>
+              <div className="grid grid-cols-3 gap-4">
+                <Input label="Full Name" required placeholder="Full name" value={form.emergencyContact.fullName} onChange={e => updateEC("fullName", e.target.value)} />
+                <Input label="Relationship" required placeholder="e.g., Mother, Father" value={form.emergencyContact.relationship} onChange={e => updateEC("relationship", e.target.value)} />
+                <Input label="Phone Number" required placeholder="(780) 123-4567" value={form.emergencyContact.phone} onChange={e => updateEC("phone", e.target.value)} />
+              </div>
+              {errors.emergencyContact && <p className="text-red-500 text-xs">{errors.emergencyContact}</p>}
+            </div>
+
+            {/* Emergency Contact #2 (Optional Backup) */}
+            <div className="border border-gray-200 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-gray-700">Emergency Contact #2 (Optional Backup Contact)</h4>
+              <p className="text-xs text-gray-500 mb-4">Provide a secondary contact person in case the custodial parent cannot be reached.</p>
+              <div className="grid grid-cols-3 gap-4">
+                <Input label="Full Name" placeholder="Full name" value={form.emergencyContact2.fullName} onChange={e => set("emergencyContact2", { ...form.emergencyContact2, fullName: e.target.value })} />
+                <Input label="Relationship" placeholder="e.g., Grandmother, Aunt, Friend" value={form.emergencyContact2.relationship} onChange={e => set("emergencyContact2", { ...form.emergencyContact2, relationship: e.target.value })} />
+                <Input label="Phone Number" placeholder="(780) 123-4567" value={form.emergencyContact2.phone} onChange={e => set("emergencyContact2", { ...form.emergencyContact2, phone: e.target.value })} />
+              </div>
             </div>
           </SectionCard>
 
           {/* 12. Additional Information */}
           <SectionCard num={12} title="Additional Information">
-            <Textarea label="Anything else we should know?" placeholder="Add any additional details relevant to your case..." value={form.additionalInfo} onChange={e => set("additionalInfo", e.target.value)} />
+            <Textarea label="Is there anything else we should know about your situation?" placeholder="Share any additional information that would help us understand your family's needs and provide better service..." value={form.additionalInfo} onChange={e => set("additionalInfo", e.target.value)} />
           </SectionCard>
         </div>
       );
@@ -906,11 +938,12 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
                         {completedSteps.includes(s.id) && s.id !== step ? <Check size={14} /> : s.id}
                       </div>
                       <span
-                        className="text-[10px] font-semibold text-center leading-tight"
-                        style={{ color: s.id === step ? GREEN : "#9ca3af" }}
+                        className="text-[11px] font-semibold text-center leading-tight"
+                        style={{ color: s.id === step || completedSteps.includes(s.id) ? GREEN : "#6b7280" }}
                       >
                         {s.short}
                       </span>
+                      <span className="text-[9px] text-center leading-tight text-gray-400 hidden sm:block">{s.sub}</span>
                    </button>
                    {i < STEPS.length - 1 && <div className="flex-1 h-[2px] bg-gray-200 mt-4" />}
                 </React.Fragment>
