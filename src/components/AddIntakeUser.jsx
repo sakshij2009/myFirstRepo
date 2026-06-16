@@ -68,7 +68,7 @@ const AddIntakeUser = ({ mode = "add" }) => {
       otherwise: (schema) => schema.notRequired(),
     }),
     phone: Yup.string()
-      .matches(/^[0-9]{10}$/, "Must be 10 digits")
+      .matches(/^\d{3}-?\d{3}-?\d{4}$/, "Must be 10 digits")
       .required("Phone number is required"),
     email: Yup.string().email("Invalid email").required("Email is required"),
     invoiceEmail: Yup.string()
@@ -197,7 +197,15 @@ const AddIntakeUser = ({ mode = "add" }) => {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
         <p className="font-bold text-2xl leading-7 text-light-black">
           {mode === "update" ? `Update ${initialValues.role || 'User'}` : "Add User"}
         </p>

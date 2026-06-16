@@ -109,7 +109,7 @@ const AddAgency = ({  mode = "add", user }) => {
     email: Yup.string().required("Email is required").email("Invalid email"),
     phone: Yup.string()
       .required("Phone number is required")
-      .matches(/^[0-9]{10}$/, "Phone number must be 10 digits"),
+      .matches(/^\d{3}-?\d{3}-?\d{4}$/, "Phone number must be 10 digits"),
     address: Yup.string().required("Address is required"),
     description: Yup.string().max(
       200,

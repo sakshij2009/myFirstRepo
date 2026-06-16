@@ -976,7 +976,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
           clientInfo: Yup.string().required("Client info is required"),
           phone: Yup.string()
             .required("Phone number is required")
-            .matches(/^[0-9]{10}$/, "Phone number must be 10 digits"),
+            .matches(/^\d{3}-?\d{3}-?\d{4}$/, "Phone number must be 10 digits"),
           email: Yup.string()
             .required("Email is required")
             .email("Invalid email address"),
