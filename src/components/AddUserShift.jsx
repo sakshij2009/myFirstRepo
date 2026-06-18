@@ -1188,11 +1188,6 @@ const AddUserShift = ({ mode = "add", user }) => {
         const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
         const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
 
-        // Build set of selected date strings (LOCAL "YYYY-MM-DD") for fast lookup
-        const selectedDateISOs = new Set(
-          selectedDates.map(d => formatLocalISO(normalizeDate(d)))
-        );
-
         // Build the common field payload (everything except date-specific fields)
         const buildPayload = (shiftDate) => {
           const isOvernight = values.endTime < values.startTime;
@@ -1249,51 +1244,23 @@ const AddUserShift = ({ mode = "add", user }) => {
           };
         };
 
-        const batchId = batchIdRef.current;
-
-        if (batchId) {
-          // Batch update — find all sibling shifts and update those whose dates are still selected
-          const batchSnap = await getDocs(
-            query(collection(db, "shifts"), where("batchId", "==", batchId))
-          );
-          let updatedCount = 0;
-          for (const bDoc of batchSnap.docs) {
-            const bData = bDoc.data();
-            const shiftDateISO = formatDateFromFirestore(bData.startDate);
-            if (!shiftDateISO || !selectedDateISOs.has(shiftDateISO)) continue; // date was deselected — skip
-            const shiftDate = parseLocalSafe(shiftDateISO);
-            await updateDoc(bDoc.ref, {
-              ...buildPayload(shiftDate),
-              clockIn:  bData.clockIn  || "",
-              clockOut: bData.clockOut || "",
-            });
-            updatedCount++;
-          }
+        // Always update only the specific shift being edited
+        const qShift = query(collection(db, "shifts"), where("id", "==", id));
+        const snap = await getDocs(qShift);
+        if (!snap.empty) {
+          const bData = snap.docs[0].data();
+          const shiftDate = normalizeDate(selectedDates[0]);
+          await updateDoc(snap.docs[0].ref, {
+            ...buildPayload(shiftDate),
+            clockIn:  bData.clockIn  || originalClockIn || "",
+            clockOut: bData.clockOut || originalClockOut || "",
+          });
           setSlider({
             show: true,
-            title: `${updatedCount} Shift${updatedCount !== 1 ? "s" : ""} Updated!`,
-            subtitle: `${selectedClient?.name || ""} — ${updatedCount} date${updatedCount !== 1 ? "s" : ""} updated at ${values.startTime}`,
+            title: "Shift Updated Successfully!",
+            subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${values.startTime}`,
             redirectTo: "/admin-dashboard/dashboard",
           });
-        } else {
-          // Single shift update (no batchId)
-          const qShift = query(collection(db, "shifts"), where("id", "==", id));
-          const snap = await getDocs(qShift);
-          if (!snap.empty) {
-            const bData = snap.docs[0].data();
-            const shiftDate = normalizeDate(selectedDates[0]);
-            await updateDoc(snap.docs[0].ref, {
-              ...buildPayload(shiftDate),
-              clockIn:  bData.clockIn  || originalClockIn || "",
-              clockOut: bData.clockOut || originalClockOut || "",
-            });
-            setSlider({
-              show: true,
-              title: "Shift Updated Successfully!",
-              subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${values.startTime}`,
-              redirectTo: "/admin-dashboard/dashboard",
-            });
-          }
         }
         return;
       }
@@ -2702,9 +2669,7 @@ const AddUserShift = ({ mode = "add", user }) => {
                         </>
                       ) : (
                         mode === "update"
-                          ? (batchIdRef.current && values.shiftDates?.length > 1
-                              ? `Update ${values.shiftDates.length} Shifts`
-                              : "Update Shift")
+                          ? "Update Shift"
                           : `Create Shift${values.shiftDates?.length > 1 ? `s (${values.shiftDates.length})` : ""}`
                       )}
                     </button>
