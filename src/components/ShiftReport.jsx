@@ -997,10 +997,16 @@ const ShiftReport = ({ user }) => {
     shiftCategoryName.includes("supervised") ||
     shiftCategoryName.includes("visitation");
 
+  const hasExtraTransportation = !hasTransportation && (
+    (shiftData?.extraShiftPoints && shiftData.extraShiftPoints.length > 0) ||
+    shiftData?.expenseAmount ||
+    (shiftData?.expenseReceiptUrls && shiftData.expenseReceiptUrls.length > 0)
+  );
+
   const TABS = [
     { key: "reports", label: "Reports" },
     ...(hasMedication ? [{ key: "medications", label: "Medications" }] : []),
-    ...(hasTransportation ? [{ key: "transportation", label: "Transportation" }] : []),
+    ...((hasTransportation || hasExtraTransportation) ? [{ key: "transportation", label: "Transportation" }] : []),
     { key: "serviceplan", label: "Service Plan" },
   ];
 
@@ -1587,7 +1593,125 @@ const ShiftReport = ({ user }) => {
             })()}
 
             {/* ── Transportation Tab ── */}
-            {activeTab === "transportation" && (() => {
+            {activeTab === "transportation" && hasExtraTransportation && (() => {
+              const extra = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
+              const receiptList = Array.isArray(shiftData?.expenseReceiptUrls) ? shiftData.expenseReceiptUrls : [];
+              return (
+                <div className="px-5 space-y-5 py-4">
+                  {/* Info strip */}
+                  <div className="flex flex-wrap items-center gap-6 p-3 rounded-xl" style={{ background: "#f9fafb", border: "1px solid #f3f4f6" }}>
+                    {[
+                      { label: "Date", value: normalized.displayDate },
+                      { label: "Staff", value: primaryStaff?.name || "—" },
+                      { label: "Client", value: normalized.clientName },
+                      { label: "Shift Time", value: `${normalized.startTime} – ${normalized.endTime}` },
+                    ].map((f, i) => (
+                      <div key={i}><span className="font-semibold" style={{ fontSize: 11, color: "#6b7280" }}>{f.label}: </span><span className="font-bold" style={{ fontSize: 12, color: "#111827" }}>{f.value}</span></div>
+                    ))}
+                  </div>
+
+                  {/* Extra Transportation Details */}
+                  <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
+                    <div className="flex items-center gap-2">
+                      <Car size={15} style={{ color: "#1D4ED8" }} />
+                      <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Extra Transportation</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>Start Location</p>
+                        <p className="font-semibold mt-0.5" style={{ fontSize: 13, color: extra.startLocation ? "#111827" : "#9ca3af" }}>{extra.startLocation || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" }}>End Location</p>
+                        <p className="font-semibold mt-0.5" style={{ fontSize: 13, color: extra.endLocation ? "#111827" : "#9ca3af" }}>{extra.endLocation || "N/A"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KM Breakdown */}
+                  <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
+                    <p className="font-bold mb-2" style={{ fontSize: 13, color: "#14532D" }}>Kilometer Breakdown</p>
+                    {[
+                      { label: "Office → Pickup", value: extra.officeToPickupKm != null ? `${parseFloat(extra.officeToPickupKm).toFixed(2)} km` : "—" },
+                      { label: "Staff Traveled", value: extra.staffTraveledKM != null ? `${parseFloat(extra.staffTraveledKM).toFixed(2)} km` : "0.00 km" },
+                      { label: "Drop → Office", value: extra.dropToOfficeKm != null ? `${parseFloat(extra.dropToOfficeKm).toFixed(2)} km` : "—" },
+                    ].map((row, i) => (
+                      <div key={i} className="flex justify-between items-center py-1.5 border-b" style={{ borderColor: "#d1fae5" }}>
+                        <span style={{ fontSize: 13, color: "#374151" }}>{row.label}</span>
+                        <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{row.value}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center pt-2" style={{ borderTop: "2px solid #14532D", marginTop: 4 }}>
+                      <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Total KM</span>
+                      <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>{extra.totalKm != null ? `${parseFloat(extra.totalKm).toFixed(2)} km` : "—"}</span>
+                    </div>
+                    {extra.mileageAmount != null && (
+                      <div className="flex justify-between items-center pt-1">
+                        <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>Mileage @ $0.72/km</span>
+                        <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>${parseFloat(extra.mileageAmount).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expense Amount */}
+                  {(extra.expenseAmount || shiftData?.expenseAmount) && (
+                    <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <Receipt size={15} style={{ color: "#b45309" }} />
+                          <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount</span>
+                        </div>
+                        <span className="font-bold" style={{ fontSize: 16, color: "#b45309" }}>${parseFloat(extra.expenseAmount || shiftData?.expenseAmount || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Approved KM / By */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Approved KM</p>
+                      <p style={{ fontSize: 13, color: extra.approvedKM ? "#111827" : "#9ca3af" }}>{extra.approvedKM || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Approved By</p>
+                      <p style={{ fontSize: 13, color: extra.approvedBy ? "#111827" : "#9ca3af" }}>{extra.approvedBy || "—"}</p>
+                    </div>
+                  </div>
+
+                  {/* Travel Comments */}
+                  {extra.travelComments && (
+                    <div>
+                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</p>
+                      <div className="rounded-lg border p-3" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
+                        <p style={{ fontSize: 13, color: "#374151" }}>{extra.travelComments}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Receipts */}
+                  {receiptList.length > 0 && (
+                    <div>
+                      <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
+                      <div className="space-y-1">
+                        {receiptList.map((rec, i) => {
+                          const url = typeof rec === "string" ? rec : rec.url;
+                          const name = typeof rec === "string" ? `Receipt ${i + 1}` : (rec.name || `Receipt ${i + 1}`);
+                          return (
+                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
+                              <Receipt size={13} style={{ color: "#145228" }} />
+                              <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {activeTab === "transportation" && hasTransportation && (() => {
               const isTransportation = shiftData?.categoryName?.toLowerCase() === "transportation";
               const inp = "w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors";
               return (
@@ -1752,6 +1876,19 @@ const ShiftReport = ({ user }) => {
                     <label className="font-bold mb-1 block" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</label>
                     <textarea className={inp + " resize-none"} rows={3} placeholder="Add any comments about the journey…" value={travelComments} onChange={e => setTravelComments(e.target.value)} />
                   </div>
+
+                  {/* Expense Amount */}
+                  {shiftData?.expenseAmount != null && (
+                    <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <Receipt size={15} style={{ color: "#b45309" }} />
+                          <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount</span>
+                        </div>
+                        <span className="font-bold" style={{ fontSize: 16, color: "#b45309" }}>${parseFloat(shiftData.expenseAmount).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Upload Receipt */}
                   <div>

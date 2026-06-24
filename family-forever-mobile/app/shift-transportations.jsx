@@ -3,8 +3,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, getDocs, updateDoc, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import ReportTransportationTab from "./_ReportTransportationTab";
 
 const GREEN = "#1F6F43";
 const DEMO_TASKS = [
@@ -19,46 +20,54 @@ const STATUS_COLORS = {
   Completed: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
 };
 
+function isTransportShift(shift) {
+  const raw = (
+    shift?.categoryName ||
+    shift?.shiftCategory ||
+    shift?.serviceType ||
+    shift?.category ||
+    ""
+  ).toLowerCase();
+  return (
+    raw.includes("transport") ||
+    raw.includes("supervised visitation + transportation")
+  );
+}
+
 export default function ShiftTransportations() {
   const { shiftId } = useLocalSearchParams();
   const [shift, setShift] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
-    try {
-      const docRef = doc(db, "shifts", shiftId);
-      const snap = await getDoc(docRef);
-      
+  useEffect(() => {
+    if (!shiftId) { setLoading(false); return; }
+    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setShift(data);
-        
-        // Resolve tasks from shiftPoints (family members)
-        const points = Array.isArray(data.shiftPoints) ? data.shiftPoints : (Array.isArray(data.shiftedClients) ? data.shiftedClients : []);
-        
-        if (points.length > 0) {
-          const mappedTasks = points.map((p, idx) => ({
-            id: `p-${idx}`,
-            passenger: p.name || `Member ${idx + 1}`,
-            pickup: p.pickupLocation || "Address not provided",
-            destination: p.visitLocation || p.dropLocation || "Destination not provided",
-            time: p.pickupTime || p.visitStartTime || data.startTime || "—",
-            status: "Pending" // In real app, we'd pull status from task logs
-          }));
-          setTasks(mappedTasks);
-        } else {
-          setTasks(data.transportTasks?.length ? data.transportTasks : DEMO_TASKS);
+
+        if (isTransportShift(data)) {
+          const points = Array.isArray(data.shiftPoints) ? data.shiftPoints : (Array.isArray(data.shiftedClients) ? data.shiftedClients : []);
+          if (points.length > 0) {
+            const mappedTasks = points.map((p, idx) => ({
+              id: `p-${idx}`,
+              passenger: p.name || `Member ${idx + 1}`,
+              pickup: p.pickupLocation || "Address not provided",
+              destination: p.visitLocation || p.dropLocation || "Destination not provided",
+              time: p.pickupTime || p.visitStartTime || data.startTime || "—",
+              status: "Pending"
+            }));
+            setTasks(mappedTasks);
+          } else {
+            setTasks(data.transportTasks?.length ? data.transportTasks : DEMO_TASKS);
+          }
         }
-      } else {
-        setTasks(DEMO_TASKS);
       }
-    } catch (err) {
-      console.error("Error loading transport data:", err);
-      setTasks(DEMO_TASKS);
-    }
-  };
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [shiftId]);
 
   const updateStatus = (id, newStatus) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
@@ -77,6 +86,22 @@ export default function ShiftTransportations() {
   };
 
   const completed = tasks.filter(t => t.status === "Completed").length;
+
+  // For non-transportation shifts, show the extra transportation form
+  if (shift && !isTransportShift(shift)) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>
+        {/* Header */}
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
+          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+            <Ionicons name="arrow-back" size={24} color="#374151" />
+          </Pressable>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Transportation</Text>
+        </View>
+        <ReportTransportationTab shift={shift} shiftId={shiftId} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>

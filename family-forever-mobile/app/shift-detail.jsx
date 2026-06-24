@@ -1385,13 +1385,6 @@ export default function ShiftDetails() {
             </View>
           )}
 
-          {/* Download the report as a watermarked PDF (admins + staff) */}
-          {shiftStatus !== "assigned" && shiftStatus !== "upcoming" && (
-            <Pressable onPress={handleDownloadReport} style={styles.downloadReportBtn}>
-              <Ionicons name="download-outline" size={16} color={PRIMARY_GREEN} />
-              <Text style={styles.downloadReportText}>Download Report (PDF)</Text>
-            </Pressable>
-          )}
         </View>
 
         {/* ── Transportation Report (shown after transport flow completed) ── */}

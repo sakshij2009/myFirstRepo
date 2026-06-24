@@ -77,6 +77,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
   const [comments, setComments] = useState(saved.travelComments || "");
   const [approvedKm, setApprovedKm] = useState(saved.approvedKM ? String(saved.approvedKM) : "");
   const [approvedBy, setApprovedBy] = useState(saved.approvedBy || "");
+  const [expenseAmount, setExpenseAmount] = useState(saved.expenseAmount ? String(saved.expenseAmount) : "");
 
   /* PICKUP / DROP ACTUAL */
   const [pickupDoneAtLocal, setPickupDoneAtLocal] = useState(planned.pickupDoneAt || null);
@@ -306,11 +307,13 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         approvedKM: approvedKm ? Number(approvedKm) : null,
         approvedBy: approvedBy || null,
         travelComments: comments || null,
+        expenseAmount: expenseAmount ? Number(expenseAmount) : null,
         createdAt: new Date(),
       };
 
       payload.extraShiftPoints = arrayUnion(entry);
       if (comments) payload.travelComments = comments;
+      if (expenseAmount) payload.expenseAmount = Number(expenseAmount);
 
       if (receipts.length) {
         const uploaded = await uploadReceipts();
@@ -434,6 +437,10 @@ export default function ReportTransportationTab({ shift, shiftId }) {
 
       <Text style={styles.label}>Approved By</Text>
       <TextInput style={styles.input} value={approvedBy} onChangeText={setApprovedBy} placeholder="Enter approver name" />
+
+      {/* ================= EXPENSE AMOUNT ================= */}
+      <Text style={styles.label}>Expense Amount ($)</Text>
+      <TextInput style={styles.input} value={expenseAmount} onChangeText={setExpenseAmount} placeholder="Enter expense amount" keyboardType="numeric" />
 
       {/* ================= RECEIPTS ================= */}
       <Text style={styles.label}>Receipts</Text>
