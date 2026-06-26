@@ -351,7 +351,7 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                   const lastExtra = (shift.extraShiftPoints || []).slice(-1)[0] || {};
                   const lastShift = (shift.shiftPoints || []).slice(-1)[0] || {};
                   const kms = Number(lastExtra.approvedKM ?? lastExtra.approvedKm ?? lastShift.approvedKM ?? lastShift.approvedKm ?? shift.extraApprovedKm ?? shift.approvedKms ?? shift.transportationKm ?? 0);
-                  const kmCalculated = kms * (rec.mileageRate || 0);
+                  const kmCalculated = kms * (rec.mileageRate || 0.72);
                   const expense = Number(shift.approvedExpense || shift.expense || shift.expenseAmount || 0);
                   const amount = (shiftHrs * rate) + kmCalculated + expense;
                   
@@ -581,9 +581,11 @@ export default function Payroll() {
 
       // 2. Mileage Rate Logic (defaults match ShiftReport: 0.72 before 5000km, 0.565 after)
       const totalKmsCompleted = Number(user.totalKMs || 0);
+      const rawRateBefore = parseFloat(user.rateBefore5000km);
+      const rawRateAfter = parseFloat(user.rateAfter5000km);
       const mileageRate = totalKmsCompleted > 5000
-        ? Number(user.rateAfter5000km || 0.565)
-        : Number(user.rateBefore5000km || 0.72);
+        ? (rawRateAfter > 0 ? rawRateAfter : 0.565)
+        : (rawRateBefore > 0 ? rawRateBefore : 0.72);
 
       const cancelledShifts = lockedShifts.filter(isCancelled);
       const completedShifts = lockedShifts.filter((s) => s.clockIn && s.clockOut);
@@ -693,7 +695,7 @@ export default function Payroll() {
       const exportLastExtra = (shift.extraShiftPoints || []).slice(-1)[0] || {};
       const exportLastShift = (shift.shiftPoints || []).slice(-1)[0] || {};
       const kms = Number(exportLastExtra.approvedKM ?? exportLastExtra.approvedKm ?? exportLastShift.approvedKM ?? exportLastShift.approvedKm ?? shift.extraApprovedKm ?? shift.approvedKms ?? shift.transportationKm ?? 0);
-      const kmCalculated = kms * (rec.mileageRate || 0);
+      const kmCalculated = kms * (rec.mileageRate || 0.72);
       const expense = Number(shift.approvedExpense || shift.expense || shift.expenseAmount || 0);
       const amount = (shiftHrs * rec.rate) + kmCalculated + expense;
       
