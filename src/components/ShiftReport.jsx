@@ -1652,14 +1652,14 @@ const ShiftReport = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Expense Amount (editable) */}
+                  {/* Expense Amount (editable text) */}
                   <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
                     <div className="flex items-center gap-2 mb-2">
                       <Receipt size={15} style={{ color: "#b45309" }} />
                       <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount ($)</span>
                     </div>
                     <input
-                      type="number"
+                      type="text"
                       className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors"
                       placeholder="Enter expense amount"
                       value={extraExpenseAmount}
@@ -1679,7 +1679,7 @@ const ShiftReport = ({ user }) => {
                     />
                   </div>
 
-                  {/* Receipts (with upload) */}
+                  {/* Receipts (with upload, view, remove) */}
                   <div>
                     <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
                     <div className="space-y-1 mb-3">
@@ -1690,6 +1690,22 @@ const ShiftReport = ({ user }) => {
                           <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
                             <Receipt size={13} style={{ color: "#145228" }} />
                             <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const updated = receiptList.filter((_, idx) => idx !== i);
+                                  await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: updated });
+                                  setShiftData(prev => ({ ...prev, expenseReceiptUrls: updated }));
+                                  toast.success("Receipt removed");
+                                } catch (err) {
+                                  toast.error("Failed to remove");
+                                }
+                              }}
+                              className="p-1 rounded hover:bg-red-50 transition-colors"
+                              title="Remove receipt"
+                            >
+                              <X size={14} style={{ color: "#ef4444" }} />
+                            </button>
                           </div>
                         );
                       }) : (
@@ -1717,9 +1733,14 @@ const ShiftReport = ({ user }) => {
                             const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`);
                             await uploadBytes(fileRef, file);
                             const url = await getDownloadURL(fileRef);
+                            const newReceipt = { url, name: file.name, uploadedAt: new Date().toISOString() };
                             await updateDoc(doc(db, "shifts", shiftId), {
-                              expenseReceiptUrls: arrayUnion({ url, name: file.name, uploadedAt: new Date().toISOString() }),
+                              expenseReceiptUrls: arrayUnion(newReceipt),
                             });
+                            setShiftData(prev => ({
+                              ...prev,
+                              expenseReceiptUrls: [...(prev?.expenseReceiptUrls || []), newReceipt],
+                            }));
                             toast.success("Receipt uploaded");
                           } catch (err) {
                             toast.error("Upload failed");
