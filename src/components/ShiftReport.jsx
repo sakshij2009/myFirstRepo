@@ -436,6 +436,7 @@ const ShiftReport = ({ user }) => {
   const [extraReceiptUploading, setExtraReceiptUploading] = useState(false);
   const [extraGpsKm, setExtraGpsKm] = useState("");
   const [extraTotalKm, setExtraTotalKm] = useState("");
+  const [extraApprovedExpense, setExtraApprovedExpense] = useState("");
 
   // ── Helpers ──
   function parseShiftDate(str) {
@@ -745,6 +746,7 @@ const ShiftReport = ({ user }) => {
     if (lastPt?.staffTraveledKM != null) setExtraGpsKm(String(lastPt.staffTraveledKM));
     if (shiftData?.extraTotalKm != null) setExtraTotalKm(String(shiftData.extraTotalKm));
     else if (lastPt?.totalKm != null) setExtraTotalKm(String(lastPt.totalKm));
+    if (shiftData?.approvedExpense != null) setExtraApprovedExpense(String(shiftData.approvedExpense));
   }, [shiftData]);
 
   // Load Office→Pickup and Drop→Office km values.
@@ -1645,49 +1647,60 @@ const ShiftReport = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Kilometers Traveled (editable) */}
-                  <div className="rounded-xl border p-4" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
-                    <p className="font-bold mb-3" style={{ fontSize: 13, color: "#14532D" }}>Kilometers Traveled</p>
+                  {/* ─── KILOMETERS SECTION ─── */}
+                  <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
+                    <p className="font-bold" style={{ fontSize: 14, color: "#14532D" }}>Kilometers</p>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#374151" }}>Distance Traveled (GPS)</label>
-                        <input
-                          type="text"
-                          className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors"
-                          placeholder="0.00"
-                          value={extraGpsKm}
-                          onChange={e => setExtraGpsKm(e.target.value)}
-                        />
+                        <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#374151" }}>Distance Traveled (GPS)</label>
+                        <input type="text" className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors" placeholder="0.00" value={extraGpsKm} onChange={e => setExtraGpsKm(e.target.value)} />
                       </div>
                       <div>
-                        <label className="font-bold mb-1 block" style={{ fontSize: 14, color: "#111827" }}>Total KM</label>
-                        <input
-                          type="text"
-                          className="w-full bg-white border border-[#14532D] rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors"
-                          placeholder="0.00"
-                          value={extraTotalKm}
-                          onChange={e => setExtraTotalKm(e.target.value)}
-                        />
+                        <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#374151" }}>Total KM</label>
+                        <input type="text" className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors" placeholder="0.00" value={extraTotalKm} onChange={e => setExtraTotalKm(e.target.value)} />
+                      </div>
+                    </div>
+                    <div style={{ borderTop: "1px dashed #86efac", paddingTop: 12 }}>
+                      <p className="font-semibold mb-2" style={{ fontSize: 12, color: "#14532D" }}>Admin Approval — Kilometers</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved Kilometers</label>
+                          <input className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors" placeholder="Enter approved KM" value={extraApprovedKm} onChange={e => setExtraApprovedKm(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved By</label>
+                          <input className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors" placeholder="Manager name" value={extraApprovedBy} onChange={e => setExtraApprovedBy(e.target.value)} />
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Expense Amount (editable text) */}
-                  <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
-                    <div className="flex items-center gap-2 mb-2">
+                  {/* ─── EXPENSE SECTION ─── */}
+                  <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
+                    <div className="flex items-center gap-2">
                       <Receipt size={15} style={{ color: "#b45309" }} />
-                      <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount ($)</span>
+                      <p className="font-bold" style={{ fontSize: 14, color: "#78350f" }}>Expense</p>
                     </div>
-                    <input
-                      type="text"
-                      className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors"
-                      placeholder="Enter expense amount"
-                      value={extraExpenseAmount}
-                      onChange={e => setExtraExpenseAmount(e.target.value)}
-                    />
+                    <div>
+                      <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#78350f" }}>Expense Amount ($)</label>
+                      <input type="text" className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors" placeholder="Enter expense amount" value={extraExpenseAmount} onChange={e => setExtraExpenseAmount(e.target.value)} />
+                    </div>
+                    <div style={{ borderTop: "1px dashed #fcd34d", paddingTop: 12 }}>
+                      <p className="font-semibold mb-2" style={{ fontSize: 12, color: "#b45309" }}>Admin Approval — Expense</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved Expense ($)</label>
+                          <input className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors" placeholder="Enter approved expense" value={extraApprovedExpense} onChange={e => setExtraApprovedExpense(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="font-semibold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved By</label>
+                          <input className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors" placeholder="Manager name" value={extraApprovedBy} onChange={e => setExtraApprovedBy(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Travel Comments (editable) */}
+                  {/* ─── TRAVEL COMMENTS ─── */}
                   <div>
                     <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</p>
                     <textarea
@@ -1699,7 +1712,7 @@ const ShiftReport = ({ user }) => {
                     />
                   </div>
 
-                  {/* Receipts (with upload, view, remove) */}
+                  {/* ─── RECEIPTS ─── */}
                   <div>
                     <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
                     <div className="space-y-1 mb-3">
@@ -1710,20 +1723,7 @@ const ShiftReport = ({ user }) => {
                           <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
                             <Receipt size={13} style={{ color: "#145228" }} />
                             <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const updated = receiptList.filter((_, idx) => idx !== i);
-                                  await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: updated });
-                                  setShiftData(prev => ({ ...prev, expenseReceiptUrls: updated }));
-                                  toast.success("Receipt removed");
-                                } catch (err) {
-                                  toast.error("Failed to remove");
-                                }
-                              }}
-                              className="p-1 rounded hover:bg-red-50 transition-colors"
-                              title="Remove receipt"
-                            >
+                            <button onClick={async () => { try { const updated = receiptList.filter((_, idx) => idx !== i); await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: updated }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: updated })); toast.success("Receipt removed"); } catch (err) { toast.error("Failed to remove"); } }} className="p-1 rounded hover:bg-red-50 transition-colors" title="Remove receipt">
                               <X size={14} style={{ color: "#ef4444" }} />
                             </button>
                           </div>
@@ -1735,94 +1735,41 @@ const ShiftReport = ({ user }) => {
                         </div>
                       )}
                     </div>
-                    <label
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer hover:opacity-90 ${extraReceiptUploading ? "opacity-50 pointer-events-none" : ""}`}
-                      style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#145228" }}
-                    >
+                    <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer hover:opacity-90 ${extraReceiptUploading ? "opacity-50 pointer-events-none" : ""}`} style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#145228" }}>
                       <Upload size={14} />
                       {extraReceiptUploading ? "Uploading…" : "Upload Receipt"}
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            setExtraReceiptUploading(true);
-                            const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`);
-                            await uploadBytes(fileRef, file);
-                            const url = await getDownloadURL(fileRef);
-                            const newReceipt = { url, name: file.name, uploadedAt: new Date().toISOString() };
-                            await updateDoc(doc(db, "shifts", shiftId), {
-                              expenseReceiptUrls: arrayUnion(newReceipt),
-                            });
-                            setShiftData(prev => ({
-                              ...prev,
-                              expenseReceiptUrls: [...(prev?.expenseReceiptUrls || []), newReceipt],
-                            }));
-                            toast.success("Receipt uploaded");
-                          } catch (err) {
-                            toast.error("Upload failed");
-                          } finally {
-                            setExtraReceiptUploading(false);
-                            e.target.value = "";
-                          }
-                        }}
-                      />
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { setExtraReceiptUploading(true); const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`); await uploadBytes(fileRef, file); const url = await getDownloadURL(fileRef); const newReceipt = { url, name: file.name, uploadedAt: new Date().toISOString() }; await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: arrayUnion(newReceipt) }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: [...(prev?.expenseReceiptUrls || []), newReceipt] })); toast.success("Receipt uploaded"); } catch (err) { toast.error("Upload failed"); } finally { setExtraReceiptUploading(false); e.target.value = ""; } }} />
                     </label>
                   </div>
 
-                  {/* Admin Approval */}
-                  <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
-                    <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Admin Approval</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved Kilometers</label>
-                        <input
-                          className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors"
-                          placeholder="Enter approved KM"
-                          value={extraApprovedKm}
-                          onChange={e => setExtraApprovedKm(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved By</label>
-                        <input
-                          className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors"
-                          placeholder="Manager name"
-                          value={extraApprovedBy}
-                          onChange={e => setExtraApprovedBy(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        disabled={extraTransSaving}
-                        onClick={async () => {
-                          try {
-                            setExtraTransSaving(true);
-                            await updateDoc(doc(db, "shifts", shiftId), {
-                              extraApprovedKm: extraApprovedKm || null,
-                              extraApprovedBy: extraApprovedBy || null,
-                              expenseAmount: extraExpenseAmount || null,
-                              extraTravelComments: extraTravelComments || null,
-                              extraGpsKm: extraGpsKm || null,
-                              extraTotalKm: extraTotalKm || null,
-                            });
-                            toast.success("Transportation details saved");
-                          } catch (e) {
-                            toast.error("Failed to save");
-                          } finally {
-                            setExtraTransSaving(false);
-                          }
-                        }}
-                        className="px-5 py-2 rounded-lg font-semibold text-sm text-white hover:opacity-90 disabled:opacity-50"
-                        style={{ background: "#145228" }}
-                      >
-                        {extraTransSaving ? "Saving…" : "Save Details"}
-                      </button>
-                    </div>
+                  {/* ─── SAVE BUTTON ─── */}
+                  <div className="flex justify-end pt-2">
+                    <button
+                      disabled={extraTransSaving}
+                      onClick={async () => {
+                        try {
+                          setExtraTransSaving(true);
+                          await updateDoc(doc(db, "shifts", shiftId), {
+                            extraApprovedKm: extraApprovedKm || null,
+                            extraApprovedBy: extraApprovedBy || null,
+                            expenseAmount: extraExpenseAmount || null,
+                            approvedExpense: extraApprovedExpense || null,
+                            extraTravelComments: extraTravelComments || null,
+                            extraGpsKm: extraGpsKm || null,
+                            extraTotalKm: extraTotalKm || null,
+                          });
+                          toast.success("Transportation details saved");
+                        } catch (e) {
+                          toast.error("Failed to save");
+                        } finally {
+                          setExtraTransSaving(false);
+                        }
+                      }}
+                      className="px-6 py-2.5 rounded-lg font-semibold text-sm text-white hover:opacity-90 disabled:opacity-50"
+                      style={{ background: "#145228" }}
+                    >
+                      {extraTransSaving ? "Saving…" : "Save Details"}
+                    </button>
                   </div>
                 </div>
               );
