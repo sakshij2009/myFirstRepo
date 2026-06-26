@@ -427,6 +427,11 @@ const ShiftReport = ({ user }) => {
   const [newExpense, setNewExpense] = useState({ type: EXPENSE_TYPES[0], amount: "", note: "" });
   const [transSubmitting, setTransSubmitting] = useState(false);
 
+  // Extra transportation (non-transport shifts) admin fields
+  const [extraApprovedKm, setExtraApprovedKm] = useState("");
+  const [extraApprovedBy, setExtraApprovedBy] = useState("");
+  const [extraTransSaving, setExtraTransSaving] = useState(false);
+
   // ── Helpers ──
   function parseShiftDate(str) {
     if (!str) return null;
@@ -725,6 +730,8 @@ const ShiftReport = ({ user }) => {
     if (last.approvedKM || last.approvedKm) setApprovedKm(String(last.approvedKM || last.approvedKm || ""));
     if (last.approvedBy) setApprovedBy(last.approvedBy);
     if (shiftData?.travelComments) setTravelComments(shiftData.travelComments);
+    if (shiftData?.extraApprovedKm) setExtraApprovedKm(String(shiftData.extraApprovedKm));
+    if (shiftData?.extraApprovedBy) setExtraApprovedBy(shiftData.extraApprovedBy);
   }, [shiftData]);
 
   // Load Office→Pickup and Drop→Office km values.
@@ -1637,29 +1644,17 @@ const ShiftReport = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* KM Breakdown */}
-                  <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
-                    <p className="font-bold mb-2" style={{ fontSize: 13, color: "#14532D" }}>Kilometer Breakdown</p>
-                    {[
-                      { label: "Office → Pickup", value: extra.officeToPickupKm != null ? `${parseFloat(extra.officeToPickupKm).toFixed(2)} km` : "—" },
-                      { label: "Staff Traveled", value: extra.staffTraveledKM != null ? `${parseFloat(extra.staffTraveledKM).toFixed(2)} km` : "0.00 km" },
-                      { label: "Drop → Office", value: extra.dropToOfficeKm != null ? `${parseFloat(extra.dropToOfficeKm).toFixed(2)} km` : "—" },
-                    ].map((row, i) => (
-                      <div key={i} className="flex justify-between items-center py-1.5 border-b" style={{ borderColor: "#d1fae5" }}>
-                        <span style={{ fontSize: 13, color: "#374151" }}>{row.label}</span>
-                        <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{row.value}</span>
-                      </div>
-                    ))}
+                  {/* Kilometers Traveled */}
+                  <div className="rounded-xl border p-4" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
+                    <p className="font-bold mb-3" style={{ fontSize: 13, color: "#14532D" }}>Kilometers Traveled</p>
+                    <div className="flex justify-between items-center py-2">
+                      <span style={{ fontSize: 13, color: "#374151" }}>Distance Traveled (GPS)</span>
+                      <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{extra.staffTraveledKM != null ? `${parseFloat(extra.staffTraveledKM).toFixed(2)} km` : "0.00 km"}</span>
+                    </div>
                     <div className="flex justify-between items-center pt-2" style={{ borderTop: "2px solid #14532D", marginTop: 4 }}>
                       <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Total KM</span>
                       <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>{extra.totalKm != null ? `${parseFloat(extra.totalKm).toFixed(2)} km` : "—"}</span>
                     </div>
-                    {extra.mileageAmount != null && (
-                      <div className="flex justify-between items-center pt-1">
-                        <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>Mileage @ $0.72/km</span>
-                        <span className="font-bold" style={{ fontSize: 13, color: "#14532D" }}>${parseFloat(extra.mileageAmount).toFixed(2)}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Expense Amount */}
@@ -1674,18 +1669,6 @@ const ShiftReport = ({ user }) => {
                       </div>
                     </div>
                   )}
-
-                  {/* Approved KM / By */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Approved KM</p>
-                      <p style={{ fontSize: 13, color: extra.approvedKM ? "#111827" : "#9ca3af" }}>{extra.approvedKM || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Approved By</p>
-                      <p style={{ fontSize: 13, color: extra.approvedBy ? "#111827" : "#9ca3af" }}>{extra.approvedBy || "—"}</p>
-                    </div>
-                  </div>
 
                   {/* Travel Comments */}
                   {extra.travelComments && (
@@ -1715,6 +1698,54 @@ const ShiftReport = ({ user }) => {
                       </div>
                     </div>
                   )}
+
+                  {/* Approved KM + Approved By (admin editable) */}
+                  <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
+                    <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Admin Approval</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved Kilometers</label>
+                        <input
+                          className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors"
+                          placeholder="Enter approved KM"
+                          value={extraApprovedKm}
+                          onChange={e => setExtraApprovedKm(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#6b7280" }}>Approved By</label>
+                        <input
+                          className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors"
+                          placeholder="Manager name"
+                          value={extraApprovedBy}
+                          onChange={e => setExtraApprovedBy(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        disabled={extraTransSaving}
+                        onClick={async () => {
+                          try {
+                            setExtraTransSaving(true);
+                            await updateDoc(doc(db, "shifts", shiftId), {
+                              extraApprovedKm: extraApprovedKm ? Number(extraApprovedKm) : null,
+                              extraApprovedBy: extraApprovedBy || null,
+                            });
+                            toast.success("Approval saved");
+                          } catch (e) {
+                            toast.error("Failed to save");
+                          } finally {
+                            setExtraTransSaving(false);
+                          }
+                        }}
+                        className="px-5 py-2 rounded-lg font-semibold text-sm text-white hover:opacity-90 disabled:opacity-50"
+                        style={{ background: "#145228" }}
+                      >
+                        {extraTransSaving ? "Saving…" : "Save Approval"}
+                      </button>
+                    </div>
+                  </div>
                   </>)}
                 </div>
               );
