@@ -1646,46 +1646,45 @@ const ShiftReport = ({ user }) => {
                   </div>
 
                   {/* Expense Amount */}
-                  {(extra.expenseAmount || shiftData?.expenseAmount) && (
-                    <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <Receipt size={15} style={{ color: "#b45309" }} />
-                          <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount</span>
-                        </div>
-                        <span className="font-bold" style={{ fontSize: 16, color: "#b45309" }}>${parseFloat(extra.expenseAmount || shiftData?.expenseAmount || 0).toFixed(2)}</span>
+                  <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Receipt size={15} style={{ color: "#b45309" }} />
+                        <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount</span>
                       </div>
+                      <span className="font-bold" style={{ fontSize: 16, color: "#b45309" }}>${parseFloat(extra.expenseAmount || shiftData?.expenseAmount || 0).toFixed(2)}</span>
                     </div>
-                  )}
+                  </div>
 
                   {/* Travel Comments */}
-                  {extra.travelComments && (
-                    <div>
-                      <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</p>
-                      <div className="rounded-lg border p-3" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
-                        <p style={{ fontSize: 13, color: "#374151" }}>{extra.travelComments}</p>
-                      </div>
+                  <div>
+                    <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</p>
+                    <div className="rounded-lg border p-3" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
+                      <p style={{ fontSize: 13, color: extra.travelComments ? "#374151" : "#9ca3af" }}>{extra.travelComments || "No comments"}</p>
                     </div>
-                  )}
+                  </div>
 
                   {/* Receipts */}
-                  {receiptList.length > 0 && (
-                    <div>
-                      <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
-                      <div className="space-y-1">
-                        {receiptList.map((rec, i) => {
-                          const url = typeof rec === "string" ? rec : rec.url;
-                          const name = typeof rec === "string" ? `Receipt ${i + 1}` : (rec.name || `Receipt ${i + 1}`);
-                          return (
-                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
-                              <Receipt size={13} style={{ color: "#145228" }} />
-                              <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  <div>
+                    <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
+                    <div className="space-y-1">
+                      {receiptList.length > 0 ? receiptList.map((rec, i) => {
+                        const url = typeof rec === "string" ? rec : rec.url;
+                        const name = typeof rec === "string" ? `Receipt ${i + 1}` : (rec.name || `Receipt ${i + 1}`);
+                        return (
+                          <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
+                            <Receipt size={13} style={{ color: "#145228" }} />
+                            <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
+                          </div>
+                        );
+                      }) : (
+                        <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
+                          <Receipt size={13} style={{ color: "#9ca3af" }} />
+                          <span className="text-xs font-medium" style={{ color: "#9ca3af" }}>No receipts uploaded</span>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
 
                   {/* Approved KM + Approved By (admin editable) */}
                   <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
