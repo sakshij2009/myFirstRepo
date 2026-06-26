@@ -431,6 +431,9 @@ const ShiftReport = ({ user }) => {
   const [extraApprovedKm, setExtraApprovedKm] = useState("");
   const [extraApprovedBy, setExtraApprovedBy] = useState("");
   const [extraTransSaving, setExtraTransSaving] = useState(false);
+  const [extraExpenseAmount, setExtraExpenseAmount] = useState("");
+  const [extraTravelComments, setExtraTravelComments] = useState("");
+  const [extraReceiptUploading, setExtraReceiptUploading] = useState(false);
 
   // ── Helpers ──
   function parseShiftDate(str) {
@@ -732,6 +735,10 @@ const ShiftReport = ({ user }) => {
     if (shiftData?.travelComments) setTravelComments(shiftData.travelComments);
     if (shiftData?.extraApprovedKm) setExtraApprovedKm(String(shiftData.extraApprovedKm));
     if (shiftData?.extraApprovedBy) setExtraApprovedBy(shiftData.extraApprovedBy);
+    const expAmt = shiftData?.expenseAmount || (Array.isArray(shiftData?.extraShiftPoints) && shiftData.extraShiftPoints.length > 0 ? shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1].expenseAmount : null);
+    if (expAmt) setExtraExpenseAmount(String(expAmt));
+    const tc = shiftData?.extraTravelComments || (Array.isArray(shiftData?.extraShiftPoints) && shiftData.extraShiftPoints.length > 0 ? shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1].travelComments : null);
+    if (tc) setExtraTravelComments(tc);
   }, [shiftData]);
 
   // Load Office→Pickup and Drop→Office km values.
@@ -1645,29 +1652,37 @@ const ShiftReport = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Expense Amount */}
+                  {/* Expense Amount (editable) */}
                   <div className="rounded-xl border p-4" style={{ borderColor: "#fde68a", background: "#fffbeb" }}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Receipt size={15} style={{ color: "#b45309" }} />
-                        <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount</span>
-                      </div>
-                      <span className="font-bold" style={{ fontSize: 16, color: "#b45309" }}>${parseFloat(extra.expenseAmount || shiftData?.expenseAmount || 0).toFixed(2)}</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Receipt size={15} style={{ color: "#b45309" }} />
+                      <span className="font-bold" style={{ fontSize: 13, color: "#78350f" }}>Expense Amount ($)</span>
                     </div>
+                    <input
+                      type="number"
+                      className="w-full bg-white border border-[#fcd34d] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#b45309] transition-colors"
+                      placeholder="Enter expense amount"
+                      value={extraExpenseAmount}
+                      onChange={e => setExtraExpenseAmount(e.target.value)}
+                    />
                   </div>
 
-                  {/* Travel Comments */}
+                  {/* Travel Comments (editable) */}
                   <div>
                     <p className="font-bold mb-1" style={{ fontSize: 13, color: "#2b3232" }}>Travel Comments</p>
-                    <div className="rounded-lg border p-3" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
-                      <p style={{ fontSize: 13, color: extra.travelComments ? "#374151" : "#9ca3af" }}>{extra.travelComments || "No comments"}</p>
-                    </div>
+                    <textarea
+                      className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#145228] focus:bg-white transition-colors"
+                      placeholder="Enter travel comments"
+                      rows={3}
+                      value={extraTravelComments}
+                      onChange={e => setExtraTravelComments(e.target.value)}
+                    />
                   </div>
 
-                  {/* Receipts */}
+                  {/* Receipts (with upload) */}
                   <div>
                     <p className="font-bold mb-2" style={{ fontSize: 13, color: "#2b3232" }}>Receipts</p>
-                    <div className="space-y-1">
+                    <div className="space-y-1 mb-3">
                       {receiptList.length > 0 ? receiptList.map((rec, i) => {
                         const url = typeof rec === "string" ? rec : rec.url;
                         const name = typeof rec === "string" ? `Receipt ${i + 1}` : (rec.name || `Receipt ${i + 1}`);
@@ -1684,9 +1699,40 @@ const ShiftReport = ({ user }) => {
                         </div>
                       )}
                     </div>
+                    <label
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer hover:opacity-90 ${extraReceiptUploading ? "opacity-50 pointer-events-none" : ""}`}
+                      style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#145228" }}
+                    >
+                      <Upload size={14} />
+                      {extraReceiptUploading ? "Uploading…" : "Upload Receipt"}
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            setExtraReceiptUploading(true);
+                            const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`);
+                            await uploadBytes(fileRef, file);
+                            const url = await getDownloadURL(fileRef);
+                            await updateDoc(doc(db, "shifts", shiftId), {
+                              expenseReceiptUrls: arrayUnion({ url, name: file.name, uploadedAt: new Date().toISOString() }),
+                            });
+                            toast.success("Receipt uploaded");
+                          } catch (err) {
+                            toast.error("Upload failed");
+                          } finally {
+                            setExtraReceiptUploading(false);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
 
-                  {/* Approved KM + Approved By (admin editable) */}
+                  {/* Admin Approval */}
                   <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#fff" }}>
                     <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>Admin Approval</p>
                     <div className="grid grid-cols-2 gap-4">
@@ -1718,8 +1764,10 @@ const ShiftReport = ({ user }) => {
                             await updateDoc(doc(db, "shifts", shiftId), {
                               extraApprovedKm: extraApprovedKm ? Number(extraApprovedKm) : null,
                               extraApprovedBy: extraApprovedBy || null,
+                              expenseAmount: extraExpenseAmount ? Number(extraExpenseAmount) : null,
+                              extraTravelComments: extraTravelComments || null,
                             });
-                            toast.success("Approval saved");
+                            toast.success("Transportation details saved");
                           } catch (e) {
                             toast.error("Failed to save");
                           } finally {
@@ -1729,7 +1777,7 @@ const ShiftReport = ({ user }) => {
                         className="px-5 py-2 rounded-lg font-semibold text-sm text-white hover:opacity-90 disabled:opacity-50"
                         style={{ background: "#145228" }}
                       >
-                        {extraTransSaving ? "Saving…" : "Save Approval"}
+                        {extraTransSaving ? "Saving…" : "Save Details"}
                       </button>
                     </div>
                   </div>
