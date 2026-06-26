@@ -434,6 +434,8 @@ const ShiftReport = ({ user }) => {
   const [extraExpenseAmount, setExtraExpenseAmount] = useState("");
   const [extraTravelComments, setExtraTravelComments] = useState("");
   const [extraReceiptUploading, setExtraReceiptUploading] = useState(false);
+  const [extraGpsKm, setExtraGpsKm] = useState("");
+  const [extraTotalKm, setExtraTotalKm] = useState("");
 
   // ── Helpers ──
   function parseShiftDate(str) {
@@ -739,6 +741,10 @@ const ShiftReport = ({ user }) => {
     if (expAmt) setExtraExpenseAmount(String(expAmt));
     const tc = shiftData?.extraTravelComments || (Array.isArray(shiftData?.extraShiftPoints) && shiftData.extraShiftPoints.length > 0 ? shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1].travelComments : null);
     if (tc) setExtraTravelComments(tc);
+    const lastPt = Array.isArray(shiftData?.extraShiftPoints) && shiftData.extraShiftPoints.length > 0 ? shiftData.extraShiftPoints[shiftData.extraShiftPoints.length - 1] : null;
+    if (lastPt?.staffTraveledKM != null) setExtraGpsKm(String(lastPt.staffTraveledKM));
+    if (shiftData?.extraTotalKm != null) setExtraTotalKm(String(shiftData.extraTotalKm));
+    else if (lastPt?.totalKm != null) setExtraTotalKm(String(lastPt.totalKm));
   }, [shiftData]);
 
   // Load Office→Pickup and Drop→Office km values.
@@ -1639,16 +1645,30 @@ const ShiftReport = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Kilometers Traveled */}
+                  {/* Kilometers Traveled (editable) */}
                   <div className="rounded-xl border p-4" style={{ borderColor: "#d1fae5", background: "#f0fdf4" }}>
                     <p className="font-bold mb-3" style={{ fontSize: 13, color: "#14532D" }}>Kilometers Traveled</p>
-                    <div className="flex justify-between items-center py-2">
-                      <span style={{ fontSize: 13, color: "#374151" }}>Distance Traveled (GPS)</span>
-                      <span className="font-semibold" style={{ fontSize: 13, color: "#111827" }}>{extra.staffTraveledKM != null ? `${parseFloat(extra.staffTraveledKM).toFixed(2)} km` : "0.00 km"}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2" style={{ borderTop: "2px solid #14532D", marginTop: 4 }}>
-                      <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>Total KM</span>
-                      <span className="font-bold" style={{ fontSize: 14, color: "#111827" }}>{extra.totalKm != null ? `${parseFloat(extra.totalKm).toFixed(2)} km` : "—"}</span>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-bold mb-1 block" style={{ fontSize: 12, color: "#374151" }}>Distance Traveled (GPS)</label>
+                        <input
+                          type="text"
+                          className="w-full bg-white border border-[#86efac] rounded-lg px-3 py-2.5 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors"
+                          placeholder="0.00"
+                          value={extraGpsKm}
+                          onChange={e => setExtraGpsKm(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="font-bold mb-1 block" style={{ fontSize: 14, color: "#111827" }}>Total KM</label>
+                        <input
+                          type="text"
+                          className="w-full bg-white border border-[#14532D] rounded-lg px-3 py-2.5 text-sm font-bold text-gray-700 placeholder-gray-400 focus:outline-none focus:border-[#14532D] transition-colors"
+                          placeholder="0.00"
+                          value={extraTotalKm}
+                          onChange={e => setExtraTotalKm(e.target.value)}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1783,10 +1803,12 @@ const ShiftReport = ({ user }) => {
                           try {
                             setExtraTransSaving(true);
                             await updateDoc(doc(db, "shifts", shiftId), {
-                              extraApprovedKm: extraApprovedKm ? Number(extraApprovedKm) : null,
+                              extraApprovedKm: extraApprovedKm || null,
                               extraApprovedBy: extraApprovedBy || null,
-                              expenseAmount: extraExpenseAmount ? Number(extraExpenseAmount) : null,
+                              expenseAmount: extraExpenseAmount || null,
                               extraTravelComments: extraTravelComments || null,
+                              extraGpsKm: extraGpsKm || null,
+                              extraTotalKm: extraTotalKm || null,
                             });
                             toast.success("Transportation details saved");
                           } catch (e) {
