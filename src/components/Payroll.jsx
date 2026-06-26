@@ -35,34 +35,50 @@ const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct
 
 function fmtShiftDate(val) {
   if (!val) return "—";
-  // Firestore Timestamp
-  if (val && typeof val.toDate === "function") {
+  // Firestore Timestamp — use local date
+  if (typeof val?.toDate === "function") {
     const d = val.toDate();
     return `${SHORT_MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}`;
   }
-  // ISO string or date string
-  const d = new Date(val);
-  if (isNaN(d)) return val;
-  return `${SHORT_MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}`;
+  if (typeof val === "string") {
+    // Plain date string "YYYY-MM-DD" — parse as local to avoid UTC offset shift
+    const plain = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (plain) {
+      const month = parseInt(plain[2], 10) - 1;
+      const day = parseInt(plain[3], 10);
+      return `${SHORT_MONTHS[month]} ${String(day).padStart(2, "0")}`;
+    }
+    // ISO UTC string — display UTC date
+    const d = new Date(val);
+    if (!isNaN(d)) return `${SHORT_MONTHS[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+  return "—";
 }
+
+// Returns true for Firestore Timestamps and ISO UTC strings
+const isUTCBased = (val) =>
+  typeof val?.toDate === "function" ||
+  (typeof val === "string" && (val.includes("T") || val.includes("Z")));
 
 function formatTime(val) {
   if (!val) return "—";
-  // If it's a simple time string like "14:30" (not ISO)
+  // Already a formatted AM/PM string saved by mobile app — return as-is
+  if (typeof val === "string" && /AM|PM/i.test(val)) return val.trim().toUpperCase();
+  // "HH:mm" 24-hour format
   if (typeof val === "string" && val.includes(":") && !val.includes("T")) {
     const [h, m] = val.split(":");
     const date = new Date();
     date.setHours(parseInt(h), parseInt(m));
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   }
-  // For ISO strings ending in Z or Timestamps, use UTC as requested
+  // Firestore Timestamp or ISO UTC — display UTC digits as-is (no offset)
   const d = val?.toDate ? val.toDate() : new Date(val);
   if (isNaN(d)) return "—";
-  return d.toLocaleTimeString('en-US', { 
-    timeZone: 'UTC', 
-    hour: 'numeric', 
-    minute: '2-digit', 
-    hour12: true 
+  return d.toLocaleTimeString('en-US', {
+    timeZone: 'UTC',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
   });
 }
 
@@ -81,25 +97,37 @@ function roundToQuarter(h) {
   return Math.round(h * 4) / 4;
 }
 
+// Parse "2:30 PM" / "14:30" into minutes-since-midnight, returns null if unparseable
+function timeStringToMinutes(val) {
+  if (!val || typeof val !== "string") return null;
+  const ampm = val.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampm) {
+    let h = parseInt(ampm[1], 10);
+    const m = parseInt(ampm[2], 10);
+    if (ampm[3].toUpperCase() === "PM" && h !== 12) h += 12;
+    if (ampm[3].toUpperCase() === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  const hhmm = val.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (hhmm) return parseInt(hhmm[1], 10) * 60 + parseInt(hhmm[2], 10);
+  return null;
+}
+
 function calculateShiftHours(shift, fallbackHrs) {
   // Check if cancelled
   const st = (shift.status || shift.shiftStatus || "").toLowerCase();
   const isCancelled = st === "cancelled" || st === "canceled" || !!shift.shiftCancelled;
 
   if (isCancelled) {
-    if (shift.clockIn) {
-      // On-shift cancellation or clocked-in before cancel -> Record total scheduled hours (from fallback)
+    if (shift.clockIn || shift.clockInTime) {
       const h = parseFloat(fallbackHrs);
       return isNaN(h) || h === 0 ? 0 : roundToQuarter(h);
     }
-
     const start = shift.startDate || shift.shiftDate || shift.date;
     const cancelledAt = shift.shiftCancelledAt || shift.cancelledAt || shift.updatedAt || shift.clockOut;
-
     if (start && cancelledAt) {
       const startTime = new Date(start?.toDate ? start.toDate() : start).getTime();
       const cancelTime = new Date(cancelledAt?.toDate ? cancelledAt.toDate() : cancelledAt).getTime();
-
       if (!isNaN(startTime) && !isNaN(cancelTime)) {
         const diffHours = (startTime - cancelTime) / (1000 * 60 * 60);
         if (diffHours >= 24) return 0;
@@ -112,15 +140,25 @@ function calculateShiftHours(shift, fallbackHrs) {
     return 0;
   }
 
-  // Normal Math
+  // 1. Prefer clockInTime/clockOutTime local AM/PM strings (saved directly by mobile, most reliable for diff)
+  const startMins = timeStringToMinutes(shift.clockInTime);
+  const endMins   = timeStringToMinutes(shift.clockOutTime);
+  if (startMins !== null && endMins !== null) {
+    let diffMins = endMins - startMins;
+    if (diffMins < 0) diffMins += 24 * 60; // overnight shift
+    return roundToQuarter(diffMins / 60);
+  }
+
+  // 2. Fallback: full ISO/Timestamp clockIn+clockOut
   if (shift.clockIn && shift.clockOut) {
     const start = shift.clockIn?.toDate ? shift.clockIn.toDate() : new Date(shift.clockIn);
-    const end = shift.clockOut?.toDate ? shift.clockOut.toDate() : new Date(shift.clockOut);
+    const end   = shift.clockOut?.toDate ? shift.clockOut.toDate() : new Date(shift.clockOut);
     if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
       const diffMs = end.getTime() - start.getTime();
       return roundToQuarter(Math.max(0, diffMs / (1000 * 60 * 60)));
     }
   }
+
   const h = parseFloat(fallbackHrs);
   return isNaN(h) || h === 0 ? 0 : roundToQuarter(h);
 }
@@ -307,11 +345,13 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                   
                   const fallbackHrs = shift.hoursWorked || shift.duration || shift.totalHours || shift.hours || 0;
                   const shiftHrs = calculateShiftHours(shift, fallbackHrs);
-                  
+
                   const rate = rec.rate;
-                  const kms = Number(shift.approvedKms || shift.transportationKm || shift.kms || shift.totalKms || 0);
+                  // Approved KMs come from the last entry of extraShiftPoints (set by admin in shift report)
+                  const lastPoint = (shift.extraShiftPoints || []).slice(-1)[0] || {};
+                  const kms = Number(lastPoint.approvedKM ?? lastPoint.approvedKm ?? shift.extraApprovedKm ?? shift.approvedKms ?? shift.transportationKm ?? 0);
                   const kmCalculated = kms * (rec.mileageRate || 0);
-                  const expense = Number(shift.approvedExpense || shift.expense || 0);
+                  const expense = Number(shift.approvedExpense || shift.expense || shift.expenseAmount || 0);
                   const amount = (shiftHrs * rate) + kmCalculated + expense;
                   
                   const serviceType = shift.categoryName || shift.serviceType || shift.category || shift.shiftType || "";
@@ -322,9 +362,9 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
 
                   return (
                     <tr key={shift.id || idx} style={{ backgroundColor: rowBg, color: rowColor, borderBottom: "1px solid #f3f4f6" }}>
-                      {/* DATE */}
+                      {/* DATE — actual clock-in date (matches the Clock In column) */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>
-                        {fmtShiftDate(shift.date || shift.shiftDate || shift.createdAt || shift.startDate)}
+                        {fmtShiftDate(shift.clockIn)}
                       </td>
                       {/* CLIENT */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", maxWidth: 140 }}>
@@ -352,12 +392,14 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                           <span style={{ color: "#d1d5db", fontSize: 13 }}>—</span>
                         )}
                       </td>
-                      {/* CLOCK IN - CLOCK OUT */}
+                      {/* CLOCK IN - CLOCK OUT — prefer clockInTime/clockOutTime (local strings from mobile) */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>
-                        {shift.clockIn ? (
+                        {(shift.clockIn || shift.clockInTime) ? (
                           <span>
                             <span style={{ fontWeight: 500 }}>{formatDateFull(shift.clockIn)}</span>
-                            <span style={{ marginLeft: 8 }}>{formatTime(shift.clockIn)} - {formatTime(shift.clockOut) || "—"}</span>
+                            <span style={{ marginLeft: 8 }}>
+                              {formatTime(shift.clockInTime || shift.clockIn)} - {formatTime(shift.clockOutTime || shift.clockOut) || "—"}
+                            </span>
                           </span>
                         ) : (
                           <div style={{ color: "#d1d5db" }}>—</div>
@@ -510,23 +552,26 @@ export default function Payroll() {
   // Build payroll records
   const payrollRecords = useMemo(() => {
     return users.map((user, idx) => {
-      // 1. Filter shifts by user AND selected month
+      // 1. Filter shifts by user AND selected month — use startDate (the scheduled shift start)
       const userShifts = shifts.filter((s) => {
         const isUserShift = s.userId === user.id || s.assignedUser === user.name || s.name === user.name || s.staffName === user.name;
         if (!isUserShift) return false;
 
-        const sDateValue = s.startDate || s.date || s.shiftDate || s.createdAt;
+        const sDateValue = s.startDate;
         if (!sDateValue) return false;
-        
+
         const d = sDateValue.toDate ? sDateValue.toDate() : new Date(sDateValue);
         return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
       }).sort((a, b) => {
-        const da = a.startDate || a.date || a.shiftDate || a.createdAt;
-        const db = b.startDate || b.date || b.shiftDate || b.createdAt;
+        const da = a.clockIn;
+        const dbb = b.clockIn;
         const va = da?.toDate ? da.toDate().getTime() : new Date(da).getTime();
-        const vb = db?.toDate ? db.toDate().getTime() : new Date(db).getTime();
+        const vb = dbb?.toDate ? dbb.toDate().getTime() : new Date(dbb).getTime();
         return va - vb;
       });
+
+      // Only locked shifts appear in payroll table
+      const lockedShifts = userShifts.filter((s) => s.locked === true);
 
       const isCancelled = (s) => {
         const st = (s.status || s.shiftStatus || "").toLowerCase();
@@ -539,21 +584,22 @@ export default function Payroll() {
         ? Number(user.rateAfter5000km || 0) 
         : Number(user.rateBefore5000km || 0);
 
-      const cancelledShifts = userShifts.filter(isCancelled);
-      const completedShifts = userShifts.filter((s) => s.clockIn && s.clockOut);
-      // Only locked shifts count toward payroll
-      const activeShifts    = userShifts.filter((s) => !isCancelled(s) && s.locked === true);
+      const cancelledShifts = lockedShifts.filter(isCancelled);
+      const completedShifts = lockedShifts.filter((s) => s.clockIn && s.clockOut);
+      // Active = locked and not cancelled
+      const activeShifts    = lockedShifts.filter((s) => !isCancelled(s));
 
-      // 3. Totals from shifts
+      // 3. Totals from active locked shifts
       let totalKms = 0;
       let totalExpenses = 0;
-      
+
       const hoursWorked = activeShifts.reduce((sum, s) => {
         const fallbackHrs = s.hoursWorked || s.duration || s.totalHours || s.hours || 0;
         const shiftHrs = calculateShiftHours(s, fallbackHrs);
         
-        const shiftKms = Number(s.approvedKms || s.transportationKm || s.kms || s.totalKms || 0);
-        const shiftExp = Number(s.approvedExpense || s.expense || 0);
+        const lastPt = (s.extraShiftPoints || []).slice(-1)[0] || {};
+        const shiftKms = Number(lastPt.approvedKM ?? lastPt.approvedKm ?? s.extraApprovedKm ?? s.approvedKms ?? s.transportationKm ?? 0);
+        const shiftExp = Number(s.approvedExpense || s.expense || s.expenseAmount || 0);
         
         totalKms += shiftKms;
         totalExpenses += shiftExp;
@@ -568,18 +614,18 @@ export default function Payroll() {
       const gross = (hoursWorked * rate) + totalKmsCalculated + totalExpenses;
       
       const staffNum = String(idx + 1).padStart(3, "0");
-      const allCancelled = userShifts.length > 0 && cancelledShifts.length === userShifts.length;
+      const allCancelled = lockedShifts.length > 0 && cancelledShifts.length === lockedShifts.length;
 
       return {
         id: user.id,
         name: user.name || "Unknown",
         role: user.role || "Staff",
         staffCode: user.staffId || user.staffCode || `STF-${staffNum}`,
-        shifts: userShifts.length,
+        shifts: lockedShifts.length,
         completedShifts: completedShifts.length,
         cancelledShifts: cancelledShifts.length,
         allCancelled,
-        hoursWorked: hoursWorked,
+        hoursWorked,
         rate,
         mileageRate,
         totalKms,
@@ -587,7 +633,7 @@ export default function Payroll() {
         totalExpenses,
         gross,
         status: user.payrollStatus || "Pending",
-        userShifts,
+        userShifts: lockedShifts, // only locked shifts appear in the table
       };
     }).filter((r) => r.shifts > 0);
   }, [users, shifts, viewMonth, viewYear]);
@@ -631,20 +677,21 @@ export default function Payroll() {
     const headers = ["DATE", "CLIENT", "SERVICE TYPE", "CLOCK IN - CLOCK OUT", "HRS", "KMS", "KM COST", "EXP.", "TYPE", "RATE", "AMOUNT", "SHIFT STATUS"];
     
     const rows = rec.userShifts.map((shift) => {
-      const dateStr = formatDateFull(shift.clockIn) || "—";
+      const dateStr = fmtShiftDate(shift.clockIn) || "—";
       const client = `"${shift.clientName || shift.client || ""}"`;
       const serviceType = `"${shift.categoryName || shift.serviceType || shift.category || shift.shiftType || ""}"`;
-      
-      const cIn = formatTime(shift.clockIn);
-      const cOut = formatTime(shift.clockOut);
+
+      const cIn = formatTime(shift.clockInTime || shift.clockIn);
+      const cOut = formatTime(shift.clockOutTime || shift.clockOut);
       const clockIO = `"${cIn} - ${cOut || "—"}"`;
-      
+
       const fallbackHrs = shift.hoursWorked || shift.duration || shift.totalHours || shift.hours || 0;
       const shiftHrs = calculateShiftHours(shift, fallbackHrs);
-      
-      const kms = Number(shift.approvedKms || shift.transportationKm || shift.kms || shift.totalKms || 0);
+
+      const exportLastPt = (shift.extraShiftPoints || []).slice(-1)[0] || {};
+      const kms = Number(exportLastPt.approvedKM ?? exportLastPt.approvedKm ?? shift.extraApprovedKm ?? shift.approvedKms ?? shift.transportationKm ?? 0);
       const kmCalculated = kms * (rec.mileageRate || 0);
-      const expense = Number(shift.approvedExpense || shift.expense || 0);
+      const expense = Number(shift.approvedExpense || shift.expense || shift.expenseAmount || 0);
       const amount = (shiftHrs * rec.rate) + kmCalculated + expense;
       
       const st = (shift.status || shift.shiftStatus || "").toLowerCase();
