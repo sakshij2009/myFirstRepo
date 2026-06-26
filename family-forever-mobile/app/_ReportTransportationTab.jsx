@@ -299,11 +299,11 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         startLocation: startPoint || null,
         stopLocation: stopPoint || null,
         endLocation: endPoint || null,
-        officeToPickupKm: officeToPickupKm ?? null,
-        dropToOfficeKm: dropToOfficeKm ?? null,
+        officeToPickupKm: isTransportation ? (officeToPickupKm ?? null) : null,
+        dropToOfficeKm: isTransportation ? (dropToOfficeKm ?? null) : null,
         staffTraveledKM: parseFloat(liveKm.toFixed(2)),
-        totalKm: totalKm,
-        mileageAmount: mileageAmount,
+        totalKm: isTransportation ? totalKm : parseFloat(liveKm.toFixed(2)),
+        mileageAmount: isTransportation ? mileageAmount : null,
         approvedKM: approvedKm ? Number(approvedKm) : null,
         approvedBy: approvedBy || null,
         travelComments: comments || null,
@@ -389,54 +389,64 @@ export default function ReportTransportationTab({ shift, shiftId }) {
 
       {/* ================= KM BREAKDOWN ================= */}
       <View style={styles.kmCard}>
-        <Text style={styles.kmTitle}>Kilometer Breakdown</Text>
-        {kmLoading && (
+        <Text style={styles.kmTitle}>{isTransportation ? "Kilometer Breakdown" : "Kilometers Traveled"}</Text>
+        {isTransportation && kmLoading && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <ActivityIndicator size="small" color="#14532D" />
             <Text style={{ fontSize: 12, color: "#6B7280" }}>Calculating route distances…</Text>
           </View>
         )}
 
-        <View style={styles.kmRow}>
-          <Text style={styles.kmLabel}>Office → Pickup</Text>
-          <Text style={styles.kmValue}>
-            {officeToPickupKm != null ? `${officeToPickupKm.toFixed(2)} km` : "—"}
-          </Text>
-        </View>
+        {isTransportation && (
+          <View style={styles.kmRow}>
+            <Text style={styles.kmLabel}>Office → Pickup</Text>
+            <Text style={styles.kmValue}>
+              {officeToPickupKm != null ? `${officeToPickupKm.toFixed(2)} km` : "—"}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.kmRow}>
-          <Text style={styles.kmLabel}>Staff Traveled (Live GPS)</Text>
+          <Text style={styles.kmLabel}>{isTransportation ? "Staff Traveled (Live GPS)" : "Distance Traveled (GPS)"}</Text>
           <Text style={styles.kmValue}>{liveKm.toFixed(2)} km</Text>
         </View>
 
-        <View style={styles.kmRow}>
-          <Text style={styles.kmLabel}>Drop → Office</Text>
-          <Text style={styles.kmValue}>
-            {dropToOfficeKm != null ? `${dropToOfficeKm.toFixed(2)} km` : "—"}
-          </Text>
-        </View>
+        {isTransportation && (
+          <View style={styles.kmRow}>
+            <Text style={styles.kmLabel}>Drop → Office</Text>
+            <Text style={styles.kmValue}>
+              {dropToOfficeKm != null ? `${dropToOfficeKm.toFixed(2)} km` : "—"}
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.kmRow, styles.kmTotalRow]}>
           <Text style={styles.kmTotalLabel}>Total KM</Text>
-          <Text style={styles.kmTotalValue}>{totalKm.toFixed(2)} km</Text>
+          <Text style={styles.kmTotalValue}>{isTransportation ? totalKm.toFixed(2) : liveKm.toFixed(2)} km</Text>
         </View>
 
-        <View style={[styles.kmRow, { marginTop: 4 }]}>
-          <Text style={[styles.kmLabel, { color: "#14532D", fontWeight: "700" }]}>
-            Mileage @ ${MILEAGE_RATE}/km
-          </Text>
-          <Text style={[styles.kmValue, { color: "#14532D", fontWeight: "700" }]}>
-            ${mileageAmount.toFixed(2)}
-          </Text>
-        </View>
+        {isTransportation && (
+          <View style={[styles.kmRow, { marginTop: 4 }]}>
+            <Text style={[styles.kmLabel, { color: "#14532D", fontWeight: "700" }]}>
+              Mileage @ ${MILEAGE_RATE}/km
+            </Text>
+            <Text style={[styles.kmValue, { color: "#14532D", fontWeight: "700" }]}>
+              ${mileageAmount.toFixed(2)}
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* ================= APPROVED KM ================= */}
-      <Text style={styles.label}>Approved Kilometers</Text>
-      <TextInput style={styles.input} value={approvedKm} onChangeText={setApprovedKm} placeholder="Enter approved kilometers" keyboardType="numeric" />
+      {/* ================= APPROVED KM (transportation only) ================= */}
+      {isTransportation && (
+        <>
+          <Text style={styles.label}>Approved Kilometers</Text>
+          <TextInput style={styles.input} value={approvedKm} onChangeText={setApprovedKm} placeholder="Enter approved kilometers" keyboardType="numeric" />
 
-      <Text style={styles.label}>Approved By</Text>
-      <TextInput style={styles.input} value={approvedBy} onChangeText={setApprovedBy} placeholder="Enter approver name" />
+          <Text style={styles.label}>Approved By</Text>
+          <TextInput style={styles.input} value={approvedBy} onChangeText={setApprovedBy} placeholder="Enter approver name" />
+        </>
+      )}
 
       {/* ================= EXPENSE AMOUNT ================= */}
       <Text style={styles.label}>Expense Amount ($)</Text>
