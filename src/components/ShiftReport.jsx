@@ -1599,7 +1599,6 @@ const ShiftReport = ({ user }) => {
             {activeTab === "transportation" && hasExtraTransportation && (() => {
               const extra = shiftData?.extraShiftPoints?.slice(-1)[0] || {};
               const receiptList = Array.isArray(shiftData?.expenseReceiptUrls) ? shiftData.expenseReceiptUrls : [];
-              const hasData = (shiftData?.extraShiftPoints && shiftData.extraShiftPoints.length > 0) || shiftData?.expenseAmount || receiptList.length > 0;
               return (
                 <div className="px-5 space-y-5 py-4">
                   {/* Info strip */}
@@ -1613,17 +1612,6 @@ const ShiftReport = ({ user }) => {
                       <div key={i}><span className="font-semibold" style={{ fontSize: 11, color: "#6b7280" }}>{f.label}: </span><span className="font-bold" style={{ fontSize: 12, color: "#111827" }}>{f.value}</span></div>
                     ))}
                   </div>
-
-                  {!hasData && (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <Car size={36} style={{ color: "#d1d5db", marginBottom: 12 }} />
-                      <p className="font-semibold" style={{ fontSize: 14, color: "#6b7280" }}>No Transportation Data Yet</p>
-                      <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>Transportation details will appear here once the staff logs a trip from the mobile app.</p>
-                    </div>
-                  )}
-
-                  {hasData && (<>
-
 
                   {/* Extra Transportation Details */}
                   <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
@@ -1746,7 +1734,6 @@ const ShiftReport = ({ user }) => {
                       </button>
                     </div>
                   </div>
-                  </>)}
                 </div>
               );
             })()}
