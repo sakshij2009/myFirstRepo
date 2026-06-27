@@ -171,10 +171,13 @@ export default function BillingAgencyDetails({ agency, onBack }) {
             const r = parseFloat(s.rate || s.hourlyRate || s.clientRate) || matchedRate;
             const amt = h * r;
 
-            // 5) Transport KM — check all known fields and shiftPoints totals
+            // 5) Transport KM — use approved or shift-level total (not sum of individual points, which doubles for multi-client)
             let tkms = parseFloat(s.approvedKms || s.approvedKM || s.kms || s.kilometers || 0);
-            if (!tkms && Array.isArray(s.shiftPoints) && s.shiftPoints.length > 0) {
-              tkms = s.shiftPoints.reduce((sum, p) => sum + (parseFloat(p.totalKilometers || p.totalKM || 0)), 0);
+            if (!tkms && s.totalScheduledKm) {
+              tkms = parseFloat(s.totalScheduledKm);
+            }
+            if (!tkms && Array.isArray(s.shiftPoints) && s.shiftPoints.length === 1) {
+              tkms = parseFloat(s.shiftPoints[0].totalKilometers || s.shiftPoints[0].totalKM || 0);
             }
             if (!tkms && Array.isArray(s.extraShiftPoints) && s.extraShiftPoints.length > 0) {
               const last = s.extraShiftPoints[s.extraShiftPoints.length - 1];

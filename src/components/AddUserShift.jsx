@@ -280,14 +280,27 @@ const AddUserShift = ({ mode = "add", user }) => {
   // Ref to Formik instance so we can call setFieldValue from outside the render
   const formikRef = useRef(null);
 
-  // Auto-calculate scheduled km (office → pickup → drop → office) when points change
+  // Auto-calculate scheduled km as ONE continuous route when multiple clients exist
   const recomputeScheduledKm = async () => {
     const valid = shiftPoints.filter((p) => p.pickupLocation && p.dropLocation);
     if (!valid.length) { setScheduledKm(0); return; }
     setKmCalculating(true);
     try {
-      const results = await Promise.all(valid.map((p) => calculateTotalDistance(p)));
-      setScheduledKm(results.reduce((s, r) => s + (r?.totalKm || 0), 0));
+      if (valid.length === 1) {
+        const result = await calculateTotalDistance(valid[0]);
+        setScheduledKm(result?.totalKm || 0);
+      } else {
+        // Build one continuous route: OFFICE → client1 pickup → client1 drop → client2 pickup → client2 drop → ... → OFFICE
+        const waypoints = [OFFICE_ADDRESS];
+        valid.forEach((p) => {
+          waypoints.push(p.pickupLocation);
+          if (p.visitLocation) waypoints.push(p.visitLocation);
+          waypoints.push(p.dropLocation);
+        });
+        waypoints.push(OFFICE_ADDRESS);
+        const result = await calculateRouteDistance(waypoints);
+        setScheduledKm(result ? parseFloat(result.km.toFixed(2)) : 0);
+      }
     } catch (e) {
       console.warn("scheduled km error", e);
     } finally {

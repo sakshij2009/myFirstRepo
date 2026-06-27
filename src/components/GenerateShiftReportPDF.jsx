@@ -31,105 +31,111 @@ export const calculateTotalHours = (start, end) => {
   return ((24 - s) + e).toFixed(2);
 };
 
-// Build the shared HTML content for the report (used for both download & share)
 const buildReportContent = (shift) => {
-  const totalHoursCalculated = calculateTotalHours(shift.startTime, shift.endTime);
+  // Build visitation timing row for supervised visitation shifts
+  const category = (shift.categoryName || shift.serviceType || shift.category || "").toLowerCase();
+  const isVisitation = category.includes("visitation");
+  let visitationHtml = "";
+  if (isVisitation) {
+    const points = Array.isArray(shift.shiftPoints) ? shift.shiftPoints : [];
+    const visitTimes = points
+      .filter(p => p.visitStartTime || p.visitEndTime)
+      .map(p => `${p.name || "Client"}: ${p.visitStartTime || "N/A"} - ${p.visitEndTime || "N/A"}`)
+      .join(", ");
+    if (visitTimes) {
+      visitationHtml = `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Visitation Timing:</b> ${visitTimes}</p>`;
+    }
+  }
 
   return `
-    <div style="font-family: Arial; padding: 30px 35px; ">
-      <div style="display: flex; gap: 24px; align-items: center;">
-        <img src="/images/Logo2.png" style="width: 60px; height: 60px; display: flex;" />
-        <div>
-          <h1 style="margin: 0; font-size: 28px;">Family Forever</h1>
-          <p style="margin: 0; font-size: 16px; font-weight: 600;">From Humanity to Community</p>
+    <div style="font-family: Arial, Helvetica, sans-serif; padding: 40px 45px;">
+      <!-- Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; gap: 16px; align-items: center;">
+          <img src="/images/Logo2.png" style="width: 65px; height: 65px;" />
+          <div>
+            <p style="margin: 0; font-size: 20px; font-weight: 700; color: #2E7D32; letter-spacing: 1px;">FAMILY FOREVER</p>
+            <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: 600; color: #2E7D32; letter-spacing: 0.5px;">FROM HUMANITY TO COMMUNITY</p>
+          </div>
         </div>
+        <p style="margin: 0; font-size: 16px; font-weight: 600; color: #C97B1A;">Daily Shift report</p>
       </div>
 
-      <hr style="margin: 15px 0;" />
+      <hr style="margin: 18px 0; border: none; border-top: 1.5px solid #ccc;" />
 
-      <h2 style="font-size: 18px;"><b>Shift Report</b></h2>
-
-      <div style="display: flex; gap:100px;">
-        <div>
-          <p style="font-size: 14px;">Date: <b>${shift.dateKey}</b></p>
-          <p style="font-size: 14px;">Staff Name: <b>${shift.name}</b></p>
-          <p style="font-size: 14px;">Staff ID: <b>${shift.userId}</b></p>
-        </div>
-        <div>
-          <p style="font-size: 14px;">Client Name: <b>${shift.clientName}</b></p>
-          <p style="font-size: 14px;">Shift Time: <b>${shift.startTime} - ${shift.endTime}</b></p>
-          <p style="font-size: 14px;">Total Hours: <b>${totalHoursCalculated}</b></p>
-        </div>
+      <!-- Shift Details -->
+      <div style="margin-bottom: 8px;">
+        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Staff Name:</b> ${shift.name || "N/A"}</p>
+        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Staff ID:</b> ${shift.staffId || shift.userId || "N/A"}</p>
+        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Client Name:</b> ${shift.clientName || "N/A"}</p>
+        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Date:</b> ${shift.dateKey || "N/A"}</p>
+        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Shift Time:</b> ${shift.startTime || "N/A"} - ${shift.endTime || "N/A"}</p>
+        ${visitationHtml}
       </div>
 
-      <hr style="margin: 15px 0;" />
+      <hr style="margin: 14px 0; border: none; border-top: 1px solid #ddd;" />
 
-      
-
-     <div style="
-  margin-top: 15px;
-  text-align: justify;
-  line-height: 1.55;
-  font-size: 14px;
-">
-
-  ${shift.shiftReport
-    .split(/\n+/)
-    .map(
-      (p) => `
-        <div style="
-          margin-bottom: 12px;
-          page-break-inside: avoid;
-        ">
-          ${p}
-        </div>
-      `
-    )
-    .join("")}
-
-</div>
-
+      <!-- Report Content -->
+      <div style="margin-top: 12px; text-align: justify; line-height: 1.6; font-size: 13px; color: #333;">
+        ${(shift.shiftReport || "")
+          .split(/\n+/)
+          .map(
+            (p) => `<div style="margin-bottom: 10px; page-break-inside: avoid;">${p}</div>`
+          )
+          .join("")}
+      </div>
     </div>
   `;
 };
 
 const buildOpt = (shift) => ({
-  margin: 10,
+  margin: [50, 10, 10, 10],
   filename: `Shift_Report_${shift.clientName}.pdf`,
   image: { type: "jpeg", quality: 0.98 },
   html2canvas: { scale: 2, useCORS: true },
   jsPDF: { unit: "pt", format: "a4", orientation: "portrait" },
 });
 
-// Apply the centered Family Forever watermark + spacing to every page.
 const applyWatermark = (pdf) => {
   const totalPages = pdf.internal.getNumberOfPages();
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-
-  pdf.setLineHeightFactor(1.25); // prevents slicing text across pages
+  const cx = pageWidth / 2;
+  const cy = pageHeight / 2;
 
   for (let i = 1; i <= totalPages; i++) {
     pdf.setPage(i);
 
-    /* ⬆ Add top spacing */
-    pdf.setFontSize(4);
-    pdf.text(" ", 40, 60); // pushes content slightly down
-
-    /* ⬇ Add bottom spacing */
-    pdf.text(" ", 40, pageHeight - 60);
-
-    /* Add centered watermark */
-    pdf.setGState(pdf.GState({ opacity: 0.15 }));
+    // Large centered logo watermark
+    pdf.setGState(pdf.GState({ opacity: 0.08 }));
+    const logoSize = 350;
     pdf.addImage(
       "/images/Logo2.png",
       "PNG",
-      pageWidth / 2 - 150,
-      pageHeight / 2 - 150,
-      300,
-      300
+      cx - logoSize / 2,
+      cy - logoSize / 2,
+      logoSize,
+      logoSize
     );
+
+    // "FAMILY FOREVER" text watermark radiating around the logo
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(38);
+    pdf.setTextColor(180, 180, 180);
+    pdf.setGState(pdf.GState({ opacity: 0.1 }));
+
+    const text = "FAMILY FOREVER";
+    const radius = 270;
+    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+    angles.forEach((deg) => {
+      const rad = (deg * Math.PI) / 180;
+      const tx = cx + radius * Math.cos(rad);
+      const ty = cy + radius * Math.sin(rad);
+      pdf.text(text, tx, ty, { angle: deg + 90, align: "center" });
+    });
+
     pdf.setGState(pdf.GState({ opacity: 1 }));
+    pdf.setTextColor(0, 0, 0);
   }
 };
 
@@ -154,7 +160,6 @@ export const getShiftReportPDFBase64 = (shift) => {
     .get("pdf")
     .then((pdf) => {
       applyWatermark(pdf);
-      // 'datauristring' → "data:application/pdf;base64,XXXX"; strip the prefix.
       const dataUri = pdf.output("datauristring");
       return dataUri.substring(dataUri.indexOf(",") + 1);
     });

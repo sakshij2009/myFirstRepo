@@ -172,12 +172,15 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
     clientName: normalized.clientName,
     name: primaryStaff?.name || "N/A",
     userId: primaryStaff?.id || shiftData?.userId || "N/A",
+    staffId: primaryStaff?.staffId || primaryStaff?.staffCode || shiftData?.userId || "N/A",
     dateKey: normalized.displayDate || shiftData?.startDate || "",
     startTime: normalized.startTime,
     endTime: normalized.endTime,
     clockIn: normalized.clockIn,
     clockOut: normalized.clockOut,
     shiftReport: reportText,
+    categoryName: shiftData?.categoryName || shiftData?.serviceType || shiftData?.category || "",
+    shiftPoints: shiftData?.shiftPoints || [],
   });
 
   const handleDownload = () => {
