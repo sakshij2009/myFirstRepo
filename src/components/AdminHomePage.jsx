@@ -124,7 +124,13 @@ const AdminHomePage = ({ user, setUser }) => {
             <Route path="gst-reporting" element={<GSTReportingPage />} />
 
             {/* Under construction pages */}
-            <Route path="services" element={<ServicesPage filter={filter} dateRange={dateRange} />} />
+            <Route path="services" element={
+              <div className="flex flex-col items-center justify-center" style={{ minHeight: "60vh" }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🚧</div>
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>Under Development</h2>
+                <p style={{ fontSize: 14, color: "#6b7280", maxWidth: 400, textAlign: "center" }}>This section is currently being built and will be available soon.</p>
+              </div>
+            } />
             <Route path="family-treatment-houses" element={<FamilyTreatmentHouses />} />
             <Route path="pdd-houses" element={<PDDHouses />} />
             <Route path="child-youth-houses" element={<ChildYouthHouses />} />
