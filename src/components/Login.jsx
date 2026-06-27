@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
-import { Mail, Lock, Eye, EyeOff, Shield, Accessibility, Heart, Building2, ClipboardList, ArrowRight } from "lucide-react";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../firebase";
+import { Mail, Lock, Eye, EyeOff, Shield, Accessibility, Heart, Building2, ClipboardList, ArrowRight, ShieldCheck } from "lucide-react";
 
 // ─── Role Selection ────────────────────────────────────────────────────────
 
@@ -107,6 +108,27 @@ function OwnerLoginScreen({ onBack, setUser }) {
   const [passwordError, setPasswordError] = useState("");
   const [isLoading, setIsLoading]   = useState(false);
 
+  // OTP state
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
+  const [otpError, setOtpError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [pendingUser, setPendingUser] = useState(null);
+  const otpRefs = useRef([]);
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+
+  const sendOtp = async (userEmail, userName) => {
+    const sendLoginOTP = httpsCallable(functions, "sendLoginOTP");
+    await sendLoginOTP({ email: userEmail, name: userName });
+    setResendTimer(30);
+  };
+
   const handleSubmit = async (e) => {
     e?.preventDefault();
     setEmailError(""); setPasswordError("");
@@ -121,9 +143,9 @@ function OwnerLoginScreen({ onBack, setUser }) {
       const snap = await getDocs(query(collection(db, "users"), where("email", "==", email), where("password", "==", password)));
       if (!snap.empty) {
         const userData = snap.docs[0].data();
-        localStorage.setItem("user", JSON.stringify(userData));
-        setUser(userData);
-        navigate(userData.role === "admin" ? "/admin-dashboard" : "/user-dashboard");
+        setPendingUser(userData);
+        await sendOtp(email, userData.firstName || userData.name);
+        setOtpStep(true);
       } else {
         setPasswordError("Invalid email or password");
       }
@@ -135,6 +157,66 @@ function OwnerLoginScreen({ onBack, setUser }) {
     }
   };
 
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newCode = [...otpCode];
+    newCode[index] = value.slice(-1);
+    setOtpCode(newCode);
+    setOtpError("");
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otpCode[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    const newCode = [...otpCode];
+    for (let i = 0; i < 6; i++) newCode[i] = pasted[i] || "";
+    setOtpCode(newCode);
+    const focusIdx = Math.min(pasted.length, 5);
+    otpRefs.current[focusIdx]?.focus();
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e?.preventDefault();
+    const code = otpCode.join("");
+    if (code.length !== 6) { setOtpError("Please enter the 6-digit code"); return; }
+
+    setOtpLoading(true);
+    try {
+      const verifyLoginOTP = httpsCallable(functions, "verifyLoginOTP");
+      await verifyLoginOTP({ email, code });
+      localStorage.setItem("user", JSON.stringify(pendingUser));
+      setUser(pendingUser);
+      navigate(pendingUser.role === "admin" ? "/admin-dashboard" : "/user-dashboard");
+    } catch (err) {
+      const msg = err?.message || "";
+      if (msg.includes("expired")) setOtpError("Code has expired. Please request a new one.");
+      else if (msg.includes("Too many")) setOtpError("Too many attempts. Please request a new code.");
+      else if (msg.includes("Invalid") || msg.includes("permission-denied")) setOtpError("Invalid code. Please try again.");
+      else setOtpError("Verification failed. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    setOtpError("");
+    setOtpCode(["", "", "", "", "", ""]);
+    try {
+      await sendOtp(email, pendingUser?.firstName || pendingUser?.name);
+    } catch {
+      setOtpError("Failed to resend code. Try again.");
+    }
+  };
+
   const inputStyle = (hasError) => ({
     width: "100%", height: 48, borderRadius: 10,
     border: hasError ? "1px solid #EF4444" : "1px solid #D1D5DB",
@@ -143,6 +225,130 @@ function OwnerLoginScreen({ onBack, setUser }) {
     background: "#FFFFFF", outline: "none",
     transition: "all 0.15s ease",
   });
+
+  // ── OTP Verification Screen ──
+  if (otpStep) {
+    const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + "*".repeat(b.length) + c);
+    return (
+      <div className="flex flex-col md:flex-row w-screen min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
+        {/* Left panel (same branding) */}
+        <div className="relative flex flex-col items-center justify-center overflow-hidden h-[30vh] md:h-auto md:w-[55%]" style={{ background: "linear-gradient(160deg, #1B5E37 0%, #14472A 50%, #0D3520 100%)" }}>
+          {[
+            { w: 500, h: 500, top: -100, right: -120, opacity: 0.06 },
+            { w: 400, h: 400, bottom: -80, left: -60, opacity: 0.04 },
+            { w: 250, h: 250, top: "40%", left: "20%", opacity: 0.08 },
+          ].map((orb, i) => (
+            <div key={i} className="absolute pointer-events-none" style={{
+              width: orb.w, height: orb.h, borderRadius: "50%",
+              background: `radial-gradient(circle, rgba(255,255,255,${orb.opacity}) 0%, transparent 70%)`,
+              top: orb.top, bottom: orb.bottom, left: orb.left, right: orb.right,
+            }} />
+          ))}
+          <div className="relative z-10 flex flex-col items-center" style={{ maxWidth: 420, textAlign: "center", padding: "0 32px" }}>
+            <div className="flex items-center justify-center overflow-hidden" style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.15)", marginBottom: 28, backdropFilter: "blur(8px)" }}>
+              <img src="/images/logo.png" alt="Family Forever" style={{ width: 72, height: 72, objectFit: "contain" }} />
+            </div>
+            <h1 style={{ fontSize: 32, fontWeight: 700, color: "#FFFFFF", letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>Family Forever</h1>
+            <p style={{ fontSize: 16, color: "rgba(255,255,255,0.75)", lineHeight: 1.6 }}>Caring for every family, every step of the way.</p>
+          </div>
+        </div>
+
+        {/* Right panel (OTP form) */}
+        <div className="flex flex-col items-center justify-center relative flex-1 bg-white p-6 md:p-16">
+          <button onClick={() => { setOtpStep(false); setOtpCode(["", "", "", "", "", ""]); setOtpError(""); setPendingUser(null); }}
+            className="absolute flex items-center cursor-pointer transition-colors"
+            style={{ top: 32, left: 48, fontSize: 13, fontWeight: 500, color: "#9CA3AF", background: "none", border: "none", gap: 6 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#1B5E37")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#9CA3AF")}
+          >
+            ← Back to Login
+          </button>
+
+          <div style={{ width: "100%", maxWidth: 400 }}>
+            <div className="flex flex-col items-center" style={{ marginBottom: 32 }}>
+              <div className="flex items-center justify-center" style={{ width: 64, height: 64, borderRadius: 16, background: "#F0FDF4", color: "#1B5E37", marginBottom: 20 }}>
+                <ShieldCheck size={32} strokeWidth={1.8} />
+              </div>
+              <h2 style={{ fontSize: 28, fontWeight: 700, color: "#111827", lineHeight: 1.1, marginBottom: 12, textAlign: "center" }}>Verify Your Identity</h2>
+              <p style={{ fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 1.6 }}>
+                We sent a 6-digit code to<br />
+                <span style={{ fontWeight: 600, color: "#374151" }}>{maskedEmail}</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyOtp}>
+              <div className="flex justify-center" style={{ gap: 10, marginBottom: 24 }}>
+                {otpCode.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (otpRefs.current[i] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    onPaste={i === 0 ? handleOtpPaste : undefined}
+                    autoFocus={i === 0}
+                    style={{
+                      width: 52, height: 60, borderRadius: 12, textAlign: "center",
+                      fontSize: 24, fontWeight: 700, color: "#111827",
+                      border: otpError ? "2px solid #EF4444" : digit ? "2px solid #1B5E37" : "1.5px solid #D1D5DB",
+                      background: "#FFFFFF", outline: "none",
+                      transition: "all 0.15s ease",
+                    }}
+                    onFocus={(e) => { if (!otpError) { e.target.style.borderColor = "#1B5E37"; e.target.style.boxShadow = "0 0 0 4px rgba(27,94,55,0.08)"; } }}
+                    onBlur={(e) => { if (!otpError) { e.target.style.borderColor = digit ? "#1B5E37" : "#D1D5DB"; e.target.style.boxShadow = "none"; } }}
+                  />
+                ))}
+              </div>
+
+              {otpError && <p style={{ fontSize: 13, color: "#EF4444", textAlign: "center", marginBottom: 16 }}>{otpError}</p>}
+
+              <button
+                type="submit"
+                disabled={otpLoading}
+                className="w-full flex items-center justify-center"
+                style={{
+                  height: 52, borderRadius: 12,
+                  background: otpLoading ? "#9CA3AF" : "#1B5E37",
+                  color: "#FFFFFF", fontSize: 16, fontWeight: 600,
+                  border: "none", boxShadow: "0 2px 4px rgba(27,94,55,0.2)",
+                  transition: "all 0.2s ease", cursor: otpLoading ? "not-allowed" : "pointer",
+                }}
+                onMouseEnter={(e) => { if (!otpLoading) { e.currentTarget.style.background = "#166534"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                onMouseLeave={(e) => { if (!otpLoading) { e.currentTarget.style.background = "#1B5E37"; e.currentTarget.style.transform = "translateY(0)"; } }}
+              >
+                {otpLoading ? (
+                  <div className="flex items-center" style={{ gap: 10 }}>
+                    <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Verifying...
+                  </div>
+                ) : "Verify & Sign In"}
+              </button>
+            </form>
+
+            <div className="text-center" style={{ marginTop: 24 }}>
+              <p style={{ fontSize: 14, color: "#6B7280" }}>
+                Didn't receive the code?{" "}
+                {resendTimer > 0 ? (
+                  <span style={{ fontWeight: 600, color: "#9CA3AF" }}>Resend in {resendTimer}s</span>
+                ) : (
+                  <button type="button" onClick={handleResendOtp}
+                    style={{ fontWeight: 600, color: "#1B5E37", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                    Resend Code
+                  </button>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col md:flex-row w-screen min-h-screen" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -161,7 +367,7 @@ function OwnerLoginScreen({ onBack, setUser }) {
             top: orb.top, bottom: orb.bottom, left: orb.left, right: orb.right,
           }} />
         ))}
-        
+
         {/* Brand Content */}
         <div className="relative z-10 flex flex-col items-center" style={{ maxWidth: 420, textAlign: "center", padding: "0 32px" }}>
           <div className="flex items-center justify-center overflow-hidden" style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(255,255,255,0.15)", marginBottom: 28, backdropFilter: "blur(8px)" }}>
@@ -214,9 +420,9 @@ function OwnerLoginScreen({ onBack, setUser }) {
                 <div className="absolute flex items-center justify-center" style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
                   <Mail size={18} strokeWidth={1.8} />
                 </div>
-                <input 
-                  type="email" 
-                  value={email} 
+                <input
+                  type="email"
+                  value={email}
                   placeholder="you@familyforever.com"
                   onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(""); }}
                   style={inputStyle(!!emailError)}
@@ -234,9 +440,9 @@ function OwnerLoginScreen({ onBack, setUser }) {
                 <div className="absolute flex items-center justify-center" style={{ left: 14, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", pointerEvents: "none" }}>
                   <Lock size={18} strokeWidth={1.8} />
                 </div>
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  value={password} 
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
                   placeholder="Enter your password"
                   onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError(""); }}
                   style={{ ...inputStyle(!!passwordError), paddingRight: 44 }}
@@ -255,19 +461,19 @@ function OwnerLoginScreen({ onBack, setUser }) {
             {/* Actions: Remember + Forgot */}
             <div className="flex items-center justify-between" style={{ marginBottom: 32 }}>
               <label className="flex items-center cursor-pointer select-none" style={{ gap: 10 }}>
-                <input 
-                  type="checkbox" 
-                  checked={rememberMe} 
-                  onChange={() => setRememberMe(!rememberMe)} 
-                  className="hidden" 
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={() => setRememberMe(!rememberMe)}
+                  className="hidden"
                 />
-                <div 
-                  style={{ 
-                    width: 18, height: 18, borderRadius: 5, 
-                    border: rememberMe ? "none" : "1.5px solid #D1D5DB", 
-                    background: rememberMe ? "#1B5E37" : "#FFFFFF", 
-                    display: "flex", alignItems: "center", justifyContent: "center", 
-                    transition: "all 0.2s ease" 
+                <div
+                  style={{
+                    width: 18, height: 18, borderRadius: 5,
+                    border: rememberMe ? "none" : "1.5px solid #D1D5DB",
+                    background: rememberMe ? "#1B5E37" : "#FFFFFF",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.2s ease"
                   }}
                 >
                   {rememberMe && <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M1 5L4.5 8.5L11 1.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
@@ -278,16 +484,16 @@ function OwnerLoginScreen({ onBack, setUser }) {
             </div>
 
             {/* Submit Button */}
-            <button 
-              type="submit" 
-              disabled={isLoading} 
+            <button
+              type="submit"
+              disabled={isLoading}
               className="w-full flex items-center justify-center"
-              style={{ 
-                height: 52, borderRadius: 12, 
-                background: isLoading ? "#9CA3AF" : "#1B5E37", 
-                color: "#FFFFFF", fontSize: 16, fontWeight: 600, 
-                border: "none", boxShadow: "0 2px 4px rgba(27,94,55,0.2)", 
-                transition: "all 0.2s ease", cursor: isLoading ? "not-allowed" : "pointer" 
+              style={{
+                height: 52, borderRadius: 12,
+                background: isLoading ? "#9CA3AF" : "#1B5E37",
+                color: "#FFFFFF", fontSize: 16, fontWeight: 600,
+                border: "none", boxShadow: "0 2px 4px rgba(27,94,55,0.2)",
+                transition: "all 0.2s ease", cursor: isLoading ? "not-allowed" : "pointer"
               }}
               onMouseEnter={(e) => { if (!isLoading) { e.currentTarget.style.background = "#166534"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
               onMouseLeave={(e) => { if (!isLoading) { e.currentTarget.style.background = "#1B5E37"; e.currentTarget.style.transform = "translateY(0)"; } }}

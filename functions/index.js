@@ -437,3 +437,113 @@ exports.autoClockOut = onSchedule(
     }
   }
 );
+
+// ── Send Login OTP ───────────────────────────────────────────────────────────
+exports.sendLoginOTP = onCall(
+  { secrets: [sendgridApiKey] },
+  async (request) => {
+    const { email, name } = request.data || {};
+    if (!email || typeof email !== "string") {
+      throw new HttpsError("invalid-argument", "Email is required.");
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const db = getFirestore();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await db.collection("otpCodes").doc(email.toLowerCase().trim()).set({
+      code,
+      expiresAt,
+      attempts: 0,
+      createdAt: new Date(),
+    });
+
+    sgMail.setApiKey(sendgridApiKey.value());
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0"
+        style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:linear-gradient(160deg,#1B5E37 0%,#14472A 100%);padding:28px 32px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:20px;font-weight:700;">Family Forever Inc.</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:6px 0 0;font-size:12px;">From Humanity to Community</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 32px 24px;">
+            <p style="color:#374151;font-size:14px;margin:0 0 8px;">Hi${name ? " " + name : ""},</p>
+            <p style="color:#374151;font-size:14px;margin:0 0 20px;">Your verification code for login is:</p>
+            <div style="text-align:center;margin:0 0 20px;">
+              <span style="display:inline-block;font-size:36px;font-weight:800;letter-spacing:8px;color:#1B5E37;background:#f0fdf4;padding:16px 32px;border-radius:12px;border:2px dashed #86efac;">${code}</span>
+            </div>
+            <p style="color:#6b7280;font-size:12px;margin:0 0 6px;text-align:center;">This code expires in <strong>5 minutes</strong>.</p>
+            <p style="color:#6b7280;font-size:12px;margin:0;text-align:center;">If you did not request this code, please ignore this email.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;padding:16px 32px;text-align:center;border-top:1px solid #e5e7eb;">
+            <p style="color:#9ca3af;font-size:11px;margin:0;">&copy; ${new Date().getFullYear()} Family Forever Inc. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+    try {
+      await sgMail.send({
+        to: email.trim().toLowerCase(),
+        from: { email: FROM_EMAIL, name: FROM_NAME },
+        subject: `${code} — Your Family Forever verification code`,
+        html,
+      });
+    } catch (err) {
+      console.error("SendGrid OTP error:", err?.response?.body ?? err);
+      throw new HttpsError("internal", "Failed to send verification code.");
+    }
+
+    return { success: true };
+  }
+);
+
+// ── Verify Login OTP ─────────────────────────────────────────────────────────
+exports.verifyLoginOTP = onCall(async (request) => {
+  const { email, code } = request.data || {};
+  if (!email || !code) {
+    throw new HttpsError("invalid-argument", "Email and code are required.");
+  }
+
+  const db = getFirestore();
+  const docRef = db.collection("otpCodes").doc(email.toLowerCase().trim());
+  const snap = await docRef.get();
+
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "No verification code found. Please request a new one.");
+  }
+
+  const data = snap.data();
+
+  if (data.attempts >= 5) {
+    await docRef.delete();
+    throw new HttpsError("resource-exhausted", "Too many attempts. Please request a new code.");
+  }
+
+  const now = new Date();
+  const expires = data.expiresAt?.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
+  if (now > expires) {
+    await docRef.delete();
+    throw new HttpsError("deadline-exceeded", "Code has expired. Please request a new one.");
+  }
+
+  if (data.code !== String(code).trim()) {
+    await docRef.update({ attempts: (data.attempts || 0) + 1 });
+    throw new HttpsError("permission-denied", "Invalid code. Please try again.");
+  }
+
+  await docRef.delete();
+  return { success: true };
+});

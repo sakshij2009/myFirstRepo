@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../src/firebase/config";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../src/firebase/config";
 import { Ionicons } from "@expo/vector-icons";
 
 const { height, width } = Dimensions.get("window");
@@ -19,6 +20,15 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  // OTP state
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
+  const [otpError, setOtpError] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+  const [pendingUser, setPendingUser] = useState(null);
+  const otpInputRefs = useRef([]);
 
   // Animation values
   const brandOpacity = useRef(new Animated.Value(0)).current;
@@ -106,6 +116,18 @@ export default function Login() {
     ).start();
   }, []);
 
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+
+  const sendOtp = async (userEmail, userName) => {
+    const sendLoginOTP = httpsCallable(functions, "sendLoginOTP");
+    await sendLoginOTP({ email: userEmail, name: userName });
+    setResendTimer(30);
+  };
+
   const handleLogin = async () => {
     setError("");
     if (!email || !password) {
@@ -125,11 +147,9 @@ export default function Login() {
       if (!snapshot.empty) {
         const userDoc = snapshot.docs[0];
         const userData = { ...userDoc.data(), userId: userDoc.data().userId || userDoc.id, firestoreId: userDoc.id };
-        await AsyncStorage.setItem("user", JSON.stringify(userData));
-        setSuccess(true);
-        // Route based on role — admins/owners go to the admin dashboard
-        const isAdmin = userData.role?.toLowerCase() === "admin" || userData.role?.toLowerCase() === "owner";
-        setTimeout(() => router.replace(isAdmin ? "/admin/dashboard" : "/home"), 800);
+        setPendingUser(userData);
+        await sendOtp(email.trim().toLowerCase(), userData.firstName || userData.name);
+        setOtpStep(true);
       } else {
         setError("Invalid email or password");
       }
@@ -139,6 +159,171 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newCode = [...otpCode];
+    newCode[index] = value.slice(-1);
+    setOtpCode(newCode);
+    setOtpError("");
+    if (value && index < 5) otpInputRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyPress = (index, key) => {
+    if (key === "Backspace" && !otpCode[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otpCode.join("");
+    if (code.length !== 6) { setOtpError("Please enter the 6-digit code"); return; }
+
+    setOtpLoading(true);
+    try {
+      const verifyLoginOTP = httpsCallable(functions, "verifyLoginOTP");
+      await verifyLoginOTP({ email: email.trim().toLowerCase(), code });
+      await AsyncStorage.setItem("user", JSON.stringify(pendingUser));
+      setSuccess(true);
+      const isAdmin = pendingUser.role?.toLowerCase() === "admin" || pendingUser.role?.toLowerCase() === "owner";
+      setTimeout(() => router.replace(isAdmin ? "/admin/dashboard" : "/home"), 800);
+    } catch (err) {
+      const msg = err?.message || "";
+      if (msg.includes("expired")) setOtpError("Code has expired. Please request a new one.");
+      else if (msg.includes("Too many")) setOtpError("Too many attempts. Please request a new code.");
+      else if (msg.includes("Invalid") || msg.includes("permission-denied")) setOtpError("Invalid code. Please try again.");
+      else setOtpError("Verification failed. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    setOtpError("");
+    setOtpCode(["", "", "", "", "", ""]);
+    try {
+      await sendOtp(email.trim().toLowerCase(), pendingUser?.firstName || pendingUser?.name);
+    } catch {
+      setOtpError("Failed to resend code. Try again.");
+    }
+  };
+
+  // ── OTP Verification Screen ──
+  if (otpStep) {
+    const maskedEmail = email.replace(/(.{2})(.*)(@.*)/, (_, a, b, c) => a + "*".repeat(b.length) + c);
+    return (
+      <View style={styles.container}>
+        <View style={styles.greenBackground}>
+          <Animated.View style={[styles.lightOrbTop, { transform: [{ translateY: orb1Drift }] }]} />
+          <Animated.View style={[styles.lightOrbBottom, { transform: [{ translateY: orb2Drift }] }]} />
+          <View style={styles.accentBeam} />
+          <View style={styles.ring1} />
+          <View style={styles.ring2} />
+          <View style={styles.ring3} />
+        </View>
+
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {/* Brand header */}
+            <View style={styles.brandContainer}>
+              <View style={styles.logoWrapper}>
+                <View style={styles.logoCircle}>
+                  <Image source={require("../assets/logo.png")} style={{ width: 68, height: 68, resizeMode: "contain" }} />
+                </View>
+              </View>
+              <Text style={styles.brandName}>Family Forever</Text>
+              <Text style={styles.tagline}>From Humanity To Community.</Text>
+            </View>
+
+            {/* OTP Card */}
+            <View style={styles.loginCard}>
+              {/* Back button */}
+              <Pressable onPress={() => { setOtpStep(false); setOtpCode(["", "", "", "", "", ""]); setOtpError(""); setPendingUser(null); }}
+                style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
+                <Ionicons name="arrow-back" size={18} color={PRIMARY_GREEN} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: PRIMARY_GREEN, marginLeft: 6 }}>Back to Login</Text>
+              </Pressable>
+
+              {/* Shield icon */}
+              <View style={{ alignItems: "center", marginBottom: 16 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: "#F0FDF4", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="shield-checkmark" size={28} color={PRIMARY_GREEN} />
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 22, fontWeight: "700", color: "#111111", textAlign: "center", marginBottom: 8 }}>Verify Your Identity</Text>
+              <Text style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, marginBottom: 28 }}>
+                We sent a 6-digit code to{"\n"}
+                <Text style={{ fontWeight: "600", color: "#374151" }}>{maskedEmail}</Text>
+              </Text>
+
+              {/* OTP Input boxes */}
+              <View style={{ flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+                {otpCode.map((digit, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(el) => (otpInputRefs.current[i] = el)}
+                    value={digit}
+                    onChangeText={(v) => handleOtpChange(i, v)}
+                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(i, nativeEvent.key)}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    autoFocus={i === 0}
+                    style={{
+                      width: 48, height: 56, borderRadius: 12, textAlign: "center",
+                      fontSize: 22, fontWeight: "700", color: "#111111",
+                      borderWidth: otpError ? 2 : digit ? 2 : 1.5,
+                      borderColor: otpError ? "#EF4444" : digit ? PRIMARY_GREEN : "#EAECEF",
+                      backgroundColor: "#F7F8F9",
+                    }}
+                  />
+                ))}
+              </View>
+
+              {otpError ? (
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 16 }}>
+                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
+                  <Text style={{ fontSize: 12, fontWeight: "500", color: "#EF4444" }}>{otpError}</Text>
+                </View>
+              ) : null}
+
+              {/* Verify button */}
+              <Pressable onPress={handleVerifyOtp} disabled={otpLoading || success}
+                style={[styles.signInButton, success && styles.signInButtonSuccess]}>
+                {success ? (
+                  <>
+                    <Ionicons name="checkmark" size={20} color="#fff" />
+                    <Text style={styles.signInButtonTextSuccess}>Welcome!</Text>
+                  </>
+                ) : otpLoading ? (
+                  <View style={styles.spinnerContainer}>
+                    <View style={styles.spinner} />
+                  </View>
+                ) : (
+                  <Text style={styles.signInButtonText}>Verify & Sign In</Text>
+                )}
+              </Pressable>
+
+              {/* Resend */}
+              <View style={{ alignItems: "center", marginTop: 20 }}>
+                <Text style={{ fontSize: 13, color: "#9CA3AF" }}>
+                  Didn't receive the code?{" "}
+                  {resendTimer > 0 ? (
+                    <Text style={{ fontWeight: "600", color: "#9CA3AF" }}>Resend in {resendTimer}s</Text>
+                  ) : (
+                    <Text style={{ fontWeight: "600", color: PRIMARY_GREEN }} onPress={handleResendOtp}>Resend Code</Text>
+                  )}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.versionText}>v1.0.2 · Family Forever Staff Platform</Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
