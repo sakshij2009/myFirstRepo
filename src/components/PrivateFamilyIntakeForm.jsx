@@ -7,7 +7,6 @@ import { ChevronLeft, ChevronRight, Check, Plus, X, Upload, Pen, Trash2, ArrowLe
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import { formatLocalISO } from "../utils/dateHelpers";
-import SignatureCanvas from "react-signature-canvas";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 
 const GREEN = "#1f6f43";
@@ -36,8 +35,131 @@ const SERVICE_TYPES = [
 const VISIT_FREQUENCIES = ["Weekly", "Bi-weekly", "Monthly", "As needed", "Other"];
 const VISIT_DURATIONS = ["2 hours", "3 hours", "4 hours", "5 hours", "6 hours", "7 hours", "8 hours"];
 const VISIT_LOCATIONS = ["Family Forever Office", "Community Location", "Client Home", "Public Place", "Other"];
+const PAYMENT_RESPONSIBILITY = ["Applicant (me)", "Other Parent / Guardian", "Shared (50/50)", "Third Party / Agency", "Other"];
+const PAYMENT_METHODS = ["E-Transfer", "Credit Card", "Debit", "Cheque", "Cash", "Other"];
 const GENDERS = ["Male","Female","Non-binary","Prefer not to say"];
 const CUSTODY_OPTIONS = ["Sole Custody","Shared Custody","Court-Ordered Visitation","Informal Arrangement","Other"];
+
+const PROTOCOLS_LIST = [
+  {
+    num: 1,
+    title: "Attendance and Scheduling",
+    bullets: [
+      "Participants must arrive on time and remain for the approved visit duration.",
+      "Any inability to attend or request for changes must be communicated to the supervisor as soon as reasonably possible.",
+      "Late arrivals may result in shortened or cancelled visits at the agency's discretion."
+    ]
+  },
+  {
+    num: 2,
+    title: "Conduct and Professional Interaction",
+    bullets: [
+      "All participants are expected to behave respectfully and appropriately toward the child, staff, and other parties.",
+      "Aggressive, confrontational, abusive, or disrespectful behaviour—verbal or physical—will not be tolerated.",
+      "Concerns or feedback must be raised calmly and through appropriate channels."
+    ]
+  },
+  {
+    num: 3,
+    title: "Compliance With Supervision",
+    bullets: [
+      "Participants must follow all instructions provided by the supervising staff.",
+      "Limits placed on activities, interaction, or movement must be respected at all times.",
+      "Supervisors have the authority to intervene, redirect, or end a visit where necessary."
+    ]
+  },
+  {
+    num: 4,
+    title: "Child Safety and Well-Being",
+    bullets: [
+      "The emotional and physical safety of the child is the primary focus of all visits.",
+      "Participants must act in a manner that supports the child's comfort, security, and developmental needs.",
+      "All agency emergency procedures must be followed without exception."
+    ]
+  },
+  {
+    num: 5,
+    title: "Communication Standards",
+    bullets: [
+      "Conversations must remain age-appropriate, supportive, and child-focused.",
+      "Adult matters, legal issues, conflicts, or distressing topics must not be discussed in the child's presence.",
+      "Language must be respectful, non-derogatory, and appropriate and English at all times."
+    ]
+  },
+  {
+    num: 6,
+    title: "Physical Boundaries",
+    bullets: [
+      "Physical contact with the child must be appropriate, minimal, and consistent with supervision guidelines, court orders, and the child's comfort level.",
+      "Physical contact with staff or supervisors is strictly prohibited."
+    ]
+  },
+  {
+    num: 7,
+    title: "Activities and Materials",
+    bullets: [
+      "Only activities approved by the supervisor may occur during visits.",
+      "Unsafe, inappropriate, or unapproved activities or materials are not permitted.",
+      "All toys, books, and materials must be age-appropriate and suitable for supervised settings."
+    ]
+  },
+  {
+    num: 8,
+    title: "Substance Use",
+    bullets: [
+      "Attendance under the influence of alcohol, drugs, or impairing substances is strictly prohibited.",
+      "If impairment is suspected, the supervisor may immediately terminate the visit."
+    ]
+  },
+  {
+    num: 9,
+    title: "Confidentiality and Privacy",
+    bullets: [
+      "Confidential or sensitive information must not be discussed in the presence of the child.",
+      "Visit details must not be shared outside authorized or legally required reporting channels."
+    ]
+  },
+  {
+    num: 10,
+    title: "Photography and Recording",
+    bullets: [
+      "Audio or video recording of visits is prohibited unless expressly authorized in writing by the agency.",
+      "Photography of staff, supervisors, or other individuals is not permitted."
+    ]
+  },
+  {
+    num: 11,
+    title: "Supervision Proximity",
+    bullets: [
+      "Supervising staff will remain within appropriate proximity throughout the visit to ensure safety and compliance.",
+      "This level of supervision is mandatory for all supervised visits."
+    ]
+  },
+  {
+    num: 12,
+    title: "Supervisor's Role and Documentation",
+    bullets: [
+      "Supervisors provide neutral oversight and objective documentation.",
+      "Requests for biased, altered, or opinion-based reporting will not be accepted.",
+      "All records reflect factual observations only."
+    ]
+  },
+  {
+    num: 13,
+    title: "Reporting Concerns",
+    bullets: [
+      "Any concerns must be raised respectfully with the supervisor or through designated agency channels.",
+      "Issues should not be discussed during the visit in a manner that impacts the child."
+    ]
+  },
+  {
+    num: 14,
+    title: "Legal Compliance",
+    bullets: [
+      "All visits must comply with applicable court orders, legal agreements, and statutory requirements."
+    ]
+  }
+];
 
 const emptyChild = () => ({ fullName: "", dob: "", gender: "", custody: "", custodyWith: "", photo: null, photoPreview: "" });
 const emptyEmergency = () => ({ fullName: "", relationship: "", phone: "" });
@@ -145,11 +267,26 @@ const SectionCard = ({ num, title, subtitle, children, confidential }) => (
         </div>
       )}
       <div>
-        <h3 className="text-lg font-semibold" style={{ color: num ? GREEN : "#1f2937" }}>{title}</h3>
+        <h3 className="text-lg font-semibold" style={{ color: GREEN }}>{title}</h3>
         {subtitle && <p className="text-sm text-gray-500 mt-0.5 whitespace-pre-line">{subtitle}</p>}
       </div>
     </div>
     {children}
+  </div>
+);
+
+// ── Rate card (Service Rates & Fees) ───────────────────────────────────────
+const RateCard = ({ title, rows }) => (
+  <div className="border border-gray-200 rounded-xl p-4">
+    <p className="text-sm font-semibold mb-3" style={{ color: GREEN }}>{title}</p>
+    <div className="space-y-1.5">
+      {rows.map(([label, val], i) => (
+        <div key={i} className={`flex justify-between gap-3 text-xs ${label.startsWith("  ") ? "text-gray-400 italic" : "text-gray-600"}`}>
+          <span>{label.trim()}</span>
+          {val && <span className="font-semibold text-gray-800 whitespace-nowrap">{val}</span>}
+        </div>
+      ))}
+    </div>
   </div>
 );
 
@@ -226,7 +363,6 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
   const fileInputRefs = useRef({});
   const courtOrderFileRef = useRef(null);
-  const sigCanvasRef = useRef(null);
 
   // ── Form state ──────────────────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -252,12 +388,20 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     preferredTimes: "",
     preferredVisitDates: [],
 
-    // Needs & Safety
+    // Needs & Safety (Step 4)
     specialNeeds: "",
     allergies: "",
     currentMedications: "",
     domesticViolence: "",
     additionalInfo: "",
+
+    // Payment (Step 6)
+    paymentResponsibility: "",
+    paymentMethod: "",
+    paymentNotes: "",
+    payAckRates: false,
+    payAck48h: false,
+    payAckCancellation: false,
 
     // Part B/C: Party Confidential Profile (Dynamic) — Applicant Information
     fullName: "",
@@ -305,6 +449,8 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
     // Protocols
     protocolAcknowledged: false,
+    protocolName: "",
+    protocolDate: formatLocalISO(new Date()),
     partyA_signed: false,
     partyB_signed: false,
   });
@@ -360,6 +506,10 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
             partyA_signed: !!data.partyA?.signature,
             partyB_signed: !!data.partyB?.signature,
             signerName: partyData?.fullName || prev.signerName,
+            protocolAcknowledged: partyData?.protocolAcknowledged || false,
+            protocolName: partyData?.protocolName || partyData?.fullName || "",
+            protocolDate: partyData?.protocolDate || prev.protocolDate || formatLocalISO(new Date()),
+            signatureDataUrl: partyData?.signature || "",
           }));
         }
       } catch (err) {
@@ -395,9 +545,13 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     }
     if (step === 7) {
       if (!form.protocolAcknowledged) e.protocol = "You must acknowledge the protocols";
+      if (!form.protocolName?.trim()) e.protocolName = "Name is required";
+      if (!form.protocolDate?.trim()) e.protocolDate = "Date is required";
     }
     if (step === 8) {
-      if (!form.signatureDataUrl) e.signature = "Signature is required";
+      if (!form.signerName?.trim()) e.signerName = "Printed name is required";
+      if (!form.signerDate?.trim()) e.signerDate = "Date is required";
+      if (!form.signatureDataUrl?.trim()) e.signature = "Signature is required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -415,13 +569,9 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
     set("children", updated);
   };
   const updateEC = (field, val) => set("emergencyContact", { ...form.emergencyContact, [field]: val });
+  const updateEC2 = (field, val) => set("emergencyContact2", { ...form.emergencyContact2, [field]: val });
 
-  const clearSignature = () => { sigCanvasRef.current?.clear(); set("signatureDataUrl", ""); };
-  const saveSignature = () => {
-    if (sigCanvasRef.current && !sigCanvasRef.current.isEmpty()) {
-      set("signatureDataUrl", sigCanvasRef.current.toDataURL("image/png"));
-    }
-  };
+  const clearSignature = () => { set("signatureDataUrl", ""); };
 
   // ── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -457,6 +607,9 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
         emergencyContact2: form.emergencyContact2,
         signature: form.signatureDataUrl,
         signedAt: serverTimestamp(),
+        protocolAcknowledged: form.protocolAcknowledged,
+        protocolName: form.protocolName,
+        protocolDate: form.protocolDate,
         // Other parent / guardian
         otherParent: {
           fullName: form.otherParentName,
@@ -781,109 +934,163 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
 
       case 6: return (
         <div className="space-y-6">
-          <SectionCard num={13} title="Payment Model">
-            <p className="text-sm text-gray-600 mb-6">Select how service costs will be handled for this case file.</p>
-            
-            <div className="space-y-4">
-              {/* Option 1 */}
-              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 1" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 1")}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 1" ? "border-emerald-600" : "border-gray-300"}`}>
-                    {form.paymentOption === "Option 1" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
-                  </div>
-                  <span className="font-bold text-gray-800 leading-tight">Option 1 – One Party Responsible for All Costs</span>
-                </div>
-                <p className="text-xs text-gray-500 ml-8 mb-3">One party will be responsible for all visit fees, mileage, and additional services.</p>
-                {form.paymentOption === "Option 1" && (
-                  <div className="ml-8 grid grid-cols-2 gap-3" onClick={e => e.stopPropagation()}>
-                    <Radio label="Responsible Party" options={["Party A", "Party B", "Third Party / Agency"]} value={form.responsibleParty} onChange={v => set("responsibleParty", v)} />
-                    {form.responsibleParty === "Third Party / Agency" && <Input label="Name of Third Party" value={form.thirdPartyName} onChange={e => set("thirdPartyName", e.target.value)} />}
-                  </div>
-                )}
-              </div>
-
-              {/* Option 2 */}
-              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 2" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 2")}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 2" ? "border-emerald-600" : "border-gray-300"}`}>
-                    {form.paymentOption === "Option 2" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
-                  </div>
-                  <span className="font-bold text-gray-800 leading-tight">Option 2 – Shared Cost Between Parties</span>
-                </div>
-                <p className="text-xs text-gray-500 ml-8 mb-3">Both parties agree to share service costs. Full payment from both must be received before visit confirmation.</p>
-                {form.paymentOption === "Option 2" && (
-                  <div className="ml-8 grid grid-cols-2 gap-3" onClick={e => e.stopPropagation()}>
-                    <Radio label="Cost Allocation" options={["50/50", "Other split"]} value={form.costSplit} onChange={v => set("costSplit", v)} />
-                    {form.costSplit === "Other split" && <Input label="Specify Split Detail" placeholder="e.g. 70/30" value={form.costSplitDetail} onChange={e => set("costSplitDetail", e.target.value)} />}
-                  </div>
-                )}
-              </div>
-
-              {/* Option 3 */}
-              <div className={`p-4 border rounded-xl transition-all cursor-pointer ${form.paymentOption === "Option 3" ? "border-emerald-600 bg-emerald-50" : "border-gray-200"}`} onClick={() => set("paymentOption", "Option 3")}>
-                <div className="flex items-center gap-3 mb-2">
-                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${form.paymentOption === "Option 3" ? "border-emerald-600" : "border-gray-300"}`}>
-                    {form.paymentOption === "Option 3" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />}
-                  </div>
-                  <span className="font-bold text-gray-800 leading-tight">Option 3 – Third-Party Payment</span>
-                </div>
-                {form.paymentOption === "Option 3" && (
-                  <div className="ml-8 mt-3 grid grid-cols-2 gap-4" onClick={e => e.stopPropagation()}>
-                    <Select label="Payer" options={["CFS", "Agency", "Lawyer", "Other"]} value={form.thirdPartyPayer} onChange={v => set("thirdPartyPayer", v)} />
-                    <Input label="Billing Contact" value={form.billingContact} onChange={e => set("billingContact", e.target.value)} />
-                  </div>
-                )}
-              </div>
+          {/* Service Rates & Fees */}
+          <SectionCard title="Fees & Payment">
+            <p className="text-sm text-gray-600 mb-4">Family Forever, Inc. provides supervised visitation services on a fee-for-service basis.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <RateCard title="Supervised Visitation" rows={[["In Head Office", "$70.00/hr"], ["  (2-hour minimum)", ""], ["In Community", "$70.00/hr + Mileage"], ["  Mileage rate", "$0.72/km"], ["  (Calculated from and back to Family Forever Inc. Head office. May include 8% buffer for traffic, detours, or construction.)", ""]]} />
+              <RateCard title="Additional Services" rows={[["Report", "$40.00"], ["  (Issued once payment is received)", ""], ["Court appearance", "$850.00"]]} />
+              <RateCard title="Payment Terms" rows={[["Weekend visits", "Payment due before visit"], ["Weekday visits", "Payment due 3 days prior"]]} />
+              <RateCard title="Cancellation Policy" rows={[["Cancellation (<24hrs)", "Full charge"], ["  Applies regardless of who cancels", ""], ["No-show", "Full fee"]]} />
             </div>
-            {errors.paymentOption && <p className="text-red-500 text-xs mt-4">{errors.paymentOption}</p>}
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mt-4">
+              <p className="text-xs text-amber-800 leading-relaxed"><strong>Financial Assistance:</strong> We understand that supervised access services represent a financial commitment. Sliding scale fees and payment plans may be available based on demonstrated financial need. Please discuss your situation with our intake coordinator.</p>
+            </div>
+          </SectionCard>
+
+          {/* Payment Procedures */}
+          <SectionCard title="Payment Procedures">
+            <Select label="Who will be responsible for payment?" required placeholder="Select payment responsibility" options={PAYMENT_RESPONSIBILITY} value={form.paymentResponsibility} onChange={v => set("paymentResponsibility", v)} />
+            <Select label="Preferred Payment Method" required placeholder="Select payment method" options={PAYMENT_METHODS} value={form.paymentMethod} onChange={v => set("paymentMethod", v)} />
+            <Textarea label="Payment Notes or Special Arrangements" placeholder="Please provide any additional information about payment arrangements, financial assistance needs, or special circumstances..." value={form.paymentNotes} onChange={e => set("paymentNotes", e.target.value)} />
+            <p className="text-xs text-gray-400 -mt-2 mb-5">This information will be discussed confidentially during your intake assessment.</p>
+
+            <div className="border border-gray-200 rounded-xl p-4">
+              <h4 className="text-sm font-semibold mb-3" style={{ color: GREEN }}>Payment Policy Acknowledgment</h4>
+              <div className="space-y-3">
+                {[
+                  { key: "payAckRates", text: "I understand and acknowledge the service rates and payment policies outlined above." },
+                  { key: "payAck48h", text: "I understand that payment is due before weekend visits or 3 days prior to weekday visits." },
+                  { key: "payAckCancellation", text: "I understand the cancellation policy: cancellations with less than 24 hours notice will be charged in full, regardless of who cancels the visit." },
+                ].map(ack => (
+                  <label key={ack.key} className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={form[ack.key]} onChange={e => set(ack.key, e.target.checked)} className="mt-1 w-4 h-4 accent-green-700" />
+                    <span className="text-sm text-gray-700">{ack.text} <span className="text-red-500">*</span></span>
+                  </label>
+                ))}
+              </div>
+              {errors.payAck && <p className="text-red-500 text-xs mt-2">{errors.payAck}</p>}
+            </div>
           </SectionCard>
         </div>
       );
 
       case 7: return (
         <div className="space-y-6">
-           <SectionCard num={14} title="Engagement Protocols">
-             <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-lg p-4 bg-gray-50 text-[11px] text-gray-600 leading-relaxed mb-4">
-                <p className="font-bold text-gray-800 mb-2">FAMILY FOREVER INC. – ENGAGEMENT PROTOCOLS</p>
-                <div className="space-y-4">
-                   {[
-                    { t: "1. Attendance", d: "Participants must arrive on time. Late arrivals may result in shortened or cancelled visits." },
-                    { t: "2. Conduct", d: "Respectful behaviour toward the child and staff is mandatory. Aggressive or abusive behaviour will not be tolerated." },
-                    { t: "3. Compliance", d: "Participants must follow all instructions provided by the supervising staff." },
-                    { t: "4. Child Focus", d: "Adult matters, legal issues, or conflicts must not be discussed in the child's presence." },
-                    { t: "5. Substance Use", d: "Attendance under the influence of drugs or alcohol is strictly prohibited." },
-                    { t: "6. Photography", d: "Audio or video recording is prohibited unless authorized in writing." }
-                   ].map((p, i) => (
-                     <div key={i}><span className="font-bold text-gray-700">{p.t}:</span> {p.d}</div>
-                   ))}
-                </div>
+           <SectionCard title="Engagement Protocols">
+             <div className="bg-[#f4faf7] border border-[#d5e9e0] rounded-xl p-5 mb-6 text-sm text-gray-700 leading-relaxed shadow-sm">
+                Family Forever Inc.'s Engagement Protocols establish clear expectations to ensure that supervised visits are conducted in a safe, respectful, and child-focused manner. All individuals participating in supervised visits are required to comply with these protocols at all times. Failure to comply may result in immediate suspension or termination of the visit and/or services.
              </div>
-             <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.protocolAcknowledged} onChange={e => set("protocolAcknowledged", e.target.checked)} className="mt-0.5 w-4 h-4 accent-emerald-700" />
-                <span className="text-sm text-gray-700">I have read, understood, and agree to comply with the Engagement Protocols.</span>
-             </label>
+
+             <div className="space-y-6 my-6 pl-1">
+                {PROTOCOLS_LIST.map((p) => (
+                  <div key={p.num} className="space-y-2">
+                    <h4 className="text-base font-bold" style={{ color: GREEN }}>
+                      {p.num}. {p.title}
+                    </h4>
+                    <ul className="list-disc pl-5 space-y-1.5 text-sm text-gray-700 marker:text-[#1f6f43]">
+                      {p.bullets.map((bullet, idx) => (
+                        <li key={idx}>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+             </div>
+
+             <div className="bg-[#f4faf7] border border-[#d5e9e0] rounded-xl p-6 mt-8 shadow-sm">
+                <h4 className="text-base font-bold mb-2" style={{ color: GREEN }}>
+                  Acknowledgement of Engagement Protocols
+                </h4>
+                <p className="text-xs text-gray-600 mb-5 leading-relaxed">
+                  I acknowledge that I have read and understood the Engagement Protocols above and agree to comply with them throughout the visitation process.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Input
+                      label="Name"
+                      required
+                      placeholder="Type your full name"
+                      value={form.protocolName}
+                      onChange={(e) => set("protocolName", e.target.value)}
+                    />
+                    {errors.protocolName && <p className="text-red-500 text-xs -mt-3 mb-2">{errors.protocolName}</p>}
+                  </div>
+                  <div>
+                    <Input
+                      label="Date"
+                      required
+                      type="date"
+                      placeholder="Pick a date"
+                      value={form.protocolDate}
+                      onChange={(e) => set("protocolDate", e.target.value)}
+                    />
+                    {errors.protocolDate && <p className="text-red-500 text-xs -mt-3 mb-2">{errors.protocolDate}</p>}
+                  </div>
+                </div>
+                
+                <label className="flex items-start gap-3 cursor-pointer mt-4">
+                  <input
+                    type="checkbox"
+                    checked={form.protocolAcknowledged}
+                    onChange={(e) => set("protocolAcknowledged", e.target.checked)}
+                    className="mt-1 w-4 h-4 accent-emerald-700 shrink-0"
+                  />
+                  <span className="text-sm text-gray-700 font-medium leading-relaxed">
+                    I agree and consent to these terms. <span className="text-red-500">*</span>
+                  </span>
+                </label>
+                {errors.protocol && <p className="text-red-500 text-xs mt-1">{errors.protocol}</p>}
+             </div>
            </SectionCard>
         </div>
       );
 
       case 8: return (
-        <SectionCard num={15} title="Review & Submit">
+        <SectionCard title="Review & Submit">
           <p className="text-sm text-gray-600 mb-6">By signing below, you confirm that all information provided is accurate and you agree to the confidentiality and payment terms outlined.</p>
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <Input label="Name (Print)" required value={form.signerName} onChange={e => set("signerName", e.target.value)} />
-            <Input label="Date" type="date" required value={form.signerDate} onChange={e => set("signerDate", e.target.value)} />
+            <div>
+              <Input label="Name (Print)" required value={form.signerName} onChange={e => set("signerName", e.target.value)} />
+              {errors.signerName && <p className="text-red-500 text-xs -mt-3 mb-2">{errors.signerName}</p>}
+            </div>
+            <div>
+              <Input label="Date" type="date" required value={form.signerDate} onChange={e => set("signerDate", e.target.value)} />
+              {errors.signerDate && <p className="text-red-500 text-xs -mt-3 mb-2">{errors.signerDate}</p>}
+            </div>
           </div>
           <div className="mb-4">
             <div className="flex justify-between items-center mb-2">
-              <Label required>Signature</Label>
-              <button onClick={clearSignature} className="text-xs text-red-500 font-bold hover:underline">Clear</button>
+              <Label required>Digital Signature</Label>
+              {form.signatureDataUrl && (
+                <button onClick={clearSignature} className="text-xs text-red-500 font-bold hover:underline">Clear</button>
+              )}
             </div>
-            <div className="border border-gray-300 rounded-xl overflow-hidden bg-gray-50">
-              <SignatureCanvas ref={sigCanvasRef} penColor={GREEN} canvasProps={{ width: 700, height: 180, className: "w-full cursor-crosshair" }} onEnd={saveSignature} />
-            </div>
+            <input
+              type="text"
+              value={form.signatureDataUrl}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                set("signatureDataUrl", cleaned);
+              }}
+              placeholder="Type your full name to sign"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-700 bg-white"
+            />
             {errors.signature && <p className="text-red-500 text-xs mt-2">{errors.signature}</p>}
+            
+            {/* Live cursive preview */}
+            <div className="mt-3 border border-dashed rounded-xl p-6 bg-gray-50 flex flex-col items-center justify-center min-h-[120px]" style={{ borderColor: "#d1d5db" }}>
+              {form.signatureDataUrl ? (
+                <span className="text-4xl text-emerald-800 font-semibold" style={{ fontFamily: "'Dancing Script', cursive" }}>
+                  {form.signatureDataUrl}
+                </span>
+              ) : (
+                <span className="text-gray-400 italic text-sm">Signature will appear here...</span>
+              )}
+            </div>
           </div>
-          {form.signatureDataUrl && <img src={form.signatureDataUrl} alt="Signature" className="h-16 object-contain border p-2 rounded mt-2" />}
         </SectionCard>
       );
 
