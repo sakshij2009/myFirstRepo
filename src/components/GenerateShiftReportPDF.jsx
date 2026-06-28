@@ -107,7 +107,7 @@ const applyWatermark = (pdf) => {
     pdf.setPage(i);
 
     // Large centered logo watermark
-    pdf.setGState(pdf.GState({ opacity: 0.08 }));
+    pdf.setGState(pdf.GState({ opacity: 0.15 }));
     const logoSize = 350;
     pdf.addImage(
       "/images/Logo2.png",
