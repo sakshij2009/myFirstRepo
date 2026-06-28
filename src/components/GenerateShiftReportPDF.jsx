@@ -118,24 +118,7 @@ const applyWatermark = (pdf) => {
       logoSize
     );
 
-    // "FAMILY FOREVER" text watermark radiating around the logo
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(38);
-    pdf.setTextColor(180, 180, 180);
-    pdf.setGState(pdf.GState({ opacity: 0.1 }));
-
-    const text = "FAMILY FOREVER";
-    const radius = 270;
-    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
-    angles.forEach((deg) => {
-      const rad = (deg * Math.PI) / 180;
-      const tx = cx + radius * Math.cos(rad);
-      const ty = cy + radius * Math.sin(rad);
-      pdf.text(text, tx, ty, { angle: deg + 90, align: "center" });
-    });
-
     pdf.setGState(pdf.GState({ opacity: 1 }));
-    pdf.setTextColor(0, 0, 0);
   }
 };
 
