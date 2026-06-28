@@ -40,7 +40,7 @@ const buildReportContent = (shift) => {
     const points = Array.isArray(shift.shiftPoints) ? shift.shiftPoints : [];
     const visitTimes = points
       .filter(p => p.visitStartTime || p.visitEndTime)
-      .map(p => `${p.name || "Client"}: ${p.visitStartTime || "N/A"} - ${p.visitEndTime || "N/A"}`)
+      .map(p => `${p.visitStartTime || "N/A"} - ${p.visitEndTime || "N/A"}`)
       .join(", ");
     if (visitTimes) {
       visitationHtml = `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Visitation Timing:</b> ${visitTimes}</p>`;
