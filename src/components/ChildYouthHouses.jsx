@@ -12,7 +12,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { db } from "../firebase";
-import { collection, query, where, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 
 const PROGRAM_TYPE  = "child-youth";
 const PROGRAM_LABEL = "Child & Youth Program Cycle";
@@ -64,7 +64,7 @@ const ChildYouthHouses = () => {
       try {
         const q = query(collection(db, "houses"), where("programType", "==", PROGRAM_TYPE));
         const snap = await getDocs(q);
-        const houseList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const houseList = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((h) => !h.isDeleted);
         setHouses(houseList.length > 0 ? houseList : DEMO_HOUSES);
       } catch (err) {
         console.error("Error fetching houses:", err);
@@ -81,9 +81,9 @@ const ChildYouthHouses = () => {
       toast.success("Demo house removed");
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete ${houseName}? This action cannot be undone.`)) return;
+    if (!window.confirm(`Are you sure you want to delete ${houseName}?`)) return;
     try {
-      await deleteDoc(doc(db, "houses", houseId));
+      await updateDoc(doc(db, "houses", houseId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setHouses((prev) => prev.filter((h) => h.id !== houseId));
       toast.success("House deleted successfully", { description: `${houseName} has been removed.` });
     } catch (err) {

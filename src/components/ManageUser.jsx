@@ -246,6 +246,7 @@ const ManageUser = () => {
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((u) => {
+            if (u.isDeleted) return false;
             const role = (u.role || "").toLowerCase();
             return role !== "admin" && role !== "superadmin";
           });
@@ -268,7 +269,7 @@ const ManageUser = () => {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("Are you sure you want to delete this user?")) return;
     try {
-      await deleteDoc(doc(db, "users", userId));
+      await updateDoc(doc(db, "users", userId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (e) {
       console.error("Error deleting user:", e);

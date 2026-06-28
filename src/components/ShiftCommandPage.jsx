@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import {
   ChevronLeft, ChevronRight, Plus, Clock, User,
@@ -199,9 +199,9 @@ function ShiftGridHeader({ showDate }) {
 }
 
 async function handleDeleteShift(shiftId, setRawShifts) {
-  if (!window.confirm("Delete this shift? This cannot be undone.")) return;
+  if (!window.confirm("Delete this shift?")) return;
   try {
-    await deleteDoc(doc(db, "shifts", shiftId));
+    await updateDoc(doc(db, "shifts", shiftId), { isDeleted: true, deletedAt: new Date().toISOString() });
     if (setRawShifts) setRawShifts((prev) => prev.filter((s) => s.id !== shiftId));
   } catch (e) {
     console.error("Delete failed:", e);
@@ -797,7 +797,7 @@ export default function ShiftCommandPage() {
       setLoading(true);
       try {
         const snap = await getDocs(collection(db, "shifts"));
-        const list = snap.docs.map((d) => {
+        const list = snap.docs.filter((d) => !d.data().isDeleted).map((d) => {
           const data = d.data();
           const dateStr = toDateStr(data.startDate) || toDateStr(data.date);
           const serviceKey = normaliseCategoryKey(data.categoryName || data.shiftCategory || "");

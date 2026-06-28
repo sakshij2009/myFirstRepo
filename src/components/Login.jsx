@@ -140,11 +140,13 @@ function OwnerLoginScreen({ onBack, setUser }) {
 
     setIsLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, "users"), where("email", "==", email), where("password", "==", password)));
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPassword = password.trim();
+      const snap = await getDocs(query(collection(db, "users"), where("email", "==", normalizedEmail), where("password", "==", normalizedPassword)));
       if (!snap.empty) {
         const userData = snap.docs[0].data();
         setPendingUser(userData);
-        await sendOtp(email, userData.firstName || userData.name);
+        await sendOtp(normalizedEmail, userData.firstName || userData.name);
         setOtpStep(true);
       } else {
         setPasswordError("Invalid email or password");

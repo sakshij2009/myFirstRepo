@@ -317,8 +317,8 @@ export default function ManageIntakeForms() {
           };
         };
 
-        const oldList    = oldSnap.docs.map(d => processDoc(d, "old"));
-        const newList    = newSnap.docs.map(d => processDoc(d, "new"));
+        const oldList    = oldSnap.docs.map(d => processDoc(d, "old")).filter(f => !f.isDeleted);
+        const newList    = newSnap.docs.map(d => processDoc(d, "new")).filter(f => !f.isDeleted);
 
         // Smart merge: Deduplicate by id, but prefer records that actually have a client name
         const mergedMap = new Map();
@@ -364,7 +364,7 @@ export default function ManageIntakeForms() {
     try {
       const form = forms.find(f => f.id === id);
       const col = form?._source === "new" ? "intakeForms" : "InTakeForms";
-      await deleteDoc(doc(db, col, id));
+      await updateDoc(doc(db, col, id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setForms((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
       console.error("Error deleting form:", e);

@@ -294,6 +294,7 @@ const ManageClients = () => {
         const snap = await getDocs(collection(db, "clients"));
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((d) => !d.isDeleted)
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setClients(list);
         enrichFromIntake(list);
@@ -407,9 +408,9 @@ const ManageClients = () => {
   };
 
   const handleDelete = async (clientId) => {
-    if (!window.confirm("Are you sure you want to delete this client? This action cannot be undone.")) return;
+    if (!window.confirm("Are you sure you want to delete this client?")) return;
     try {
-      await deleteDoc(doc(db, "clients", clientId));
+      await updateDoc(doc(db, "clients", clientId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setClients((prev) => prev.filter((c) => c.id !== clientId));
     } catch (e) { alert("Failed to delete client"); }
   };

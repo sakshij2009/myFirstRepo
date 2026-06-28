@@ -26,7 +26,7 @@ const ManagePrivateFamilies = () => {
   const [secondShowIntakeForm, setSecondShowIntakeForm] = useState(false);
   const [invites, setInvites] = useState([]);
   const [inviting, setInviting] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+
 
   const navigate = useNavigate();
 
@@ -43,7 +43,7 @@ const ManagePrivateFamilies = () => {
         // Filter users by role "parent"
         const fams = usersSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.role?.toLowerCase() === "parent");
+          .filter(u => u.role?.toLowerCase() === "parent" && !u.isDeleted);
         setFamilies(fams);
         setInvites(invitesSnap.docs.map(d => d.data()));
 
@@ -89,7 +89,7 @@ const ManagePrivateFamilies = () => {
   const handleDeleteFamily = async (fam) => {
     if (!window.confirm(`Are you sure you want to delete "${fam.name}"?`)) return;
     try {
-      await deleteDoc(doc(db, "intakeUsers", fam.id));
+      await updateDoc(doc(db, "intakeUsers", fam.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setFamilies((prev) => prev.filter((f) => f.id !== fam.id));
     } catch (e) {
       console.error("Error deleting family:", e);
@@ -168,204 +168,6 @@ const ManagePrivateFamilies = () => {
     setGoToPage("");
   };
 
-  if (selectedRequest) {
-    const r = selectedRequest;
-    return (
-      <div className="flex flex-col h-full bg-white p-6 rounded-2xl shadow-sm border border-gray-100 animate-in fade-in slide-in-from-right-4 duration-300">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 pb-6 border-b">
-           <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setSelectedRequest(null)} 
-                className="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-400 hover:text-gray-900 transition-all"
-              >
-                <ArrowLeft size={18} />
-              </button>
-              <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-widest mb-1 block">Request Review</span>
-                <h2 className="text-xl font-black text-gray-900">{r.displayFamilyName || "Private Family Request"}</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Submitted On: {r.submittedDate ? new Date(r.submittedDate).toLocaleDateString() : "--"}</p>
-              </div>
-           </div>
-           <div className="flex items-center gap-3">
-              <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${r.status?.toLowerCase() === 'new' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-gray-100 text-gray-600 border'}`}>
-                {r.status || 'New'}
-              </span>
-           </div>
-        </div>
-
-        {/* Content Tabs */}
-        <div className="flex-1 overflow-auto pr-4 custom-scrollbar space-y-8">
-           {/* Section 1: Shared Case Info */}
-           <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                 <div className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-                 <h3 className="font-bold text-gray-900 tracking-tight">Part A: Case Information</h3>
-              </div>
-              <div className="grid grid-cols-3 gap-6 bg-gray-50 border border-gray-200 p-6 rounded-2xl">
-                 <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Referral Source</label>
-                    <p className="text-sm font-semibold text-gray-800">{r.shared?.referralSource || r.referralSource || "—"}</p>
-                 </div>
-                 <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Court Order</label>
-                    <p className="text-sm font-semibold text-gray-800">{r.shared?.courtOrder || r.courtOrder || "—"}</p>
-                 </div>
-                 <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block mb-1">Service Required</label>
-                    <p className="text-sm font-semibold text-gray-800">{r.shared?.visitType || r.serviceType || "—"}</p>
-                 </div>
-                 <div className="col-span-3">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block mb-2">Children</label>
-                    <div className="flex flex-wrap gap-3">
-                       {(r.shared?.children || r.children || []).map((c, i) => (
-                         <div key={i} className="bg-white border rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm min-w-[180px]">
-                            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 font-bold text-xs">{i+1}</div>
-                            <div>
-                               <p className="text-xs font-black text-gray-900">{c.fullName}</p>
-                               <p className="text-[10px] text-gray-500 font-medium">DOB: {c.dob} ({c.age})</p>
-                            </div>
-                         </div>
-                       ))}
-                    </div>
-                 </div>
-              </div>
-           </div>
-
-           {/* Section 2: Parties Information */}
-           <div className="grid grid-cols-2 gap-8">
-              {/* Party A */}
-              <div className="space-y-4">
-                 <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                    <h3 className="font-bold text-gray-900 tracking-tight">Party A Details</h3>
-                 </div>
-                 <div className="bg-blue-50/30 border border-blue-100 p-6 rounded-2xl rounded-tr-none space-y-4">
-                    <div className="flex items-center gap-4 border-b border-blue-100 pb-4">
-                       <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-black">A</div>
-                       <div>
-                          <p className="text-sm font-black text-gray-900">{r.partyA?.fullName || r.applicant?.fullName || r.submitterName || "—"}</p>
-                          <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">{r.partyA?.relationship || r.applicant?.relationship || "Primary Parent"}</p>
-                       </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3">
-                       <div>
-                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Phone</label>
-                          <p className="text-xs font-semibold text-gray-800">{r.partyA?.phone || r.applicant?.phone || "—"}</p>
-                       </div>
-                       <div>
-                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Email</label>
-                          <p className="text-xs font-semibold text-gray-800">{r.partyA_email || r.partyA?.email || r.applicantEmail || "—"}</p>
-                       </div>
-                       <div>
-                          <label className="text-[10px] uppercase font-bold text-gray-400 block">Address</label>
-                          <p className="text-xs font-semibold text-gray-800 leading-relaxed">{r.partyA?.address || r.applicant?.address || "—"}</p>
-                       </div>
-                    </div>
-                 </div>
-              </div>
-
-              {/* Party B */}
-              <div className="space-y-4">
-                 <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-6 bg-purple-600 rounded-full" />
-                    <h3 className="font-bold text-gray-900 tracking-tight">Party B Details</h3>
-                 </div>
-                 <div className="bg-purple-50/30 border border-purple-100 p-6 rounded-2xl rounded-tl-none space-y-4">
-                    {r.partyB || r.otherGuardian ? (
-                      <>
-                        <div className="flex items-center gap-4 border-b border-purple-100 pb-4">
-                           <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center text-white font-black">B</div>
-                           <div>
-                              <p className="text-sm font-black text-gray-900">{r.partyB?.fullName || r.otherGuardian?.fullName || "—"}</p>
-                              <p className="text-xs text-purple-600 font-bold uppercase tracking-wider">{r.partyB?.relationship || r.otherGuardian?.relationship || "Secondary Parent"}</p>
-                           </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                           <div>
-                              <label className="text-[10px] uppercase font-bold text-gray-400 block">Phone</label>
-                              <p className="text-xs font-semibold text-gray-800">{r.partyB?.phone || r.otherGuardian?.phone || "—"}</p>
-                           </div>
-                           <div>
-                              <label className="text-[10px] uppercase font-bold text-gray-400 block">Email</label>
-                              <p className="text-xs font-semibold text-gray-800">{r.partyB_email || r.partyB?.email || r.secondaryParentEmail || "—"}</p>
-                           </div>
-                           <div>
-                              <label className="text-[10px] uppercase font-bold text-gray-400 block">Address</label>
-                              <p className="text-xs font-semibold text-gray-800 leading-relaxed">{r.partyB?.address || r.otherGuardian?.address || "—"}</p>
-                           </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-2">?</div>
-                         <p className="text-xs font-bold text-gray-400 uppercase">No Data Submitted</p>
-                         <p className="text-[10px] text-gray-300 mt-1">Second party has not filled their section yet.</p>
-                      </div>
-                    )}
-                 </div>
-              </div>
-           </div>
-
-           {/* Section 3: Payment & Reports */}
-           <div className="grid grid-cols-2 gap-8">
-               <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-6 bg-amber-600 rounded-full" />
-                    <h3 className="font-bold text-gray-900 tracking-tight">Payment Plan</h3>
-                  </div>
-                  <div className="bg-amber-50/20 border border-amber-100 p-6 rounded-2xl">
-                     <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm">
-                        <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-2">{r.payment?.option || "Single Payor Mode"}</p>
-                        <p className="text-sm font-semibold text-gray-800">
-                           {r.payment?.option === "Option 1" && `Responsible: ${r.payment.responsibleParty}`}
-                           {r.payment?.option === "Option 2" && `Cost Split: ${r.payment.costSplit}`}
-                           {r.payment?.option === "Option 3" && `Third Party: ${r.payment.thirdPartyPayer}`}
-                           {!r.payment && (r.paymentResponsibility || "Standard")}
-                        </p>
-                        {r.payment?.billingContact && <p className="text-[10px] text-gray-500 mt-2">Billing Contact: {r.payment.billingContact}</p>}
-                     </div>
-                  </div>
-               </div>
-
-               <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-6 bg-red-600 rounded-full" />
-                    <h3 className="font-bold text-gray-900 tracking-tight">Reports Disclaimer</h3>
-                  </div>
-                  <div className="bg-red-50/20 border border-red-100 p-6 rounded-2xl">
-                     <div className="flex items-start gap-3">
-                        <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${r.reports?.acknowledged ? 'bg-green-600' : 'bg-gray-200'}`}>
-                           {r.reports?.acknowledged && <Check size={12} className="text-white" />}
-                        </div>
-                        <div>
-                           <p className="text-xs font-bold text-gray-700">Report Billing Acknowledged</p>
-                           <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">Party understands that reports are $40 each and billed separately from visit fees.</p>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-           </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="mt-8 pt-6 border-t flex justify-end gap-3">
-           <button 
-             onClick={() => setSelectedRequest(null)}
-             className="px-6 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all"
-           >
-             Close
-           </button>
-           <button 
-             className="px-6 py-2.5 rounded-xl bg-emerald-700 text-white text-sm font-bold shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 transition-all active:scale-95"
-             onClick={() => window.print()}
-           >
-             Download Full PDF
-           </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -544,9 +346,9 @@ const ManagePrivateFamilies = () => {
                         </td>
                         <td className="px-4 py-4">
                            <button
-                             onClick={() => setSelectedRequest(item)}
+                             onClick={() => navigate(`/admin-dashboard/view-intake-form/${item.firestoreId || item.id}`)}
                              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-gray-400 hover:text-emerald-600"
-                             title="Review Request"
+                             title="View Intake Form"
                            >
                              <Eye size={13} />
                            </button>

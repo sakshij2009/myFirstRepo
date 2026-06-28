@@ -158,7 +158,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     const fetch = async () => {
       try {
         const snap = await getDocs(collection(db, "shifts"));
-        const enriched = snap.docs.map((d) => {
+        const enriched = snap.docs.filter((d) => !d.data().isDeleted).map((d) => {
           const s = { id: d.id, ...d.data() };
           const clientName = s.clientName || s.clientDetails?.name || s.clientDetails?.clientName || "—";
           const clientId = s.clientId || s.clientDetails?.id || s.clientDetails?.clientId || "—";
@@ -254,7 +254,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     if (!deleteTarget) return;
     setProcessing(true);
     try {
-      await deleteDoc(doc(db, "shifts", deleteTarget.id));
+      await updateDoc(doc(db, "shifts", deleteTarget.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
       toast.success("Shift deleted", { description: `${deleteTarget.clientName}'s shift has been removed.`, duration: 4000 });
     } catch (err) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, doc, getDocs, deleteDoc } from "firebase/firestore";
+import { collection, doc, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import {
@@ -127,13 +127,13 @@ const ManageAgency = () => {
         const clientList = clientSnap.docs.map((d) => d.data());
         const agencyList = agencySnap.docs.map((d) => {
           const data = d.data();
-          // Calculate client count dynamically from clients DB
-          const count = clientList.filter(c => 
+          if (data.isDeleted) return null;
+          const count = clientList.filter(c =>
             c.agencyName?.trim().toLowerCase() === data.name?.trim().toLowerCase()
           ).length;
-          
+
           return { id: d.id, ...data, clientCount: count };
-        });
+        }).filter(Boolean);
 
         agencyList.sort((a, b) => {
           const da = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
@@ -152,7 +152,7 @@ const ManageAgency = () => {
   const handleDelete = async (agencyId) => {
     if (!window.confirm("Are you sure you want to delete this agency?")) return;
     try {
-      await deleteDoc(doc(db, "agencies", agencyId));
+      await updateDoc(doc(db, "agencies", agencyId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setAgencies((prev) => prev.filter((a) => a.id !== agencyId));
     } catch (e) {
       console.error("Error deleting agency:", e);

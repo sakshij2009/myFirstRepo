@@ -37,7 +37,7 @@ const ManageIntakeWorkers = () => {
   const [showModal, setShowModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+
 
   const navigate = useNavigate();
 
@@ -53,7 +53,7 @@ const ManageIntakeWorkers = () => {
         // Filter users by role
         const workers = usersSnap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.role?.toLowerCase() === "intake worker");
+          .filter(u => u.role?.toLowerCase() === "intake worker" && !u.isDeleted);
         setIntakeWorkers(workers);
 
         // Filter requests by source
@@ -98,7 +98,7 @@ const ManageIntakeWorkers = () => {
   const handleDeleteIntakeWorker = async (worker) => {
     if (!window.confirm(`Are you sure you want to delete "${worker.name}"?`)) return;
     try {
-      await deleteDoc(doc(db, "intakeUsers", worker.id));
+      await updateDoc(doc(db, "intakeUsers", worker.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setIntakeWorkers((prev) => prev.filter((w) => w.id !== worker.id));
     } catch (e) {
       console.error("Error deleting intake worker:", e);
@@ -148,22 +148,6 @@ const ManageIntakeWorkers = () => {
     setGoToPage("");
   };
 
-  if (selectedRequest) {
-    return (
-      <div className="flex flex-col h-full bg-white p-6 rounded-xl shadow-sm">
-        <div className="flex items-center gap-4 mb-6">
-           <button onClick={() => setSelectedRequest(null)} className="px-3 py-1.5 rounded-lg border hover:bg-gray-50 font-semibold text-sm">
-             ← Back
-           </button>
-           <h2 className="text-xl font-bold">Request from {selectedRequest.intakeworkerName || "Intake Worker"}</h2>
-        </div>
-        <div className="flex-1 overflow-auto bg-gray-50 p-6 rounded-lg border">
-           <pre className="text-xs">{JSON.stringify(selectedRequest, null, 2)}</pre>
-           <p className="mt-4 text-gray-500 font-medium italic">Full request review logic from IntakeRequestsPage can be integrated here.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -334,9 +318,9 @@ const ManageIntakeWorkers = () => {
                         </td>
                         <td className="px-4 py-4">
                            <button
-                             onClick={() => setSelectedRequest(item)}
+                             onClick={() => navigate(`/admin-dashboard/view-intake-form/${item.firestoreId || item.id}`)}
                              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-gray-400 hover:text-emerald-600"
-                             title="Review Request"
+                             title="View Intake Form"
                            >
                              <Eye size={13} />
                            </button>

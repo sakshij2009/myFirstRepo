@@ -419,6 +419,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         setUsers(
           userSnap.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((u) => !u.isSuspended && !u.isDeleted)
             .sort(sortByName)
         );
       } catch (error) {
@@ -1703,11 +1704,11 @@ const AddUserShift = ({ mode = "add", user }) => {
                   if (isBatch) {
                     const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
                     const batch = writeBatch(db);
-                    snap.docs.forEach(d => batch.delete(d.ref));
+                    snap.docs.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
                     await batch.commit();
                     alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
                   } else {
-                    await deleteDoc(doc(db, "shifts", id));
+                    await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
                     alert("Shift deleted successfully!");
                   }
                   window.history.back();
