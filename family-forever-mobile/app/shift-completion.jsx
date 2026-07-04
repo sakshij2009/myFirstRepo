@@ -117,7 +117,7 @@ export default function ShiftCompletion() {
   // Load shift (real-time)
   useEffect(() => {
     if (!shiftId) { setLoading(false); return; }
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "dev_shifts", shiftId), (snap) => {
       if (snap.exists()) {
         setShift({ id: snap.id, ref: snap.ref, ...snap.data() });
       }

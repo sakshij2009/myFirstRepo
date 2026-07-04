@@ -44,7 +44,7 @@ export default function CriticalIncidentScreen() {
     useEffect(() => {
         const loadIncidentData = async () => {
             try {
-                const shiftRef = doc(db, "shifts", id);
+                const shiftRef = doc(db, "dev_shifts", id);
                 const shiftSnap = await getDoc(shiftRef);
 
                 if (shiftSnap.exists()) {
@@ -82,7 +82,7 @@ export default function CriticalIncidentScreen() {
     const handleSaveDraft = async () => {
         setSaving(true);
         try {
-            const shiftRef = doc(db, "shifts", id);
+            const shiftRef = doc(db, "dev_shifts", id);
             await setDoc(shiftRef, { criticalIncidentReport: { ...form, _meta: { status: "draft" } } }, { merge: true });
             Alert.alert("Success", "Draft saved.");
         } catch (e) {
@@ -100,7 +100,7 @@ export default function CriticalIncidentScreen() {
 
         setSaving(true);
         try {
-            const shiftRef = doc(db, "shifts", id);
+            const shiftRef = doc(db, "dev_shifts", id);
             await setDoc(shiftRef, { criticalIncidentReport: { ...form, _meta: { status: "submitted" } } }, { merge: true });
             Alert.alert("Success", "Incident Report submitted.");
             router.back();

@@ -642,7 +642,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const intakeFormId = propId || paramId;
   // type can be "Intake Worker", "intake worker", "intake-worker", etc. — normalize for comparison
   const urlCaseWorker = !!formType && ["intake worker", "intake-worker", "intake_worker"].includes(formType.toLowerCase().trim());
-  const isCaseWorker = propCaseWorker ?? urlCaseWorker;
+  const [isCaseWorkerFromData, setIsCaseWorkerFromData] = useState(false);
+  const isCaseWorker = propCaseWorker ?? (urlCaseWorker || isCaseWorkerFromData);
 
   const [initialValues, setInitialValues] = useState(() => {
     const base = createEmptyInitialValues();
@@ -698,6 +699,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
       if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
       // for old structure
       if (existingData.photo) setAvatarPreview(existingData.photo);
+      if (existingData.isCaseWorker || existingData.formType === "intake-worker" || existingData.intakeworkerName || existingData.inTakeWorkerName) {
+        setIsCaseWorkerFromData(true);
+      }
       console.log("Pre-filled from existingData prop:", nextVals);
     }
   }, [existingData]);
@@ -706,7 +710,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   useEffect(() => {
     const fetchShiftCategories = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "shiftCategories"));
+        const querySnapshot = await getDocs(collection(db, "dev_shiftCategories"));
         const categories = querySnapshot.docs
           .map((d) => ({
             id: d.id,
@@ -782,7 +786,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
              let realIntakeId = null;
 
              // 1. Try directly by document ID
-             const clientSnap = await getDoc(doc(db, "clients", searchTarget));
+             const clientSnap = await getDoc(doc(db, "dev_clients", searchTarget));
              if (clientSnap.exists()) {
                 const cData = clientSnap.data();
                 realIntakeId = cData.intakeId || cData.InTakeId;
@@ -791,7 +795,7 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
              // 2. Query clients collection for field match
              if (!realIntakeId && !clientNameForFallback) {
-                const cQuery = await getDocs(collection(db, "clients"));
+                const cQuery = await getDocs(collection(db, "dev_clients"));
                 for (const cd of cQuery.docs) {
                    const cDat = cd.data();
                    if (cDat.id === searchTarget || cDat.clientId === searchTarget || cDat.clientCode === searchTarget || cd.id === searchTarget) {
@@ -898,6 +902,10 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
           setInitialValues(nextVals);
           setHeaderStatus(nextVals.status || "Submitted");
+
+          if (data.isCaseWorker || data.formType === "intake-worker" || data.intakeworkerName || data.inTakeWorkerName) {
+            setIsCaseWorkerFromData(true);
+          }
 
           // For old-structure forms, stash the human-readable service names so
           // they can be resolved to IDs once shiftCategories finishes loading.
@@ -1111,7 +1119,7 @@ const createFamilyClient = async (intake, intakeId, clients, db) => {
   if (intake.isCaseWorker) {
     agencyName = intake.agencyName || "";
     const agencySnap = await getDocs(
-      query(collection(db, "agencies"), where("agencyName", "==", agencyName))
+      query(collection(db, "dev_agencies"), where("agencyName", "==", agencyName))
     );
     if (!agencySnap.empty) {
       const agencyDoc = agencySnap.docs[0];
@@ -1163,7 +1171,7 @@ const createFamilyClient = async (intake, intakeId, clients, db) => {
   });
 
   const clientId = Date.now().toString();
-  await setDoc(doc(db, "clients", clientId), {
+  await setDoc(doc(db, "dev_clients", clientId), {
     name: intake.familyName,
     isFamily: true,
     clientCount: clients.length,
@@ -1224,7 +1232,7 @@ const createSingleClient = async (intake, intakeId, client, db) => {
 
     const agencySnap = await getDocs(
       query(
-        collection(db, "agencies"),
+        collection(db, "dev_agencies"),
         where("agencyName", "==", agencyName)
       )
     );
@@ -1263,7 +1271,7 @@ const createSingleClient = async (intake, intakeId, client, db) => {
   
   const clientId = Date.now().toString();
 
-await setDoc(doc(db, "clients", clientId), {
+await setDoc(doc(db, "dev_clients", clientId), {
   // basic
   name: client.fullName,
   dob: client.birthDate || null,  // null not "" — Flutter crashes parsing empty string as date

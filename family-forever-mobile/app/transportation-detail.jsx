@@ -28,7 +28,7 @@ export default function TransportationDetail() {
     setLoading(true);
     try {
       if (shiftId) {
-        const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+        const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
         const snap = await getDocs(q);
         if (!snap.empty) {
           const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };

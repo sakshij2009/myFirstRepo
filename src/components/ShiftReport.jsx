@@ -476,7 +476,7 @@ const ShiftReport = ({ user }) => {
     if (!shiftId) return;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "shifts", shiftId));
+        const snap = await getDoc(doc(db, "dev_shifts", shiftId));
         if (snap.exists()) {
           const data = snap.data();
           setShiftData(data);
@@ -502,7 +502,7 @@ const ShiftReport = ({ user }) => {
     setShiftReportAccess(newVal);           // optimistic update
     setAccessToggling(true);
     try {
-      await updateDoc(doc(db, "shifts", shiftId), { accessToShiftReport: newVal });
+      await updateDoc(doc(db, "dev_shifts", shiftId), { accessToShiftReport: newVal });
       toast.success(newVal ? "Shift report access enabled for intake worker" : "Shift report access disabled");
     } catch (e) {
       console.error("Failed to update shift report access:", e);
@@ -527,7 +527,7 @@ const ShiftReport = ({ user }) => {
         if (!inputId || inputId === "undefined") return null;
 
         // Strategy A: Direct Doc ID
-        const direct = await getDoc(doc(db, "InTakeForms", String(inputId)));
+        const direct = await getDoc(doc(db, "dev_InTakeForms", String(inputId)));
         if (direct.exists()) return direct.id;
 
         // Strategy B: Search internal ID fields with type-safety (Number vs String)
@@ -537,7 +537,7 @@ const ShiftReport = ({ user }) => {
 
         for (const field of searchFields) {
           for (const val of variants) {
-            const q = query(collection(db, "InTakeForms"), where(field, "==", val));
+            const q = query(collection(db, "dev_InTakeForms"), where(field, "==", val));
             const snap = await getDocs(q);
             if (!snap.empty) return snap.docs[0].id;
           }
@@ -552,7 +552,7 @@ const ShiftReport = ({ user }) => {
 
         // 2. Fallback to client mapping if needed
         if (!resolved && clientId) {
-          const clientSnap = await getDoc(doc(db, "clients", String(clientId)));
+          const clientSnap = await getDoc(doc(db, "dev_clients", String(clientId)));
           if (clientSnap.exists()) {
             const cData = clientSnap.data();
             resolved = await resolveToDocId(cData.intakeId || cData.InTakeId);
@@ -583,17 +583,17 @@ const ShiftReport = ({ user }) => {
             if (resolved) break;
             for (const t of terms) {
               if (!t || t.length < 2 || resolved) continue;
-              const snapE = await getDocs(query(collection(db, "InTakeForms"), where(f, "==", t)));
+              const snapE = await getDocs(query(collection(db, "dev_InTakeForms"), where(f, "==", t)));
               if (!snapE.empty) { resolved = snapE.docs[0].id; break; }
 
-              const snapR = await getDocs(query(collection(db, "InTakeForms"), where(f, ">=", t), where(f, "<=", t + "\uf8ff")));
+              const snapR = await getDocs(query(collection(db, "dev_InTakeForms"), where(f, ">=", t), where(f, "<=", t + "\uf8ff")));
               if (!snapR.empty) { resolved = snapR.docs[0].id; break; }
             }
           }
         }
 
         if (resolved) {
-          const finalSnap = await getDoc(doc(db, "InTakeForms", resolved));
+          const finalSnap = await getDoc(doc(db, "dev_InTakeForms", resolved));
           if (finalSnap.exists()) {
             setIntakeData({ ...finalSnap.data(), id: finalSnap.id });
           }
@@ -614,12 +614,12 @@ const ShiftReport = ({ user }) => {
     (async () => {
       try {
         // Try by doc ID first
-        const direct = await getDoc(doc(db, "clients", clientId));
+        const direct = await getDoc(doc(db, "dev_clients", clientId));
         if (direct.exists()) { setClientData(direct.data()); return; }
         // Fall back: query by userId or clientId field
-        const snap = await getDocs(query(collection(db, "clients"), where("userId", "==", clientId)));
+        const snap = await getDocs(query(collection(db, "dev_clients"), where("userId", "==", clientId)));
         if (!snap.empty) { setClientData(snap.docs[0].data()); return; }
-        const snap2 = await getDocs(query(collection(db, "clients"), where("clientId", "==", clientId)));
+        const snap2 = await getDocs(query(collection(db, "dev_clients"), where("clientId", "==", clientId)));
         if (!snap2.empty) setClientData(snap2.docs[0].data());
       } catch (e) { console.error("clientData fetch:", e); }
     })();
@@ -635,12 +635,12 @@ const ShiftReport = ({ user }) => {
       try {
         // Try by doc ID first
         if (agencyId) {
-          const snap = await getDoc(doc(db, "agencies", agencyId));
+          const snap = await getDoc(doc(db, "dev_agencies", agencyId));
           if (snap.exists()) { setAgencyData(snap.data()); return; }
         }
         // Fall back to query by name
         if (agencyName) {
-          const snap = await getDocs(collection(db, "agencies"));
+          const snap = await getDocs(collection(db, "dev_agencies"));
           snap.forEach(ds => {
             const d = ds.data();
             if ((d.name || d.agencyName || "").toLowerCase() === agencyName.toLowerCase()) {
@@ -660,7 +660,7 @@ const ShiftReport = ({ user }) => {
     const windowStart = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "shifts"));
+        const snap = await getDocs(collection(db, "dev_shifts"));
         const list = [];
         snap.forEach(ds => {
           const d = ds.data();
@@ -685,9 +685,9 @@ const ShiftReport = ({ user }) => {
     (async () => {
       try {
         let ud = null;
-        const ref = collection(db, "users");
+        const ref = collection(db, "dev_users");
         if (shiftData.userId) {
-          const ds = await getDoc(doc(db, "users", shiftData.username || shiftData.userId));
+          const ds = await getDoc(doc(db, "dev_users", shiftData.username || shiftData.userId));
           if (ds.exists()) ud = ds.data();
         }
         if (!ud && shiftData.userId) {
@@ -799,7 +799,7 @@ const ShiftReport = ({ user }) => {
               ? { ...pt, officeToPickupKm: o2pKm ?? pt.officeToPickupKm ?? 0, dropToOfficeKm: d2oKm ?? pt.dropToOfficeKm ?? 0 }
               : pt
           );
-          updateDoc(doc(db, "shifts", shiftId), { shiftPoints: updatedPoints }).catch(() => {});
+          updateDoc(doc(db, "dev_shifts", shiftId), { shiftPoints: updatedPoints }).catch(() => {});
         }
       } catch (e) {
         console.warn("KM auto-calc failed:", e);
@@ -911,7 +911,7 @@ const ShiftReport = ({ user }) => {
     setTransSubmitting(true);
     try {
       const isTransportation = shiftData?.categoryName?.toLowerCase() === "transportation";
-      const ref = doc(db, "shifts", shiftId);
+      const ref = doc(db, "dev_shifts", shiftId);
       const receiptUrls = uploadedReceipts.map(r => (typeof r === "string" ? r : r.url));
       if (isTransportation) {
         await updateDoc(ref, {
@@ -1338,7 +1338,7 @@ const ShiftReport = ({ user }) => {
                               updates.clockOut = toISO(editClockOut);
                               updates.clockOutTime = toTimeString(editClockOut);
                             }
-                            await updateDoc(doc(db, "shifts", shiftId), updates);
+                            await updateDoc(doc(db, "dev_shifts", shiftId), updates);
                             setShiftData((prev) => ({ ...prev, ...updates }));
                             setEditingClock(false);
                           } catch (e) {
@@ -1428,7 +1428,7 @@ const ShiftReport = ({ user }) => {
                               if (!reportDraft.trim() || !shiftId) return;
                               setReportSubmitting(true);
                               try {
-                                await updateDoc(doc(db, "shifts", shiftId), {
+                                await updateDoc(doc(db, "dev_shifts", shiftId), {
                                   shiftReport: reportDraft.trim(),
                                   shiftReportSubmittedAt: new Date().toISOString(),
                                   shiftReportSubmittedBy: user?.name || user?.email || "Unknown",
@@ -1726,7 +1726,7 @@ const ShiftReport = ({ user }) => {
                           <div key={i} className="flex items-center gap-2 p-2 rounded-lg border" style={{ borderColor: "#e5e7eb" }}>
                             <Receipt size={13} style={{ color: "#145228" }} />
                             <a href={url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 truncate flex-1">{name}</a>
-                            <button onClick={async () => { try { const updated = receiptList.filter((_, idx) => idx !== i); await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: updated }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: updated })); toast.success("Receipt removed"); } catch (err) { toast.error("Failed to remove"); } }} className="p-1 rounded hover:bg-red-50 transition-colors" title="Remove receipt">
+                            <button onClick={async () => { try { const updated = receiptList.filter((_, idx) => idx !== i); await updateDoc(doc(db, "dev_shifts", shiftId), { expenseReceiptUrls: updated }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: updated })); toast.success("Receipt removed"); } catch (err) { toast.error("Failed to remove"); } }} className="p-1 rounded hover:bg-red-50 transition-colors" title="Remove receipt">
                               <X size={14} style={{ color: "#ef4444" }} />
                             </button>
                           </div>
@@ -1741,7 +1741,7 @@ const ShiftReport = ({ user }) => {
                     <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm cursor-pointer hover:opacity-90 ${extraReceiptUploading ? "opacity-50 pointer-events-none" : ""}`} style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#145228" }}>
                       <Upload size={14} />
                       {extraReceiptUploading ? "Uploading…" : "Upload Receipt"}
-                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { setExtraReceiptUploading(true); const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`); await uploadBytes(fileRef, file); const url = await getDownloadURL(fileRef); const newReceipt = { url, name: file.name, uploadedAt: new Date().toISOString() }; await updateDoc(doc(db, "shifts", shiftId), { expenseReceiptUrls: arrayUnion(newReceipt) }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: [...(prev?.expenseReceiptUrls || []), newReceipt] })); toast.success("Receipt uploaded"); } catch (err) { toast.error("Upload failed"); } finally { setExtraReceiptUploading(false); e.target.value = ""; } }} />
+                      <input type="file" accept="image/*,application/pdf" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { setExtraReceiptUploading(true); const fileRef = storageRef(storage, `expenseReceipts/${shiftId}/${Date.now()}_${file.name}`); await uploadBytes(fileRef, file); const url = await getDownloadURL(fileRef); const newReceipt = { url, name: file.name, uploadedAt: new Date().toISOString() }; await updateDoc(doc(db, "dev_shifts", shiftId), { expenseReceiptUrls: arrayUnion(newReceipt) }); setShiftData(prev => ({ ...prev, expenseReceiptUrls: [...(prev?.expenseReceiptUrls || []), newReceipt] })); toast.success("Receipt uploaded"); } catch (err) { toast.error("Upload failed"); } finally { setExtraReceiptUploading(false); e.target.value = ""; } }} />
                     </label>
                   </div>
 
@@ -1752,7 +1752,7 @@ const ShiftReport = ({ user }) => {
                       onClick={async () => {
                         try {
                           setExtraTransSaving(true);
-                          await updateDoc(doc(db, "shifts", shiftId), {
+                          await updateDoc(doc(db, "dev_shifts", shiftId), {
                             extraApprovedKm: extraApprovedKm || null,
                             extraApprovedBy: extraApprovedBy || null,
                             expenseAmount: extraExpenseAmount || null,

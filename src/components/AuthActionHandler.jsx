@@ -136,14 +136,14 @@ export default function AuthActionHandler() {
 
       const normalizedEmail = email.trim().toLowerCase();
       const q = query(
-        collection(db, "intakeUsers"),
+        collection(db, "dev_intakeUsers"),
         where("email", "==", normalizedEmail)
       );
       const snap = await getDocs(q);
 
       if (!snap.empty) {
         // Mark account as verified in Firestore (first-time magic-link sign-in)
-        const docRef = doc(db, "intakeUsers", snap.docs[0].id);
+        const docRef = doc(db, "dev_intakeUsers", snap.docs[0].id);
         await updateDoc(docRef, { verified: true });
 
         const userData = { id: snap.docs[0].id, ...snap.docs[0].data(), verified: true };

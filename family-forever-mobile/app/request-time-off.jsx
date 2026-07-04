@@ -96,7 +96,7 @@ export default function RequestTimeOff() {
   useEffect(() => {
     if (!user) return;
     const uid = user.userId || user.uid || user.id || user.username;
-    const unsub = onSnapshot(collection(db, "shifts"), (snap) => {
+    const unsub = onSnapshot(collection(db, "dev_shifts"), (snap) => {
       const mine = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter(
@@ -130,7 +130,7 @@ export default function RequestTimeOff() {
     setSubmitting(true);
     try {
       const uid = user.userId || user.uid || user.id || user.username;
-      await addDoc(collection(db, "timeOffRequests"), {
+      await addDoc(collection(db, "dev_timeOffRequests"), {
         userId: uid,
         staffName: user.name || "",
         type: selectedType,

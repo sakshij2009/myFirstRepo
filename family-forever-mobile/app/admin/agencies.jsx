@@ -73,8 +73,8 @@ export default function AgenciesScreen() {
     const fetchAll = async () => {
       try {
         const [agenciesSnap, typesSnap] = await Promise.all([
-          getDocs(collection(db, 'agencies')),
-          getDocs(collection(db, 'AgencyTypes')).catch(() => ({ docs: [] })),
+          getDocs(collection(db, 'dev_agencies')),
+          getDocs(collection(db, 'dev_AgencyTypes')).catch(() => ({ docs: [] })),
         ]);
 
         const list = agenciesSnap.docs
@@ -110,7 +110,7 @@ export default function AgenciesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, 'agencies', agencyId));
+              await deleteDoc(doc(db, 'dev_agencies', agencyId));
               setAgencies((prev) => prev.filter((a) => a.id !== agencyId));
               Alert.alert('Deleted', 'Agency deleted successfully.');
             } catch (err) {

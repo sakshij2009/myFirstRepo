@@ -67,7 +67,7 @@ export default function ClientDetail() {
   const fetchClient = async () => {
     try {
       // 1. Direct doc lookup in "clients" collection
-      const docRef = doc(db, "clients", clientId);
+      const docRef = doc(db, "dev_clients", clientId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         setClient({ id: docSnap.id, ...docSnap.data() });
@@ -77,7 +77,7 @@ export default function ClientDetail() {
 
       // 2. Query "clients" by "clientId" field
       const cq = query(
-        collection(db, "clients"),
+        collection(db, "dev_clients"),
         where("clientId", "==", clientId)
       );
       const cSnap = await getDocs(cq);
@@ -89,7 +89,7 @@ export default function ClientDetail() {
 
       // 3. Fall back: pull client info from matching shift
       const sq = query(
-        collection(db, "shifts"),
+        collection(db, "dev_shifts"),
         where("clientId", "==", clientId)
       );
       const sSnap = await getDocs(sq);
@@ -108,7 +108,7 @@ export default function ClientDetail() {
       }
 
       // 4. Try shifts doc directly
-      const shiftDoc = await getDoc(doc(db, "shifts", clientId));
+      const shiftDoc = await getDoc(doc(db, "dev_shifts", clientId));
       if (shiftDoc.exists()) {
         const sd = shiftDoc.data();
         setClient({

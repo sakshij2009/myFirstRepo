@@ -145,7 +145,7 @@ const getLocationString = async () => {
 
 const sendNotification = async (receiverId, payload) => {
   try {
-    await addDoc(collection(db, "notifications", receiverId, "userNotifications"), {
+    await addDoc(collection(db, "dev_notifications", receiverId, "userNotifications"), {
       ...payload,
       read: false,
       status: "pending",
@@ -311,8 +311,8 @@ export default function Home() {
 
     // Primary user query
     const qPrimary = userId
-      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
-      : query(collection(db, "shifts"), ...primaryConstraints);
+      ? query(collection(db, "dev_shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "dev_shifts"), ...primaryConstraints);
 
     const unsubPrimary = onSnapshot(qPrimary, (snap) => {
       primaryShifts = snap.docs.map(toShift);
@@ -324,7 +324,7 @@ export default function Home() {
     let unsubSecondaryById = () => {};
     if (userId) {
       const qSecondaryById = query(
-        collection(db, "shifts"),
+        collection(db, "dev_shifts"),
         where("secondaryUserId", "==", userId),
         ...secondaryConstraints
       );
@@ -341,7 +341,7 @@ export default function Home() {
     let unsubSecondaryByDocId = () => {};
     if (userDocId && userDocId !== userId) {
       const qSecondaryByDocId = query(
-        collection(db, "shifts"),
+        collection(db, "dev_shifts"),
         where("secondaryUserId", "==", userDocId),
         ...secondaryConstraints
       );
@@ -358,7 +358,7 @@ export default function Home() {
     let unsubSecondaryByName = () => {};
     if (userName) {
       const qSecondaryByName = query(
-        collection(db, "shifts"),
+        collection(db, "dev_shifts"),
         where("secondaryUserName", "==", userName),
         ...secondaryConstraints
       );
@@ -375,7 +375,7 @@ export default function Home() {
     let unsubPrimaryByName = () => {};
     if (userName) {
       const qPrimaryByName = query(
-        collection(db, "shifts"),
+        collection(db, "dev_shifts"),
         where("userName", "==", userName),
         ...secondaryConstraints
       );
@@ -507,7 +507,7 @@ export default function Home() {
     const shiftDocId = shift.id;
 
     try {
-      const ref = doc(db, "shifts", shiftDocId);
+      const ref = doc(db, "dev_shifts", shiftDocId);
 
       if (type === "confirm") {
         const now = new Date().toISOString();

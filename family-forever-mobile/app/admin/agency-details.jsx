@@ -45,7 +45,7 @@ export default function AgencyDetailsScreen() {
       if (!id) { setLoadingAgency(false); return; }
       try {
         // Try direct doc fetch first (Firestore doc ID = id)
-        const directRef = doc(db, 'agencies', id);
+        const directRef = doc(db, 'dev_agencies', id);
         const directSnap = await getDoc(directRef);
 
         let data = null;
@@ -55,7 +55,7 @@ export default function AgencyDetailsScreen() {
           data = directSnap.data();
         } else {
           // Fallback: query by the stored `id` field
-          const q = query(collection(db, 'agencies'), where('id', '==', id));
+          const q = query(collection(db, 'dev_agencies'), where('id', '==', id));
           const snap = await getDocs(q);
           if (!snap.empty) {
             fDocId = snap.docs[0].id;
@@ -94,7 +94,7 @@ export default function AgencyDetailsScreen() {
 
     const fetchTypes = async () => {
       try {
-        const snap = await getDocs(collection(db, 'AgencyTypes'));
+        const snap = await getDocs(collection(db, 'dev_AgencyTypes'));
         setAgencyTypes(snap.docs.map((d) => ({ id: d.id, name: d.data().name })));
       } catch (err) { /* ignore */ }
     };
@@ -138,7 +138,7 @@ export default function AgencyDetailsScreen() {
         photoURL = await getDownloadURL(storageRef);
       }
 
-      await updateDoc(doc(db, 'agencies', docId), {
+      await updateDoc(doc(db, 'dev_agencies', docId), {
         agencyType: form.agencyType,
         name: form.name,
         email: form.email,

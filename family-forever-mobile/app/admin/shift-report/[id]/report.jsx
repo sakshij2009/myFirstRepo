@@ -25,7 +25,7 @@ export default function ReportWritingScreen() {
   useEffect(() => {
     const loadShift = async () => {
       try {
-        const ref = doc(db, 'shifts', String(shiftId));
+        const ref = doc(db, 'dev_shifts', String(shiftId));
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const data = snap.data();
@@ -48,7 +48,7 @@ export default function ReportWritingScreen() {
       return;
     }
     try {
-      await updateDoc(doc(db, "shifts", String(shiftId)), {
+      await updateDoc(doc(db, "dev_shifts", String(shiftId)), {
         shiftReport: reportText,
         reportSubmitted: true,
       });
@@ -93,9 +93,9 @@ export default function ReportWritingScreen() {
   };
 
   const staff = {
-    name: shift?.name || 'Benjamin Harris',
+    name: shift?.userName || shift?.name || 'Benjamin Harris',
     id: shift?.userId || '987654321',
-    avatar: shift?.name ? shift.name.substring(0, 2).toUpperCase() : 'BH',
+    avatar: shift?.userName || shift?.name ? (shift.userName || shift.name).substring(0, 2).toUpperCase() : 'BH',
   };
 
   const calculateHours = (inTime, outTime) => {

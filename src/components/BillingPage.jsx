@@ -23,7 +23,7 @@ export default function BillingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const snap = await getDocs(collection(db, "agencies"));
+        const snap = await getDocs(collection(db, "dev_agencies"));
         // We simulate billing metrics for the UI since the collection doesn't have exact billed figures yet
         const data = snap.docs.map(d => {
           const item = d.data();

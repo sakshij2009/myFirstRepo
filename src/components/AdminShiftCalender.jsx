@@ -28,7 +28,7 @@ export default function AdminShiftCalendar() {
   // 🔥 FETCH ALL SHIFTS (ADMIN)
   const fetchShifts = async () => {
     const db = getFirestore();
-    const q = query(collection(db, "shifts"));
+    const q = query(collection(db, "dev_shifts"));
     const snap = await getDocs(q);
     const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     setShifts(data);

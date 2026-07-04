@@ -67,7 +67,7 @@ export default function AddAgencyScreen() {
   useEffect(() => {
     const fetchTypes = async () => {
       try {
-        const snap = await getDocs(collection(db, "AgencyTypes"));
+        const snap = await getDocs(collection(db, "dev_AgencyTypes"));
         const types = snap.docs.map((d) => ({
           id: d.id,
           name: d.data().name,
@@ -149,7 +149,7 @@ export default function AddAgencyScreen() {
         updatedAt: new Date(),
       };
 
-      await setDoc(doc(db, "agencies", agencyId), dataToSave);
+      await setDoc(doc(db, "dev_agencies", agencyId), dataToSave);
 
       Alert.alert("✅ Success", `Agency "${form.name}" added successfully!`, [
         {

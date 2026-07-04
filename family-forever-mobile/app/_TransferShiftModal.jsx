@@ -11,7 +11,7 @@ export default function TransferShiftModal({ visible, onClose, onSubmit }) {
 
   useEffect(() => {
     const fetchStaff = async () => {
-      const snap = await getDocs(collection(db, "users"));
+      const snap = await getDocs(collection(db, "dev_users"));
       setStaffList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     };
     if (visible) fetchStaff();

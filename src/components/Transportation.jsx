@@ -541,7 +541,7 @@ export default function Transportation() {
     setLoading(true);
 
     // Load intake forms once (they rarely change)
-    getDocs(collection(db, "InTakeForms")).then((formsSnap) => {
+    getDocs(collection(db, "dev_InTakeForms")).then((formsSnap) => {
       formsSnap.forEach((d) => {
         const data = d.data();
         if (Array.isArray(data.inTakeClients)) {
@@ -551,7 +551,7 @@ export default function Transportation() {
     });
 
     // Real-time listener on shifts
-    const unsub = onSnapshot(collection(db, "shifts"), (shiftsSnap) => {
+    const unsub = onSnapshot(collection(db, "dev_shifts"), (shiftsSnap) => {
       const allTrips = shiftsSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter(isTransportShift)

@@ -109,7 +109,7 @@ const AddClient = ({ mode = "add", user }) => {
     const fetchClient = async () => {
       if (mode === "update" && id) {
         try {
-          const clientSnap = await getDoc(doc(db, "clients", id));
+          const clientSnap = await getDoc(doc(db, "dev_clients", id));
           if (clientSnap.exists()) {
             const data = clientSnap.data();
             setInitialValues({
@@ -251,9 +251,9 @@ const AddClient = ({ mode = "add", user }) => {
       };
 
       if (mode === "update" && id) {
-        const clientSnap = await getDoc(doc(db, "clients", id));
+        const clientSnap = await getDoc(doc(db, "dev_clients", id));
         if (clientSnap.exists()) {
-          await updateDoc(doc(db, "clients", id), {
+          await updateDoc(doc(db, "dev_clients", id), {
             ...dataToSave,
             updatedAt: new Date(),
           });
@@ -268,7 +268,7 @@ const AddClient = ({ mode = "add", user }) => {
           setSlider({ show: true, title: "Client Not Found!", subtitle: "", viewText: "" });
         }
       } else {
-        await setDoc(doc(db, "clients", customId), {
+        await setDoc(doc(db, "dev_clients", customId), {
           ...dataToSave,
           createdAt: new Date(),
           fileClosed: false,
@@ -284,7 +284,7 @@ const AddClient = ({ mode = "add", user }) => {
         setAvatarPreview(null);
       }
 
-      const q = query(collection(db, "users"), where("role", "==", "admin"));
+      const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
       const adminsSnapshot = await getDocs(q);
       const admins = adminsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       for (const admin of admins) {

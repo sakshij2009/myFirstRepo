@@ -133,7 +133,7 @@ export function ShiftDetail() {
   /* Write confirm to Firestore */
   const handleConfirmShift = async () => {
     if (!shiftDocId) return;
-    await updateDoc(doc(db, 'shifts', shiftDocId), { shiftConfirmed: true });
+    await updateDoc(doc(db, 'dev_shifts', shiftDocId), { shiftConfirmed: true });
   };
 
   if (loading) {

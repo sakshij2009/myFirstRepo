@@ -63,7 +63,7 @@ const MedicalLogForm = ({ clientData = {}, shiftId, onCancel, onSuccess }) => {
     };
 
     // ✅ Correct — merge new form data inside existing shift
-    const shiftRef = doc(db, "shifts", shiftId);
+    const shiftRef = doc(db, "dev_shifts", shiftId);
     await setDoc(shiftRef, { [formType]: data }, { merge: true });
 
     localStorage.removeItem(draftKey);

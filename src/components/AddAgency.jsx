@@ -43,7 +43,7 @@ const AddAgency = ({  mode = "add", user }) => {
   useEffect(() => {
     const fetchAgencyTypes = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "AgencyTypes"));
+        const querySnapshot = await getDocs(collection(db, "dev_AgencyTypes"));
         const typeList = querySnapshot.docs
           .map((doc) => ({
             id: doc.id,
@@ -63,7 +63,7 @@ const AddAgency = ({  mode = "add", user }) => {
 
     if (mode === "update" && id) {
       try {
-        const docRef = doc(db, "agencies", id);
+        const docRef = doc(db, "dev_agencies", id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -173,12 +173,12 @@ const handleSubmit = async (values, { resetForm }) => {
     };
 
     if (mode === "update") {
-      const q = query(collection(db, "agencies"), where("id", "==", id));
+      const q = query(collection(db, "dev_agencies"), where("id", "==", id));
       const snapshot = await getDocs(q);
 
       if (!snapshot.empty) {
         const docId = snapshot.docs[0].id;
-        await updateDoc(doc(db, "agencies", docId), dataToSave);
+        await updateDoc(doc(db, "dev_agencies", docId), dataToSave);
         setSlider({
           show: true,
           title: "Agency Updated Successfully!",
@@ -186,7 +186,7 @@ const handleSubmit = async (values, { resetForm }) => {
         });
       }
     } else {
-      await setDoc(doc(db, "agencies", agencyId), dataToSave);
+      await setDoc(doc(db, "dev_agencies", agencyId), dataToSave);
       setSlider({
         show: true,
         title: "Agency Added Successfully!",
@@ -195,7 +195,7 @@ const handleSubmit = async (values, { resetForm }) => {
     }
 
     // ✅ Notify admins (unchanged)
-    const q = query(collection(db, "users"), where("role", "==", "admin"));
+    const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
     const adminsSnapshot = await getDocs(q);
     const admins = adminsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 

@@ -59,7 +59,7 @@ export default function ShiftsScreen({ isDarkMode = false }) {
 
   const fetchShifts = async () => {
     try {
-      const snapshot = await getDocs(query(collection(db, "shifts"), orderBy("createdAt", "desc")));
+      const snapshot = await getDocs(query(collection(db, "dev_shifts"), orderBy("createdAt", "desc")));
 
       const shiftsArray = [];
       const transportArray = [];
@@ -500,7 +500,7 @@ function MinimalShiftCard({ shift, router, onDeleted }) {
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive", onPress: async () => {
-          try { await deleteDoc(doc(db, "shifts", shift.id)); onDeleted?.(); }
+          try { await deleteDoc(doc(db, "dev_shifts", shift.id)); onDeleted?.(); }
           catch (e) { Alert.alert("Error", "Could not delete the shift."); }
         },
       },

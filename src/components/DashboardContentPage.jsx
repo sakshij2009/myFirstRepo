@@ -77,7 +77,7 @@ const DashboardContentPage = ({ activeTab, handleViewReport,openTransportDetails
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "shifts"));
+        const querySnapshot = await getDocs(collection(db, "dev_shifts"));
         const employeeList = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -245,7 +245,7 @@ try {
 useEffect(() => {
   const fetchCategories = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "shiftCategories"));
+      const querySnapshot = await getDocs(collection(db, "dev_shiftCategories"));
 
       let categoryList = querySnapshot.docs.map((doc) => ({
         id: doc.id,

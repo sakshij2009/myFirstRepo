@@ -24,7 +24,7 @@ export default function ShiftMedications() {
 
   const loadData = async () => {
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };
@@ -54,7 +54,7 @@ export default function ShiftMedications() {
       if (shift?.ref) {
         await updateDoc(shift.ref, { medications, medicationsLoggedAt: new Date().toISOString() });
       }
-      await addDoc(collection(db, "medicationLogs"), {
+      await addDoc(collection(db, "dev_medicationLogs"), {
         shiftId, medications,
         loggedAt: serverTimestamp(),
         staffId: (JSON.parse(await AsyncStorage.getItem("user") || "{}"))?.userId,

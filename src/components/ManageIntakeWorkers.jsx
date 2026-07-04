@@ -46,8 +46,8 @@ const ManageIntakeWorkers = () => {
       setLoading(true);
       try {
         const [usersSnap, formsSnap] = await Promise.all([
-          getDocs(collection(db, "intakeUsers")),
-          getDocs(collection(db, "InTakeForms")),
+          getDocs(collection(db, "dev_intakeUsers")),
+          getDocs(collection(db, "dev_InTakeForms")),
         ]);
         
         // Filter users by role
@@ -98,7 +98,7 @@ const ManageIntakeWorkers = () => {
   const handleDeleteIntakeWorker = async (worker) => {
     if (!window.confirm(`Are you sure you want to delete "${worker.name}"?`)) return;
     try {
-      await updateDoc(doc(db, "intakeUsers", worker.id), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_intakeUsers", worker.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setIntakeWorkers((prev) => prev.filter((w) => w.id !== worker.id));
     } catch (e) {
       console.error("Error deleting intake worker:", e);

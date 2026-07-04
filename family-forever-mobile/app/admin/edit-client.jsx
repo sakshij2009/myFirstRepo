@@ -47,12 +47,12 @@ export default function EditClientScreen() {
   useEffect(() => {
     const fetchAgencies = async () => {
       try {
-        const snap = await getDocs(collection(db, 'agencies'));
+        const snap = await getDocs(collection(db, 'dev_agencies'));
         const names = snap.docs.map(d => d.data().agencyName || d.data().name).filter(Boolean);
         if (names.length) { setAgencies([...new Set(names)].sort()); return; }
       } catch (e) { /* fall through */ }
       try {
-        const snap = await getDocs(collection(db, 'AgencyTypes'));
+        const snap = await getDocs(collection(db, 'dev_AgencyTypes'));
         setAgencies(snap.docs.map(d => d.data().name).filter(Boolean));
       } catch (e) { /* noop */ }
     };
@@ -63,7 +63,7 @@ export default function EditClientScreen() {
     if (!id) { Alert.alert('Error', 'No Client ID provided'); router.back(); return; }
     const load = async () => {
       try {
-        const snap = await getDoc(doc(db, 'clients', id));
+        const snap = await getDoc(doc(db, 'dev_clients', id));
         if (!snap.exists()) { Alert.alert('Not Found', 'Client not found.'); router.back(); return; }
         const data = snap.data();
         const str = (v) => (v === undefined || v === null) ? '' : String(v);
@@ -160,7 +160,7 @@ export default function EditClientScreen() {
         updatedAt: new Date(),
       };
 
-      await updateDoc(doc(db, 'clients', id), payload);
+      await updateDoc(doc(db, 'dev_clients', id), payload);
       Alert.alert('Success', 'Client Updated Successfully!', [
         { text: 'OK', onPress: () => router.replace('/admin/(tabs)/clients') },
       ]);

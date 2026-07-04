@@ -227,7 +227,7 @@ const getLocationString = async () => {
 // ── Helper: Send notification to Firestore ───────────────────────────────────
 const sendNotification = async (receiverId, payload) => {
   try {
-    await addDoc(collection(db, "notifications", receiverId, "userNotifications"), {
+    await addDoc(collection(db, "dev_notifications", receiverId, "userNotifications"), {
       ...payload,
       read: false,
       status: "pending",
@@ -307,6 +307,13 @@ export default function ShiftDetails() {
   const [savingTransReport, setSavingTransReport] = useState(false);
   const [officeToPickup, setOfficeToPickup] = useState("");
   const [dropToOffice, setDropToOffice] = useState("");
+  // "Other Actions" (Critical Incident / Medical / Noteworthy / Follow Through) are
+  // hidden until the caregiver answers this one common question.
+  const [showOtherActions, setShowOtherActions] = useState(null); // null | true | false
+  // Transportation / Expense are separate entry points in Shift Actions, each gated
+  // by its own Yes/No question — answered here, before ever opening that screen.
+  const [transportAnswer, setTransportAnswer] = useState(null); // null | true | false
+  const [expenseAnswer, setExpenseAnswer] = useState(null); // null | true | false
   const [showClockOutSuccess, setShowClockOutSuccess] = useState(false);
 
   // ── Fetch Intake Form ───────────────────────────────────────────
@@ -325,17 +332,17 @@ export default function ShiftDetails() {
 
       // 1. Direct check using Document ID or intakeId
       if (intakeId) {
-        const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
+        const snap = await getDoc(doc(db, "dev_InTakeForms", String(intakeId)));
         if (snap.exists()) matchedIntake = { ...snap.data(), id: snap.id };
         if (!matchedIntake) {
-          const snap2 = await getDoc(doc(db, "clients", String(intakeId)));
+          const snap2 = await getDoc(doc(db, "dev_clients", String(intakeId)));
           if (snap2.exists()) matchedIntake = { ...snap2.data(), id: snap2.id };
         }
       }
 
       // 2. Comprehensive Search across all intake forms and clients
       if (!matchedIntake) {
-        const collections = ["InTakeForms", "clients"];
+        const collections = ["dev_InTakeForms", "dev_clients"];
         const cleanClientName = clientName ? clientName.trim().toLowerCase() : null;
 
         for (const collName of collections) {
@@ -405,12 +412,12 @@ export default function ShiftDetails() {
         const uid = u.userId || u.uid || u.id;
         if (uid) {
           try {
-            const q = query(collection(db, "users"), where("userId", "==", uid));
+            const q = query(collection(db, "dev_users"), where("userId", "==", uid));
             const snap = await getDocs(q);
             if (!snap.empty) {
               setStaffInfo(snap.docs[0].data());
             } else if (u.username) {
-              const q2 = query(collection(db, "users"), where("username", "==", typeof u.username === "string" ? u.username : ""));
+              const q2 = query(collection(db, "dev_users"), where("username", "==", typeof u.username === "string" ? u.username : ""));
               const snap2 = await getDocs(q2);
               if (!snap2.empty) setStaffInfo(snap2.docs[0].data());
             }
@@ -423,18 +430,36 @@ export default function ShiftDetails() {
     load();
   }, []);
 
+  // Reset per-shift editable state whenever the caregiver switches to a different shift,
+  // otherwise leftover text from a previously viewed shift's report leaks into this one.
+  useEffect(() => {
+    if (!shiftId) return;
+    setReportText("");
+    setIsEditingReport(false);
+    setTransComments("");
+    setReceiptUrl("");
+    setReceiptImage(null);
+    setOfficeToPickup("");
+    setDropToOffice("");
+    setShowOtherActions(null);
+    setTransportAnswer(null);
+    setExpenseAnswer(null);
+  }, [shiftId]);
+
   // Real-time shift listener
   useEffect(() => {
     if (!shiftId) return;
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "dev_shifts", shiftId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setShift({ id: snap.id, ...data });
         setShiftLocked(data.shiftLocked || false);
-        if (data.shiftReport && !reportText) setReportText(data.shiftReport);
+        // Functional updates so an in-progress edit isn't clobbered by a snapshot echo,
+        // while still prefilling fresh per-shift after the reset effect above.
+        if (data.shiftReport) setReportText((prev) => prev || data.shiftReport);
         // Pre-fill transport report fields if already saved
-        if (data.transComments) setTransComments(data.transComments);
-        if (data.receiptUrl) setReceiptUrl(data.receiptUrl);
+        if (data.transComments) setTransComments((prev) => prev || data.transComments);
+        if (data.receiptUrl) setReceiptUrl((prev) => prev || data.receiptUrl);
         // Load from shiftPoints[0] first (saved at creation), then top-level fallback
         const sp0 = Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0
           ? data.shiftPoints[0] : null;
@@ -442,8 +467,11 @@ export default function ShiftDetails() {
           : data.officeToPickupKm > 0 ? data.officeToPickupKm : null;
         const d2o = sp0?.dropToOfficeKm > 0 ? sp0.dropToOfficeKm
           : data.dropToOfficeKm > 0 ? data.dropToOfficeKm : null;
-        if (o2p) setOfficeToPickup(String(parseFloat(o2p).toFixed(2)));
-        if (d2o) setDropToOffice(String(parseFloat(d2o).toFixed(2)));
+        if (o2p) setOfficeToPickup((prev) => prev || String(parseFloat(o2p).toFixed(2)));
+        if (d2o) setDropToOffice((prev) => prev || String(parseFloat(d2o).toFixed(2)));
+        // Pre-fill the Transportation/Expense entry-point answers if already answered
+        if (typeof data.transportationReported === "boolean") setTransportAnswer((prev) => prev === null ? data.transportationReported : prev);
+        if (typeof data.expenseReported === "boolean") setExpenseAnswer((prev) => prev === null ? data.expenseReported : prev);
       }
       setLoading(false);
     });
@@ -455,11 +483,11 @@ export default function ShiftDetails() {
     if (!shift || !shift.clientId) return;
     const loadClient = async () => {
       try {
-        const docSnap = await getDoc(doc(db, "clients", String(shift.clientId)));
+        const docSnap = await getDoc(doc(db, "dev_clients", String(shift.clientId)));
         if (docSnap.exists()) {
           setClientInfo(docSnap.data());
         } else {
-          const cq = query(collection(db, "clients"), where("clientId", "==", shift.clientId));
+          const cq = query(collection(db, "dev_clients"), where("clientId", "==", shift.clientId));
           const snap = await getDocs(cq);
           if (!snap.empty) setClientInfo(snap.docs[0].data());
         }
@@ -475,7 +503,7 @@ export default function ShiftDetails() {
     if (!shift?.clientId || !shiftId) return;
     const loadPrevShifts = async () => {
       try {
-        const q1 = query(collection(db, "shifts"), where("clientId", "==", shift.clientId));
+        const q1 = query(collection(db, "dev_shifts"), where("clientId", "==", shift.clientId));
         const snap = await getDocs(q1);
 
         // Reference point: this shift's start; fall back to now
@@ -616,7 +644,7 @@ export default function ShiftDetails() {
         try {
             const scheduledEndTime = formatStoredTime(shift.endTime) || _endSnap || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
             const locationStr = await getLocationString();
-            await updateDoc(doc(db, "shifts", shiftId), {
+            await updateDoc(doc(db, "dev_shifts", shiftId), {
               clockOut: serverTimestamp(),
               clockOutTime: scheduledEndTime,
               clockOutLocation: locationStr,
@@ -651,7 +679,7 @@ export default function ShiftDetails() {
     if (!isNumericId(raw)) return; // name is fine as-is
     const clientId = shift.clientId || shift.clientDetails?.id;
     if (!clientId) return;
-    getDoc(doc(db, "clients", String(clientId)))
+    getDoc(doc(db, "dev_clients", String(clientId)))
       .then((snap) => { if (snap.exists()) setIntakeData({ ...snap.data(), id: snap.id }); })
       .catch(() => {});
   }, [shift?.clientId]);
@@ -680,7 +708,7 @@ export default function ShiftDetails() {
 
     try {
       // Always use the URL param shiftId as the Firestore document ID
-      const ref = doc(db, "shifts", shiftId);
+      const ref = doc(db, "dev_shifts", shiftId);
 
       if (type === "confirm") {
         await updateDoc(ref, {
@@ -858,6 +886,25 @@ export default function ShiftDetails() {
     ]);
   };
 
+  // ── Transportation / Expense entry-point answers (Shift Actions) ──────────
+  const handleTransportGateAnswer = async (val) => {
+    setTransportAnswer(val);
+    try {
+      await updateDoc(doc(db, "dev_shifts", shiftId), { transportationReported: val });
+    } catch (e) {
+      console.error("Failed to save transportation answer:", e);
+    }
+  };
+
+  const handleExpenseGateAnswer = async (val) => {
+    setExpenseAnswer(val);
+    try {
+      await updateDoc(doc(db, "dev_shifts", shiftId), { expenseReported: val });
+    } catch (e) {
+      console.error("Failed to save expense answer:", e);
+    }
+  };
+
   // ── Transport report: save to Firestore ────────────────────────────────
   const handleSaveTransReport = async () => {
     setSavingTransReport(true);
@@ -874,7 +921,7 @@ export default function ShiftDetails() {
       const dropOfficeNum = parseFloat(dropToOffice) || 0;
       const routeKm = shift?.transportationKm || 0;
       const totalKm = routeKm + officePickupNum + dropOfficeNum;
-      await updateDoc(doc(db, "shifts", shiftId), {
+      await updateDoc(doc(db, "dev_shifts", shiftId), {
         transComments: transComments.trim() || null,
         receiptUrl: uploadedUrl || null,
         // Also save as expenseReceiptUrls[] — field the admin app reads
@@ -897,7 +944,7 @@ export default function ShiftDetails() {
     if (!reportText.trim()) return;
     setSavingReport(true);
     try {
-      const ref = doc(db, "shifts", shiftId);
+      const ref = doc(db, "dev_shifts", shiftId);
       await updateDoc(ref, {
         shiftReport: reportText,
         reportLastSaved: serverTimestamp(),
@@ -925,7 +972,7 @@ export default function ShiftDetails() {
         : safeString(shift?.startDate);
       await generateShiftReportPdf({
         dateLabel,
-        staffName: safeString(shift?.name || shift?.userName || staffName),
+        staffName: safeString(shift?.userName || shift?.name || staffName),
         staffId: safeString(shift?.userId || shift?.primaryUserId),
         clientName,
         startTime: safeString(shift?.startTime),
@@ -944,7 +991,7 @@ export default function ShiftDetails() {
   const handleLockToggle = async (val) => {
     setShiftLocked(val);
     try {
-      await updateDoc(doc(db, "shifts", shiftId), { shiftLocked: val });
+      await updateDoc(doc(db, "dev_shifts", shiftId), { shiftLocked: val });
     } catch (e) {
       setShiftLocked(!val);
     }
@@ -1517,71 +1564,168 @@ export default function ShiftDetails() {
             </View>
           </Pressable>
         )}
-        <Pressable
-          style={styles.actionCard}
-          onPress={() => router.push({ pathname: "/shift-transportations", params: { shiftId: shift.id } })}
-        >
-          <View style={[styles.actionIconBox, { backgroundColor: "#EFF6FF" }]}>
-            <Ionicons name="car-outline" size={22} color="#1D4ED8" />
-          </View>
-          <View style={styles.actionBody}>
-            <Text style={styles.actionTitle}>Transportation</Text>
-            <Text style={styles.actionSubtitle}>Log kilometers, routes & upload receipts</Text>
-          </View>
-          <View style={styles.actionRight}>
-            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
-          </View>
-        </Pressable>
+        {/* ── Transportation entry point — gated by its own Yes/No question ── */}
+        <View style={[styles.sectionCard, { marginBottom: 15 }]}>
+          {transportAnswer === null ? (
+            <>
+              <Text style={styles.sectionDesc}>Is there any transportation for this shift?</Text>
+              <View style={styles.reportBtnRow}>
+                <Pressable style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]} onPress={() => handleTransportGateAnswer(false)}>
+                  <Text style={[styles.reportBtnText, { color: DARK_TEXT }]}>No</Text>
+                </Pressable>
+                <Pressable style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]} onPress={() => handleTransportGateAnswer(true)}>
+                  <Text style={[styles.reportBtnText, { color: "#FFF" }]}>Yes</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : transportAnswer === false ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={{ fontSize: 13, color: GRAY_TEXT }}>No transportation for this shift.</Text>
+              <Pressable onPress={() => setTransportAnswer(null)}>
+                <Text style={{ color: PRIMARY_GREEN, fontWeight: "700", fontSize: 13 }}>Change</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <Pressable
+                style={[styles.actionCard, { marginBottom: 0 }]}
+                onPress={() => router.push({ pathname: "/shift-transportations", params: { shiftId: shift.id, section: "transportation" } })}
+              >
+                <View style={[styles.actionIconBox, { backgroundColor: "#EFF6FF" }]}>
+                  <Ionicons name="car-outline" size={22} color="#1D4ED8" />
+                </View>
+                <View style={styles.actionBody}>
+                  <Text style={styles.actionTitle}>Transportation</Text>
+                  <Text style={styles.actionSubtitle}>Log kilometers & routes</Text>
+                </View>
+                <View style={styles.actionRight}>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </View>
+              </Pressable>
+              <Pressable onPress={() => setTransportAnswer(null)} style={{ marginTop: 8 }}>
+                <Text style={{ color: GRAY_TEXT, fontSize: 12, textAlign: "right" }}>Change answer</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+
+        {/* ── Expense entry point — gated by its own Yes/No question ── */}
+        <View style={[styles.sectionCard, { marginBottom: 15 }]}>
+          {expenseAnswer === null ? (
+            <>
+              <Text style={styles.sectionDesc}>Is there any expense for this shift?</Text>
+              <View style={styles.reportBtnRow}>
+                <Pressable style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]} onPress={() => handleExpenseGateAnswer(false)}>
+                  <Text style={[styles.reportBtnText, { color: DARK_TEXT }]}>No</Text>
+                </Pressable>
+                <Pressable style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]} onPress={() => handleExpenseGateAnswer(true)}>
+                  <Text style={[styles.reportBtnText, { color: "#FFF" }]}>Yes</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : expenseAnswer === false ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={{ fontSize: 13, color: GRAY_TEXT }}>No expense for this shift.</Text>
+              <Pressable onPress={() => setExpenseAnswer(null)}>
+                <Text style={{ color: PRIMARY_GREEN, fontWeight: "700", fontSize: 13 }}>Change</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <Pressable
+                style={[styles.actionCard, { marginBottom: 0 }]}
+                onPress={() => router.push({ pathname: "/shift-transportations", params: { shiftId: shift.id, section: "expense" } })}
+              >
+                <View style={[styles.actionIconBox, { backgroundColor: "#F0FDF4" }]}>
+                  <Ionicons name="cash-outline" size={22} color={PRIMARY_GREEN} />
+                </View>
+                <View style={styles.actionBody}>
+                  <Text style={styles.actionTitle}>Expense</Text>
+                  <Text style={styles.actionSubtitle}>Upload receipt & log expense amount</Text>
+                </View>
+                <View style={styles.actionRight}>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </View>
+              </Pressable>
+              <Pressable onPress={() => setExpenseAnswer(null)} style={{ marginTop: 8 }}>
+                <Text style={{ color: GRAY_TEXT, fontSize: 12, textAlign: "right" }}>Change answer</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
 
         {/* ── Other Actions (Visible when Confirmed or In-Progress) ── */}
         {shiftStatus !== "assigned" && (
           <View style={{ marginTop: 15 }}>
             <Text style={[styles.sectionTitle, { marginBottom: 15 }]}>Other Actions</Text>
 
-            <Pressable style={[styles.otherActionCard, { borderLeftColor: "#DC2626" }]} onPress={() => setActiveModal("critical")}>
-              <View style={styles.otherActionHeader}>
-                <Ionicons name="alert-circle-outline" color="#DC2626" size={20} />
-                <Text style={styles.otherActionTitle}>Critical Incident Reporting</Text>
+            {showOtherActions !== true ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionDesc}>Is there any other report to log for this shift? (Critical Incident, Medical Contact, Noteworthy Event, or Follow Through)</Text>
+                <View style={styles.reportBtnRow}>
+                  <Pressable style={[styles.reportBtn, { backgroundColor: "#F3F4F6" }]} onPress={() => setShowOtherActions(false)}>
+                    <Text style={[styles.reportBtnText, { color: DARK_TEXT }]}>No</Text>
+                  </Pressable>
+                  <Pressable style={[styles.reportBtn, { backgroundColor: PRIMARY_GREEN }]} onPress={() => setShowOtherActions(true)}>
+                    <Text style={[styles.reportBtnText, { color: "#FFF" }]}>Yes</Text>
+                  </Pressable>
+                </View>
+                {showOtherActions === false && (
+                  <Text style={{ fontSize: 12, color: GRAY_TEXT, marginTop: 10 }}>No reports logged for this shift.</Text>
+                )}
               </View>
-              <Text style={styles.otherActionDesc}>For serious incident requiring immediate management attention</Text>
-              <Text style={[styles.otherActionHighlight, { color: "#DC2626" }]}>Self-harm, violence, abuse allegations, serious accidents, medication errors..</Text>
-              <View style={[styles.otherActionBtn, { backgroundColor: "#DC2626" }]}>
-                <Text style={styles.otherActionBtnText}>Report Critical Incident</Text>
-              </View>
-            </Pressable>
+            ) : (
+              <>
+                <Pressable onPress={() => setShowOtherActions(false)} style={{ marginBottom: 10 }}>
+                  <Text style={{ color: GRAY_TEXT, fontSize: 12, textAlign: "right" }}>Hide</Text>
+                </Pressable>
 
-            <Pressable style={[styles.otherActionCard, { borderLeftColor: "#1D4ED8" }]} onPress={() => setActiveModal("medical")}>
-              <View style={styles.otherActionHeader}>
-                <Ionicons name="document-text-outline" color="#1D4ED8" size={20} />
-                <Text style={styles.otherActionTitle}>Medical Contact Log</Text>
-              </View>
-              <Text style={styles.otherActionDesc}>Record any medical contacts or health-related communications during your shift</Text>
-              <View style={[styles.otherActionBtn, { backgroundColor: "#1D4ED8" }]}>
-                <Text style={styles.otherActionBtnText}>Log Medical Contact</Text>
-              </View>
-            </Pressable>
+                <Pressable style={[styles.otherActionCard, { borderLeftColor: "#DC2626" }]} onPress={() => setActiveModal("critical")}>
+                  <View style={styles.otherActionHeader}>
+                    <Ionicons name="alert-circle-outline" color="#DC2626" size={20} />
+                    <Text style={styles.otherActionTitle}>Critical Incident Reporting</Text>
+                  </View>
+                  <Text style={styles.otherActionDesc}>For serious incident requiring immediate management attention</Text>
+                  <Text style={[styles.otherActionHighlight, { color: "#DC2626" }]}>Self-harm, violence, abuse allegations, serious accidents, medication errors..</Text>
+                  <View style={[styles.otherActionBtn, { backgroundColor: "#DC2626" }]}>
+                    <Text style={styles.otherActionBtnText}>Report Critical Incident</Text>
+                  </View>
+                </Pressable>
 
-            <Pressable style={[styles.otherActionCard, { borderLeftColor: "#F59E0B" }]} onPress={() => setActiveModal("noteworthy")}>
-              <View style={styles.otherActionHeader}>
-                <Ionicons name="star-outline" color="#F59E0B" size={20} />
-                <Text style={styles.otherActionTitle}>Noteworthy Event</Text>
-              </View>
-              <Text style={styles.otherActionDesc}>Document any unusual but non-critical events or observations</Text>
-              <View style={[styles.otherActionBtn, { backgroundColor: "#F59E0B" }]}>
-                <Text style={styles.otherActionBtnText}>Log Noteworthy Event</Text>
-              </View>
-            </Pressable>
+                <Pressable style={[styles.otherActionCard, { borderLeftColor: "#1D4ED8" }]} onPress={() => setActiveModal("medical")}>
+                  <View style={styles.otherActionHeader}>
+                    <Ionicons name="document-text-outline" color="#1D4ED8" size={20} />
+                    <Text style={styles.otherActionTitle}>Medical Contact Log</Text>
+                  </View>
+                  <Text style={styles.otherActionDesc}>Record any medical contacts or health-related communications during your shift</Text>
+                  <View style={[styles.otherActionBtn, { backgroundColor: "#1D4ED8" }]}>
+                    <Text style={styles.otherActionBtnText}>Log Medical Contact</Text>
+                  </View>
+                </Pressable>
 
-            <Pressable style={[styles.otherActionCard, { borderLeftColor: "#10B981" }]} onPress={() => setActiveModal("follow")}>
-              <View style={styles.otherActionHeader}>
-                <Ionicons name="checkmark-circle-outline" color="#10B981" size={20} />
-                <Text style={styles.otherActionTitle}>Follow Through</Text>
-              </View>
-              <Text style={styles.otherActionDesc}>Record details about following through on specific tasks or care plans</Text>
-              <View style={[styles.otherActionBtn, { backgroundColor: "#10B981" }]}>
-                <Text style={styles.otherActionBtnText}>Log Follow Through</Text>
-              </View>
-            </Pressable>
+                <Pressable style={[styles.otherActionCard, { borderLeftColor: "#F59E0B" }]} onPress={() => setActiveModal("noteworthy")}>
+                  <View style={styles.otherActionHeader}>
+                    <Ionicons name="star-outline" color="#F59E0B" size={20} />
+                    <Text style={styles.otherActionTitle}>Noteworthy Event</Text>
+                  </View>
+                  <Text style={styles.otherActionDesc}>Document any unusual but non-critical events or observations</Text>
+                  <View style={[styles.otherActionBtn, { backgroundColor: "#F59E0B" }]}>
+                    <Text style={styles.otherActionBtnText}>Log Noteworthy Event</Text>
+                  </View>
+                </Pressable>
+
+                <Pressable style={[styles.otherActionCard, { borderLeftColor: "#10B981" }]} onPress={() => setActiveModal("follow")}>
+                  <View style={styles.otherActionHeader}>
+                    <Ionicons name="checkmark-circle-outline" color="#10B981" size={20} />
+                    <Text style={styles.otherActionTitle}>Follow Through</Text>
+                  </View>
+                  <Text style={styles.otherActionDesc}>Record details about following through on specific tasks or care plans</Text>
+                  <View style={[styles.otherActionBtn, { backgroundColor: "#10B981" }]}>
+                    <Text style={styles.otherActionBtnText}>Log Follow Through</Text>
+                  </View>
+                </Pressable>
+              </>
+            )}
           </View>
         )}
 

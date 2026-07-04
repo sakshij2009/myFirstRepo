@@ -66,7 +66,7 @@ export default function Profile() {
       // a stale/colliding doc id showing someone else's profile)
       const docId = parsed.id || parsed.firestoreId || parsed.username || parsed.userId;
       if (!docId) return;
-      const userRef = doc(db, "users", String(docId));
+      const userRef = doc(db, "dev_users", String(docId));
       unsub = onSnapshot(userRef, (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();
@@ -84,7 +84,7 @@ export default function Profile() {
   // Live shifts listener for stats
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "shifts"));
+    const q = query(collection(db, "dev_shifts"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const mine = data.filter(s =>
@@ -149,7 +149,7 @@ export default function Profile() {
     if (!result.canceled) {
       try {
         const url = await uploadProfilePhoto(result.assets[0].uri, user.id);
-        await updateDoc(doc(db, "users", user.id), { profilePhotoUrl: url });
+        await updateDoc(doc(db, "dev_users", user.id), { profilePhotoUrl: url });
       } catch (e) {
         Alert.alert("Error", "Failed to upload photo.");
       }
@@ -175,7 +175,7 @@ export default function Profile() {
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, pwNew);
       // Notify admin
-      await addDoc(collection(db, "adminNotifications"), {
+      await addDoc(collection(db, "dev_adminNotifications"), {
         title: "Password Changed",
         message: `${user?.name || "A staff member"} (${user?.email}) changed their password.`,
         type: "security",

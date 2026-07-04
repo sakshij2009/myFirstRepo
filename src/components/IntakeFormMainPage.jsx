@@ -33,7 +33,7 @@ const IntakeFormMainPage = () => {
         const email = (parsed.email || parsed.intakeworkerEmail || "").trim().toLowerCase();
         if (!email) throw new Error("no email in session");
         const snap = await getDocs(
-          query(collection(db, "intakeUsers"), where("email", "==", email))
+          query(collection(db, "dev_intakeUsers"), where("email", "==", email))
         );
         if (snap.empty) throw new Error("user not found in Firestore");
         const docData = snap.docs[0].data();

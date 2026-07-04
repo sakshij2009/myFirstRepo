@@ -438,7 +438,7 @@ export function CompleteShift() {
               // Write clockOut to Firestore — marks shift as Completed
               if (shiftDocId) {
                 try {
-                  await updateDoc(doc(db, 'shifts', shiftDocId), {
+                  await updateDoc(doc(db, 'dev_shifts', shiftDocId), {
                     clockOut: serverTimestamp(),
                   });
                 } catch (e) {

@@ -26,7 +26,7 @@ export default function IntakeFormViewScreen() {
 
         // 1. Direct match by childsName
         if (name) {
-          const iq = query(collection(db, 'InTakeForms'), where('childsName', '==', name));
+          const iq = query(collection(db, 'dev_InTakeForms'), where('childsName', '==', name));
           const iSnap = await getDocs(iq);
           if (!iSnap.empty) matched = { id: iSnap.docs[0].id, ...iSnap.docs[0].data() };
         }
@@ -34,7 +34,7 @@ export default function IntakeFormViewScreen() {
         // 2. Broader scan across InTakeForms + clients (by id or any name field)
         if (!matched) {
           const lname = name.toLowerCase();
-          for (const coll of ['InTakeForms', 'clients']) {
+          for (const coll of ["dev_InTakeForms", "dev_clients"]) {
             if (matched) break;
             const snap = await getDocs(collection(db, coll));
             for (const d of snap.docs) {

@@ -291,7 +291,7 @@ const ManageClients = () => {
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const snap = await getDocs(collection(db, "clients"));
+        const snap = await getDocs(collection(db, "dev_clients"));
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((d) => !d.isDeleted)
@@ -306,7 +306,7 @@ const ManageClients = () => {
   useEffect(() => {
     const fetchAgencyTypes = async () => {
       try {
-        const snap = await getDocs(collection(db, "AgencyTypes"));
+        const snap = await getDocs(collection(db, "dev_AgencyTypes"));
         setAgencyTypeOptions(snap.docs.map((d) => d.data().name));
       } catch (e) { console.error(e); }
     };
@@ -317,8 +317,8 @@ const ManageClients = () => {
   const enrichFromIntake = async (clientList) => {
     try {
       const [formsSnap, catsSnap] = await Promise.all([
-        getDocs(collection(db, "InTakeForms")),
-        getDocs(collection(db, "shiftCategories")),
+        getDocs(collection(db, "dev_InTakeForms")),
+        getDocs(collection(db, "dev_shiftCategories")),
       ]);
       const forms = formsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const catsMap = {};
@@ -401,7 +401,7 @@ const ManageClients = () => {
   const handleToggle = async (clientId, value) => {
     setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, fileClosed: value } : c));
     try {
-      await updateDoc(doc(db, "clients", clientId), { fileClosed: value });
+      await updateDoc(doc(db, "dev_clients", clientId), { fileClosed: value });
     } catch (e) {
       setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, fileClosed: !value } : c));
     }
@@ -410,7 +410,7 @@ const ManageClients = () => {
   const handleDelete = async (clientId) => {
     if (!window.confirm("Are you sure you want to delete this client?")) return;
     try {
-      await updateDoc(doc(db, "clients", clientId), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_clients", clientId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setClients((prev) => prev.filter((c) => c.id !== clientId));
     } catch (e) { alert("Failed to delete client"); }
   };

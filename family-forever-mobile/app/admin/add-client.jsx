@@ -43,12 +43,12 @@ export default function AddClientScreen() {
   useEffect(() => {
     const fetchAgencies = async () => {
       try {
-        const snap = await getDocs(collection(db, 'agencies'));
+        const snap = await getDocs(collection(db, 'dev_agencies'));
         const names = snap.docs.map(d => d.data().agencyName || d.data().name).filter(Boolean);
         if (names.length) { setAgencies([...new Set(names)].sort()); return; }
       } catch (e) { /* fall through */ }
       try {
-        const snap = await getDocs(collection(db, 'AgencyTypes'));
+        const snap = await getDocs(collection(db, 'dev_AgencyTypes'));
         setAgencies(snap.docs.map(d => d.data().name).filter(Boolean));
       } catch (e) { console.error('Failed to load agencies', e); }
     };
@@ -123,7 +123,7 @@ export default function AddClientScreen() {
         id: docId,
       };
 
-      await setDoc(doc(db, 'clients', docId), payload);
+      await setDoc(doc(db, 'dev_clients', docId), payload);
       Alert.alert('Success', 'Client Added Successfully!', [
         { text: 'OK', onPress: () => router.replace('/admin/(tabs)/clients') },
       ]);

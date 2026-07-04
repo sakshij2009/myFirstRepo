@@ -26,7 +26,7 @@ const UserTransportationShifts = ({ filteredShifts }) => {
     const fetchIntakeForms = async () => {
       if (!filteredShifts || filteredShifts.length === 0) return;
 
-      const snap = await getDocs(collection(db, "InTakeForms"));
+      const snap = await getDocs(collection(db, "dev_InTakeForms"));
       const formsByClientName = {};
 
       snap.forEach((d) => {
@@ -57,7 +57,7 @@ const UserTransportationShifts = ({ filteredShifts }) => {
   useEffect(() => {
     const fetchAdmin = async () => {
       try {
-        const q = query(collection(db, "users"), where("role", "==", "admin"));
+        const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
         const snap = await getDocs(q);
         if (!snap.empty) {
           setAdminId(snap.docs[0].id);
@@ -154,7 +154,7 @@ const UserTransportationShifts = ({ filteredShifts }) => {
 // ----------------------------------------------------------
 const handleStartRide = async (shift, clientForm, primaryPoint) => {
   try {
-    const shiftRef = doc(db, "shifts", String(shift.id));
+    const shiftRef = doc(db, "dev_shifts", String(shift.id));
 
     // ---------- Prepare Addresses ----------
     const pickupAddress =
@@ -282,7 +282,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
   // ----------------------------------------------------------
   const handleEndRide = async (shift) => {
     try {
-      const shiftRef = doc(db, "shifts", String(shift.id));
+      const shiftRef = doc(db, "dev_shifts", String(shift.id));
 
       await updateDoc(shiftRef, {
         "transportation.driveEnded": true,
@@ -307,7 +307,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
   // ----------------------------------------------------------
   const handleCancelRide = async (shift) => {
     try {
-      const shiftRef = doc(db, "shifts", String(shift.id));
+      const shiftRef = doc(db, "dev_shifts", String(shift.id));
 
       await updateDoc(shiftRef, {
         shiftCancelled: true,

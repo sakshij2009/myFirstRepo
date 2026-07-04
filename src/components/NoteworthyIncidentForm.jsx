@@ -86,7 +86,7 @@ const NoteworthyIncidentForm = ({
       };
 
       // Convert shiftId to string for path safety
-      const shiftRef = doc(db, "shifts", String(shiftId));
+      const shiftRef = doc(db, "dev_shifts", String(shiftId));
 
       // Use setDoc with merge so we don't overwrite other fields on the shift doc
       await setDoc(

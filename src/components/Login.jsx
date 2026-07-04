@@ -142,7 +142,7 @@ function OwnerLoginScreen({ onBack, setUser }) {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedPassword = password.trim();
-      const snap = await getDocs(query(collection(db, "users"), where("email", "==", normalizedEmail), where("password", "==", normalizedPassword)));
+      const snap = await getDocs(query(collection(db, "dev_users"), where("email", "==", normalizedEmail), where("password", "==", normalizedPassword)));
       if (!snap.empty) {
         const userData = snap.docs[0].data();
         setPendingUser(userData);

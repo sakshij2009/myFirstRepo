@@ -59,7 +59,7 @@ export default function SetRecurringHours() {
       
       try {
         const uid = u.userId || u.uid || u.id || u.username;
-        const snap = await getDoc(doc(db, "users", uid));
+        const snap = await getDoc(doc(db, "dev_users", uid));
         if (snap.exists() && snap.data().recurringHours) {
           setSchedule(snap.data().recurringHours);
           if (snap.data().selectedActiveDays) {
@@ -125,7 +125,7 @@ export default function SetRecurringHours() {
     setSaving(true);
     try {
       const uid = user.userId || user.uid || user.id || user.username;
-      await updateDoc(doc(db, "users", uid), {
+      await updateDoc(doc(db, "dev_users", uid), {
         recurringHours: schedule,
         selectedActiveDays: selectedDays,
       });

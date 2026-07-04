@@ -171,7 +171,7 @@ const [showCritical, setShowCritical] = useState(false);
   useEffect(() => {
       const loadShift = async () => {
         try {
-          const ref = doc(db, "shifts", String(shiftId));
+          const ref = doc(db, "dev_shifts", String(shiftId));
           const snap = await getDoc(ref);
           if (snap.exists()) {
             const data = snap.data();
@@ -199,7 +199,7 @@ const [showCritical, setShowCritical] = useState(false);
         return;
       }
       try {
-        await updateDoc(doc(db, "shifts", String(shiftId)), {
+        await updateDoc(doc(db, "dev_shifts", String(shiftId)), {
           shiftReport: reportText,
         });
         alert("Draft saved");
@@ -216,7 +216,7 @@ const [showCritical, setShowCritical] = useState(false);
         return;
       }
       try {
-        await updateDoc(doc(db, "shifts", String(shiftId)), {
+        await updateDoc(doc(db, "dev_shifts", String(shiftId)), {
           shiftReport: reportText,
           reportSubmitted: true,
         });
@@ -245,7 +245,7 @@ const fetchIntakeForm = async () => {
 
     // 1. Quick check: Direct string match on Document ID if intakeId is present
     if (intakeId) {
-      const docRef = doc(db, "InTakeForms", String(intakeId));
+      const docRef = doc(db, "dev_InTakeForms", String(intakeId));
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         matchedIntake = { ...snap.data(), id: snap.id };
@@ -254,7 +254,7 @@ const fetchIntakeForm = async () => {
 
     // 2. Comprehensive Search across all intake forms and clients
     if (!matchedIntake) {
-      const collections = ["InTakeForms", "clients"];
+      const collections = ["dev_InTakeForms", "dev_clients"];
       
       for (const collName of collections) {
         if (matchedIntake) break;

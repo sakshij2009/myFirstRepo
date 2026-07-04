@@ -31,7 +31,7 @@ export default function TransferShift() {
 
   const loadShift = async () => {
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
     } catch {}
@@ -40,7 +40,7 @@ export default function TransferShift() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) {
         await updateDoc(snap.docs[0].ref, {

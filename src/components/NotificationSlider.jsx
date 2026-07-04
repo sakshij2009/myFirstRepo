@@ -25,7 +25,7 @@ const NotificationSlider = ({ onClose, userId }) => {
     if (!userId) return;
 
     const q = query(
-      collection(db, "notifications", userId, "userNotifications"),
+      collection(db, "dev_notifications", userId, "userNotifications"),
       orderBy("timestamp", "desc")
     );
 
@@ -43,7 +43,7 @@ const NotificationSlider = ({ onClose, userId }) => {
 
   /* ================= MARK READ ================= */
   const handleMarkRead = async (notifId) => {
-    const ref = doc(db, "notifications", userId, "userNotifications", notifId);
+    const ref = doc(db, "dev_notifications", userId, "userNotifications", notifId);
     await updateDoc(ref, { read: true });
     setNotifications((prev) => prev.filter((n) => n.id !== notifId));
   };
@@ -64,7 +64,7 @@ const NotificationSlider = ({ onClose, userId }) => {
       } = notif.meta;
 
       // 1️⃣ Update leave request status
-      await updateDoc(doc(db, "leaveRequests", leaveId), {
+      await updateDoc(doc(db, "dev_leaveRequests", leaveId), {
         status: action === "approve" ? "approved" : "declined",
         actionedAt: new Date(),
       });
@@ -84,7 +84,7 @@ const NotificationSlider = ({ onClose, userId }) => {
 
         const leaveKey = leaveType.toLowerCase();
 
-        await updateDoc(doc(db, "users", staffId), {
+        await updateDoc(doc(db, "dev_users", staffId), {
           [`leaveBalance.${leaveKey}.used`]: increment(days),
           [`leaveBalance.${leaveKey}.remaining`]: increment(-days),
         });
@@ -126,7 +126,7 @@ const NotificationSlider = ({ onClose, userId }) => {
 
     /* ========= MARK NOTIFICATION HANDLED ========= */
     await updateDoc(
-      doc(db, "notifications", userId, "userNotifications", notifId),
+      doc(db, "dev_notifications", userId, "userNotifications", notifId),
       {
         read: true,
         status: action === "approve" ? "approved" : "declined",

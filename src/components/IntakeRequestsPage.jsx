@@ -20,8 +20,8 @@ export default function IntakeRequestsPage() {
       try {
         // ── Fetch from both collections ──
         const [oldSnap, newSnap] = await Promise.all([
-          getDocs(collection(db, "InTakeForms")),
-          getDocs(collection(db, "intakeForms")),
+          getDocs(collection(db, "dev_InTakeForms")),
+          getDocs(collection(db, "dev_intakeForms")),
         ]);
 
         const normalizeDoc = (doc, source) => {

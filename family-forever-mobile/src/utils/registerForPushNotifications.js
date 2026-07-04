@@ -31,7 +31,7 @@ export async function registerForPushNotifications(username) {
   console.log("📲 Push Token:", token);
 
   // Save token in Firestore
-  await updateDoc(doc(db, "users", username), {
+  await updateDoc(doc(db, "dev_users", username), {
     expoPushToken: token,
   });
 

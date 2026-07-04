@@ -433,7 +433,7 @@ useEffect(() => {
         const staffDocId = shiftData?.primaryUserId || shiftData?.userId || null;
         if (staffDocId) {
           // Try direct doc lookup first (fastest)
-          const directSnap = await getDoc(doc(db, "users", staffDocId));
+          const directSnap = await getDoc(doc(db, "dev_users", staffDocId));
           if (directSnap.exists()) {
             const u = directSnap.data();
             staffInfo = {
@@ -444,7 +444,7 @@ useEffect(() => {
             };
           } else {
             // Fallback: query by userId field
-            const qStaff = query(collection(db, "users"), where("userId", "==", staffDocId));
+            const qStaff = query(collection(db, "dev_users"), where("userId", "==", staffDocId));
             const snap = await getDocs(qStaff);
             if (!snap.empty) {
               const u = snap.docs[0].data();
@@ -481,7 +481,7 @@ useEffect(() => {
       };
       try {
         // clientDocId is the Firestore document ID in the clients collection
-        const directClient = await getDoc(doc(db, "clients", clientDocId));
+        const directClient = await getDoc(doc(db, "dev_clients", clientDocId));
         if (directClient.exists()) {
           const cd = directClient.data();
           clientInfo = {
@@ -491,7 +491,7 @@ useEffect(() => {
           };
         } else {
           // Fallback: query by clientId field
-          const qClient = query(collection(db, "clients"), where("clientId", "==", clientDocId));
+          const qClient = query(collection(db, "dev_clients"), where("clientId", "==", clientDocId));
           const snap = await getDocs(qClient);
           if (!snap.empty) {
             const cd = snap.docs[0].data();
@@ -511,7 +511,7 @@ useEffect(() => {
       try {
         // Try multiple lookup strategies across both collection name variants
         let intakeDoc = null;
-        for (const col of ["InTakeForms", "intakeForms"]) {
+        for (const col of ["dev_InTakeForms", "dev_intakeForms"]) {
           if (intakeDoc) break;
           // Strategy A: by clientId field
           for (const field of ["clientId", "id"]) {
@@ -571,7 +571,7 @@ useEffect(() => {
       /* ---------------- 4️⃣ INCIDENT (if editing) ---------------- */
       let incidentData = null;
       try {
-        const ir = doc(db, "criticalIncidents", String(clientDocId));
+        const ir = doc(db, "dev_criticalIncidents", String(clientDocId));
         const snap = await getDoc(ir);
         if (snap.exists()) incidentData = snap.data();
       } catch (err) {
@@ -675,7 +675,7 @@ useEffect(() => {
         },
         // lastEditedBy not available here (no currentUser prop)
       };
-      await setDoc(doc(db, "criticalIncidents", String(clientId)), payload, { merge: true });
+      await setDoc(doc(db, "dev_criticalIncidents", String(clientId)), payload, { merge: true });
       alert("Draft saved");
     } catch (err) {
       console.error("saveDraft error:", err);
@@ -702,7 +702,7 @@ useEffect(() => {
           createdAt: values._meta?.createdAt || serverTimestamp(),
         },
       };
-      await setDoc(doc(db, "criticalIncidents", String(clientId)), payload, { merge: true });
+      await setDoc(doc(db, "dev_criticalIncidents", String(clientId)), payload, { merge: true });
       alert("Report submitted");
       if (typeof onSuccess === "function") {
         try {

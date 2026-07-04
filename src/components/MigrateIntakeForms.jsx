@@ -114,14 +114,14 @@ export default function MigrateIntakeForms() {
       // STEP 1 — Fix all existing InTakeForms documents
       // ══════════════════════════════════════════════════════════════
       addLog("── STEP 1: Fixing existing InTakeForms documents ──", "header");
-      const intakeSnap = await getDocs(collection(db, "InTakeForms"));
+      const intakeSnap = await getDocs(collection(db, "dev_InTakeForms"));
       addLog(`Found ${intakeSnap.size} InTakeForms documents.`);
 
       const intakeNames = []; // build as we go for step 2
 
       for (const docSnap of intakeSnap.docs) {
         const data    = docSnap.data();
-        const ref     = doc(db, "InTakeForms", docSnap.id);
+        const ref     = doc(db, "dev_InTakeForms", docSnap.id);
         const patch   = {};
         const reasons = [];
 
@@ -219,7 +219,7 @@ export default function MigrateIntakeForms() {
       addLog("", "info");
       addLog("── STEP 2: Creating InTakeForms for clients missing one ──", "header");
 
-      const clientsSnap = await getDocs(collection(db, "clients"));
+      const clientsSnap = await getDocs(collection(db, "dev_clients"));
       addLog(`Found ${clientsSnap.size} clients in clients collection.`);
 
       for (const cSnap of clientsSnap.docs) {
@@ -311,7 +311,7 @@ export default function MigrateIntakeForms() {
         if (cData.UID)           newDoc.clientUID     = cData.UID;
 
         try {
-          await addDoc(collection(db, "InTakeForms"), newDoc);
+          await addDoc(collection(db, "dev_InTakeForms"), newDoc);
           addLog(`  ✅ CREATED IntakeForm for: ${clientName}`, "ok");
           intakeNames.push(clientName);
           created++;
@@ -333,9 +333,9 @@ export default function MigrateIntakeForms() {
       addLog("  Loading users, shiftTypes, shiftCategories…");
 
       const [usersSnap, typesSnap, catsSnap] = await Promise.all([
-        getDocs(collection(db, "users")),
-        getDocs(collection(db, "shiftTypes")),
-        getDocs(collection(db, "shiftCategories")),
+        getDocs(collection(db, "dev_users")),
+        getDocs(collection(db, "dev_shiftTypes")),
+        getDocs(collection(db, "dev_shiftCategories")),
       ]);
 
       // users: keyed by docId and by username (lowercase)
@@ -371,7 +371,7 @@ export default function MigrateIntakeForms() {
       // ── 3b. Fetch and scan all shifts ──────────────────────────────
 
       addLog("  Fetching all shifts — please wait…");
-      const shiftsSnap = await getDocs(collection(db, "shifts"));
+      const shiftsSnap = await getDocs(collection(db, "dev_shifts"));
       addLog(`  Found ${shiftsSnap.size} shifts total.`);
 
       let s3Fixed = 0, s3Skipped = 0, s3Errors = 0;
@@ -574,7 +574,7 @@ export default function MigrateIntakeForms() {
         }
 
         try {
-          await updateDoc(doc(db, "shifts", sSnap.id), patch3);
+          await updateDoc(doc(db, "dev_shifts", sSnap.id), patch3);
           addLog(`  ✅ FIXED shift …${sSnap.id.slice(-8)}  → ${reasons3.join(", ")}`, "ok");
           s3Fixed++;
           shiftsFixed++;

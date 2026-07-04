@@ -242,9 +242,9 @@ export default function RightPanel({ filter = "Weekly" }) {
     const load = async () => {
       try {
         const [shiftSnap, revSnap, userSnap] = await Promise.all([
-          getDocs(collection(db, "shifts")),
-          getDocs(collection(db, "revenue")),
-          getDocs(query(collection(db, "users"), where("role", "==", "user"))),
+          getDocs(collection(db, "dev_shifts")),
+          getDocs(collection(db, "dev_revenue")),
+          getDocs(query(collection(db, "dev_users"), where("role", "==", "user"))),
         ]);
 
         const shifts  = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));

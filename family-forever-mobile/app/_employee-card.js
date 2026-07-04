@@ -20,7 +20,7 @@ export default function EmployeeCard() {
       if (!stored) return;
 
       const parsed = JSON.parse(stored);
-      const userRef = doc(db, "users", parsed.username);
+      const userRef = doc(db, "dev_users", parsed.username);
 
       unsubscribe = onSnapshot(userRef, (snap) => {
         if (snap.exists()) setUser({ username: parsed.username, ...snap.data() });

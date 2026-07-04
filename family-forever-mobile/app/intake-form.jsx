@@ -31,7 +31,7 @@ export default function IntakeForm() {
 
   const loadShift = async () => {
     try {
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
       
@@ -57,7 +57,7 @@ export default function IntakeForm() {
     setSaving(true);
     try {
       const user = JSON.parse(await AsyncStorage.getItem("user") || "{}");
-      await addDoc(collection(db, "intakeForms"), {
+      await addDoc(collection(db, "dev_intakeForms"), {
         shiftId, clientName: shift?.clientName || shift?.name,
         formType, // 'intake' or 'private'
         arrivalCondition, conditionNotes, vitals, activitiesCompleted: activities,

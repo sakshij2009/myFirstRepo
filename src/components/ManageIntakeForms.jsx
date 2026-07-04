@@ -202,9 +202,7 @@ export default function ManageIntakeForms() {
       setLoading(true);
       try {
         // Fetch from potential collections in parallel
-        const collectionsToTry = [
-          "InTakeForms", "intakeForms"
-        ];
+        const collectionsToTry = ["dev_InTakeForms", "dev_intakeForms"];
         
         const snaps = await Promise.all(
           collectionsToTry.map(c => getDocs(collection(db, c)).catch(() => ({ docs: [] })))

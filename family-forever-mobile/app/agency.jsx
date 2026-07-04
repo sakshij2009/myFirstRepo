@@ -62,7 +62,7 @@ export default function Agency() {
     try {
       const identifier = u.username || u.userId;
       if (!identifier) return;
-      const snap = await getDoc(doc(db, "users", identifier));
+      const snap = await getDoc(doc(db, "dev_users", identifier));
       if (snap.exists()) {
         const data = snap.data();
         if (data.agencyInfo) {
@@ -89,7 +89,7 @@ export default function Agency() {
     setSaving(true);
     try {
       const identifier = user.username || user.userId;
-      const userRef = doc(db, "users", identifier);
+      const userRef = doc(db, "dev_users", identifier);
       await updateDoc(userRef, {
         agencyInfo,
         updatedAt: new Date(),

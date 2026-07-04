@@ -43,7 +43,7 @@ export default function Alerts() {
       setLoading(false);
       return;
     }
-    const notifRef = collection(db, "notifications", user.username, "userNotifications");
+    const notifRef = collection(db, "dev_notifications", user.username, "userNotifications");
     const q = query(notifRef, orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -65,21 +65,21 @@ export default function Alerts() {
     if (!user?.username) return;
     alerts.forEach(async (a) => {
       if (!a.read) {
-        await updateDoc(doc(db, "notifications", user.username, "userNotifications", a.id), { read: true });
+        await updateDoc(doc(db, "dev_notifications", user.username, "userNotifications", a.id), { read: true });
       }
     });
   };
 
   const markRead = async (id) => {
     if (!user?.username) return;
-    await updateDoc(doc(db, "notifications", user.username, "userNotifications", id), { read: true });
+    await updateDoc(doc(db, "dev_notifications", user.username, "userNotifications", id), { read: true });
   };
 
   const clearAll = async () => {
     if (!user?.username) return;
     await Promise.all(
       alerts.map((a) =>
-        deleteDoc(doc(db, "notifications", user.username, "userNotifications", a.id))
+        deleteDoc(doc(db, "dev_notifications", user.username, "userNotifications", a.id))
       )
     );
   };

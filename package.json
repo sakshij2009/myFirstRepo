@@ -46,6 +46,7 @@
     "date-fns": "3.6.0",
     "embla-carousel-react": "8.6.0",
     "firebase": "^12.13.0",
+    "firebase-admin": "^14.1.0",
     "formik": "^2.4.9",
     "framer-motion": "^12.40.0",
     "html2pdf.js": "^0.14.0",

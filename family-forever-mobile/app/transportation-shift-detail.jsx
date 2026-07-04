@@ -81,7 +81,7 @@ export default function TransportationShiftDetail() {
   // Real-time shift listener
   useEffect(() => {
     if (!shiftId) return;
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "dev_shifts", shiftId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setShift({ id: snap.id, ...data });
@@ -108,13 +108,13 @@ export default function TransportationShiftDetail() {
 
         // 1. Direct ID Resolve
         if (intakeId) {
-          const snap = await getDoc(doc(db, "InTakeForms", String(intakeId)));
+          const snap = await getDoc(doc(db, "dev_InTakeForms", String(intakeId)));
           if (snap.exists()) matched = { ...snap.data(), id: snap.id };
         }
 
         // 2. Comprehensive search across InTakeForms and clients
         if (!matched) {
-          const collections = ["InTakeForms", "clients"];
+          const collections = ["dev_InTakeForms", "dev_clients"];
           const cleanName = clientName ? clientName.toString().trim().toLowerCase() : null;
 
           for (const collName of collections) {
@@ -305,7 +305,7 @@ export default function TransportationShiftDetail() {
     }
     setNoShowClients(updated);
     try {
-      await updateDoc(doc(db, "shifts", shiftId), {
+      await updateDoc(doc(db, "dev_shifts", shiftId), {
         noShowClients: Array.from(updated),
       });
     } catch (e) {
@@ -684,7 +684,7 @@ export default function TransportationShiftDetail() {
               // Write clockIn only if not already set
               if (shiftId && !shift?.clockIn && !shift?.clockInTime) {
                 try {
-                  await updateDoc(doc(db, "shifts", shiftId), {
+                  await updateDoc(doc(db, "dev_shifts", shiftId), {
                     clockIn: serverTimestamp(),
                   });
                 } catch (e) {

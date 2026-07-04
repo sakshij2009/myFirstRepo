@@ -308,7 +308,7 @@ export default function Availability() {
     const uid = user.userId || user.uid || user.id;
     const docId = `${uid}_${weekStart}`;
     const unsub = onSnapshot(
-      doc(db, "availability", docId),
+      doc(db, "dev_availability", docId),
       (snap) => {
         setAvailData(snap.exists() ? (snap.data().days || {}) : {});
         setLoading(false);
@@ -326,7 +326,7 @@ export default function Availability() {
   useEffect(() => {
     if (!user) return;
     const uid = user.userId || user.uid || user.id;
-    const q = query(collection(db, "timeOffRequests"), where("userId", "==", uid));
+    const q = query(collection(db, "dev_timeOffRequests"), where("userId", "==", uid));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -367,14 +367,14 @@ export default function Availability() {
     };
 
     // Primary: shifts where this user is the main worker
-    const q1 = query(collection(db, "shifts"), where("userId", "==", uid), limit(300));
+    const q1 = query(collection(db, "dev_shifts"), where("userId", "==", uid), limit(300));
     const unsub1 = onSnapshot(q1,
       (snap) => { primary = snap.docs.map((d) => ({ id: d.id, ...d.data() })); pLoaded = true; merge(); },
       () => { pLoaded = true; merge(); }
     );
 
     // Secondary: shifts where this user is the secondary worker
-    const q2 = query(collection(db, "shifts"), where("secondaryUserId", "==", uid), limit(100));
+    const q2 = query(collection(db, "dev_shifts"), where("secondaryUserId", "==", uid), limit(100));
     const unsub2 = onSnapshot(q2,
       (snap) => { secondary = snap.docs.map((d) => ({ id: d.id, ...d.data() })); sLoaded = true; merge(); },
       () => { sLoaded = true; merge(); }
@@ -423,7 +423,7 @@ export default function Availability() {
         };
       });
       await setDoc(
-        doc(db, "availability", `${uid}_${weekStart}`),
+        doc(db, "dev_availability", `${uid}_${weekStart}`),
         {
           userId: uid,
           userName: user.name || "",
@@ -465,7 +465,7 @@ export default function Availability() {
             try {
               const uid = user.userId || user.uid || user.id;
               await setDoc(
-                doc(db, "availability", `${uid}_${nextStart}`),
+                doc(db, "dev_availability", `${uid}_${nextStart}`),
                 {
                   userId: uid,
                   userName: user.name || "",

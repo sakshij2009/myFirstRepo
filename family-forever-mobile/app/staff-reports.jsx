@@ -195,7 +195,7 @@ export default function StaffReports() {
 
   const fetchShifts = useCallback(async () => {
     try {
-      const snap = await getDocs(collection(db, "shifts"));
+      const snap = await getDocs(collection(db, "dev_shifts"));
       const allData = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       
       const staffId = user?.uid || user?.id || user?.staffId || user?.userId;

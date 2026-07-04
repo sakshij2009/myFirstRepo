@@ -16,7 +16,7 @@ const ShiftLockToggle = ({ shiftId, initialValue }) => {
     setLocked(newValue);
 
     try {
-      await updateDoc(doc(db, "shifts", shiftId.toString()), {
+      await updateDoc(doc(db, "dev_shifts", shiftId.toString()), {
         locked: newValue,
         isRatify: newValue,
         billingStatus: newValue ? "Locked" : "Billable",

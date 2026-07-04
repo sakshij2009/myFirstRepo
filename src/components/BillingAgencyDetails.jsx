@@ -40,7 +40,7 @@ export default function BillingAgencyDetails({ agency, onBack }) {
       try {
         // 1. Fetch real clients linked to this agency
         let clientsList = [];
-        const clientsSnap = await getDocs(collection(db, "clients"));
+        const clientsSnap = await getDocs(collection(db, "dev_clients"));
         clientsSnap.docs.forEach(d => {
           const c = d.data();
           const aName = c.agencyName || c.agency || "";
@@ -50,7 +50,7 @@ export default function BillingAgencyDetails({ agency, onBack }) {
         });
 
         // 2. Fetch all shifts (so we don't hit 10-item limit with 'in' queries)
-        const shiftsSnap = await getDocs(collection(db, "shifts"));
+        const shiftsSnap = await getDocs(collection(db, "dev_shifts"));
         const allShifts = [];
         shiftsSnap.docs.forEach(d => {
           const s = d.data();
@@ -317,7 +317,7 @@ export default function BillingAgencyDetails({ agency, onBack }) {
         kmRate: String(editForm.kmRate)
       };
 
-      const agencyRef = doc(db, "agencies", liveAgency.id);
+      const agencyRef = doc(db, "dev_agencies", liveAgency.id);
       await updateDoc(agencyRef, { rateList: newList });
       
       setLiveAgency(prev => ({ ...prev, rateList: newList }));

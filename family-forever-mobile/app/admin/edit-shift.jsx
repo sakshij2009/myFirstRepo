@@ -119,10 +119,10 @@ export default function EditShiftScreen() {
         const loadAll = async () => {
             try {
                 const [shiftSnap, clientsSnap, usersSnap, categoriesSnap] = await Promise.all([
-                    getDoc(doc(db, 'shifts', id)),
-                    getDocs(collection(db, 'clients')).catch(() => ({ docs: [] })),
-                    getDocs(collection(db, 'users')).catch(() => ({ docs: [] })),
-                    getDocs(collection(db, 'shiftCategories')).catch(() => ({ docs: [] })),
+                    getDoc(doc(db, 'dev_shifts', id)),
+                    getDocs(collection(db, 'dev_clients')).catch(() => ({ docs: [] })),
+                    getDocs(collection(db, 'dev_users')).catch(() => ({ docs: [] })),
+                    getDocs(collection(db, 'dev_shiftCategories')).catch(() => ({ docs: [] })),
                 ]);
 
                 // Build dropdown lists
@@ -209,7 +209,7 @@ export default function EditShiftScreen() {
             const endDateObj = new Date(serviceDate);
             if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-            await updateDoc(doc(db, 'shifts', id), {
+            await updateDoc(doc(db, 'dev_shifts', id), {
                 clientId: selectedClient.value,
                 clientName: selectedClient.fullName,
                 clientDetails: selectedClient, // from web

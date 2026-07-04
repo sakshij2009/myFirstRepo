@@ -104,14 +104,14 @@ export default function DashboardScreen() {
         }).catch(() => {});
 
         // Live listeners — dashboard stays fresh as data changes
-        const unsubShifts = onSnapshot(collection(db, "shifts"), (snap) => {
+        const unsubShifts = onSnapshot(collection(db, "dev_shifts"), (snap) => {
             setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
             setLoading(false);
         }, (e) => { console.warn("shifts listener:", e); setLoading(false); });
-        const unsubClients = onSnapshot(collection(db, "clients"), (snap) => {
+        const unsubClients = onSnapshot(collection(db, "dev_clients"), (snap) => {
             setClients(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         }, (e) => console.warn("clients listener:", e));
-        const unsubAgencies = onSnapshot(collection(db, "agencies"), (snap) => {
+        const unsubAgencies = onSnapshot(collection(db, "dev_agencies"), (snap) => {
             setAgencies(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         }, (e) => console.warn("agencies listener:", e));
 
@@ -527,7 +527,7 @@ function ShiftCard({ shift, getCategoryColor, formatDate, formatTime }) {
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete", style: "destructive", onPress: async () => {
-                    try { await deleteDoc(doc(db, "shifts", shift.id)); }
+                    try { await deleteDoc(doc(db, "dev_shifts", shift.id)); }
                     catch (e) { Alert.alert("Error", "Could not delete the shift."); }
                 },
             },

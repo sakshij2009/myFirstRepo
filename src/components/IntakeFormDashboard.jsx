@@ -33,7 +33,7 @@ const [allClients, setAllClients] = useState([]);
 useEffect(() => {
   const fetchClients = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "clients"));
+      const querySnapshot = await getDocs(collection(db, "dev_clients"));
       const clientList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -53,7 +53,7 @@ useEffect(() => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "shiftCategories"));
+        const querySnapshot = await getDocs(collection(db, "dev_shiftCategories"));
         let categoryList = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -84,9 +84,9 @@ useEffect(() => {
     try {
       // ✅ Fetch both collections + categories in parallel
       const [oldFormsSnap, newFormsSnap, categoriesSnap] = await Promise.all([
-        getDocs(collection(db, "InTakeForms")),
-        getDocs(collection(db, "intakeForms")),
-        getDocs(collection(db, "shiftCategories")),
+        getDocs(collection(db, "dev_InTakeForms")),
+        getDocs(collection(db, "dev_intakeForms")),
+        getDocs(collection(db, "dev_shiftCategories")),
       ]);
 
       // Merge both collections, deduplicating by id

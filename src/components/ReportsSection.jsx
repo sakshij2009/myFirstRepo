@@ -118,7 +118,7 @@ const ReportsSection = ({ shiftId, shiftData,user }) => {
     }
 
     try {
-      const shiftRef = doc(db, "shifts", shiftId);
+      const shiftRef = doc(db, "dev_shifts", shiftId);
       await updateDoc(shiftRef, { shiftReport: text });
       alert("Report submitted successfully!");
       localStorage.removeItem(`draft_${shiftId}`);

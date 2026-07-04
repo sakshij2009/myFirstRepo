@@ -22,7 +22,7 @@ const TransportationDetails = ({ shift, onClose }) => {
           return;
         }
 
-        const snapshot = await getDocs(collection(db, "InTakeForms"));
+        const snapshot = await getDocs(collection(db, "dev_InTakeForms"));
         let foundClient = null;
 
         snapshot.forEach((doc) => {

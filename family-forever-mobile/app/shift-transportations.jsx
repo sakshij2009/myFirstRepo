@@ -35,14 +35,14 @@ function isTransportShift(shift) {
 }
 
 export default function ShiftTransportations() {
-  const { shiftId } = useLocalSearchParams();
+  const { shiftId, section } = useLocalSearchParams();
   const [shift, setShift] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!shiftId) { setLoading(false); return; }
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), (snap) => {
+    const unsub = onSnapshot(doc(db, "dev_shifts", shiftId), (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setShift(data);
@@ -93,12 +93,12 @@ export default function ShiftTransportations() {
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f8f8f6" }}>
         {/* Header */}
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
-          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <Pressable onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId } })} style={{ marginRight: 12 }}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
           </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Transportation</Text>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>{section === "expense" ? "Expense" : "Transportation"}</Text>
         </View>
-        <ReportTransportationTab shift={shift} shiftId={shiftId} />
+        <ReportTransportationTab shift={shift} shiftId={shiftId} section={section === "expense" ? "expense" : "transportation"} />
       </SafeAreaView>
     );
   }
@@ -108,7 +108,7 @@ export default function ShiftTransportations() {
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Header */}
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e5e7eb" }}>
-          <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <Pressable onPress={() => router.push({ pathname: "/shift-detail", params: { shiftId } })} style={{ marginRight: 12 }}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
           </Pressable>
           <Text style={{ fontSize: 18, fontWeight: "700", color: "#1a1a1a", flex: 1 }}>Transportation Tasks</Text>

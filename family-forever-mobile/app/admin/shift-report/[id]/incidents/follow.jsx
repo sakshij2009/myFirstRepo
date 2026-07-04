@@ -33,7 +33,7 @@ export default function FollowThroughScreen() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const shiftRef = doc(db, "shifts", id);
+                const shiftRef = doc(db, "dev_shifts", id);
                 const shiftSnap = await getDoc(shiftRef);
 
                 if (shiftSnap.exists()) {
@@ -57,7 +57,7 @@ export default function FollowThroughScreen() {
     const handleSave = async (isSubmit = false) => {
         setSaving(true);
         try {
-            const shiftRef = doc(db, "shifts", id);
+            const shiftRef = doc(db, "dev_shifts", id);
             await setDoc(shiftRef, {
                 followThroughReport: { ...form, status: isSubmit ? "submitted" : "draft" }
             }, { merge: true });

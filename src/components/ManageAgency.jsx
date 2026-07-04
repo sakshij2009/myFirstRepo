@@ -120,8 +120,8 @@ const ManageAgency = () => {
     const fetchData = async () => {
       try {
         const [agencySnap, clientSnap] = await Promise.all([
-          getDocs(collection(db, "agencies")),
-          getDocs(collection(db, "clients")),
+          getDocs(collection(db, "dev_agencies")),
+          getDocs(collection(db, "dev_clients")),
         ]);
 
         const clientList = clientSnap.docs.map((d) => d.data());
@@ -152,7 +152,7 @@ const ManageAgency = () => {
   const handleDelete = async (agencyId) => {
     if (!window.confirm("Are you sure you want to delete this agency?")) return;
     try {
-      await updateDoc(doc(db, "agencies", agencyId), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_agencies", agencyId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setAgencies((prev) => prev.filter((a) => a.id !== agencyId));
     } catch (e) {
       console.error("Error deleting agency:", e);

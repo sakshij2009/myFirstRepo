@@ -351,10 +351,10 @@ const AddUserShift = ({ mode = "add", user }) => {
       try {
         const [shiftTypeSnap, shiftCategorySnap, clientSnap, userSnap] =
           await Promise.all([
-            getDocs(collection(db, "shiftTypes")),
-            getDocs(collection(db, "shiftCategories")),
-            getDocs(collection(db, "clients")),
-            getDocs(collection(db, "users")),
+            getDocs(collection(db, "dev_shiftTypes")),
+            getDocs(collection(db, "dev_shiftCategories")),
+            getDocs(collection(db, "dev_clients")),
+            getDocs(collection(db, "dev_users")),
           ]);
 
         const sortByName = (a, b) => {
@@ -471,7 +471,7 @@ const AddUserShift = ({ mode = "add", user }) => {
     const fetchShiftData = async () => {
       if (mode === "update" && id) {
         try {
-          const docRef = doc(db, "shifts", id);
+          const docRef = doc(db, "dev_shifts", id);
           const docSnap = await getDoc(docRef);
 
           if (!docSnap.exists()) return;
@@ -550,7 +550,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           if (data.batchId) {
             try {
               const batchSnap = await getDocs(
-                query(collection(db, "shifts"), where("batchId", "==", data.batchId))
+                query(collection(db, "dev_shifts"), where("batchId", "==", data.batchId))
               );
               batchSnap.docs.forEach((bDoc) => {
                 const bData = bDoc.data();
@@ -825,7 +825,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         const clientNameCandidate = (selectedClient.name || "").trim();
         if (!clientNameCandidate) return;
 
-        const snap = await getDocs(collection(db, "InTakeForms"));
+        const snap = await getDocs(collection(db, "dev_InTakeForms"));
 
         // Sort intake forms by createdAt (newest first) to prioritize most recent updates
         const sortedDocs = snap.docs.sort((a, b) => {
@@ -1259,7 +1259,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         };
 
         // Always update only the specific shift being edited
-        const qShift = query(collection(db, "shifts"), where("id", "==", id));
+        const qShift = query(collection(db, "dev_shifts"), where("id", "==", id));
         const snap = await getDocs(qShift);
         if (!snap.empty) {
           const bData = snap.docs[0].data();
@@ -1314,7 +1314,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         const clientRateEntry = (selectedClient?.rateList || [])
           .find(r => r.id === selectedShiftCategory?.id);
 
-        await setDoc(doc(db, "shifts", newShiftId), {
+        await setDoc(doc(db, "dev_shifts", newShiftId), {
           // ── Identity ──────────────────────────────────────────────
           id:            newShiftId,
           batchId:       batchId,      // links all shifts created together
@@ -1423,7 +1423,7 @@ const AddUserShift = ({ mode = "add", user }) => {
 
 
         // ✅ SEND ADMIN NOTIFICATION
-        const adminQuery = query(collection(db, "users"), where("role", "==", "admin"));
+        const adminQuery = query(collection(db, "dev_users"), where("role", "==", "admin"));
         const adminsSnapshot = await getDocs(adminQuery);
         for (const admin of adminsSnapshot.docs) {
           await sendNotification(admin.id, {
@@ -1471,7 +1471,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             ? users.find(u => String(u.id) === String(returnDriverId) || String(u.userId) === String(returnDriverId)) || primaryStaff
             : primaryStaff;
 
-          await setDoc(doc(db, "shifts", returnShiftId), {
+          await setDoc(doc(db, "dev_shifts", returnShiftId), {
             id:            returnShiftId,
             batchId:       batchId,
             isReturnTrip:  true,
@@ -1602,7 +1602,7 @@ const AddUserShift = ({ mode = "add", user }) => {
   useEffect(() => {
     const fetchAllShifts = async () => {
       try {
-        const snap = await getDocs(collection(db, "shifts"));
+        const snap = await getDocs(collection(db, "dev_shifts"));
         setMonthShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         console.error("Error fetching shifts for calendar:", err);
@@ -1702,13 +1702,13 @@ const AddUserShift = ({ mode = "add", user }) => {
               if (window.confirm(confirmMsg)) {
                 try {
                   if (isBatch) {
-                    const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
+                    const snap = await getDocs(query(collection(db, "dev_shifts"), where("batchId", "==", batchId)));
                     const batch = writeBatch(db);
                     snap.docs.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
                     await batch.commit();
                     alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
                   } else {
-                    await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
+                    await updateDoc(doc(db, "dev_shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
                     alert("Shift deleted successfully!");
                   }
                   window.history.back();

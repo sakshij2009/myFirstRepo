@@ -15,7 +15,7 @@ import { db } from "../firebase";
  */
 export const sendNotification = async (receiverId, payload) => {
   try {
-    const notifRef = collection(db, "notifications", receiverId, "userNotifications");
+    const notifRef = collection(db, "dev_notifications", receiverId, "userNotifications");
 
     await addDoc(notifRef, {
       ...payload,

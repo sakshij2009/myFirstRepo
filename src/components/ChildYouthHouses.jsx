@@ -62,7 +62,7 @@ const ChildYouthHouses = () => {
   useEffect(() => {
     (async () => {
       try {
-        const q = query(collection(db, "houses"), where("programType", "==", PROGRAM_TYPE));
+        const q = query(collection(db, "dev_houses"), where("programType", "==", PROGRAM_TYPE));
         const snap = await getDocs(q);
         const houseList = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((h) => !h.isDeleted);
         setHouses(houseList.length > 0 ? houseList : DEMO_HOUSES);
@@ -83,7 +83,7 @@ const ChildYouthHouses = () => {
     }
     if (!window.confirm(`Are you sure you want to delete ${houseName}?`)) return;
     try {
-      await updateDoc(doc(db, "houses", houseId), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_houses", houseId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setHouses((prev) => prev.filter((h) => h.id !== houseId));
       toast.success("House deleted successfully", { description: `${houseName} has been removed.` });
     } catch (err) {

@@ -240,11 +240,11 @@ export default function AddShiftScreen() {
                 // NOTE: no orderBy — Firestore orderBy silently drops docs missing the field
                 // (many clients store "name", not "fullName"), which left the dropdown empty.
                 const [clientsSnap, usersSnap, categoriesSnap, typesSnap, shiftsSnap] = await Promise.all([
-                    getDocs(collection(db, 'clients')),
-                    getDocs(collection(db, 'users')),
-                    getDocs(collection(db, 'shiftCategories')),
-                    getDocs(collection(db, 'shiftTypes')),
-                    getDocs(collection(db, 'shifts')),
+                    getDocs(collection(db, 'dev_clients')),
+                    getDocs(collection(db, 'dev_users')),
+                    getDocs(collection(db, 'dev_shiftCategories')),
+                    getDocs(collection(db, 'dev_shiftTypes')),
+                    getDocs(collection(db, 'dev_shifts')),
                 ]);
                 setAllShifts(shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
@@ -468,7 +468,7 @@ export default function AddShiftScreen() {
                 };
 
                 // Outgoing shift
-                await setDoc(doc(db, 'shifts', newShiftId), {
+                await setDoc(doc(db, 'dev_shifts', newShiftId), {
                     ...baseShift,
                     name: selectedUser.name,
                     userId: selectedUser.value,
@@ -490,7 +490,7 @@ export default function AddShiftScreen() {
                     const retEnd = new Date(sDate);
                     if (retOvernight) retEnd.setDate(retEnd.getDate() + 1);
                     const retId = `${newShiftId}_ret`;
-                    await setDoc(doc(db, 'shifts', retId), {
+                    await setDoc(doc(db, 'dev_shifts', retId), {
                         ...baseShift,
                         name: returnStaff.name,
                         userId: returnStaff.value,

@@ -41,8 +41,8 @@ export default function IntakeFormsScreen() {
     try {
       setLoading(true);
       const [intakeSnap, catSnap] = await Promise.all([
-        getDocs(collection(db, 'InTakeForms')),
-        getDocs(collection(db, 'shiftCategories')),
+        getDocs(collection(db, 'dev_InTakeForms')),
+        getDocs(collection(db, 'dev_shiftCategories')),
       ]);
 
       const categoryMap = {};

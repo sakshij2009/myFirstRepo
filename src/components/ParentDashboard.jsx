@@ -183,7 +183,7 @@ const ParentDashboard = ({ user, onLogout }) => {
 
     // ── Listen to old InTakeForms (private forms only) ──
     const unsubOld = onSnapshot(
-      query(collection(db, "InTakeForms"), where("formType", "==", "private")),
+      query(collection(db, "dev_InTakeForms"), where("formType", "==", "private")),
       (snap) => {
         oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() }));
         oldLoaded = true;
@@ -195,7 +195,7 @@ const ParentDashboard = ({ user, onLogout }) => {
     );
 
     // ── Shifts listener (unchanged) ──
-    const unsubShifts = onSnapshot(query(collection(db, "shifts")), (snap) => {
+    const unsubShifts = onSnapshot(query(collection(db, "dev_shifts")), (snap) => {
       const allShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const clientIds = [];
       forms.forEach(f => {

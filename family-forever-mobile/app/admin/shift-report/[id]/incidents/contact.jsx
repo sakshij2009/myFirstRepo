@@ -26,7 +26,7 @@ export default function ContactNoteScreen() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const shiftRef = doc(db, "shifts", id);
+                const shiftRef = doc(db, "dev_shifts", id);
                 const shiftSnap = await getDoc(shiftRef);
 
                 if (shiftSnap.exists()) {
@@ -50,7 +50,7 @@ export default function ContactNoteScreen() {
     const handleSave = async (isSubmit = false) => {
         setSaving(true);
         try {
-            const shiftRef = doc(db, "shifts", id);
+            const shiftRef = doc(db, "dev_shifts", id);
             await setDoc(shiftRef, {
                 medicalContactLog: { ...form, status: isSubmit ? "submitted" : "draft" }
             }, { merge: true });

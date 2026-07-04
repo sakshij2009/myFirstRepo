@@ -119,7 +119,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
     e.stopPropagation();
     setConfirmingId(shiftId);
     try {
-      await updateDoc(doc(db, "shifts", shiftId), {
+      await updateDoc(doc(db, "dev_shifts", shiftId), {
         status: "Confirmed",
         shiftConfirmed: true,
       });

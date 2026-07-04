@@ -126,7 +126,7 @@ const UserDashboard = ({ user }) => {
   // 🔴 Real-time listener for unread notifications
   useEffect(() => {
     const q = query(
-      collection(db, "notifications", userDocId, "userNotifications"),
+      collection(db, "dev_notifications", userDocId, "userNotifications"),
       where("read", "==", false)
     );
 
@@ -141,7 +141,7 @@ const UserDashboard = ({ user }) => {
   useEffect(() => {
     const fetchAdmin = async () => {
       try {
-        const q = query(collection(db, "users"), where("role", "==", "admin"));
+        const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
         const snap = await getDocs(q);
         if (!snap.empty) setAdminId(snap.docs[0].id);
       } catch (err) {
@@ -274,7 +274,7 @@ useEffect(() => {
   const fetchUserShifts = async () => {
     if (!user?.name && !user?.uid) return;
     try {
-      const shiftsRef = collection(db, "shifts");
+      const shiftsRef = collection(db, "dev_shifts");
       const snapshot = await getDocs(shiftsRef);
       const allShifts = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -409,7 +409,7 @@ setUserTransportationShifts(transportShifts);
 
     try {
       // ✅ Save leave request to Firestore
-      const leaveRef = await addDoc(collection(db, "leaveRequests"), {
+      const leaveRef = await addDoc(collection(db, "dev_leaveRequests"), {
         userId: user.userId,
         userName: user.name,
         leaveType,
@@ -422,7 +422,7 @@ setUserTransportationShifts(transportShifts);
       const leaveId = leaveRef.id;
 
       // ✅ Find admin (assuming only one admin)
-      const q = query(collection(db, "users"), where("role", "==", "admin"));
+      const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
       const adminSnap = await getDocs(q);
 
       if (!adminSnap.empty) {
@@ -459,7 +459,7 @@ setUserTransportationShifts(transportShifts);
   // =============== SHIFT FLAGS UPDATE HELPER ===============
   const updateShiftFlags = async (shiftId, data) => {
     try {
-      await updateDoc(doc(db, "shifts", shiftId), data);
+      await updateDoc(doc(db, "dev_shifts", shiftId), data);
     } catch (err) {
       console.error("Error updating shift flags:", err);
     }
@@ -471,7 +471,7 @@ setUserTransportationShifts(transportShifts);
     try {
       if (!shift?.id) return;
 
-      const shiftRef = doc(db, "shifts", shift.id);
+      const shiftRef = doc(db, "dev_shifts", shift.id);
 
       const timeDate =
         type === "clockIn"
@@ -573,7 +573,7 @@ const getEdmontonTimeString = (date = new Date()) => {
     
     const clockInStr = `${datePart}, ${activeShift.startTime}:00`;
 
-    await updateDoc(doc(db, "shifts", activeShift.id), {
+    await updateDoc(doc(db, "dev_shifts", activeShift.id), {
       clockIn: clockInStr,
       clockInLocation: address,
       clockInTimeZone: "America/Edmonton",
@@ -600,7 +600,7 @@ const getEdmontonTimeString = (date = new Date()) => {
 
     const clockOutStr = `${datePart}, ${activeShift.endTime}:00`;
 
-    await updateDoc(doc(db, "shifts", activeShift.id), {
+    await updateDoc(doc(db, "dev_shifts", activeShift.id), {
       clockOut: clockOutStr,
       clockOutLocation: address,
       clockOutTimeZone: "America/Edmonton",
@@ -611,7 +611,7 @@ const getEdmontonTimeString = (date = new Date()) => {
 const handleExtendShift = async () => {
   if (!activeShift) return;
 
-  await updateDoc(doc(db, "shifts", activeShift.id), {
+  await updateDoc(doc(db, "dev_shifts", activeShift.id), {
     extendedShift: true,
   });
 };
@@ -705,7 +705,7 @@ useEffect(() => {
       if (diffStart >= 15) {
         setLockClockIn(true);
 
-        await updateDoc(doc(db, "shifts", activeShift.id), {
+        await updateDoc(doc(db, "dev_shifts", activeShift.id), {
           clockInLocked: true,
         });
 
@@ -762,7 +762,7 @@ useEffect(() => {
           day: "2-digit",
         }).format(end);
 
-        await updateDoc(doc(db, "shifts", activeShift.id), {
+        await updateDoc(doc(db, "dev_shifts", activeShift.id), {
           clockOut: `${datePart}, ${activeShift.endTime}:00`,
           clockOutLocation: address,
           clockOutLocked: true,

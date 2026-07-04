@@ -446,7 +446,7 @@ export default function CompleteShift() {
   // Load shift + restore saved progress
   useEffect(() => {
     if (!shiftId) { setLoading(false); return; }
-    const unsub = onSnapshot(doc(db, "shifts", shiftId), async (snap) => {
+    const unsub = onSnapshot(doc(db, "dev_shifts", shiftId), async (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
         setShift(data);
@@ -617,7 +617,7 @@ export default function CompleteShift() {
         }
 
         if (Object.keys(clientUpdates).length > 0) {
-          await updateDoc(doc(db, "shifts", shiftId), clientUpdates);
+          await updateDoc(doc(db, "dev_shifts", shiftId), clientUpdates);
         }
       } catch (e) { console.warn("stop time save error:", e); }
     }
@@ -634,7 +634,7 @@ export default function CompleteShift() {
 
       if (shiftId) {
         try {
-          await updateDoc(doc(db, "shifts", shiftId), {
+          await updateDoc(doc(db, "dev_shifts", shiftId), {
             transportationCompleted: true,
             transportationKm: totalKm,
             transportationCompletedAt: serverTimestamp(),
@@ -695,7 +695,7 @@ export default function CompleteShift() {
             const totalTimeMinutes = Math.round((Date.now() - startTimeRef.current) / 60000);
             if (shiftId) {
               try {
-                await updateDoc(doc(db, "shifts", shiftId), {
+                await updateDoc(doc(db, "dev_shifts", shiftId), {
                   transportationCompleted: true,
                   transportationKm: totalKm,
                   transportationCancelled: true,

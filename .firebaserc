@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "famforeveradmin"
-  }
+  },
+  "targets": {
+    "famforeveradmin": {
+      "hosting": {
+        "prod": [
+          "ffadmin-prod"
+        ],
+        "uat": [
+          "ffadmin-uat"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

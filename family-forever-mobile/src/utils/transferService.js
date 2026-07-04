@@ -15,7 +15,7 @@ export const requestShiftTransfer = async ({
   toStaff,
   reason,
 }) => {
-  const transferRef = await addDoc(collection(db, "transferRequests"), {
+  const transferRef = await addDoc(collection(db, "dev_transferRequests"), {
     shiftId: shift.id,
     fromUserId: fromUser.userId,
     fromUserName: fromUser.name,
@@ -46,7 +46,7 @@ export const requestShiftTransfer = async ({
 
   // Notify admin
   const adminSnap = await getDocs(
-    query(collection(db, "users"), where("role", "==", "admin"))
+    query(collection(db, "dev_users"), where("role", "==", "admin"))
   );
 
   if (!adminSnap.empty) {

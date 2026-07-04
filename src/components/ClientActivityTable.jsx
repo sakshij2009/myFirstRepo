@@ -157,7 +157,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
   useEffect(() => {
     const fetch = async () => {
       try {
-        const snap = await getDocs(collection(db, "shifts"));
+        const snap = await getDocs(collection(db, "dev_shifts"));
         const enriched = snap.docs.filter((d) => !d.data().isDeleted).map((d) => {
           const s = { id: d.id, ...d.data() };
           const clientName = s.clientName || s.clientDetails?.name || s.clientDetails?.clientName || "—";
@@ -218,7 +218,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     if (!lockTarget) return;
     setProcessing(true);
     try {
-      await updateDoc(doc(db, "shifts", lockTarget.id), { locked: true, billingStatus: "Locked" });
+      await updateDoc(doc(db, "dev_shifts", lockTarget.id), { locked: true, billingStatus: "Locked" });
       setRows(prev => prev.map(r => r.id === lockTarget.id ? { ...r, locked: true, billingStatus: "Locked" } : r));
       toast.success("Shift locked for billing", {
         description: `${lockTarget.clientName} — ${lockTarget.service} (${lockTarget.hoursWorked}h × $${lockTarget.billingRate}/hr) added to billing queue.`,
@@ -236,7 +236,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     if (!unlockTarget) return;
     setProcessing(true);
     try {
-      await updateDoc(doc(db, "shifts", unlockTarget.id), { locked: false, billingStatus: "Verified" });
+      await updateDoc(doc(db, "dev_shifts", unlockTarget.id), { locked: false, billingStatus: "Verified" });
       setRows(prev => prev.map(r => r.id === unlockTarget.id ? { ...r, locked: false, billingStatus: "Verified" } : r));
       toast.info("Shift unlocked", {
         description: `${unlockTarget.clientName}'s shift returned to Verified status.`,
@@ -254,7 +254,7 @@ export default function ClientActivityTable({ onNavigateToReport }) {
     if (!deleteTarget) return;
     setProcessing(true);
     try {
-      await updateDoc(doc(db, "shifts", deleteTarget.id), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_shifts", deleteTarget.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setRows(prev => prev.filter(r => r.id !== deleteTarget.id));
       toast.success("Shift deleted", { description: `${deleteTarget.clientName}'s shift has been removed.`, duration: 4000 });
     } catch (err) {

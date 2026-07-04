@@ -43,8 +43,8 @@ export default function StaffEvaluationPage() {
       setLoading(true);
       try {
         const [usersSnap, shiftsSnap] = await Promise.all([
-          getDocs(query(collection(db, "users"), where("role", "==", "user"))),
-          getDocs(collection(db, "shifts")),
+          getDocs(query(collection(db, "dev_users"), where("role", "==", "user"))),
+          getDocs(collection(db, "dev_shifts")),
         ]);
 
         const shifts = shiftsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));

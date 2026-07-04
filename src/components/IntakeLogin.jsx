@@ -90,7 +90,7 @@ const IntakeLogin = () => {
             // Remove magic link params from URL so re-renders don't re-process it
             window.history.replaceState({}, document.title, "/intake-form/login");
             const { collection, query: fbQuery, where, getDocs, doc: fbDoc, updateDoc } = await import("firebase/firestore");
-            const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
+            const q = fbQuery(collection(db, "dev_intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
             const snap = await getDocs(q);
             if (!snap.empty) {
               await updateDoc(fbDoc(db, "intakeUsers", snap.docs[0].id), { verified: true });
@@ -149,7 +149,7 @@ const IntakeLogin = () => {
     setIsLoading(true);
     try {
       const { collection, query: fbQuery, where, getDocs } = await import("firebase/firestore");
-      const q = fbQuery(collection(db, "intakeUsers"), where("email", "==", loginEmail.trim().toLowerCase()));
+      const q = fbQuery(collection(db, "dev_intakeUsers"), where("email", "==", loginEmail.trim().toLowerCase()));
       const snap = await getDocs(q);
 
       if (snap.empty) {

@@ -125,7 +125,7 @@ export default function Availability() {
 
   useEffect(() => {
     if (!userId) return;
-    const unsubUser = onSnapshot(doc(db, "users", userId), (snap) => {
+    const unsubUser = onSnapshot(doc(db, "dev_users", userId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setUser(data);
@@ -134,7 +134,7 @@ export default function Availability() {
       setLoading(false);
     });
 
-    const q = query(collection(db, "timeOffRequests"), where("userId", "==", userId));
+    const q = query(collection(db, "dev_timeOffRequests"), where("userId", "==", userId));
     const unsubTimeOff = onSnapshot(q, (snap) => {
       setTimeOffRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -181,7 +181,7 @@ export default function Availability() {
 
   const saveToFirebase = async () => {
     try {
-      const userRef = doc(db, "users", userId);
+      const userRef = doc(db, "dev_users", userId);
       await updateDoc(userRef, {
         availability: draftAvail,
         updatedAt: serverTimestamp()

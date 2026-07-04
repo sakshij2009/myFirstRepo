@@ -61,7 +61,7 @@ export default function GeoCheckin() {
 
   const fetchShift = async () => {
     try {
-      const docRef = doc(db, "shifts", shiftId);
+      const docRef = doc(db, "dev_shifts", shiftId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         setShift({ id: docSnap.id, ...docSnap.data() });
@@ -69,7 +69,7 @@ export default function GeoCheckin() {
         setLoadingShift(false);
         return;
       }
-      const q = query(collection(db, "shifts"), where("id", "==", shiftId));
+      const q = query(collection(db, "dev_shifts"), where("id", "==", shiftId));
       const snap = await getDocs(q);
       if (!snap.empty) {
         setShift({ id: snap.docs[0].id, ...snap.docs[0].data() });
@@ -135,10 +135,10 @@ export default function GeoCheckin() {
       };
 
       if (shiftDocId) {
-        await updateDoc(doc(db, "shifts", shiftDocId), updateData);
+        await updateDoc(doc(db, "dev_shifts", shiftDocId), updateData);
       } else {
         const q = query(
-          collection(db, "shifts"),
+          collection(db, "dev_shifts"),
           where("id", "==", shiftId)
         );
         const snap = await getDocs(q);

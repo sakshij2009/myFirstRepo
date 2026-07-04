@@ -70,13 +70,13 @@ const FileClosureSlider = ({ isOpen, onClose, selectedClient }) => {
                     try {
                         const formId = selectedClient.id || selectedClient.formId;
                         if (formId) {
-                            const formSnap = await getDoc(doc(db, "InTakeForms", formId));
+                            const formSnap = await getDoc(doc(db, "dev_InTakeForms", formId));
                             if (formSnap.exists()) {
                                 const data = formSnap.data();
                                 let service = data.services?.serviceType || data.serviceRequired || "";
 
                                 if (Array.isArray(service)) {
-                                    const catSnap = await getDocs(collection(db, "shiftCategories"));
+                                    const catSnap = await getDocs(collection(db, "dev_shiftCategories"));
                                     const categoryMap = {};
                                     catSnap.forEach(d => categoryMap[d.id] = d.data().name);
 
@@ -141,11 +141,11 @@ const FileClosureSlider = ({ isOpen, onClose, selectedClient }) => {
                 status: "Closed"
             };
 
-            await addDoc(collection(db, "FileClosures"), closureData);
+            await addDoc(collection(db, "dev_FileClosures"), closureData);
 
             const clientIdToUpdate = selectedClient.id || selectedClient.formId;
             if (clientIdToUpdate) {
-                await updateDoc(doc(db, "InTakeForms", clientIdToUpdate), {
+                await updateDoc(doc(db, "dev_InTakeForms", clientIdToUpdate), {
                     status: "Closed",
                     fileClosureDate: dateClosed
                 });

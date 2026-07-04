@@ -41,10 +41,10 @@ const SideBar = ({ user, onLogout, onWidthChange }) => {
     const fetchCounts = async () => {
       try {
         const [clients, shifts, intakeWorkers, privateFamilies] = await Promise.all([
-          getCountFromServer(collection(db, "clients")),
-          getCountFromServer(collection(db, "shifts")),
-          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Intake Worker"))),
-          getCountFromServer(query(collection(db, "intakeUsers"), where("role", "==", "Parent"))),
+          getCountFromServer(collection(db, "dev_clients")),
+          getCountFromServer(collection(db, "dev_shifts")),
+          getCountFromServer(query(collection(db, "dev_intakeUsers"), where("role", "==", "Intake Worker"))),
+          getCountFromServer(query(collection(db, "dev_intakeUsers"), where("role", "==", "Parent"))),
         ]);
         setBadges({
           clients: clients.data().count || null,

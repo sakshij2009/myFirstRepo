@@ -265,7 +265,7 @@ const handleEndDrive = () => {
   // ===================== SUBMIT =====================
 const handleSubmit = async () => {
   try {
-    const shiftRef = doc(db, "shifts", String(shiftId));
+    const shiftRef = doc(db, "dev_shifts", String(shiftId));
     const shiftSnap = await getDoc(shiftRef);
 
     if (!shiftSnap.exists()) {

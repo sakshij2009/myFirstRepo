@@ -81,7 +81,7 @@ const AddIntakeUser = ({ mode = "add" }) => {
     const fetchIntakeUser = async () => {
       if (mode === "update" && id) {
         try {
-          const q = query(collection(db, "intakeUsers"), where("email", "==", id));
+          const q = query(collection(db, "dev_intakeUsers"), where("email", "==", id));
           const snap = await getDocs(q);
 
           if (!snap.empty) {
@@ -127,11 +127,11 @@ const AddIntakeUser = ({ mode = "add" }) => {
     }
     try {
       if (mode === "update") {
-        const q = query(collection(db, "intakeUsers"), where("email", "==", id));
+        const q = query(collection(db, "dev_intakeUsers"), where("email", "==", id));
         const snap = await getDocs(q);
 
         if (!snap.empty) {
-          const docRef = doc(db, "intakeUsers", snap.docs[0].id);
+          const docRef = doc(db, "dev_intakeUsers", snap.docs[0].id);
           await updateDoc(docRef, {
             ...values,
             updatedAt: new Date(),
@@ -147,14 +147,14 @@ const AddIntakeUser = ({ mode = "add" }) => {
           alert("No matching intake user found to update!");
         }
       } else {
-        const q = query(collection(db, "intakeUsers"), where("email", "==", values.email));
+        const q = query(collection(db, "dev_intakeUsers"), where("email", "==", values.email));
         const snap = await getDocs(q);
         if (!snap.empty) {
           alert("User already exists!");
           return;
         }
 
-        await addDoc(collection(db, "intakeUsers"), {
+        await addDoc(collection(db, "dev_intakeUsers"), {
           ...values,
           createdAt: new Date(),
         });

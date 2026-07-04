@@ -76,7 +76,7 @@ const HouseDetailPage = () => {
     if (stateHouse || id?.startsWith("__demo_")) { setLoading(false); return; }
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "houses", id));
+        const snap = await getDoc(doc(db, "dev_houses", id));
         if (snap.exists()) setHouse({ id: snap.id, ...snap.data() });
       } catch (e) {
         console.error("Error fetching house:", e);

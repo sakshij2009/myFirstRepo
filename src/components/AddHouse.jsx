@@ -393,7 +393,7 @@ const AddHouse = () => {
     (async () => {
       try {
         setStaffLoading(true);
-        const snap = await getDocs(collection(db, "users"));
+        const snap = await getDocs(collection(db, "dev_users"));
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(u => u.name && u.role !== "admin")
           .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -411,7 +411,7 @@ const AddHouse = () => {
     (async () => {
       try {
         setClientsLoading(true);
-        const snap = await getDocs(collection(db, "clients"));
+        const snap = await getDocs(collection(db, "dev_clients"));
         const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(c => c.name || c.clientName || c.fullName)
           .sort((a, b) => ((a.name || a.clientName || "")).localeCompare((b.name || b.clientName || "")));
@@ -654,7 +654,7 @@ const AddHouse = () => {
         };
 
         // 3. Save to Firestore
-        await setDoc(doc(db, "houses", houseId), finalData);
+        await setDoc(doc(db, "dev_houses", houseId), finalData);
 
         // 4. Clear saved draft on successful creation
         localStorage.removeItem(draftKey);

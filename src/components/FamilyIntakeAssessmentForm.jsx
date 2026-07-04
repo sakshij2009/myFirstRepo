@@ -516,9 +516,9 @@ const FamilyIntakeAssessmentForm = ({ user, onSubmitSuccess }) => {
         applicantEmail: user?.email || "",
         ...form,
       };
-      const docRef = await addDoc(collection(db, "familyIntakeForms"), payload);
+      const docRef = await addDoc(collection(db, "dev_familyIntakeForms"), payload);
       if (user?.id) {
-        await updateDoc(doc(db, "intakeUsers", user.id), {
+        await updateDoc(doc(db, "dev_intakeUsers", user.id), {
           familyIntakeFormId: docRef.id,
           familyIntakeStatus: "Submitted",
         });

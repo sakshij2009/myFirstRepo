@@ -25,7 +25,7 @@ export default function NoteworthyEventScreen() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const shiftRef = doc(db, "shifts", id);
+                const shiftRef = doc(db, "dev_shifts", id);
                 const shiftSnap = await getDoc(shiftRef);
 
                 if (shiftSnap.exists()) {
@@ -49,7 +49,7 @@ export default function NoteworthyEventScreen() {
     const handleSave = async (isSubmit = false) => {
         setSaving(true);
         try {
-            const shiftRef = doc(db, "shifts", id);
+            const shiftRef = doc(db, "dev_shifts", id);
             await setDoc(shiftRef, {
                 noteworthyIncidentReport: { ...form, status: isSubmit ? "submitted" : "draft" }
             }, { merge: true });

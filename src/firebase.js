@@ -36,4 +36,4 @@ auth.settings.appVerificationDisabledForTesting = false;
 export const COLLECTION_OLD_INTAKES = "InTakeForms";
 // NEW web app (IntakeForm.jsx / PrivateFamilyIntakeForm / Assessment)
 // Reverted: Using InTakeForms as the primary collection again.
-export const COLLECTION_NEW_INTAKES = "InTakeForms";
+export const COLLECTION_NEW_INTAKES = "dev_InTakeForms";

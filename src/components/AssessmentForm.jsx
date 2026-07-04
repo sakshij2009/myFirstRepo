@@ -252,7 +252,7 @@ const AssessmentForm = ({ user, assessmentId: existingAssessmentId, onSubmitSucc
       }
 
       if (user?.id) {
-        await updateDoc(doc(db, "intakeUsers", user.id), {
+        await updateDoc(doc(db, "dev_intakeUsers", user.id), {
           assessmentId: newAssessmentId,
         });
       }

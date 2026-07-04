@@ -32,7 +32,7 @@ export default function ShiftCalendar({ user }) {
     try {
       const db = getFirestore();
       // Fetching all shifts and filtering in JS to handle both primary and secondary assignments
-      const shiftsRef = collection(db, "shifts");
+      const shiftsRef = collection(db, "dev_shifts");
       const snap = await getDocs(shiftsRef);
 
       const data = snap.docs

@@ -73,10 +73,10 @@ export default function KPIStrip({ filter = "Weekly", dateRange }) {
         const { start, end, prevStart, prevEnd } = getRange(filter, dateRange);
 
         const [clientsSnap, usersSnap, shiftsSnap, revenueSnap] = await Promise.all([
-          getDocs(collection(db, "clients")),
-          getDocs(collection(db, "users")),
-          getDocs(collection(db, "shifts")),
-          getDocs(collection(db, "revenue")),
+          getDocs(collection(db, "dev_clients")),
+          getDocs(collection(db, "dev_users")),
+          getDocs(collection(db, "dev_shifts")),
+          getDocs(collection(db, "dev_revenue")),
         ]);
 
         const allShifts  = shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() }));

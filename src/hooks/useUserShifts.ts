@@ -197,7 +197,7 @@ export function useTodayShifts(userId: string | undefined) {
     const today = todayISO();
 
     const q = query(
-      collection(db, 'shifts'),
+      collection(db, 'dev_shifts'),
       where('userId', '==', userId)   // single field — no index required
     );
 
@@ -240,7 +240,7 @@ export function useUserShifts(userId: string | undefined) {
     }
 
     const q = query(
-      collection(db, 'shifts'),
+      collection(db, 'dev_shifts'),
       where('userId', '==', userId)
     );
 
@@ -278,7 +278,7 @@ export function useSingleShift(shiftDocId: string | undefined) {
     }
 
     const unsub = onSnapshot(
-      doc(db, 'shifts', shiftDocId),
+      doc(db, 'dev_shifts', shiftDocId),
       (snap) => {
         if (snap.exists()) {
           setShift({ docId: snap.id, ...snap.data() } as Shift);

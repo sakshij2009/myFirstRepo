@@ -80,8 +80,8 @@ export default function Routes() {
     };
 
     const qPrimary = userId
-      ? query(collection(db, "shifts"), where("userId", "==", userId), ...primaryConstraints)
-      : query(collection(db, "shifts"), ...primaryConstraints);
+      ? query(collection(db, "dev_shifts"), where("userId", "==", userId), ...primaryConstraints)
+      : query(collection(db, "dev_shifts"), ...primaryConstraints);
     const unsubPrimary = onSnapshot(qPrimary, (snap) => {
       primaryShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       primaryLoaded = true;
@@ -91,7 +91,7 @@ export default function Routes() {
     // Secondary query by custom userId
     let unsubSecondaryById = () => {};
     if (userId) {
-      const qSecondaryById = query(collection(db, "shifts"), where("secondaryUserId", "==", userId), ...secondaryConstraints);
+      const qSecondaryById = query(collection(db, "dev_shifts"), where("secondaryUserId", "==", userId), ...secondaryConstraints);
       unsubSecondaryById = onSnapshot(qSecondaryById, (snap) => {
         secondaryByIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         secondaryByIdLoaded = true;
@@ -104,7 +104,7 @@ export default function Routes() {
     // Secondary query by Firestore doc ID (username) — catches shifts where userId was empty at save time
     let unsubSecondaryByDocId = () => {};
     if (userDocId && userDocId !== userId) {
-      const qSecondaryByDocId = query(collection(db, "shifts"), where("secondaryUserId", "==", userDocId), ...secondaryConstraints);
+      const qSecondaryByDocId = query(collection(db, "dev_shifts"), where("secondaryUserId", "==", userDocId), ...secondaryConstraints);
       unsubSecondaryByDocId = onSnapshot(qSecondaryByDocId, (snap) => {
         secondaryByDocIdShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         secondaryByDocIdLoaded = true;
@@ -117,7 +117,7 @@ export default function Routes() {
     // Secondary fallback query by name
     let unsubSecondaryByName = () => {};
     if (userName) {
-      const qSecondaryByName = query(collection(db, "shifts"), where("secondaryUserName", "==", userName), ...secondaryConstraints);
+      const qSecondaryByName = query(collection(db, "dev_shifts"), where("secondaryUserName", "==", userName), ...secondaryConstraints);
       unsubSecondaryByName = onSnapshot(qSecondaryByName, (snap) => {
         secondaryByNameShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         secondaryByNameLoaded = true;

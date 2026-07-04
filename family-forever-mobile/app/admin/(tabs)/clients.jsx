@@ -35,9 +35,9 @@ export default function ClientsScreen() {
       setLoading(true);
 
       const [clientsSnap, intakeSnap, catSnap] = await Promise.all([
-        getDocs(collection(db, "clients")),
-        getDocs(collection(db, "InTakeForms")),
-        getDocs(collection(db, "shiftCategories")),
+        getDocs(collection(db, "dev_clients")),
+        getDocs(collection(db, "dev_InTakeForms")),
+        getDocs(collection(db, "dev_shiftCategories")),
       ]);
 
       const clientsList = clientsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
@@ -135,7 +135,7 @@ export default function ClientsScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, "clients", clientId));
+            await deleteDoc(doc(db, "dev_clients", clientId));
             setClients(prev => prev.filter(c => c.id !== clientId));
           } catch (e) {
             Alert.alert("Error", "Failed to delete client");
@@ -148,7 +148,7 @@ export default function ClientsScreen() {
   const handleToggleFileClosure = async (clientId, newValue) => {
     setClients(prev => prev.map(c => c.id === clientId ? { ...c, fileClosed: newValue } : c));
     try {
-      await updateDoc(doc(db, "clients", clientId), { fileClosed: newValue });
+      await updateDoc(doc(db, "dev_clients", clientId), { fileClosed: newValue });
     } catch (e) {
       Alert.alert("Error", "Failed to update file closure status");
       // Revert optimism if failed

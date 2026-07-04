@@ -98,7 +98,7 @@ const ServicePlanForm = ({ shiftId, shiftData, onCancel, step = "observations", 
         const loadData = async () => {
             if (!shiftId) return;
             try {
-                const shiftSnap = await getDoc(doc(db, "shifts", String(shiftId)));
+                const shiftSnap = await getDoc(doc(db, "dev_shifts", String(shiftId)));
                 if (shiftSnap.exists() && shiftSnap.data().servicePlan) {
                     const saved = shiftSnap.data().servicePlan;
                     setInitialValues((prev) => ({ ...prev, ...saved }));
@@ -115,7 +115,7 @@ const ServicePlanForm = ({ shiftId, shiftData, onCancel, step = "observations", 
         try {
             const payload = { ...values, submittedAt: serverTimestamp() };
             await setDoc(
-                doc(db, "shifts", String(shiftId)),
+                doc(db, "dev_shifts", String(shiftId)),
                 { [formType]: payload },
                 { merge: true }
             );
@@ -565,7 +565,7 @@ const ServicePointsTab = ({ shiftId, onBack, onNext }) => {
         if (!shiftId) return;
         const load = async () => {
             try {
-                const snap = await getDoc(doc(db, "shifts", String(shiftId)));
+                const snap = await getDoc(doc(db, "dev_shifts", String(shiftId)));
                 if (snap.exists() && snap.data().servicePoints) {
                     setValues((prev) => ({ ...prev, ...snap.data().servicePoints }));
                 }
@@ -584,7 +584,7 @@ const ServicePointsTab = ({ shiftId, onBack, onNext }) => {
         if (!shiftId) return;
         try {
             await setDoc(
-                doc(db, "shifts", String(shiftId)),
+                doc(db, "dev_shifts", String(shiftId)),
                 { servicePoints: { ...values, submittedAt: serverTimestamp() } },
                 { merge: true }
             );
@@ -707,7 +707,7 @@ const OverviewTab = ({ shiftId, onCancel, onBack }) => {
         if (!shiftId) return;
         const load = async () => {
             try {
-                const snap = await getDoc(doc(db, "shifts", String(shiftId)));
+                const snap = await getDoc(doc(db, "dev_shifts", String(shiftId)));
                 if (snap.exists() && snap.data().servicePlanOverview) {
                     setValues((prev) => ({ ...prev, ...snap.data().servicePlanOverview }));
                 }
@@ -726,7 +726,7 @@ const OverviewTab = ({ shiftId, onCancel, onBack }) => {
         if (!shiftId) return;
         try {
             await setDoc(
-                doc(db, "shifts", String(shiftId)),
+                doc(db, "dev_shifts", String(shiftId)),
                 { servicePlanOverview: { ...values, submittedAt: serverTimestamp() } },
                 { merge: true }
             );

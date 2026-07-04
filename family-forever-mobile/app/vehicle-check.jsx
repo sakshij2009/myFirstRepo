@@ -40,7 +40,7 @@ export default function VehicleCheck() {
   // Handles any string the admin might have stored ("office", "Office Vehicle", "Company Car", etc.)
   useEffect(() => {
     if (!shiftId) return;
-    getDoc(doc(db, "shifts", shiftId)).then((snap) => {
+    getDoc(doc(db, "dev_shifts", shiftId)).then((snap) => {
       if (snap.exists()) {
         const raw = snap.data()?.vehicleType;
         if (!raw) return;
@@ -96,7 +96,7 @@ export default function VehicleCheck() {
       }
 
       // 1. Log to vehicleChecks collection (audit trail)
-      await addDoc(collection(db, "vehicleChecks"), {
+      await addDoc(collection(db, "dev_vehicleChecks"), {
         shiftId: shiftId || null,
         vehicleType,
         meterStart: meterStart ? Number(meterStart) : null,
@@ -106,7 +106,7 @@ export default function VehicleCheck() {
 
       // 2. Also save photos + meter directly on the shift document so admin can see them
       if (shiftId) {
-        await updateDoc(doc(db, "shifts", shiftId), {
+        await updateDoc(doc(db, "dev_shifts", shiftId), {
           vehicleCheckPhotoUrls: photoUrls,
           vehicleCheckMeterStart: meterStart ? Number(meterStart) : null,
           vehicleCheckSubmittedAt: serverTimestamp(),

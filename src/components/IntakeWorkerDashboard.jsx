@@ -669,7 +669,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "shiftCategories"));
+        const snap = await getDocs(collection(db, "dev_shiftCategories"));
         const map = {};
         snap.forEach(d => { map[d.id] = d.data().name || d.data().categoryName || d.id; });
         setCategories(map);
@@ -717,13 +717,13 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     };
 
     const unsubOld = onSnapshot(
-      collection(db, "InTakeForms"),
+      collection(db, "dev_InTakeForms"),
       (snap) => { oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() })); oldLoaded = true; merge(); },
       (err) => { console.error("InTakeForms listener:", err); toast.error("Failed to load intake forms"); setLoading(false); }
     );
 
     const unsubNew = onSnapshot(
-      collection(db, "intakeForms"),
+      collection(db, "dev_intakeForms"),
       (snap) => { newAppForms = snap.docs.map(d => ({ id: d.id, _source: "new", ...d.data() })); newLoaded = true; merge(); },
       (err) => { console.error("intakeForms listener:", err); newLoaded = true; merge(); }
     );
@@ -737,7 +737,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
     if (!workerId && !workerName) return;
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "intakeUsers"));
+        const snap = await getDocs(collection(db, "dev_intakeUsers"));
         snap.forEach(d => {
           const data = d.data();
           if (
@@ -947,7 +947,7 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
         let rows = [];
         const tryField = async (field) => {
           try {
-            const q = query(collection(db, "ShiftReports"), where(field, "==", selectedShiftFormId), orderBy("createdAt", "desc"));
+            const q = query(collection(db, "dev_ShiftReports"), where(field, "==", selectedShiftFormId), orderBy("createdAt", "desc"));
             const snap = await getDocs(q);
             return snap.docs.map(d => ({ id: d.id, ...d.data() }));
           } catch { return []; }

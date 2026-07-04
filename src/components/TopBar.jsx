@@ -75,7 +75,7 @@ const TopBar = ({ user, onLogout, onAddNewClick, filter = "Weekly", setFilter, d
   // Unread notifications listener
   useEffect(() => {
     const q = query(
-      collection(db, "notifications", userDocId, "userNotifications"),
+      collection(db, "dev_notifications", userDocId, "userNotifications"),
       where("read", "==", false)
     );
     const unsub = onSnapshot(q, (snap) => setHasUnread(snap.docs.length > 0));

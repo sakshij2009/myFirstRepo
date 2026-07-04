@@ -34,7 +34,7 @@ const MedicationPage = ({ shiftData,user }) => {
       const clientId=shiftData?.clientId || shiftData?.clientDetails.id;
       if (!clientId) return;
       try {
-        const clientRef = doc(db, "clients", clientId);
+        const clientRef = doc(db, "dev_clients", clientId);
         const clientSnap = await getDoc(clientRef);
 
         if (clientSnap.exists()) {
@@ -63,7 +63,7 @@ const MedicationPage = ({ shiftData,user }) => {
     if (!targetName) return;
 
     try {
-      const snapshot = await getDocs(collection(db, "InTakeForms"));
+      const snapshot = await getDocs(collection(db, "dev_InTakeForms"));
       let found = null;
 
       snapshot.forEach((docSnap) => {
@@ -148,7 +148,7 @@ const MedicationPage = ({ shiftData,user }) => {
     const fetchMedications = async () => {
       if (!shiftData?.clientId) return;
       try {
-        const docRef = doc(db, "medicationRecords", shiftData.clientId);
+        const docRef = doc(db, "dev_medicationRecords", shiftData.clientId);
         const docSnap = await getDoc(docRef);
         const monthKey = `${currentDate.year}-${String(currentDate.month + 1).padStart(2, "0")}`;
         if (docSnap.exists()) {
@@ -275,7 +275,7 @@ const MedicationPage = ({ shiftData,user }) => {
         return;
       }
 
-      const docRef = doc(db, "medicationRecords", shiftData.clientId);
+      const docRef = doc(db, "dev_medicationRecords", shiftData.clientId);
       const docSnap = await getDoc(docRef);
 
       const monthKey = `${currentDate.year}-${String(

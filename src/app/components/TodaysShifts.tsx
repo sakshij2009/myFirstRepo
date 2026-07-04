@@ -42,7 +42,7 @@ function ShiftCard({ shift: seedShift }: { shift: Shift }) {
 
   const handleConfirmed = async () => {
     try {
-      await updateDoc(doc(db, 'shifts', shift.docId), { shiftConfirmed: true });
+      await updateDoc(doc(db, 'dev_shifts', shift.docId), { shiftConfirmed: true });
     } catch (e) {
       console.error('Failed to confirm shift:', e);
     }
@@ -190,7 +190,7 @@ function TransportationShiftCard({ shift: seedShift }: { shift: Shift }) {
 
   const handleConfirmed = async () => {
     try {
-      await updateDoc(doc(db, 'shifts', shift.docId), { shiftConfirmed: true });
+      await updateDoc(doc(db, 'dev_shifts', shift.docId), { shiftConfirmed: true });
     } catch (e) {
       console.error('Failed to confirm shift:', e);
     }

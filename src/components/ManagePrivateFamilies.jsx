@@ -35,9 +35,9 @@ const ManagePrivateFamilies = () => {
       setLoading(true);
       try {
         const [usersSnap, formsSnap, invitesSnap] = await Promise.all([
-          getDocs(collection(db, "intakeUsers")),
-          getDocs(collection(db, "InTakeForms")),
-          getDocs(collection(db, "parentInvites")),
+          getDocs(collection(db, "dev_intakeUsers")),
+          getDocs(collection(db, "dev_InTakeForms")),
+          getDocs(collection(db, "dev_parentInvites")),
         ]);
         
         // Filter users by role "parent"
@@ -89,7 +89,7 @@ const ManagePrivateFamilies = () => {
   const handleDeleteFamily = async (fam) => {
     if (!window.confirm(`Are you sure you want to delete "${fam.name}"?`)) return;
     try {
-      await updateDoc(doc(db, "intakeUsers", fam.id), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_intakeUsers", fam.id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setFamilies((prev) => prev.filter((f) => f.id !== fam.id));
     } catch (e) {
       console.error("Error deleting family:", e);
@@ -114,7 +114,7 @@ const ManagePrivateFamilies = () => {
 
     try {
       // Save per-parent settings to Firestore before sending invite
-      await addDoc(collection(db, "parentInvites"), {
+      await addDoc(collection(db, "dev_parentInvites"), {
         primaryEmail,
         primaryShowAssessmentLink: primaryShowAssessment,
         primaryShowIntakeFormLink: primaryShowIntakeForm,

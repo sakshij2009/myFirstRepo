@@ -64,8 +64,8 @@ export default function ServiceOverview({ filter = "Weekly", dateRange }) {
         const { start, end } = getRange(filter, dateRange);
 
         const [catSnap, shiftSnap] = await Promise.all([
-          getDocs(collection(db, "shiftCategories")),
-          getDocs(collection(db, "shifts")),
+          getDocs(collection(db, "dev_shiftCategories")),
+          getDocs(collection(db, "dev_shifts")),
         ]);
 
         // Filter out combined/admin categories

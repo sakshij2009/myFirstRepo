@@ -13,7 +13,7 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
     const fetchIntakeForms = async () => {
       if (!filteredShifts || filteredShifts.length === 0) return;
 
-      const snapshot = await getDocs(collection(db, "InTakeForms"));
+      const snapshot = await getDocs(collection(db, "dev_InTakeForms"));
       const forms = {};
 
       snapshot.forEach((doc) => {

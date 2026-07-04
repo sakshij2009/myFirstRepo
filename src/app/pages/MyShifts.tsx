@@ -151,7 +151,7 @@ function ShiftCard({ shift }: { shift: Shift }) {
   const location    = shift.address || '';
 
   const handleConfirmShift = async () => {
-    await updateDoc(doc(db, 'shifts', shift.docId), { shiftConfirmed: true });
+    await updateDoc(doc(db, 'dev_shifts', shift.docId), { shiftConfirmed: true });
   };
 
   return (

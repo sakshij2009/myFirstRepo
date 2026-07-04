@@ -49,8 +49,8 @@ export default function GSTReportingPage() {
       setLoading(true);
       try {
         const [revSnap, expSnap] = await Promise.all([
-          getDocs(collection(db, "revenue")),
-          getDocs(collection(db, "expenses")),
+          getDocs(collection(db, "dev_revenue")),
+          getDocs(collection(db, "dev_expenses")),
         ]);
 
         const revByMonth = {};

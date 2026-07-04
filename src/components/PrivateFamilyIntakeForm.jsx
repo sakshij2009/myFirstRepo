@@ -463,12 +463,12 @@ const PrivateFamilyIntakeForm = ({ user, onSubmitSuccess }) => {
       setLoading(true);
       try {
         // 1. Determine if current user is Party A or B
-        const qInv = query(collection(db, "parentInvites"), where("primaryEmail", "==", user?.email?.toLowerCase()));
+        const qInv = query(collection(db, "dev_parentInvites"), where("primaryEmail", "==", user?.email?.toLowerCase()));
         const snapInv = await getDocs(qInv);
         
         let targetParty = "A";
         if (snapInv.empty) {
-           const qInv2 = query(collection(db, "parentInvites"), where("secondParentEmail", "==", user?.email?.toLowerCase()));
+           const qInv2 = query(collection(db, "dev_parentInvites"), where("secondParentEmail", "==", user?.email?.toLowerCase()));
            const snapInv2 = await getDocs(qInv2);
            if (!snapInv2.empty) targetParty = "B";
         }

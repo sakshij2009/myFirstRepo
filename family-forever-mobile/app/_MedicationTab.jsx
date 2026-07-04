@@ -47,7 +47,7 @@ export default function MedicationTab({ shift }) {
     const fetchClientMedicationData = async () => {
       if (!clientId) return;
       try {
-        const clientRef = doc(db, "clients", clientId);
+        const clientRef = doc(db, "dev_clients", clientId);
         const clientSnap = await getDoc(clientRef);
 
         if (clientSnap.exists()) {
@@ -72,7 +72,7 @@ export default function MedicationTab({ shift }) {
       if (!targetName) return;
 
       try {
-        const collections = ["InTakeForms", "clients"];
+        const collections = ["dev_InTakeForms", "dev_clients"];
         let found = null;
 
         for (const collName of collections) {
@@ -158,7 +158,7 @@ export default function MedicationTab({ shift }) {
     const fetchMedications = async () => {
       if (!clientId) return;
       try {
-        const docRef = doc(db, "medicationRecords", clientId);
+        const docRef = doc(db, "dev_medicationRecords", clientId);
         const docSnap = await getDoc(docRef);
 
         const monthKey = `${currentDate.year}-${String(
@@ -277,7 +277,7 @@ export default function MedicationTab({ shift }) {
         return;
       }
 
-      const docRef = doc(db, "medicationRecords", clientId);
+      const docRef = doc(db, "dev_medicationRecords", clientId);
       const docSnap = await getDoc(docRef);
 
       const monthKey = `${currentDate.year}-${String(

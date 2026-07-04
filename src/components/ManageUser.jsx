@@ -242,7 +242,7 @@ const ManageUser = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const snap = await getDocs(collection(db, "users"));
+        const snap = await getDocs(collection(db, "dev_users"));
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((u) => {
@@ -269,7 +269,7 @@ const ManageUser = () => {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("Are you sure you want to delete this user?")) return;
     try {
-      await updateDoc(doc(db, "users", userId), { isDeleted: true, deletedAt: new Date().toISOString() });
+      await updateDoc(doc(db, "dev_users", userId), { isDeleted: true, deletedAt: new Date().toISOString() });
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (e) {
       console.error("Error deleting user:", e);
@@ -279,7 +279,7 @@ const ManageUser = () => {
   const handleSuspendToggle = async (userId, currentStatus) => {
     try {
       const newStatus = !currentStatus;
-      await updateDoc(doc(db, "users", userId), { isSuspended: newStatus });
+      await updateDoc(doc(db, "dev_users", userId), { isSuspended: newStatus });
       setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, isSuspended: newStatus } : u));
     } catch (e) {
       console.error("Error updating suspension:", e);

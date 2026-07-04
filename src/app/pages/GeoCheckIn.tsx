@@ -39,7 +39,7 @@ export function GeoCheckIn() {
     // admin dashboard uses for payroll & hours calculation.
     if (shiftDocId) {
       try {
-        await updateDoc(doc(db, 'shifts', shiftDocId), {
+        await updateDoc(doc(db, 'dev_shifts', shiftDocId), {
           clockIn: serverTimestamp(),
           shiftConfirmed: true,
         });

@@ -41,7 +41,7 @@ const  FollowThroughForm = ({ clientData = {},shiftId, onCancel, onSuccess }) =>
       };
   
       // find the existing shift document reference
-      const shiftRef = doc(db, "shifts", shiftId);
+      const shiftRef = doc(db, "dev_shifts", shiftId);
   
       // update that document, attach the form data as a nested object
       await updateDoc(shiftRef, {

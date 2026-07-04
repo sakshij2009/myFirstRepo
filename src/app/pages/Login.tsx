@@ -57,7 +57,7 @@ export function Login() {
       // Query users collection by email + password (same pattern as admin app)
       const snap = await getDocs(
         query(
-          collection(db, 'users'),
+          collection(db, 'dev_users'),
           where('email', '==', email.trim().toLowerCase()),
           where('password', '==', password)
         )

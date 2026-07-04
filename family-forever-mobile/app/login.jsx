@@ -138,7 +138,7 @@ export default function Login() {
     setLoading(true);
     try {
       const q = query(
-        collection(db, "users"),
+        collection(db, "dev_users"),
         where("email", "==", email.trim().toLowerCase()),
         where("password", "==", password)
       );

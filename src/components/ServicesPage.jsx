@@ -115,7 +115,7 @@ const ServicesPage = ({ filter = "Weekly", dateRange }) => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "houses"));
+        const querySnapshot = await getDocs(collection(db, "dev_houses"));
         const newStats = {
           "family-treatment": { houses: 0 },
           "pdd": { houses: 0 },

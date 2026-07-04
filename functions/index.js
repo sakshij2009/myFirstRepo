@@ -391,7 +391,7 @@ exports.autoClockOut = onSchedule(
     // excludes documents where the field doesn't exist, so brand-new shifts would
     // never be found. Filter everything in JS instead.
     const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-    const snapshot = await db.collection("shifts")
+    const snapshot = await db.collection("dev_shifts")
       .where("clockIn", ">=", twoDaysAgo)
       .get();
 
@@ -451,7 +451,7 @@ exports.sendLoginOTP = onCall(
     const db = getFirestore();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    await db.collection("otpCodes").doc(email.toLowerCase().trim()).set({
+    await db.collection("dev_otpCodes").doc(email.toLowerCase().trim()).set({
       code,
       expiresAt,
       attempts: 0,
@@ -518,7 +518,7 @@ exports.verifyLoginOTP = onCall(async (request) => {
   }
 
   const db = getFirestore();
-  const docRef = db.collection("otpCodes").doc(email.toLowerCase().trim());
+  const docRef = db.collection("dev_otpCodes").doc(email.toLowerCase().trim());
   const snap = await docRef.get();
 
   if (!snap.exists) {

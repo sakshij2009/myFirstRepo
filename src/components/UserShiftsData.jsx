@@ -57,7 +57,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
       try {
         // Fetch all users. If you want only caregivers or same-company staff,
         // change the query accordingly (e.g., where("role","==","caregiver"))
-        const usersRef = collection(db, "users");
+        const usersRef = collection(db, "dev_users");
         const q = query(usersRef); // no filter by default
         const snap = await getDocs(q);
         const staff = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -93,7 +93,7 @@ const UserShiftsData = ({ user, userShifts = [] }) => {
   // Confirm shift (existing logic)
   const handleConfirm = async (shiftId) => {
     try {
-      const shiftRef = doc(db, "shifts", shiftId);
+      const shiftRef = doc(db, "dev_shifts", shiftId);
       await updateDoc(shiftRef, { shiftConfirmed: true });
       setLocalConfirmed((prev) => ({ ...prev, [shiftId]: true }));
       console.log(`✅ Shift ${shiftId} confirmed successfully`);
@@ -132,7 +132,7 @@ const handleTransferShift = async () => {
     }
 
     // 1️⃣ Create transfer request
-    const transferRef = await addDoc(collection(db, "transferRequests"), {
+    const transferRef = await addDoc(collection(db, "dev_transferRequests"), {
       shiftId: selectedShift.id,
       fromUserId: user.userId,
       fromUserName: user.name,
@@ -157,12 +157,15 @@ const handleTransferShift = async () => {
         transferId,
         shiftId: selectedShift.id,
         fromUserId: user.userId,
+        fromUserName: user.name,
+        toUserId: selectedStaff.id,
+        toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
       },
     });
 
     // 3️⃣ Notify ADMIN (FYI)
     const adminSnap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "admin"))
+      query(collection(db, "dev_users"), where("role", "==", "admin"))
     );
 
     if (!adminSnap.empty) {
@@ -195,7 +198,7 @@ const handleTransferShift = async () => {
 
   const handleConfirmShift = async (shiftId) => {
   try {
-    await updateDoc(doc(db, "shifts", shiftId), {
+    await updateDoc(doc(db, "dev_shifts", shiftId), {
       shiftConfirmed: true,
     });
   } catch (error) {

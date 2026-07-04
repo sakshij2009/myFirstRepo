@@ -116,7 +116,7 @@ const AddUserForm = ({ mode = "add", user }) => {
     const fetchUser = async () => {
       if (mode === "update" && id) {
         try {
-          const usersRef = collection(db, "users");
+          const usersRef = collection(db, "dev_users");
           const q = query(usersRef, where("userId", "==", id));
           const querySnapshot = await getDocs(q);
 
@@ -129,7 +129,7 @@ const AddUserForm = ({ mode = "add", user }) => {
            let lastShiftDate = "";
 
           try {
-            const shiftsRef = collection(db, "shifts");
+            const shiftsRef = collection(db, "dev_shifts");
 
             // no orderBy => no index
             const shiftsQ = query(
@@ -279,13 +279,13 @@ const AddUserForm = ({ mode = "add", user }) => {
       const submissionData = { ...values, name: fullName };
 
       if (mode === "update") {
-        const q = query(collection(db, "users"), where("userId", "==", id));
+        const q = query(collection(db, "dev_users"), where("userId", "==", id));
         const snap = await getDocs(q);
 
         if (!snap.empty) {
           const userDoc = snap.docs[0].id;
 
-          await updateDoc(doc(db, "users", userDoc), {
+          await updateDoc(doc(db, "dev_users", userDoc), {
             ...submissionData,
             profilePhotoUrl: photoURL,
             updatedAt: new Date(),
@@ -301,7 +301,7 @@ const AddUserForm = ({ mode = "add", user }) => {
           setCreatedUser(submissionData);
         }
       } else {
-        await setDoc(doc(db, "users", values.username), {
+        await setDoc(doc(db, "dev_users", values.username), {
           ...submissionData,
           profilePhotoUrl: photoURL,
           createdAt: new Date(),
@@ -321,7 +321,7 @@ const AddUserForm = ({ mode = "add", user }) => {
       }
 
       // Fetch admins (unchanged)
-      const q = query(collection(db, "users"), where("role", "==", "admin"));
+      const q = query(collection(db, "dev_users"), where("role", "==", "admin"));
       const adminsSnapshot = await getDocs(q);
       const admins = adminsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
@@ -462,7 +462,7 @@ const AddUserForm = ({ mode = "add", user }) => {
                     <ErrorMessage name="driverLicenseExpiry" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID (CYIM ID)</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID</label>
                     <Field name="userId" placeholder="Please enter a specific ID" className={inputCls(touched.userId && errors.userId)} />
                     <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
                   </div>

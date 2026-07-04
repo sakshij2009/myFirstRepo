@@ -29,7 +29,7 @@ export function GeoCheckOut() {
   const handleConfirm = useCallback(async () => {
     if (shiftDocId) {
       try {
-        await updateDoc(doc(db, 'shifts', shiftDocId), { clockOut: serverTimestamp() });
+        await updateDoc(doc(db, 'dev_shifts', shiftDocId), { clockOut: serverTimestamp() });
       } catch (e) {
         console.error('Clock-out write failed:', e);
       }
