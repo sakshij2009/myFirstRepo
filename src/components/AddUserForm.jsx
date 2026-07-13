@@ -555,6 +555,8 @@ const AddUserForm = ({ mode = "add", user }) => {
                       <option value="director">Director</option>
                       <option value="manager">Manager</option>
                       <option value="team lead">Team Lead</option>
+                      <option value="payroll">Payroll</option>
+                      <option value="hr">HR</option>
                     </Field>
                     <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none"><FaChevronDown className="text-gray-400 w-3.5 h-3.5" /></span>
                     <ErrorMessage name="role" component="div" className="text-red-500 text-xs mt-1" />

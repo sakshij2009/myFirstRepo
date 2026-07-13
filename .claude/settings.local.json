@@ -113,7 +113,22 @@
       "Bash(npx --yes @babel/parser --help)",
       "Bash(node inspect-pielak-shifts.cjs)",
       "Bash(node fix-pielak-transfer.cjs)",
-      "Bash(node --check src/components/Payroll.jsx)"
+      "Bash(node --check src/components/Payroll.jsx)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(node -e \"console.log\\(require\\('C:/Users/Sakshi Jamwal/Desktop/startup/FFAdmin-uat/package.json'\\).dependencies['firebase-admin'] || 'not in root deps'\\)\")",
+      "Bash(node -e \"console.log\\(require\\('C:/Users/Sakshi Jamwal/Desktop/startup/FFAdmin-uat/functions/package.json'\\).dependencies['firebase-admin'] || 'not in functions deps'\\)\")",
+      "Bash(git check-ignore *)",
+      "Bash(ls -la .env*)",
+      "Bash(node \"C:\\\\Users\\\\SAKSHI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Sakshi-Jamwal-Desktop-startup-FFAdmin-uat\\\\9274fa7c-dcee-47a4-955e-da412600ece7\\\\scratchpad\\\\find_latest_intake.js\")",
+      "Bash(node _tmp-find-latest-intake.cjs)",
+      "Bash(node -e \"console.log\\(require\\('firebase-admin/package.json'\\).version\\)\")",
+      "Bash(node -e \"const a=require\\('firebase-admin'\\); console.log\\(Object.keys\\(a\\)\\)\")",
+      "Bash(node _tmp-copy-intake.cjs)",
+      "Bash(git worktree *)",
+      "Bash(curl -s \"https://router.project-osrm.org/route/v1/driving/-113.5228,53.5764;-114.0453,51.0632?overview=false\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\('Office\\(Edmonton 124 St approx\\) -> Edmonton Trail Calgary approx:', \\(j.routes[0].distance/1000\\).toFixed\\(1\\), 'km'\\);}catch\\(e\\){console.log\\('raw:',d.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(curl -s \"https://router.project-osrm.org/route/v1/driving/-113.5360992,53.5415527;-114.0538978,51.0825558;-114.0735897,50.9979719;-113.5360992,53.5415527?overview=false\")"
     ]
   }
 }

@@ -196,7 +196,12 @@ function OwnerLoginScreen({ onBack, setUser }) {
       await verifyLoginOTP({ email, code });
       localStorage.setItem("user", JSON.stringify(pendingUser));
       setUser(pendingUser);
-      navigate(pendingUser.role === "admin" ? "/admin-dashboard" : "/user-dashboard");
+      const roleRoutes = {
+        admin: "/admin-dashboard",
+        payroll: "/payroll-dashboard",
+        hr: "/hr-dashboard",
+      };
+      navigate(roleRoutes[pendingUser.role] || "/user-dashboard");
     } catch (err) {
       const msg = err?.message || "";
       if (msg.includes("expired")) setOtpError("Code has expired. Please request a new one.");

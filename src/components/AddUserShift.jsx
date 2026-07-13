@@ -290,12 +290,23 @@ const AddUserShift = ({ mode = "add", user }) => {
         const result = await calculateTotalDistance(valid[0]);
         setScheduledKm(result?.totalKm || 0);
       } else {
-        // Build one continuous route: OFFICE → client1 pickup → client1 drop → client2 pickup → client2 drop → ... → OFFICE
+        // Build one continuous route: OFFICE → pickup → drop → ... → OFFICE.
+        // Multiple family members sharing the same pickup/drop stop (the normal case —
+        // one staff member picks up and drops off all siblings together) must only be
+        // visited once each, otherwise the route re-drives the same leg per child and
+        // the distance gets doubled (or worse) for no real-world reason.
         const waypoints = [OFFICE_ADDRESS];
+        const seen = new Set([OFFICE_ADDRESS.trim().toLowerCase()]);
+        const pushUnique = (addr) => {
+          const key = (addr || "").trim().toLowerCase();
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          waypoints.push(addr);
+        };
         valid.forEach((p) => {
-          waypoints.push(p.pickupLocation);
-          if (p.visitLocation) waypoints.push(p.visitLocation);
-          waypoints.push(p.dropLocation);
+          pushUnique(p.pickupLocation);
+          if (p.visitLocation) pushUnique(p.visitLocation);
+          pushUnique(p.dropLocation);
         });
         waypoints.push(OFFICE_ADDRESS);
         const result = await calculateRouteDistance(waypoints);
@@ -1040,11 +1051,13 @@ const AddUserShift = ({ mode = "add", user }) => {
         });
 
 
-        // PRIORITIZE Intake points if we found any, otherwise fallback to local client db points
-        if (intakePoints.length > 0) {
-          setShiftPoints(intakePoints);
-        } else if (pointsFound.length > 0) {
+        // PRIORITIZE the client's own shiftPoints (accurate, tied to this exact client)
+        // over the intake-form fuzzy name search, which only exists as a fallback for
+        // legacy clients that don't have shiftPoints stored directly on their record.
+        if (pointsFound.length > 0) {
           setShiftPoints(pointsFound);
+        } else if (intakePoints.length > 0) {
+          setShiftPoints(intakePoints);
         } else {
           setShiftPoints([]);
         }

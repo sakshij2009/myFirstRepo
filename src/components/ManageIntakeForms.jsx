@@ -311,6 +311,7 @@ export default function ManageIntakeForms() {
             submittedAt: data.submittedOn || data.createDate || data.createdAt || data.dateOfInTake || data.submittedAt || "—",
             isEditable: data.isEditable !== false,
             filledBy: data.filledBy || data.inTakeWorkerName || data.parentName || data.staffName || "—",
+            isDeleted: !!data.isDeleted,
             _source: sourceLabel,
           };
         };
@@ -361,7 +362,7 @@ export default function ManageIntakeForms() {
     if (!window.confirm("Are you sure you want to delete this form?")) return;
     try {
       const form = forms.find(f => f.id === id);
-      const col = form?._source === "new" ? "intakeForms" : "InTakeForms";
+      const col = form?._source === "new" ? "dev_intakeForms" : "dev_InTakeForms";
       await updateDoc(doc(db, col, id), { isDeleted: true, deletedAt: new Date().toISOString() });
       setForms((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
@@ -372,7 +373,7 @@ export default function ManageIntakeForms() {
   const handleToggleEdit = async (form) => {
     const newState = !form.isEditable;
     try {
-      const col = form._source === "new" ? "intakeForms" : "InTakeForms";
+      const col = form._source === "new" ? "dev_intakeForms" : "dev_InTakeForms";
       await updateDoc(doc(db, col, form.id), { isEditable: newState });
       setForms((prev) => prev.map((f) => (f.id === form.id ? { ...f, isEditable: newState } : f)));
     } catch (e) {

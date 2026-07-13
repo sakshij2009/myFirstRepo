@@ -10,7 +10,7 @@ initializeApp();
 
 const sendgridApiKey = defineSecret("SENDGRID_API_KEY");
 
-const APP_URL = "https://ffadmin-prod.web.app";
+const APP_URL = "https://ffadmin-uat.web.app";
 const AUTH_ACTION_URL = `${APP_URL}/auth/action`;
 const INTAKE_LOGIN_URL = `${APP_URL}/intake-form/login`;
 const FROM_EMAIL = "intakes@familyforever.ca";

@@ -32,8 +32,5 @@ if (import.meta.env.DEV) {
 auth.settings.appVerificationDisabledForTesting = false;
 
 // ── Firestore Collection Names ─────────────────────────────────
-// OLD web app (legacy structure) → keeps old InTakeForms data
-export const COLLECTION_OLD_INTAKES = "InTakeForms";
 // NEW web app (IntakeForm.jsx / PrivateFamilyIntakeForm / Assessment)
-// Reverted: Using InTakeForms as the primary collection again.
 export const COLLECTION_NEW_INTAKES = "dev_InTakeForms";

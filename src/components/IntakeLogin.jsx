@@ -93,7 +93,7 @@ const IntakeLogin = () => {
             const q = fbQuery(collection(db, "dev_intakeUsers"), where("email", "==", emailForSignIn.trim().toLowerCase()));
             const snap = await getDocs(q);
             if (!snap.empty) {
-              await updateDoc(fbDoc(db, "intakeUsers", snap.docs[0].id), { verified: true });
+              await updateDoc(fbDoc(db, "dev_intakeUsers", snap.docs[0].id), { verified: true });
               const userData = { id: snap.docs[0].id, ...snap.docs[0].data(), verified: true };
               localStorage.setItem("intakeUser", JSON.stringify(userData));
               localStorage.setItem("user", JSON.stringify(userData));
@@ -201,7 +201,7 @@ const IntakeLogin = () => {
       const { collection: fbCollection, query: fbQuery, where, getDocs, addDoc, orderBy, limit } = await import("firebase/firestore");
 
       // Check if email already exists
-      const q = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", email.trim().toLowerCase()));
+      const q = fbQuery(fbCollection(db, "dev_intakeUsers"), where("email", "==", email.trim().toLowerCase()));
       const snap = await getDocs(q);
 
       if (!snap.empty) {
@@ -217,7 +217,7 @@ const IntakeLogin = () => {
       if (role === "Parent" || role.toLowerCase() === "parent") {
         const userEmail = email.trim().toLowerCase();
         // Check if they are primary email
-        let invQ = fbQuery(fbCollection(db, "parentInvites"), where("primaryEmail", "==", userEmail));
+        let invQ = fbQuery(fbCollection(db, "dev_parentInvites"), where("primaryEmail", "==", userEmail));
         let invSnap = await getDocs(invQ);
 
         if (!invSnap.empty) {
@@ -226,7 +226,7 @@ const IntakeLogin = () => {
           showIntakeFormLink = !!latestInvite.primaryShowIntakeFormLink;
         } else {
           // Check if they are secondary email
-          const secondQ = fbQuery(fbCollection(db, "parentInvites"), where("secondParentEmail", "==", userEmail));
+          const secondQ = fbQuery(fbCollection(db, "dev_parentInvites"), where("secondParentEmail", "==", userEmail));
           const secondSnap = await getDocs(secondQ);
 
           if (!secondSnap.empty) {
@@ -236,7 +236,7 @@ const IntakeLogin = () => {
 
             // Link to primary parent if they exist
             if (latestInvite.primaryEmail) {
-              const pQuery = fbQuery(fbCollection(db, "intakeUsers"), where("email", "==", latestInvite.primaryEmail));
+              const pQuery = fbQuery(fbCollection(db, "dev_intakeUsers"), where("email", "==", latestInvite.primaryEmail));
               const pSnap = await getDocs(pQuery);
               if (!pSnap.empty) {
                 linkedParentId = pSnap.docs[0].id;
@@ -262,7 +262,7 @@ const IntakeLogin = () => {
         verified: false,
         createdAt: new Date(),
       };
-      await addDoc(fbCollection(db, "intakeUsers"), newUser);
+      await addDoc(fbCollection(db, "dev_intakeUsers"), newUser);
 
       setMessage("Account created successfully! Click \"Sign In\" below to access your dashboard.");
     } catch (err) {

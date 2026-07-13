@@ -10,6 +10,8 @@ import IntakeLogin from "./components/IntakeLogin";
 import UserHomePage from "./components/UserHomePage";
 import MigrateIntakeForms from "./components/MigrateIntakeForms";
 import AuthActionHandler from "./components/AuthActionHandler";
+import PayrollHomePage from "./components/PayrollHomePage";
+import HRHomePage from "./components/HRHomePage";
 
 // ✅ Protected Route – Main App Only (Admin + User)
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -77,6 +79,26 @@ function App() {
           element={
             <ProtectedRoute allowedRoles={["user"]}>
               <UserHomePage user={user} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 🌐 Payroll Dashboard */}
+        <Route
+          path="/payroll-dashboard/*"
+          element={
+            <ProtectedRoute allowedRoles={["payroll"]}>
+              <PayrollHomePage user={user} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 🌐 HR Dashboard */}
+        <Route
+          path="/hr-dashboard/*"
+          element={
+            <ProtectedRoute allowedRoles={["hr"]}>
+              <HRHomePage user={user} />
             </ProtectedRoute>
           }
         />
