@@ -93,9 +93,9 @@ export default function ReportWritingScreen() {
   };
 
   const staff = {
-    name: shift?.name || 'Benjamin Harris',
+    name: shift?.userName || shift?.name || 'Benjamin Harris',
     id: shift?.userId || '987654321',
-    avatar: shift?.name ? shift.name.substring(0, 2).toUpperCase() : 'BH',
+    avatar: shift?.userName || shift?.name ? (shift.userName || shift.name).substring(0, 2).toUpperCase() : 'BH',
   };
 
   const calculateHours = (inTime, outTime) => {

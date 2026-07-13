@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   DollarSign, Users, Clock, ChevronDown, ChevronLeft, ChevronRight,
   Search, CheckCircle2, ChevronsUpDown, Play, Lock, Unlock,
@@ -33,26 +34,40 @@ function getInitials(name = "") {
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-function fmtShiftDate(val) {
-  if (!val) return "—";
-  // Firestore Timestamp — use local date
+// Extracts {year, month, day} directly from the shift-date fields Firestore stores
+// (dateKey "DD-MM-YYYY", startDate "DD Mon YYYY", or a Timestamp), without routing
+// through Date() timezone conversion — that conversion is what shifted the displayed
+// day away from the actual shift date.
+function extractDateParts(val) {
+  if (!val) return null;
   if (typeof val?.toDate === "function") {
     const d = val.toDate();
-    return `${SHORT_MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}`;
+    return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
   }
   if (typeof val === "string") {
-    // Plain date string "YYYY-MM-DD" — parse as local to avoid UTC offset shift
-    const plain = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (plain) {
-      const month = parseInt(plain[2], 10) - 1;
-      const day = parseInt(plain[3], 10);
-      return `${SHORT_MONTHS[month]} ${String(day).padStart(2, "0")}`;
+    // dateKey field: "DD-MM-YYYY"
+    let m = val.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (m) return { year: parseInt(m[3], 10), month: parseInt(m[2], 10) - 1, day: parseInt(m[1], 10) };
+    // dateKey_iso / plain date field: "YYYY-MM-DD"
+    m = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return { year: parseInt(m[1], 10), month: parseInt(m[2], 10) - 1, day: parseInt(m[3], 10) };
+    // startDate field: "DD Mon YYYY" (e.g. "04 Jan 2025")
+    m = val.match(/^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\s+(\d{4})$/);
+    if (m) {
+      const monthIdx = SHORT_MONTHS.findIndex((mo) => mo.toLowerCase() === m[2].slice(0, 3).toLowerCase());
+      if (monthIdx >= 0) return { year: parseInt(m[3], 10), month: monthIdx, day: parseInt(m[1], 10) };
     }
-    // ISO UTC string — display UTC date
+    // ISO UTC instant (e.g. clockIn saved as ISO string) — use UTC digits as-is
     const d = new Date(val);
-    if (!isNaN(d)) return `${SHORT_MONTHS[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, "0")}`;
+    if (!isNaN(d)) return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
   }
-  return "—";
+  return null;
+}
+
+function fmtShiftDate(val) {
+  const p = extractDateParts(val);
+  if (!p) return "—";
+  return `${SHORT_MONTHS[p.month]} ${String(p.day).padStart(2, "0")}`;
 }
 
 // Returns true for Firestore Timestamps and ISO UTC strings
@@ -83,13 +98,9 @@ function formatTime(val) {
 }
 
 function formatDateFull(val) {
-  if (!val) return "—";
-  const d = val?.toDate ? val.toDate() : new Date(val);
-  if (isNaN(d)) return "—";
-  const day = d.getUTCDate().toString().padStart(2, "0");
-  const month = SHORT_MONTHS[d.getUTCMonth()];
-  const year = d.getUTCFullYear();
-  return `${day} ${month} ${year}`;
+  const p = extractDateParts(val);
+  if (!p) return "—";
+  return `${String(p.day).padStart(2, "0")} ${SHORT_MONTHS[p.month]} ${p.year}`;
 }
 
 // Round hours to nearest quarter: 0.25, 0.50, 0.75, 1.00, etc.
@@ -206,6 +217,7 @@ function KPIItem({ icon, label, value, valueColor }) {
 
 // ── Staff row ─────────────────────────────────────────────────────────────────
 function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onApprove, onExport }) {
+  const navigate = useNavigate();
   const { bg, text } = getAvatarColor(rec.name);
   const isPending  = rec.status === "Pending";
   const isPaid     = rec.status === "Paid";
@@ -363,13 +375,22 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
 
                   return (
                     <tr key={shift.id || idx} style={{ backgroundColor: rowBg, color: rowColor, borderBottom: "1px solid #f3f4f6" }}>
-                      {/* DATE — actual clock-in date (matches the Clock In column) */}
+                      {/* DATE — scheduled shift date (dateKey/startDate), not clock-in timestamp, which can differ if filed late */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", fontWeight: 500, whiteSpace: "nowrap" }}>
-                        {fmtShiftDate(shift.clockIn)}
+                        {fmtShiftDate(shift.dateKey || shift.startDate || shift.clockIn)}
                       </td>
-                      {/* CLIENT */}
+                      {/* CLIENT — click through to this shift's Client Report */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", maxWidth: 140 }}>
-                        <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span
+                          onClick={() => shift.id && navigate(`/admin-dashboard/shift-report/${shift.id}`)}
+                          style={{
+                            display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            cursor: shift.id ? "pointer" : "default",
+                            color: shift.id ? "#2563eb" : "#374151",
+                            fontWeight: shift.id ? 600 : 400,
+                          }}
+                          title={shift.id ? "View client report" : undefined}
+                        >
                           {shift.clientName || shift.client || shift.customerName || "—"}
                         </span>
                       </td>
@@ -397,7 +418,7 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", whiteSpace: "nowrap" }}>
                         {(shift.clockIn || shift.clockInTime) ? (
                           <span>
-                            <span style={{ fontWeight: 500 }}>{formatDateFull(shift.clockIn)}</span>
+                            <span style={{ fontWeight: 500 }}>{formatDateFull(shift.dateKey || shift.startDate || shift.clockIn)}</span>
                             <span style={{ marginLeft: 8 }}>
                               {formatTime(shift.clockInTime || shift.clockIn)} - {formatTime(shift.clockOutTime || shift.clockOut) || "—"}
                             </span>
@@ -500,7 +521,11 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function Payroll() {
   const today = new Date();
-  const [monthOffset, setMonthOffset] = useState(0);
+  // Persist the selected month across navigation (e.g. drilling into a shift report and coming back)
+  const [monthOffset, setMonthOffset] = useState(() => {
+    const saved = sessionStorage.getItem("payroll_monthOffset");
+    return saved !== null ? parseInt(saved, 10) : 0;
+  });
   const [users, setUsers] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -521,6 +546,10 @@ export default function Payroll() {
   const viewMonth = viewDate.getMonth();
   const viewYear = viewDate.getFullYear();
   const monthLabel = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+
+  useEffect(() => {
+    sessionStorage.setItem("payroll_monthOffset", String(monthOffset));
+  }, [monthOffset]);
 
   useEffect(() => {
     const h = (e) => {
@@ -553,21 +582,19 @@ export default function Payroll() {
   // Build payroll records
   const payrollRecords = useMemo(() => {
     return users.map((user, idx) => {
-      // 1. Filter shifts by user AND selected month — use startDate (the scheduled shift start)
+      // 1. Filter shifts by user AND selected month — use dateKey/startDate (the scheduled shift date)
       const userShifts = shifts.filter((s) => {
         const isUserShift = s.userId === user.id || s.assignedUser === user.name || s.name === user.name || s.staffName === user.name;
         if (!isUserShift) return false;
 
-        const sDateValue = s.startDate;
-        if (!sDateValue) return false;
-
-        const d = sDateValue.toDate ? sDateValue.toDate() : new Date(sDateValue);
-        return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
+        const parts = extractDateParts(s.dateKey || s.startDate);
+        if (!parts) return false;
+        return parts.month === viewMonth && parts.year === viewYear;
       }).sort((a, b) => {
-        const da = a.clockIn;
-        const dbb = b.clockIn;
-        const va = da?.toDate ? da.toDate().getTime() : new Date(da).getTime();
-        const vb = dbb?.toDate ? dbb.toDate().getTime() : new Date(dbb).getTime();
+        const pa = extractDateParts(a.dateKey || a.startDate || a.clockIn);
+        const pb = extractDateParts(b.dateKey || b.startDate || b.clockIn);
+        const va = pa ? new Date(pa.year, pa.month, pa.day).getTime() : 0;
+        const vb = pb ? new Date(pb.year, pb.month, pb.day).getTime() : 0;
         return va - vb;
       });
 
@@ -681,7 +708,7 @@ export default function Payroll() {
     const headers = ["DATE", "CLIENT", "SERVICE TYPE", "CLOCK IN - CLOCK OUT", "HRS", "KMS", "KM COST", "EXP.", "TYPE", "RATE", "AMOUNT", "SHIFT STATUS"];
     
     const rows = rec.userShifts.map((shift) => {
-      const dateStr = fmtShiftDate(shift.clockIn) || "—";
+      const dateStr = fmtShiftDate(shift.dateKey || shift.startDate || shift.clockIn) || "—";
       const client = `"${shift.clientName || shift.client || ""}"`;
       const serviceType = `"${shift.categoryName || shift.serviceType || shift.category || shift.shiftType || ""}"`;
 

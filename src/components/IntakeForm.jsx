@@ -642,7 +642,8 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const intakeFormId = propId || paramId;
   // type can be "Intake Worker", "intake worker", "intake-worker", etc. — normalize for comparison
   const urlCaseWorker = !!formType && ["intake worker", "intake-worker", "intake_worker"].includes(formType.toLowerCase().trim());
-  const isCaseWorker = propCaseWorker ?? urlCaseWorker;
+  const [isCaseWorkerFromData, setIsCaseWorkerFromData] = useState(false);
+  const isCaseWorker = propCaseWorker ?? (urlCaseWorker || isCaseWorkerFromData);
 
   const [initialValues, setInitialValues] = useState(() => {
     const base = createEmptyInitialValues();
@@ -698,6 +699,9 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
       if (nextVals.avatar) setAvatarPreview(nextVals.avatar);
       // for old structure
       if (existingData.photo) setAvatarPreview(existingData.photo);
+      if (existingData.isCaseWorker || existingData.formType === "intake-worker" || existingData.intakeworkerName || existingData.inTakeWorkerName) {
+        setIsCaseWorkerFromData(true);
+      }
       console.log("Pre-filled from existingData prop:", nextVals);
     }
   }, [existingData]);
@@ -898,6 +902,10 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
           setInitialValues(nextVals);
           setHeaderStatus(nextVals.status || "Submitted");
+
+          if (data.isCaseWorker || data.formType === "intake-worker" || data.intakeworkerName || data.inTakeWorkerName) {
+            setIsCaseWorkerFromData(true);
+          }
 
           // For old-structure forms, stash the human-readable service names so
           // they can be resolved to IDs once shiftCategories finishes loading.

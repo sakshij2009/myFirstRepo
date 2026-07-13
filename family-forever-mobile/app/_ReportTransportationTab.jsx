@@ -35,8 +35,11 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
 
 const nowISO = () => new Date().toISOString();
 
-/* ---------------- COMPONENT ---------------- */
-export default function ReportTransportationTab({ shift, shiftId }) {
+/* ---------------- COMPONENT ----------------
+ * `section` selects which half of the report to render — "transportation" or
+ * "expense" — deciding *whether* to show either one happens one screen earlier
+ * (Shift Actions), not inside this component. */
+export default function ReportTransportationTab({ shift, shiftId, section = "transportation" }) {
   const isTransportation =
     shift?.categoryName?.toLowerCase() === "transportation" ||
     shift?.shiftCategory?.toLowerCase() === "transportation" ||
@@ -289,12 +292,9 @@ export default function ReportTransportationTab({ shift, shiftId }) {
     return uploaded;
   };
 
-  /* ---------------- SUBMIT ---------------- */
-  const handleSubmit = async () => {
+  /* ---------------- SUBMIT TRANSPORTATION ---------------- */
+  const handleSubmitTransportation = async () => {
     try {
-      const shiftRef = doc(db, "shifts", String(shiftId));
-      const payload = {};
-
       const entry = {
         startLocation: startPoint || null,
         stopLocation: stopPoint || null,
@@ -307,12 +307,21 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         approvedKM: approvedKm ? Number(approvedKm) : null,
         approvedBy: approvedBy || null,
         travelComments: comments || null,
-        expenseAmount: expenseAmount ? Number(expenseAmount) : null,
         createdAt: new Date(),
       };
-
-      payload.extraShiftPoints = arrayUnion(entry);
+      const payload = { extraShiftPoints: arrayUnion(entry), transportationReported: true };
       if (comments) payload.travelComments = comments;
+      await updateDoc(doc(db, "shifts", String(shiftId)), payload);
+      Alert.alert("Success", "Transportation report submitted");
+    } catch (e) {
+      Alert.alert("Error", "Submission failed");
+    }
+  };
+
+  /* ---------------- SUBMIT EXPENSE ---------------- */
+  const handleSubmitExpense = async () => {
+    try {
+      const payload = { expenseReported: true };
       if (expenseAmount) payload.expenseAmount = Number(expenseAmount);
 
       if (receipts.length) {
@@ -320,17 +329,42 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         payload.expenseReceiptUrls = arrayUnion(...uploaded);
       }
 
-      await updateDoc(shiftRef, payload);
-      Alert.alert("Success", "Transportation report submitted");
+      await updateDoc(doc(db, "shifts", String(shiftId)), payload);
+      Alert.alert("Success", "Expense report submitted");
     } catch (e) {
       Alert.alert("Error", "Submission failed");
     }
   };
 
   /* ---------------- UI ---------------- */
+  if (section === "expense") {
+    return (
+      <ScrollView style={{ padding: 16 }}>
+        <Text style={styles.label}>Expense Amount ($)</Text>
+        <TextInput style={styles.input} value={expenseAmount} onChangeText={setExpenseAmount} placeholder="Enter expense amount" keyboardType="numeric" />
+
+        <Text style={styles.label}>Receipts</Text>
+        <Pressable style={styles.uploadBtn} onPress={pickReceipt}>
+          <Text>Upload Receipt</Text>
+        </Pressable>
+        {receipts.map((r, i) => (
+          <View key={i} style={{ marginTop: 8 }}>
+            <Text onPress={() => Linking.openURL(r.url || r.uri)}>{r.name}</Text>
+            <Pressable onPress={() => deleteReceipt(r)}>
+              <Text style={{ color: "red" }}>Delete</Text>
+            </Pressable>
+          </View>
+        ))}
+
+        <Pressable style={styles.submitBtn} onPress={handleSubmitExpense}>
+          <Text style={styles.driveText}>Submit</Text>
+        </Pressable>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView style={{ padding: 16 }}>
-      {/* ================= TRANSPORTATION SHIFT ================= */}
       {isTransportation && (
         <>
           {/* Pickup */}
@@ -377,7 +411,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         </>
       )}
 
-      {/* ================= DRIVE BUTTON ================= */}
+      {/* Drive Button */}
       <Pressable
         onPress={isDriving ? endDrive : startDrive}
         style={{ backgroundColor: isDriving ? "#DC2626" : "#14532D", padding: 14, borderRadius: 6, marginTop: 16 }}
@@ -387,7 +421,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         </Text>
       </Pressable>
 
-      {/* ================= KM BREAKDOWN ================= */}
+      {/* KM Breakdown */}
       <View style={styles.kmCard}>
         <Text style={styles.kmTitle}>{isTransportation ? "Kilometer Breakdown" : "Kilometers Traveled"}</Text>
         {isTransportation && kmLoading && (
@@ -437,7 +471,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         )}
       </View>
 
-      {/* ================= APPROVED KM (transportation only) ================= */}
+      {/* Approved KM (transportation category only) */}
       {isTransportation && (
         <>
           <Text style={styles.label}>Approved Kilometers</Text>
@@ -448,25 +482,6 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         </>
       )}
 
-      {/* ================= EXPENSE AMOUNT ================= */}
-      <Text style={styles.label}>Expense Amount ($)</Text>
-      <TextInput style={styles.input} value={expenseAmount} onChangeText={setExpenseAmount} placeholder="Enter expense amount" keyboardType="numeric" />
-
-      {/* ================= RECEIPTS ================= */}
-      <Text style={styles.label}>Receipts</Text>
-      <Pressable style={styles.uploadBtn} onPress={pickReceipt}>
-        <Text>Upload Receipt</Text>
-      </Pressable>
-      {receipts.map((r, i) => (
-        <View key={i} style={{ marginTop: 8 }}>
-          <Text onPress={() => Linking.openURL(r.url || r.uri)}>{r.name}</Text>
-          <Pressable onPress={() => deleteReceipt(r)}>
-            <Text style={{ color: "red" }}>Delete</Text>
-          </Pressable>
-        </View>
-      ))}
-
-      {/* ================= COMMENTS ================= */}
       <Text style={styles.label}>Travel Comments</Text>
       <TextInput
         multiline value={comments} onChangeText={setComments}
@@ -474,7 +489,7 @@ export default function ReportTransportationTab({ shift, shiftId }) {
         style={[styles.input, { height: 90 }]}
       />
 
-      <Pressable style={styles.submitBtn} onPress={handleSubmit}>
+      <Pressable style={styles.submitBtn} onPress={handleSubmitTransportation}>
         <Text style={styles.driveText}>Submit</Text>
       </Pressable>
     </ScrollView>

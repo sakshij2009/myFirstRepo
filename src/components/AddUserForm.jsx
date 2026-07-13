@@ -462,7 +462,7 @@ const AddUserForm = ({ mode = "add", user }) => {
                     <ErrorMessage name="driverLicenseExpiry" component="div" className="text-red-500 text-xs mt-1" />
                   </div>
                   <div>
-                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID (CYIM ID)</label>
+                    <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Staff ID</label>
                     <Field name="userId" placeholder="Please enter a specific ID" className={inputCls(touched.userId && errors.userId)} />
                     <ErrorMessage name="userId" component="div" className="text-red-500 text-xs mt-1" />
                   </div>

@@ -157,6 +157,9 @@ const handleTransferShift = async () => {
         transferId,
         shiftId: selectedShift.id,
         fromUserId: user.userId,
+        fromUserName: user.name,
+        toUserId: selectedStaff.id,
+        toUserName: selectedStaff.name || selectedStaff.fullName || selectedStaff.email,
       },
     });
 
