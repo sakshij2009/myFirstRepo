@@ -81,6 +81,7 @@ export default function KPIStrip({ filter = "Weekly", dateRange }) {
 
         const allShifts  = shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const allRevenue = revenueSnap.docs.map(d => d.data());
+        const activeClientsCount = clientsSnap.docs.filter(d => !d.data().isDeleted).length;
 
         // Current period shifts
         const curShifts = allShifts.filter(s => inRange(shiftDate(s), start, end));
@@ -106,7 +107,7 @@ export default function KPIStrip({ filter = "Weekly", dateRange }) {
         const prevPending = prevShifts.filter(s => !s.clockIn).length;
 
         // If no current-period shifts match clientId, fall back to all clients
-        const curClients  = curClientIds.size || clientsSnap.size;
+        const curClients  = curClientIds.size || activeClientsCount;
         const prevClients = prevClientIds.size || 0;
         const curStaff    = curStaffIds.size || usersSnap.docs.filter(d => d.data().role === "user").length;
         const prevStaff   = prevStaffIds.size;

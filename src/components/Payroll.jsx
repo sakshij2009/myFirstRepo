@@ -321,7 +321,7 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
       {/* Expanded detail row — per-shift table */}
       {expanded && (
         <div className="border-b" style={{ borderColor: "#f3f4f6", backgroundColor: allCancelled ? "#fff5f5" : "#f9fafb" }}>
-          <div style={{ overflowX: "auto" }}>
+          <div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
@@ -336,6 +336,9 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                       letterSpacing: "0.06em",
                       whiteSpace: "nowrap",
                       backgroundColor: allCancelled ? "#fff5f5" : "#f9fafb",
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 1,
                     }}>
                       {col}
                     </th>
@@ -833,7 +836,7 @@ export default function Payroll() {
       <div className="flex-1 overflow-auto px-6 py-4">
 
         {activeTab === "staff" && (
-          <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <div className="bg-white rounded-xl border" style={{ borderColor: "#e5e7eb", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
 
             {/* Toolbar */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: "#f3f4f6" }}>

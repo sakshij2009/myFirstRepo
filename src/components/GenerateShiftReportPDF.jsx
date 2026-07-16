@@ -32,11 +32,16 @@ export const calculateTotalHours = (start, end) => {
 };
 
 const buildReportContent = (shift) => {
+  // Both default to shown — callers that don't pass these flags (e.g. the
+  // quick-download button in the shift list) keep today's full-detail behavior.
+  const showShiftTimings = shift.showShiftTimings !== false;
+  const showVisitationTiming = shift.showVisitationTiming !== false;
+
   // Build visitation timing row for supervised visitation shifts
   const category = (shift.categoryName || shift.serviceType || shift.category || "").toLowerCase();
   const isVisitation = category.includes("visitation");
   let visitationHtml = "";
-  if (isVisitation) {
+  if (isVisitation && showVisitationTiming) {
     const points = Array.isArray(shift.shiftPoints) ? shift.shiftPoints : [];
     const visitTimes = points
       .filter(p => p.visitStartTime || p.visitEndTime)
@@ -69,7 +74,7 @@ const buildReportContent = (shift) => {
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Staff ID:</b> ${shift.staffId || shift.userId || "N/A"}</p>
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Client Name:</b> ${shift.clientName || "N/A"}</p>
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Date:</b> ${shift.dateKey || "N/A"}</p>
-        <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Shift Time:</b> ${shift.startTime || "N/A"} - ${shift.endTime || "N/A"}</p>
+        ${showShiftTimings ? `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Shift Time:</b> ${shift.startTime || "N/A"} - ${shift.endTime || "N/A"}</p>` : ""}
         ${visitationHtml}
       </div>
 
