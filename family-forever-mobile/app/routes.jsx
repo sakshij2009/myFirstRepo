@@ -73,6 +73,7 @@ export default function Routes() {
       ].filter(s => {
         if (seen.has(s.id)) return false;
         seen.add(s.id);
+        if (s?.isDeleted) return false;
         return isTransport(s);
       });
       setShifts(combined);
