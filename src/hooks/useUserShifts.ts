@@ -39,6 +39,7 @@ export interface Shift {
   clockIn?: string;
   clockOut?: string;
   isCancelled?: boolean;
+  isDeleted?: boolean;
   vehicleType?: string;
   shiftPoints?: ShiftPoint[];
   agencyName?: string;
@@ -207,7 +208,7 @@ export function useTodayShifts(userId: string | undefined) {
       (snap) => {
         const docs: Shift[] = snap.docs
           .map((d) => ({ docId: d.id, ...d.data() } as Shift))
-          .filter((s) => !s.isCancelled && shiftMatchesDate(s, today));
+          .filter((s) => !s.isCancelled && !s.isDeleted && shiftMatchesDate(s, today));
 
         docs.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
         setShifts(docs);
@@ -250,7 +251,7 @@ export function useUserShifts(userId: string | undefined) {
       (snap) => {
         const docs: Shift[] = snap.docs
           .map((d) => ({ docId: d.id, ...d.data() } as Shift))
-          .filter((s) => !s.isCancelled);
+          .filter((s) => !s.isCancelled && !s.isDeleted);
         setShifts(docs);
         setLoading(false);
       },
