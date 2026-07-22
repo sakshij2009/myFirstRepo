@@ -741,6 +741,7 @@ const ShiftReport = ({ user }) => {
         const list = [];
         snap.forEach(ds => {
           const d = ds.data();
+          if (d.isDeleted) return;
           const cId = d.clientId || d.client || d.clientDetails?.id;
           if (String(cId) !== String(clientId)) return;
           let sDate = d.startDate?.toDate?.() || parseShiftDate(d.startDate);
