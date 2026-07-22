@@ -1212,6 +1212,9 @@ const AddUserShift = ({ mode = "add", user }) => {
       const finalReturnPoints = returnPointsWithKm.map(mapPoint);
 
       // ---------- UPDATE MODE ----------
+      let batchId;
+      let datesToCreate = [];
+
       if (mode === "update" && id) {
         const primaryStaff = users.find(u => String(u.id) === String(values.primaryUser) || String(u.userId) === String(values.primaryUser));
         const secondaryStaff = users.find(u => String(u.id) === String(values.secondaryUser) || String(u.userId) === String(values.secondaryUser));
@@ -1272,8 +1275,8 @@ const AddUserShift = ({ mode = "add", user }) => {
           };
         };
 
-        // Always update only the specific shift being edited
-        const qShift = query(collection(db, "dev_shifts"), where("id", "==", id));
+        // Always update the specific shift being edited
+        const qShift = query(collection(db, "shifts"), where("id", "==", id));
         const snap = await getDocs(qShift);
         if (!snap.empty) {
           const bData = snap.docs[0].data();
@@ -1289,16 +1292,22 @@ const AddUserShift = ({ mode = "add", user }) => {
             subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${values.startTime}`,
             redirectTo: "/admin-dashboard/dashboard",
           });
+
+          // Any additional dates picked while editing become brand-new shifts,
+          // linked to the original via the same batchId — they used to be silently dropped.
+          batchId = bData.batchId || `batch_${Date.now()}`;
+          datesToCreate = selectedDates.slice(1);
         }
-        return;
+
+        if (datesToCreate.length === 0) return;
+      } else {
+        // ---------- ADD MODE ----------
+        // Shared batchId so all shifts from this submission can be found when editing
+        batchId = `batch_${Date.now()}`;
+        datesToCreate = selectedDates;
       }
 
-
-      // ---------- ADD MODE ----------
-      // Shared batchId so all shifts from this submission can be found when editing
-      const batchId = `batch_${Date.now()}`;
-
-      for (const date of selectedDates) {
+      for (const date of datesToCreate) {
         const startDateObj = normalizeDate(date);
         const newShiftId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
@@ -1568,6 +1577,18 @@ const AddUserShift = ({ mode = "add", user }) => {
       }
 
       // ✅ SUCCESS SLIDER
+      if (mode === "update" && id) {
+        // We already updated the original shift above; datesToCreate here are the
+        // extra dates added during this edit, now created as new linked shifts.
+        setSlider({
+          show: true,
+          title: "Shift Updated Successfully!",
+          subtitle: `${selectedClient?.name || ""} – updated, plus ${datesToCreate.length} new date(s) added`,
+          redirectTo: "/admin-dashboard/dashboard",
+        });
+        return;
+      }
+
       const firstDate = normalizeDate(selectedDates[0]);
       setSlider({
         show: true,
@@ -2091,9 +2112,9 @@ const AddUserShift = ({ mode = "add", user }) => {
                               onClick={() => {
                                 if (!cell.isCurrentMonth) return;
                                 const existing = values.shiftDates || [];
-                                const already = existing.some(d => (d instanceof Date ? d : new Date(d)).toISOString().split("T")[0] === dateKey);
+                                const already = existing.some(d => formatLocalISO(d instanceof Date ? d : new Date(d)) === dateKey);
                                 handleDatesChange(already
-                                  ? existing.filter(d => (d instanceof Date ? d : new Date(d)).toISOString().split("T")[0] !== dateKey)
+                                  ? existing.filter(d => formatLocalISO(d instanceof Date ? d : new Date(d)) !== dateKey)
                                   : [...existing, cell.date]
                                 );
                               }}

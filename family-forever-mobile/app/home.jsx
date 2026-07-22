@@ -294,6 +294,7 @@ export default function Home() {
       ].filter(s => {
         if (seen.has(s.id)) return false;
         seen.add(s.id);
+        if (s?.isDeleted) return false;
         const raw = s?.category || s?.categoryName || s?.serviceType || s?.shiftCategory;
         if (!raw) return true;
         return ALLOWED_CATEGORIES.includes(normalizeCat(raw));

@@ -1,0 +1,32 @@
+[
+  {
+    "groupKey": "friesen, brooklyn|alta care resources",
+    "recommendedKeepId": "1779215474718",
+    "candidates": [
+      {
+        "id": "1779215474718",
+        "clientName": "Friesen, Brooklyn",
+        "agency": "Alta Care Resources",
+        "parentEmail": "",
+        "workerEmail": "tanya.norton@altacare.ca",
+        "status": "Accepted",
+        "fieldCount": 43,
+        "createdAt": "—",
+        "lastUpdatedAt": "08 Jul 2026 10:28 am",
+        "lastUpdatedBy": "Tanya Norton"
+      },
+      {
+        "id": "1778779254383",
+        "clientName": "Friesen, Brooklyn",
+        "agency": "Alta Care Resources",
+        "parentEmail": "",
+        "workerEmail": "Tanya@altacare.ca",
+        "status": "Accepted",
+        "fieldCount": 40,
+        "createdAt": "—",
+        "lastUpdatedAt": "21 May 2026 08:33 am",
+        "lastUpdatedBy": "Tanya Norton"
+      }
+    ]
+  }
+]

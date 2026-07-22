@@ -276,10 +276,12 @@ useEffect(() => {
     try {
       const shiftsRef = collection(db, "dev_shifts");
       const snapshot = await getDocs(shiftsRef);
-      const allShifts = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
+      const allShifts = snapshot.docs
+        .map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }))
+        .filter((shift) => !shift.isDeleted);
 
       // 🔸 Shifts assigned to this user (Primary or Secondary)
       let regularShifts = allShifts.filter(
