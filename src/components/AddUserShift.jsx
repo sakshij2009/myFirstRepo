@@ -1276,7 +1276,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         };
 
         // Always update the specific shift being edited
-        const qShift = query(collection(db, "shifts"), where("id", "==", id));
+        const qShift = query(collection(db, "dev_shifts"), where("id", "==", id));
         const snap = await getDocs(qShift);
         if (!snap.empty) {
           const bData = snap.docs[0].data();
