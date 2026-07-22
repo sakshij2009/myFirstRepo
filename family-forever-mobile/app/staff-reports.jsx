@@ -203,6 +203,7 @@ export default function StaffReports() {
       const staffName = user?.name?.toLowerCase();
 
       const myShifts = allData.filter(s => {
+        if (s?.isDeleted) return false;
         const isPrimary = s?.staffId === staffId || s?.userId === staffId || s?.staffEmail?.toLowerCase() === staffEmail || s?.name?.toLowerCase() === staffName;
         const isSecondary = s?.secondaryUserId === staffId || s?.secondaryUserName?.toLowerCase() === staffName || s?.secondaryUser?.toLowerCase() === staffName;
         return isPrimary || isSecondary;

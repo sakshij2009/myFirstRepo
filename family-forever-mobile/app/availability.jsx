@@ -361,7 +361,7 @@ export default function Availability() {
         [...primary, ...secondary].filter((s) => {
           if (seen.has(s.id)) return false;
           seen.add(s.id);
-          return true;
+          return !s?.isDeleted;
         })
       );
     };

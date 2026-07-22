@@ -1738,26 +1738,40 @@ const AddUserShift = ({ mode = "add", user }) => {
             onClick={async () => {
               const batchId = batchIdRef.current;
               const isBatch = !!batchId;
-              const confirmMsg = isBatch
-                ? "This shift is part of a multi-date group. Delete ALL shifts in this group?"
-                : "Are you sure you want to delete this shift?";
-              if (window.confirm(confirmMsg)) {
-                try {
-                  if (isBatch) {
-                    const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
-                    const batch = writeBatch(db);
-                    snap.docs.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
-                    await batch.commit();
-                    alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
-                  } else {
-                    await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
-                    alert("Shift deleted successfully!");
-                  }
+              try {
+                if (!isBatch) {
+                  if (!window.confirm("Are you sure you want to delete this shift?")) return;
+                  await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
+                  alert("Shift deleted successfully!");
                   window.history.back();
-                } catch (err) {
-                  console.error("Error deleting shift:", err);
-                  alert("Failed to delete shift. Please try again.");
+                  return;
                 }
+
+                // Multi-date group: deleting the whole group is a separate, explicit
+                // choice from deleting just the one shift currently open. Defaulting
+                // "Delete Shift" to wiping every sibling silently deleted dates the
+                // user never asked to touch.
+                const deleteWholeGroup = window.confirm(
+                  "This shift is part of a multi-date group.\n\nClick OK to delete the ENTIRE group of shifts.\nClick Cancel to delete only this one shift instead."
+                );
+
+                if (deleteWholeGroup) {
+                  const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
+                  const batch = writeBatch(db);
+                  snap.docs.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
+                  await batch.commit();
+                  alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
+                  window.history.back();
+                  return;
+                }
+
+                if (!window.confirm("Delete only this one shift?")) return;
+                await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
+                alert("Shift deleted successfully!");
+                window.history.back();
+              } catch (err) {
+                console.error("Error deleting shift:", err);
+                alert("Failed to delete shift. Please try again.");
               }
             }}
             className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
