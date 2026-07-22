@@ -28,12 +28,12 @@ export const approveTransfer = async (meta) => {
   // field on the shift (not just userId/userName) points at the new assignee —
   // otherwise screens that read the stale `name`/`primaryUserId` fields keep
   // showing the outgoing staff member.
-  const toUserSnap = await getDoc(doc(db, "dev_users", toUserId));
+  const toUserSnap = await getDoc(doc(db, "users", toUserId));
   const toUser = toUserSnap.exists() ? toUserSnap.data() : {};
   const resolvedUserId = toUser.userId ?? toUserId;
   const resolvedName = toUser.name || toUserName || "";
 
-  const shiftRef = doc(db, "dev_shifts", shiftId);
+  const shiftRef = doc(db, "shifts", shiftId);
   const shiftSnap = await getDoc(shiftRef);
   const shiftData = shiftSnap.exists() ? shiftSnap.data() : {};
 

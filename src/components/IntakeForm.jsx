@@ -21,8 +21,9 @@ import { db, storage, auth, COLLECTION_NEW_INTAKES } from "../firebase";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 import { FaChevronDown } from "react-icons/fa6";
-import { Upload, X, Calendar } from "lucide-react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { Upload, X, Calendar, Printer } from "lucide-react";
+import { printIntakeFormPDF } from "./GenerateIntakeFormPDF";
+import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -587,6 +588,11 @@ const mapDataToInitialValues = (data) => {
 
 const IntakeForm = ({ mode = "add", isCaseWorker: propCaseWorker, user , id: propId, isEditable=true, existingData=null }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Admin/owner panel always routes through /admin-dashboard/... — the intake
+  // worker's own app uses /intake-form/... . The editing-assist lock below is
+  // only meant to restrict intake workers, so admins are exempt from it.
+  const isAdminContext = location.pathname.includes("/admin-dashboard/");
   const [showServiceCalendar, setShowServiceCalendar] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [shiftCategories, setShiftCategories] = useState([]);
@@ -614,12 +620,27 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const pendingServiceNamesRef = useRef([]);
   // Preserves isEditable flag from Firestore so setDoc doesn't wipe it on update
   const fetchedIsEditableRef = useRef(true);
+  // The fetch below can resolve a form via fallback strategies whose real Firestore
+  // doc ID differs from the URL's intakeFormId (e.g. a clientId was passed instead).
+  // Saving must target that real doc ID, or it silently creates a duplicate.
+  const resolvedDocIdRef = useRef(null);
 
   const handleSaveDraft = () => {
     if (formikRef.current) {
       isDraftSaveRef.current = true;
       formikRef.current.submitForm();
     }
+  };
+
+  // Prints the form as-is — works for a blank form (mode="add", nothing
+  // filled in yet) as well as a fully/partially filled submission.
+  const handlePrint = () => {
+    const vals = formikRef.current ? formikRef.current.values : initialValues;
+    const selectedIds = vals.services?.serviceType || [];
+    const serviceNames = shiftCategories
+      .filter((cat) => selectedIds.includes(cat.id))
+      .map((cat) => cat.name);
+    printIntakeFormPDF(vals, { isCaseWorker, serviceNames });
   };
 
   useEffect(() => {
@@ -882,12 +903,18 @@ const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
           // If admin has set isEditable=false and the intake worker is trying
           // to open this form in edit/update mode, redirect to view-only mode.
-          if (mode === "update" && data.isEditable === false) {
+          // Admins themselves are always exempt — the lock only governs intake workers.
+          if (mode === "update" && data.isEditable === false && !isAdminContext) {
             alert("⛔ Editing has been disabled by the admin for this form. Opening in view mode.");
             navigate(`/intake-form/view/${intakeFormId}`);
             setLoading(false);
             return;
           }
+
+          // Strategy A leaves data without an .id (docSnap.data() has no id field),
+          // so the URL param IS the real doc ID in that case. Strategies B/C/D
+          // explicitly attach the real doc ID they found — use that instead.
+          resolvedDocIdRef.current = data.id ? String(data.id) : String(intakeFormId);
 
           const nextVals = mapDataToInitialValues(data);
 
@@ -1582,8 +1609,11 @@ const handleSubmit = async (values, { resetForm }) => {
     };
 
     // ================== SAVE INTAKE ==================
-    // In update mode use the existing document ID; in add mode generate a new timestamp ID
-    const formId = mode === "update" && intakeFormId ? intakeFormId : Date.now().toString();
+    // In update mode, save back to the actual resolved document ID (which can differ
+    // from the URL param — see resolvedDocIdRef above) so edits update the existing
+    // form instead of creating a duplicate. In add mode, generate a new timestamp ID.
+    const existingDocId = resolvedDocIdRef.current || intakeFormId;
+    const formId = mode === "update" && existingDocId ? existingDocId : Date.now().toString();
 
     // 🔥 CREATE CLIENTS WHEN STATUS CHANGES TO ACCEPTED
     const isNewlyAccepted =
@@ -1739,6 +1769,11 @@ const handleSubmit = async (values, { resetForm }) => {
               </div>
             );
           })()}
+          <button type="button" onClick={handlePrint}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            style={{ borderColor: "#e5e7eb" }}>
+            <Printer size={14} /> Print
+          </button>
           <button type="button" onClick={handleSaveDraft} disabled={isSavingDraft}
             className="px-4 py-2 rounded-lg border text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
             style={{ borderColor: "#e5e7eb" }}>

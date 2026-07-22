@@ -311,7 +311,7 @@ export default function ReportTransportationTab({ shift, shiftId, section = "tra
       };
       const payload = { extraShiftPoints: arrayUnion(entry), transportationReported: true };
       if (comments) payload.travelComments = comments;
-      await updateDoc(doc(db, "dev_shifts", String(shiftId)), payload);
+      await updateDoc(doc(db, "shifts", String(shiftId)), payload);
       Alert.alert("Success", "Transportation report submitted");
     } catch (e) {
       Alert.alert("Error", "Submission failed");
@@ -329,7 +329,7 @@ export default function ReportTransportationTab({ shift, shiftId, section = "tra
         payload.expenseReceiptUrls = arrayUnion(...uploaded);
       }
 
-      await updateDoc(doc(db, "dev_shifts", String(shiftId)), payload);
+      await updateDoc(doc(db, "shifts", String(shiftId)), payload);
       Alert.alert("Success", "Expense report submitted");
     } catch (e) {
       Alert.alert("Error", "Submission failed");

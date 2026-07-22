@@ -890,7 +890,7 @@ export default function ShiftDetails() {
   const handleTransportGateAnswer = async (val) => {
     setTransportAnswer(val);
     try {
-      await updateDoc(doc(db, "dev_shifts", shiftId), { transportationReported: val });
+      await updateDoc(doc(db, "shifts", shiftId), { transportationReported: val });
     } catch (e) {
       console.error("Failed to save transportation answer:", e);
     }
@@ -899,7 +899,7 @@ export default function ShiftDetails() {
   const handleExpenseGateAnswer = async (val) => {
     setExpenseAnswer(val);
     try {
-      await updateDoc(doc(db, "dev_shifts", shiftId), { expenseReported: val });
+      await updateDoc(doc(db, "shifts", shiftId), { expenseReported: val });
     } catch (e) {
       console.error("Failed to save expense answer:", e);
     }

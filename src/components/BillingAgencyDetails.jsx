@@ -43,6 +43,7 @@ export default function BillingAgencyDetails({ agency, onBack }) {
         const clientsSnap = await getDocs(collection(db, "dev_clients"));
         clientsSnap.docs.forEach(d => {
           const c = d.data();
+          if (c.isDeleted) return;
           const aName = c.agencyName || c.agency || "";
           if (aName.trim().toLowerCase() === (agency.name || "").trim().toLowerCase()) {
             clientsList.push({ id: d.id, ...c });

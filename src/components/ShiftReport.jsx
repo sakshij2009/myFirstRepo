@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { calculateRouteDistance, reverseGeocode } from "../utils/mapboxHelper";
 import ShiftLockToggle from "./ShiftLockToggle";
+import AppToggle from "./ui/AppToggle";
 
 const PILL_COLORS = [
   { label: "Yellow", bg: "#fffae3", border: "#f1e19e" },
@@ -158,6 +159,24 @@ function AddMedModal({ day, onClose, onSubmit }) {
 
 const FONT = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
+// Timing toggle rows shared by the Download Options and Share popups.
+function TimingToggleRows({ showTimings, setShowTimings, showVisitTiming, setShowVisitTiming, isVisitation }) {
+  return (
+    <div className="rounded-lg border mb-4" style={{ borderColor: "#e5e7eb" }}>
+      <div className="flex items-center justify-between px-3.5 py-3" style={{ borderBottom: isVisitation ? "1px solid #f3f4f6" : "none" }}>
+        <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>Show Shift Timings</span>
+        <AppToggle checked={showTimings} onChange={() => setShowTimings(v => !v)} />
+      </div>
+      {isVisitation && (
+        <div className="flex items-center justify-between px-3.5 py-3">
+          <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>Show Visitation Timing</span>
+          <AppToggle checked={showVisitTiming} onChange={() => setShowVisitTiming(v => !v)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Full Report Modal ────────────────────────────────────────────────────────
 function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
   const reportText = shiftData?.shiftReport || "No shift report has been filed for this shift.";
@@ -166,6 +185,12 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
   const [showShare, setShowShare] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [showTimings, setShowTimings] = useState(true);
+  const [showVisitTiming, setShowVisitTiming] = useState(true);
+
+  const categoryStr = (shiftData?.categoryName || shiftData?.serviceType || shiftData?.category || normalized.category || "").toLowerCase();
+  const isVisitation = categoryStr.includes("visitation");
 
   // Build the object the PDF generator expects from the normalized shift data.
   const buildPdfShift = () => ({
@@ -181,10 +206,25 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
     shiftReport: reportText,
     categoryName: shiftData?.categoryName || shiftData?.serviceType || shiftData?.category || "",
     shiftPoints: shiftData?.shiftPoints || [],
+    showShiftTimings: showTimings,
+    showVisitationTiming: showVisitTiming,
   });
 
-  const handleDownload = () => {
+  const openDownloadOptions = () => {
+    setShowTimings(true);
+    setShowVisitTiming(true);
+    setShowDownloadOptions(true);
+  };
+
+  const confirmDownload = () => {
     generateShiftReportPDF(buildPdfShift());
+    setShowDownloadOptions(false);
+  };
+
+  const openShare = () => {
+    setShowTimings(true);
+    setShowVisitTiming(true);
+    setShowShare(true);
   };
 
   const handleShare = async () => {
@@ -235,10 +275,10 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-semibold" style={{ fontSize: 11, background: "#f0fdf4", color: "#15803d" }}>
               <CheckCircle size={11} /> Approved &amp; Filed
             </span>
-            <button onClick={handleDownload} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50" style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
+            <button onClick={openDownloadOptions} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border font-semibold transition-all hover:bg-gray-50" style={{ fontSize: 12, color: "#374151", borderColor: "#e5e7eb" }}>
               <Download size={13} /> Download
             </button>
-            <button onClick={() => setShowShare(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-white transition-all" style={{ fontSize: 12, background: "#145228" }}>
+            <button onClick={openShare} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-white transition-all" style={{ fontSize: 12, background: "#145228" }}>
               <Mail size={13} /> Share
             </button>
             <button onClick={onClose} className="flex items-center justify-center rounded-lg border transition-all hover:bg-gray-50 ml-1" style={{ width: 34, height: 34, borderColor: "#e5e7eb" }}>
@@ -333,6 +373,11 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
               <p style={{ fontSize: 13, color: "#6b7280", margin: "8px 0 16px" }}>
                 Enter the email address to send this report for <b>{normalized.clientName}</b>. The PDF will be attached.
               </p>
+              <TimingToggleRows
+                showTimings={showTimings} setShowTimings={setShowTimings}
+                showVisitTiming={showVisitTiming} setShowVisitTiming={setShowVisitTiming}
+                isVisitation={isVisitation}
+              />
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Recipient Email</label>
               <input
                 type="email"
@@ -352,6 +397,38 @@ function FullReportModal({ shiftData, normalized, primaryStaff, onClose }) {
                   className="px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-60"
                   style={{ background: "#145228" }}>
                   {sharing ? "Sending…" : "Send Report"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Download Options popup */}
+        {showDownloadOptions && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
+            onClick={e => { if (e.target === e.currentTarget) setShowDownloadOptions(false); }}>
+            <div className="bg-white rounded-2xl p-6" style={{ width: 420, maxWidth: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+              <div className="flex items-center gap-2.5 mb-1">
+                <div className="rounded-lg p-2" style={{ background: "#f0fdf4" }}><Download size={16} style={{ color: "#145228" }} /></div>
+                <p className="font-bold" style={{ fontSize: 16, color: "#111827" }}>Report Options</p>
+              </div>
+              <p style={{ fontSize: 13, color: "#6b7280", margin: "8px 0 16px" }}>
+                Choose what to include before downloading the PDF for <b>{normalized.clientName}</b>.
+              </p>
+              <TimingToggleRows
+                showTimings={showTimings} setShowTimings={setShowTimings}
+                showVisitTiming={showVisitTiming} setShowVisitTiming={setShowVisitTiming}
+                isVisitation={isVisitation}
+              />
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <button onClick={() => setShowDownloadOptions(false)}
+                  className="px-4 py-2 rounded-lg border font-semibold text-sm hover:bg-gray-50"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}>Cancel</button>
+                <button onClick={confirmDownload}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm text-white"
+                  style={{ background: "#145228" }}>
+                  Download PDF
                 </button>
               </div>
             </div>

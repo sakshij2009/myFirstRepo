@@ -42,8 +42,19 @@ shift_report_main_utf8.txt
 # Vite
 *.local
 
+<<<<<<< HEAD
 # Credentials - never commit
 serviceAccountKey.json
 
 # Claude Code worktrees (nested git repos)
 .claude/worktrees/
+=======
+# Secrets / credentials
+serviceAccountKey.json
+*serviceAccountKey*.json
+*.pem
+*.key
+
+# Claude Code local settings (permission log, machine-specific)
+.claude/settings.local.json
+>>>>>>> 11ed30ae41515f7cee510898a0b2ecd43776b386

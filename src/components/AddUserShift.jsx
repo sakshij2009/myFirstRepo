@@ -424,6 +424,7 @@ const AddUserShift = ({ mode = "add", user }) => {
         setClients(
           clientSnap.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((c) => !c.isDeleted)
             .sort(sortByName)
         );
 

@@ -413,7 +413,7 @@ const AddHouse = () => {
         setClientsLoading(true);
         const snap = await getDocs(collection(db, "dev_clients"));
         const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          .filter(c => c.name || c.clientName || c.fullName)
+          .filter(c => !c.isDeleted && (c.name || c.clientName || c.fullName))
           .sort((a, b) => ((a.name || a.clientName || "")).localeCompare((b.name || b.clientName || "")));
         setFirestoreClients(clients);
       } catch (e) {
