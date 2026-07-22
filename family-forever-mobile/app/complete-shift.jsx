@@ -752,6 +752,15 @@ export default function CompleteShift() {
     );
   }
 
+  if (!shift || shift.isDeleted) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: PAGE, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="alert-circle-outline" size={50} color="#D1D5DB" />
+        <Text style={{ color: GRAY, marginTop: 15 }}>Shift not found</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: PAGE }}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}

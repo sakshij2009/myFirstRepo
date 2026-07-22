@@ -998,7 +998,7 @@ export default function ShiftDetails() {
   };
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color={PRIMARY_GREEN} />;
-  if (!shift) return (
+  if (!shift || shift.isDeleted) return (
     <SafeAreaView style={styles.container}>
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <Ionicons name="alert-circle-outline" size={50} color="#D1D5DB" />

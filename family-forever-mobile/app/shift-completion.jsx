@@ -235,6 +235,15 @@ export default function ShiftCompletion() {
     );
   }
 
+  if (!shift || shift.isDeleted) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="alert-circle-outline" size={50} color="#D1D5DB" />
+        <Text style={{ color: GRAY, marginTop: 15 }}>Shift not found</Text>
+      </SafeAreaView>
+    );
+  }
+
   const summaryItems = shift ? [
     { icon: "person-outline",   label: "Client",    value: shift.clientName || shift.name || "Client" },
     { icon: "calendar-outline", label: "Date",      value: safeDate(shift.startDate || shift.date) || "Today" },
