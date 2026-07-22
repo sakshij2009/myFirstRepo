@@ -557,19 +557,23 @@ const AddUserShift = ({ mode = "add", user }) => {
           // Store batchId so the update handler can update all selected-date siblings
           batchIdRef.current = data.batchId || null;
 
-          // Load ALL dates from this batch so editing one shift shows all sibling dates
+          // Load ALL dates from this batch so editing one shift shows all sibling dates.
+          // Dedupe by day — pre-existing duplicate sibling shifts (from before this fix)
+          // must not show up as repeated entries here, or re-saving would look like there
+          // are multiple dates to preserve for the same day.
           const calendarDates = [];
           if (data.batchId) {
             try {
               const batchSnap = await getDocs(
                 query(collection(db, "dev_shifts"), where("batchId", "==", data.batchId))
               );
+              const seenDays = new Set();
               batchSnap.docs.forEach((bDoc) => {
                 const bData = bDoc.data();
                 const bISO = formatDateFromFirestore(bData.startDate);
-                if (bISO) {
+                if (bISO && !seenDays.has(bISO)) {
                   const bd = parseLocalSafe(bISO);
-                  if (bd) calendarDates.push(bd);
+                  if (bd) { calendarDates.push(bd); seenDays.add(bISO); }
                 }
               });
               // Sort ascending
@@ -1275,12 +1279,18 @@ const AddUserShift = ({ mode = "add", user }) => {
           };
         };
 
-        // Always update the specific shift being edited
+        // Always update the specific shift being edited, using ITS OWN original date —
+        // never selectedDates[0]. shiftDates holds every sibling date in the batch for
+        // display, and this doc isn't necessarily the first one chronologically, so
+        // selectedDates[0] used to silently relabel whichever shift was edited to the
+        // batch's earliest date (e.g. editing the 23rd's shift would rewrite it to the 21st).
         const qShift = query(collection(db, "dev_shifts"), where("id", "==", id));
         const snap = await getDocs(qShift);
         if (!snap.empty) {
           const bData = snap.docs[0].data();
-          const shiftDate = normalizeDate(selectedDates[0]);
+          const shiftDate = bData.dateKey_iso
+            ? (parseLocalSafe(bData.dateKey_iso) || normalizeDate(selectedDates[0]))
+            : normalizeDate(selectedDates[0]);
           await updateDoc(snap.docs[0].ref, {
             ...buildPayload(shiftDate),
             clockIn:  bData.clockIn  || originalClockIn || "",
@@ -1293,10 +1303,20 @@ const AddUserShift = ({ mode = "add", user }) => {
             redirectTo: "/admin-dashboard/dashboard",
           });
 
-          // Any additional dates picked while editing become brand-new shifts,
-          // linked to the original via the same batchId — they used to be silently dropped.
           batchId = bData.batchId || `batch_${Date.now()}`;
-          datesToCreate = selectedDates.slice(1);
+
+          // Only dates with no existing sibling shift in this batch should become brand-new
+          // shifts. Re-fetch the batch fresh so a date that already has a shift is never
+          // recreated — that was duplicating every sibling shift again on each save.
+          const existingDateKeys = new Set([formatLocalISO(shiftDate)]);
+          if (bData.batchId) {
+            const batchSnap = await getDocs(query(collection(db, "dev_shifts"), where("batchId", "==", bData.batchId)));
+            batchSnap.docs.forEach(d => {
+              const key = d.data().dateKey_iso;
+              if (key) existingDateKeys.add(key);
+            });
+          }
+          datesToCreate = selectedDates.filter(d => !existingDateKeys.has(formatLocalISO(normalizeDate(d))));
         }
 
         if (datesToCreate.length === 0) return;
