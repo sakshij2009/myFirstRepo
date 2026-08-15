@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { sendNotification } from "../utils/notificationHelper"; // adjust path if needed
+import { formatTime12 } from "../utils/timeHelpers";
 
 const UserShiftsData = ({ user, userShifts = [] }) => {
   // pagination + local UI state
@@ -273,7 +274,7 @@ const handleTransferShift = async () => {
                     <div className="w-[100px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Timeline</p>
                       <p className="font-bold text-[14px] leading-[20px]">
-                        {emp.startTime}-{emp.endTime}
+                        {formatTime12(emp.startTime)}-{formatTime12(emp.endTime)}
                       </p>
                     </div>
                     <div className="w-[160px]">
@@ -433,7 +434,7 @@ const handleTransferShift = async () => {
                 </div>
                 <div className="flex flex-col">
                   <p className="font-normal text-sm leading-5">Time</p>
-                  <p className="font-bold text-sm leading-5">{selectedShift?.startTime} - {selectedShift?.endTime}</p>
+                  <p className="font-bold text-sm leading-5">{formatTime12(selectedShift?.startTime)} - {formatTime12(selectedShift?.endTime)}</p>
                 </div>
                 <div className="flex flex-col">
                   <p className="font-normal text-sm leading-5">Category</p>

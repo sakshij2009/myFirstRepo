@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
-import { safeString } from "../src/utils/date";
+import { safeString, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 const REASONS = ["Emergency", "Personal", "Scheduling Conflict", "Medical", "Family Emergency", "Other"];
@@ -198,7 +198,7 @@ export default function TransferShift() {
                    <View>
                      <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>SHIFT</Text>
                      <Text style={{ fontSize: 15, fontWeight: "700", color: "#1a1a1a", fontFamily: "Poppins" }}>{safeString(shift?.clientName) || "Client"} • {safeString(shift?.startDate)}</Text>
-                     <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift?.startTime} – {shift?.endTime}</Text>
+                     <Text style={{ fontSize: 13, color: "#6b7280" }}>{formatShiftTimeUTCtoCanada(null, shift?.startTime)} – {formatShiftTimeUTCtoCanada(null, shift?.endTime)}</Text>
                    </View>
                    
                    <View style={{ height: 1, backgroundColor: "#DCFCE7" }} />

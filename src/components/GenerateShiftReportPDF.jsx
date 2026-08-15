@@ -1,4 +1,5 @@
 import html2pdf from "html2pdf.js";
+import { to12HourClock } from "../utils/timeHelpers";
 
 export const formatTime = (value) => {
   if (!value) return "N/A";
@@ -7,13 +8,23 @@ export const formatTime = (value) => {
   // Already a formatted "HH:MM AM/PM" string (stored by mobile app) — return as-is
   if (/AM|PM/i.test(s) && s.match(/^\d{1,2}:\d{2}/)) return s.toUpperCase();
 
+  // Bare "HH:mm" / "HH:mm:ss" — no date, so convert the clock value directly
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(s)) return to12HourClock(s);
+
+  // "YYYY-MM-DD, HH:mm:ss" — take the time part so the browser timezone
+  // never shifts a value that was already recorded in Edmonton local time
+  if (s.includes(",")) {
+    const timePart = s.split(",")[1]?.trim();
+    if (timePart && /^\d{1,2}:\d{2}/.test(timePart)) return to12HourClock(timePart);
+  }
+
   const d = new Date(s);
   if (isNaN(d.getTime())) return s || "N/A";
 
-  return d.toLocaleTimeString("en-CA", {
-    hour: "2-digit",
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
     timeZone: "America/Edmonton",
   });
 };
@@ -45,7 +56,7 @@ const buildReportContent = (shift) => {
     const points = Array.isArray(shift.shiftPoints) ? shift.shiftPoints : [];
     const visitTimes = points
       .filter(p => p.visitStartTime || p.visitEndTime)
-      .map(p => `${p.visitStartTime || "N/A"} - ${p.visitEndTime || "N/A"}`)
+      .map(p => `${formatTime(p.visitStartTime)} - ${formatTime(p.visitEndTime)}`)
       .join(", ");
     if (visitTimes) {
       visitationHtml = `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Visitation Timing:</b> ${visitTimes}</p>`;
@@ -74,7 +85,7 @@ const buildReportContent = (shift) => {
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Staff ID:</b> ${shift.staffId || shift.userId || "N/A"}</p>
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Client Name:</b> ${shift.clientName || "N/A"}</p>
         <p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Date:</b> ${shift.dateKey || "N/A"}</p>
-        ${showShiftTimings ? `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Shift Time:</b> ${shift.startTime || "N/A"} - ${shift.endTime || "N/A"}</p>` : ""}
+        ${showShiftTimings ? `<p style="font-size: 13px; margin: 3px 0; color: #333;"><b>Shift Time:</b> ${formatTime(shift.startTime)} - ${formatTime(shift.endTime)}</p>` : ""}
         ${visitationHtml}
       </div>
 

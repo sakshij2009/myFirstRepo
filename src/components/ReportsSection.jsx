@@ -6,6 +6,7 @@ import CriticalIncidentForm from "./CriticalIncidentForm";
 import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
 import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
+import { formatTime12 } from "../utils/timeHelpers";
 
 const ReportsSection = ({ shiftId, shiftData,user }) => {
   const [text, setText] = useState("");
@@ -267,7 +268,7 @@ const formatTime = (ts) => {
             <span className="font-semibold" >Client Name:</span> {shiftData.clientName || shiftData?.clientDetails.name}
           </div>
           <div>
-            <span className="font-semibold">Shift Time:</span> {shiftData.startTime} - {shiftData.endTime}
+            <span className="font-semibold">Shift Time:</span> {formatTime12(shiftData.startTime)} - {formatTime12(shiftData.endTime)}
           </div>
         </div>
 

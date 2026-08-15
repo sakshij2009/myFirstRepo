@@ -121,7 +121,7 @@ export default function ReportTransportationTab({ shift, shiftId, section = "tra
   const mileageAmount = parseFloat((totalKm * MILEAGE_RATE).toFixed(2));
 
   const nowTimeHHMM = () =>
-    new Date().toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" });
+    new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
   /* ---------------- OPEN ROUTE IN MAPS ---------------- */
   const openRouteInMaps = () => {

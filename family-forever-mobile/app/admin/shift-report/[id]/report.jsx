@@ -68,7 +68,7 @@ export default function ReportWritingScreen() {
     try {
       const dateObj = new Date(time);
       if (!isNaN(dateObj.getTime())) {
-        return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       }
     } catch (e) { }
     return time;

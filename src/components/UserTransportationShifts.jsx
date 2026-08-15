@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { sendNotification } from "../utils/notificationHelper";
+import { formatTime12, formatTimeRange12 } from "../utils/timeHelpers";
 import { VscDebugStart } from "react-icons/vsc";
 import { useNavigate } from "react-router-dom";
 
@@ -397,8 +398,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
           primaryPoint?.seatType || clientForm.typeOfSeat || "N/A";
 
         const shiftTimeline =
-          shift.startTime - shift.endTime
-          "N/A";
+          formatTimeRange12(shift.startTime, shift.endTime) || "N/A";
 
         const shiftDate = shift.startDate || "N/A";
 
@@ -435,7 +435,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
 
                     <div className="flex gap-[4px] text-[14px] leading-[20px]">
                       <p className="font-normal">Pick Up Time:</p>
-                      <p className="font-bold">{pickupTime}</p>
+                      <p className="font-bold">{formatTime12(pickupTime)}</p>
                     </div>
                   </div>
 
@@ -468,7 +468,7 @@ const handleStartRide = async (shift, clientForm, primaryPoint) => {
 
                     <div className="flex gap-[4px] text-[14px] leading-[20px]">
                       <p className="font-normal">Drop Off Time:</p>
-                      <p className="font-bold">{dropTime}</p>
+                      <p className="font-bold">{formatTime12(dropTime)}</p>
                     </div>
                   </div>
                 </div>

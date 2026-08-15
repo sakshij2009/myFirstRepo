@@ -12,6 +12,7 @@ import NoteworthyIncidentForm from "./NoteworthyIncidentForm";
 import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
 import ServicePlanForm from "./ServicePlanForm";
+import { formatTime12 } from "../utils/timeHelpers";
 import {
   ArrowLeft, Calendar, Clock, User, MapPin, Phone, Mail,
   FileText, Download, CheckCircle, AlertCircle, Edit,
@@ -1051,8 +1052,8 @@ const ShiftReport = ({ user }) => {
     agency: shiftData.agencyName || intakeData?.agencyName || shiftData.agency || "N/A",
     startDate: shiftData.startDate || null,
     displayDate: renderDate(shiftData.startDate),
-    startTime: shiftData.startTime || "—",
-    endTime: shiftData.endTime || "—",
+    startTime: formatTime12(shiftData.startTime, "—"),
+    endTime: formatTime12(shiftData.endTime, "—"),
     clockIn: clockInVal,
     clockOut: clockOutVal,
     statusVal,
@@ -1598,7 +1599,7 @@ const ShiftReport = ({ user }) => {
                               <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151" }}>{m.dosage || "—"}</span></td>
                               <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151" }}>{m.route || "Oral"}</span></td>
                               <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151" }}>{m.frequency || "Daily"}</span></td>
-                              <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151" }}>{m.time || "—"}</span></td>
+                              <td className="px-4 py-2.5"><span style={{ fontSize: 12, color: "#374151" }}>{formatTime12(m.time, "—")}</span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1907,16 +1908,16 @@ const ShiftReport = ({ user }) => {
                     return sortedPts.map((sp, idx) => {
                       const ordinal = idx === 0 ? "1st" : idx === 1 ? "2nd" : idx === 2 ? "3rd" : `${idx + 1}th`;
                       const pickupLoc = sp.pickupLocation || (idx === 0 ? shiftData?.pickupLocation : null) || "N/A";
-                      const pickupTime = sp.pickupTime || (idx === 0 ? shiftData?.pickupTime : null) || "N/A";
-                      const pickedUpTime = sp.pickedUpTime || (idx === 0 ? shiftData?.pickedUpTime : null) || "N/A";
+                      const pickupTime = formatTime12(sp.pickupTime || (idx === 0 ? shiftData?.pickupTime : null), "N/A");
+                      const pickedUpTime = formatTime12(sp.pickedUpTime || (idx === 0 ? shiftData?.pickedUpTime : null), "N/A");
                       const pickedUpLoc = sp.pickedUpLocation || (idx === 0 ? shiftData?.pickedUpLocation : null) || "N/A";
                       const visitLoc = sp.visitLocation || (idx === 0 ? shiftData?.visitLocation : null) || "N/A";
-                      const visitStartTime = sp.visitStartTime || (idx === 0 ? shiftData?.visitStartOfficialTime : null) || "N/A";
-                      const visitEndTime = sp.visitEndTime || (idx === 0 ? shiftData?.visitEndOfficialTime : null) || "N/A";
+                      const visitStartTime = formatTime12(sp.visitStartTime || (idx === 0 ? shiftData?.visitStartOfficialTime : null), "N/A");
+                      const visitEndTime = formatTime12(sp.visitEndTime || (idx === 0 ? shiftData?.visitEndOfficialTime : null), "N/A");
                       const dropLoc = sp.dropLocation || (idx === 0 ? shiftData?.dropLocation : null) || "N/A";
-                      const dropTime = sp.dropTime || (idx === 0 ? shiftData?.dropTime : null) || "N/A";
+                      const dropTime = formatTime12(sp.dropTime || (idx === 0 ? shiftData?.dropTime : null), "N/A");
                       const droppedOffLoc = sp.droppedLocation || sp.dropActualLocation || (idx === 0 ? (shiftData?.droppedLocation || shiftData?.dropActualLocation) : null) || "N/A";
-                      const droppedOffTime = sp.droppedTime || sp.dropDoneAt || (idx === 0 ? (shiftData?.droppedTime || shiftData?.dropDoneAt) : null) || "N/A";
+                      const droppedOffTime = formatTime12(sp.droppedTime || sp.dropDoneAt || (idx === 0 ? (shiftData?.droppedTime || shiftData?.dropDoneAt) : null), "N/A");
 
                       return (
                         <div key={idx} className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>

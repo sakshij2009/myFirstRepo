@@ -7,6 +7,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { formatTime12 } from "../utils/timeHelpers";
 
 const MedicationPage = ({ shiftData,user }) => {
   const today = new Date();
@@ -470,7 +471,7 @@ const MedicationPage = ({ shiftData,user }) => {
                           time
                         )}`}
                       >
-                        {time}
+                        {formatTime12(time)}
                       </button>
                     ))}
                 </div>
@@ -478,7 +479,7 @@ const MedicationPage = ({ shiftData,user }) => {
                 <div className="mt-2 flex flex-col gap-1">
                   {Object.entries(medsForDay).map(([time, meds]) => (
                     <div key={time} className="text-[10px] text-green-700">
-                      {time}: {meds.map((m) => m.medicationName).join(", ")}
+                      {formatTime12(time)}: {meds.map((m) => m.medicationName).join(", ")}
                     </div>
                   ))}
                 </div>

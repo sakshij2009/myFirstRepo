@@ -29,7 +29,7 @@ import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../src/firebase/config";
-import { safeString, parseDate } from "../src/utils/date";
+import { safeString, parseDate, formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 // ── Office address (for personal vehicle KM) ─────────────────────────────────
 const OFFICE_ADDRESS = "10110 124 St NW, Edmonton, AB T5N 1P6, Canada";
@@ -98,7 +98,7 @@ function formatHeaderDate(shift) {
   if (d) {
     part = d.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
   }
-  const t = shift.startTime && shift.endTime ? `${shift.startTime} – ${shift.endTime}` : "";
+  const t = shift.startTime && shift.endTime ? `${formatShiftTimeUTCtoCanada(null, shift.startTime)} – ${formatShiftTimeUTCtoCanada(null, shift.endTime)}` : "";
   return [part, t].filter(Boolean).join(" · ");
 }
 
@@ -503,7 +503,7 @@ export default function CompleteShift() {
     // Record the time when a client is confirmed (for display below "Picked up" / "Dropped off")
     if (status === "confirmed") {
       const now = new Date();
-      const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
       setClientConfirmedTimes((prev) => ({ ...prev, [`${stopIdx}_${clientId}`]: timeStr }));
       // First pickup confirmed → start counting route kilometers from here
       if (stopsRef.current[stopIdx]?.type === "pickup") {
@@ -547,7 +547,7 @@ export default function CompleteShift() {
   const advanceStop = async () => {
     // Record completion time for the current stop
     const now = new Date();
-    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
     const newCompletedTimes = { ...completedTimes, [currentIdx]: timeStr };
     setCompletedTimes(newCompletedTimes);
 

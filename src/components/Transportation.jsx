@@ -9,6 +9,7 @@ import {
   Timer, Maximize2, Plus, CalendarDays, X,
 } from "lucide-react";
 import CustomCalendar from "./CustomerCalender";
+import { formatTime12 } from "../utils/timeHelpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getOverallStatus(shift) {
@@ -493,11 +494,11 @@ function buildStops(shift, clientForm) {
   const visitStatus  = visitDone ? "completed" : (pickupDone && overallStatus === "In Progress") ? "in-progress" : "pending";
   const dropStatus   = dropDone ? "completed" : (visitDone && overallStatus === "In Progress") ? "in-progress" : "pending";
 
-  const stops = [{ label: "Pickup", address: pickupAddress, time: pickupTime, status: pickupStatus }];
+  const stops = [{ label: "Pickup", address: pickupAddress, time: formatTime12(pickupTime), status: pickupStatus }];
   if (visitAddress && visitAddress.trim()) {
-    stops.push({ label: "Visit", address: visitAddress, time: visitTime, status: visitStatus });
+    stops.push({ label: "Visit", address: visitAddress, time: formatTime12(visitTime), status: visitStatus });
   }
-  stops.push({ label: "Drop-off", address: dropAddress, time: dropTime, status: dropStatus });
+  stops.push({ label: "Drop-off", address: dropAddress, time: formatTime12(dropTime), status: dropStatus });
   return stops;
 }
 

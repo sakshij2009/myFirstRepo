@@ -314,7 +314,7 @@ export default function AddShiftScreen() {
     const openPicker = (mode, field) => setShowPicker({ visible: true, mode, field });
 
     const formatDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const formatTime = (t) => t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const formatTime = (t) => t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     const pad2 = (n) => String(n).padStart(2, '0');
     const toTimeStr = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 

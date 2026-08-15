@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import { CheckCircle } from "lucide-react";
 import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
+import { formatTime12 } from "../utils/timeHelpers";
 import {
   ChevronLeft, ChevronRight, Calendar, User, Tag, Clock,
   FileText, Edit2, Download, Lock, Building2, Car,
@@ -221,7 +222,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                 />
                 <div className="flex items-center gap-1" style={{ fontSize: 12, color: "#6b7280" }}>
                   <Clock size={13} />
-                  <span>{shift.startTime}–{shift.endTime}</span>
+                  <span>{formatTime12(shift.startTime)}–{formatTime12(shift.endTime)}</span>
                 </div>
               </div>
             </div>

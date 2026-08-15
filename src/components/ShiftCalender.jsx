@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+import { formatTime12 } from "../utils/timeHelpers";
 
 export default function ShiftCalendar({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -143,7 +144,7 @@ export default function ShiftCalendar({ user }) {
                 >
                   <div>{shift.clientName || shift.name}</div>
                   <div>
-                    {shift.startTime} → {shift.endTime}
+                    {formatTime12(shift.startTime)} → {formatTime12(shift.endTime)}
                   </div>
                 </div>
               ))}

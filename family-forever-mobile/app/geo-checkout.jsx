@@ -15,6 +15,7 @@ import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const PRIMARY = "#1F6F43";
@@ -109,7 +110,7 @@ export default function GeoCheckOut() {
     try {
       const coeff = 1000 * 60 * 15;
       const roundedDate = new Date(Math.round(new Date().getTime() / coeff) * coeff);
-      const roundedTime = roundedDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const roundedTime = roundedDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
       let locStr = "Location unavailable";
       if (location) {
@@ -192,7 +193,7 @@ export default function GeoCheckOut() {
               <View style={styles.summaryCell}>
                 <Ionicons name="time-outline" size={16} color={TEXT_MUTED} />
                 <Text style={styles.summaryCellLabel}>Scheduled</Text>
-                <Text style={styles.summaryCellValue}>{shift.startTime} – {shift.endTime}</Text>
+                <Text style={styles.summaryCellValue}>{formatShiftTimeUTCtoCanada(null, shift.startTime)} – {formatShiftTimeUTCtoCanada(null, shift.endTime)}</Text>
               </View>
             </View>
           </View>

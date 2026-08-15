@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 
@@ -104,7 +105,7 @@ export default function TransportationDetail() {
   const displayClient = task?.passenger || shift?.clientName || shift?.name || "Client";
   const displayPickup = task?.pickup || task?.pickupLocation || shift?.pickupLocation || shift?.location || "Pickup location";
   const displayDrop = task?.destination || task?.dropLocation || shift?.dropLocation || shift?.destination || "Drop-off location";
-  const displayTime = task?.time || (shift ? `${shift.startTime} – ${shift.endTime}` : "—");
+  const displayTime = task?.time || (shift ? `${formatShiftTimeUTCtoCanada(null, shift.startTime)} – ${formatShiftTimeUTCtoCanada(null, shift.endTime)}` : "—");
   const displayDate = shift?.startDate || "—";
   const status = task?.status || shift?.status || "Pending";
   const statusCfg = STATUS_CONFIG[status] || STATUS_CONFIG.Pending;

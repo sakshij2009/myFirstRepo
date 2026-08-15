@@ -134,7 +134,7 @@ export function ShiftMedications() {
 
   const handleToggle = (id: string) => {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     setMeds((prev) =>
       prev.map((m) => {
         if (m.id !== id) return m;

@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, query, where, getDocs, updateDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebase/config";
+import { formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 const DEMO_MEDS = [
@@ -93,7 +94,7 @@ export default function ShiftMedications() {
               <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.7)" style={{ marginRight: 12 }} />
               <View>
                 <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{shift.clientName || shift.name || "Client"}</Text>
-                <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>{shift.startTime} – {shift.endTime}</Text>
+                <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>{formatShiftTimeUTCtoCanada(null, shift.startTime)} – {formatShiftTimeUTCtoCanada(null, shift.endTime)}</Text>
               </View>
             </View>
           )}
@@ -137,7 +138,7 @@ export default function ShiftMedications() {
                   <View>
                     <View style={{ backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginBottom: 10, flexDirection: "row", alignItems: "center" }}>
                       <Ionicons name="checkmark-circle" size={16} color={GREEN} style={{ marginRight: 6 }} />
-                      <Text style={{ fontSize: 13, color: GREEN, fontWeight: "600" }}>Administered at {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
+                      <Text style={{ fontSize: 13, color: GREEN, fontWeight: "600" }}>Administered at {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</Text>
                     </View>
                     <TextInput
                       value={med.notes}

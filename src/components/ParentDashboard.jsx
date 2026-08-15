@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { filterFieldsForParents } from "../utils/parentFieldFilter";
+import { formatTime12 } from "../utils/timeHelpers";
 import {
   LayoutGrid, Bell, LogOut, Search, ChevronLeft, ChevronRight,
   Calendar, Clock, Eye, FileText,
@@ -400,8 +401,8 @@ const ParentDashboard = ({ user, onLogout }) => {
                     <div className="flex-1">
                       <p className="font-semibold text-sm" style={{ color: "#111827" }}>{shift.clientName || "—"}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {formatDate(shift.clockIn)} {shift.clockIn?.toDate ? shift.clockIn.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
-                        {shift.clockOut?.toDate ? ` - ${shift.clockOut.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                        {formatDate(shift.clockIn)} {shift.clockIn ? formatTime12(shift.clockIn) : ""}
+                        {shift.clockOut ? ` - ${formatTime12(shift.clockOut)}` : ""}
                       </p>
                       <div className="text-[10px] text-gray-400 mt-0.5">
                         {shift.primaryUserName || shift.userName || shift.name || "—"} (P)

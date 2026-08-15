@@ -24,6 +24,7 @@ import { sendNotification } from "../utils/notificationHelper";
 import NotificationSlider from "../components/NotificationSlider";
 import ShiftCalendar from "./ShiftCalender";
 import UserTransportationShifts from "./UserTransportationShifts";
+import { formatTime12, edmontonNow12 } from "../utils/timeHelpers";
 
 // ================== UTIL HELPERS FOR SHIFT TIMES ==================
 
@@ -155,14 +156,7 @@ const UserDashboard = ({ user }) => {
   const [currentTime, setCurrentTime] = useState("");
   useEffect(() => {
     const updateTime = () => {
-      const formatter = new Intl.DateTimeFormat("en-CA", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-        timeZone: "America/Edmonton",
-      });
-      setCurrentTime(formatter.format(new Date()));
+      setCurrentTime(edmontonNow12());
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -621,16 +615,8 @@ const handleExtendShift = async () => {
 // =============== REAL TIME TICKER (DO NOT REMOVE) ===============
 // =============== REAL TIME TICKER (FIXED) ===============
 useEffect(() => {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZone: "America/Edmonton",
-  });
-
   const timer = setInterval(() => {
-    setCurrentTime(formatter.format(new Date())); // ✅ always string
+    setCurrentTime(edmontonNow12()); // ✅ always string
   }, 30 * 1000);
 
   return () => clearInterval(timer);
@@ -926,7 +912,7 @@ useEffect(() => {
                     Clock In
                   </p>
                   <p className="font-bold text-[14px] leading-[20px]">
-                    {clockInTime || "--:--"}
+                    {formatTime12(clockInTime) || "--:--"}
                   </p>
                 </div>
                 <div className="flex justify-between">
@@ -949,7 +935,7 @@ useEffect(() => {
                     Clock Out
                   </p>
                   <p className="font-bold text-[14px] leading-[20px]">
-                    {clockOutTime || "--:--"}
+                    {formatTime12(clockOutTime) || "--:--"}
                   </p>
                 </div>
                 <div className="flex justify-between">

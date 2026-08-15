@@ -127,7 +127,7 @@ export default function Alerts() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
     if (itemDate.getTime() === today.getTime()) return `Today at ${timeStr}`;
     const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
     if (itemDate.getTime() === yesterday.getTime()) return `Yesterday at ${timeStr}`;
@@ -252,7 +252,7 @@ function NotificationCard({ alert, onPress }) {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+            const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
             if (itemDate.getTime() === todayStart.getTime()) return `Today at ${timeStr}`;
             const yday = new Date(todayStart); yday.setDate(todayStart.getDate() - 1);
             if (itemDate.getTime() === yday.getTime()) return `Yesterday at ${timeStr}`;

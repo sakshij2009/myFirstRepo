@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getFirestore, collection, query, getDocs } from "firebase/firestore";
 import { formatLocalISO, parseLocalSafe, getEdmontonToday } from "../utils/dateHelpers";
+import { formatTime12 } from "../utils/timeHelpers";
 
 export default function AdminShiftCalendar() {
   const [currentDate, setCurrentDate] = useState(getEdmontonToday());
@@ -156,7 +157,7 @@ export default function AdminShiftCalendar() {
                                   <span className="text-gray-500">{shift.secondaryUserName} (S)</span>
                                 )}
                               </div>
-                              <div>{shift.startTime} → {shift.endTime}</div>
+                              <div>{formatTime12(shift.startTime)} → {formatTime12(shift.endTime)}</div>
                             </div>
                           ))}
                         </div>

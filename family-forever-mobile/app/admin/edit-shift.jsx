@@ -65,7 +65,7 @@ const ds = StyleSheet.create({
 
 /* ─── Helpers ────────────────────────────────────────────── */
 const formatDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-const formatTime = (t) => t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+const formatTime = (t) => t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 const pad2 = (n) => String(n).padStart(2, '0');
 const toHHMM = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 

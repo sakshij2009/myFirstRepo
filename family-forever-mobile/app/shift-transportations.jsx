@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { collection, query, where, getDocs, updateDoc, doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import ReportTransportationTab from "./_ReportTransportationTab";
+import { formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
 const GREEN = "#1F6F43";
 const DEMO_TASKS = [
@@ -123,7 +124,7 @@ export default function ShiftTransportations() {
                 <Ionicons name="car" size={20} color="#ea580c" style={{ marginRight: 10 }} />
                 <View>
                   <Text style={{ fontSize: 14, fontWeight: "700", color: "#1a1a1a" }}>{shift.clientName || "Client"}</Text>
-                  <Text style={{ fontSize: 13, color: "#6b7280" }}>{shift.startTime} – {shift.endTime}</Text>
+                  <Text style={{ fontSize: 13, color: "#6b7280" }}>{formatShiftTimeUTCtoCanada(null, shift.startTime)} – {formatShiftTimeUTCtoCanada(null, shift.endTime)}</Text>
                 </View>
               </View>
             </View>

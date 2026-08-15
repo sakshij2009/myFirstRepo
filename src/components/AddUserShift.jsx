@@ -33,6 +33,7 @@ import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
+import { formatTime12 } from "../utils/timeHelpers";
 
 
 // ---------------- OFFICE ADDRESS ----------------
@@ -1286,7 +1287,7 @@ const AddUserShift = ({ mode = "add", user }) => {
           setSlider({
             show: true,
             title: "Shift Updated Successfully!",
-            subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${values.startTime}`,
+            subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${formatTime12(values.startTime)}`,
             redirectTo: "/admin-dashboard/dashboard",
           });
 
@@ -1600,7 +1601,7 @@ const AddUserShift = ({ mode = "add", user }) => {
       setSlider({
         show: true,
         title: "Shifts Created Successfully!",
-        subtitle: `${selectedClient?.name || ""} – ${selectedDates.length} day(s) starting ${firstDate.toDateString()} at ${values.startTime}`,
+        subtitle: `${selectedClient?.name || ""} – ${selectedDates.length} day(s) starting ${firstDate.toDateString()} at ${formatTime12(values.startTime)}`,
         redirectTo: "/admin-dashboard/dashboard",
       });
 

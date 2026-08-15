@@ -1282,7 +1282,7 @@ export default function ShiftDetails() {
           <TimelineItem
             title="Shift Confirmed"
             subtitle={shift.confirmedAt ? `Confirmed by ${safeString(shift.confirmedBy) || staffName}` : "Awaiting confirmation"}
-            time={shift.confirmedAt ? (() => { const d = toDate(shift.confirmedAt); return d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"; })() : "—"}
+            time={shift.confirmedAt ? (() => { const d = toDate(shift.confirmedAt); return d ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "—"; })() : "—"}
             completed={!!shift.shiftConfirmed}
           />
           <TimelineItem

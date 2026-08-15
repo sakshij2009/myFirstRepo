@@ -5,6 +5,7 @@ import { storage, db } from "../firebase";
 import { FaUpload } from "react-icons/fa";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import { reverseGeocode, calculateRouteDistance } from "../utils/mapboxHelper";
+import { formatTime12 } from "../utils/timeHelpers";
 
 const AddTransportation = ({ shiftId, shiftData }) => {
   const [uploadedReceipts, setUploadedReceipts] = useState([]);
@@ -339,7 +340,7 @@ const handleSubmit = async () => {
         <div><b>Staff Name:</b> {shiftData.name || shiftData.userName}</div>
         <div><b>Staff ID:</b> {shiftData.userId}</div>
         <div><b>Client Name:</b> {shiftData.clientName}</div>
-        <div><b>Shift Time:</b> {shiftData.startTime} - {shiftData.endTime}</div>
+        <div><b>Shift Time:</b> {formatTime12(shiftData.startTime)} - {formatTime12(shiftData.endTime)}</div>
       </div>
 
       <hr className="border-light-gray" />

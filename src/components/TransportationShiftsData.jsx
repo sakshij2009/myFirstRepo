@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import { formatTime12 } from "../utils/timeHelpers";
 
 const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
   const [intakeForms, setIntakeForms] = useState({});
@@ -126,9 +127,9 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
 
   const buildRangeLabel = (start, end) => {
     if (start && end && end !== "–" && start !== "N/A") {
-      return `${start} – ${end}`;
+      return `${formatTime12(start)} – ${formatTime12(end)}`;
     }
-    if (start && start !== "N/A") return start;
+    if (start && start !== "N/A") return formatTime12(start);
     return "N/A";
   };
 
@@ -230,7 +231,7 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
                     </p>
                     <p className="font-normal text-[14px]">
                       Pick Up Time:{" "}
-                      <span className="font-bold">{pickupTime}</span>
+                      <span className="font-bold">{formatTime12(pickupTime)}</span>
                     </p>
                   </div>
 
@@ -262,7 +263,7 @@ const TransportationShiftsData = ({ filteredShifts, openTransportDetails }) => {
 
                     <p className="font-normal text-[14px]">
                       Drop Off Time:{" "}
-                      <span className="font-bold">{dropTime}</span>
+                      <span className="font-bold">{formatTime12(dropTime)}</span>
                     </p>
                   </div>
                 </div>
