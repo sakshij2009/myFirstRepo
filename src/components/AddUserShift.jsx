@@ -2360,11 +2360,11 @@ const AddUserShift = ({ mode = "add", user }) => {
                                   <div>
                                     <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Location</label>
                                     <div className="flex items-center gap-2">
-                                      <input type="text"
-                                        className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
+                                      <PlacesAutocomplete
                                         value={pt.visitLocation || ""}
-                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitLocation: e.target.value } : p))}
-                                        placeholder="N/A"
+                                        onChange={(val) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitLocation: val } : p))}
+                                        placeholder="Search address"
+                                        className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
                                       />
                                       <FaRegMap className="text-[#145228] text-lg cursor-pointer hover:opacity-70 flex-shrink-0"
                                         onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pt.visitLocation || "")}`, "_blank")} />
