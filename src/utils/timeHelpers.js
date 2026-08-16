@@ -101,6 +101,52 @@ export const formatTime12 = (value, fallback = "") => {
   return s;
 };
 
+/**
+ * Parse forgiving user time entry into the canonical 24-hour "HH:mm" that the
+ * app stores. Accepts "9", "9pm", "9:30 PM", "930", "2130", "21:30", "09:00".
+ *
+ * @returns "HH:mm", "" for blank input, or null when it cannot be parsed.
+ */
+export const parseTimeInput = (raw) => {
+  if (raw === null || raw === undefined) return "";
+  const s = String(raw).trim().toLowerCase().replace(/\./g, "");
+  if (!s) return "";
+
+  // Trailing meridiem, e.g. "9:30 pm" / "9pm" / "930 p"
+  const mer = s.match(/^(.*?)\s*([ap])m?$/);
+  const body = (mer ? mer[1] : s).trim().replace(/\s+/g, "");
+  const meridiem = mer ? mer[2] : null;
+
+  let h;
+  let min;
+
+  const colon = body.match(/^(\d{1,2}):(\d{2})$/);
+  if (colon) {
+    h = parseInt(colon[1], 10);
+    min = parseInt(colon[2], 10);
+  } else if (/^\d{1,2}$/.test(body)) {          // "9" → 9:00
+    h = parseInt(body, 10);
+    min = 0;
+  } else if (/^\d{3,4}$/.test(body)) {          // "930" → 9:30, "2130" → 21:30
+    h = parseInt(body.slice(0, body.length - 2), 10);
+    min = parseInt(body.slice(-2), 10);
+  } else {
+    return null;
+  }
+
+  if (isNaN(h) || isNaN(min) || min > 59) return null;
+
+  if (meridiem) {
+    if (h < 1 || h > 12) return null;
+    if (meridiem === "p" && h !== 12) h += 12;
+    if (meridiem === "a" && h === 12) h = 0;
+  } else if (h > 23) {
+    return null;
+  }
+
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+};
+
 /** "09:00"–"17:00" → "9:00 AM – 5:00 PM" (empty sides are dropped). */
 export const formatTimeRange12 = (start, end, separator = " – ") => {
   const a = formatTime12(start);

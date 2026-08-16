@@ -32,6 +32,7 @@ import { sendNotification } from "../utils/notificationHelper";
 import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
+import TimeInput12 from "./TimeInput12";
 import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
 import { formatTime12 } from "../utils/timeHelpers";
 
@@ -333,13 +334,13 @@ const AddUserShift = ({ mode = "add", user }) => {
       .required("Start time is required")
       .matches(
         /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-        "Please enter a valid time in HH:MM format"
+        "Please enter a valid time, e.g. 9:00 AM"
       ),
     endTime: Yup.string()
       .required("End time is required")
       .matches(
         /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-        "Please enter a valid time in HH:MM format"
+        "Please enter a valid time, e.g. 9:00 AM"
       ),
     description: Yup.string()
       .required("Shift description is required")
@@ -1972,14 +1973,24 @@ const AddUserShift = ({ mode = "add", user }) => {
                       {/* Start Time */}
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Start Time</label>
-                        <Field name="startTime" type="text" placeholder="HH:MM (24-hour)" className={inputCls(touched.startTime && errors.startTime)} />
+                        <TimeInput12
+                          name="startTime"
+                          value={values.startTime}
+                          onChange={(v) => setFieldValue("startTime", v)}
+                          className={inputCls(touched.startTime && errors.startTime)}
+                        />
                         <ErrorMessage name="startTime" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
                       {/* End Time */}
                       <div>
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>End Time</label>
-                        <Field name="endTime" type="text" placeholder="HH:MM (24-hour)" className={inputCls(touched.endTime && errors.endTime)} />
+                        <TimeInput12
+                          name="endTime"
+                          value={values.endTime}
+                          onChange={(v) => setFieldValue("endTime", v)}
+                          className={inputCls(touched.endTime && errors.endTime)}
+                        />
                         <ErrorMessage name="endTime" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
 
@@ -2313,11 +2324,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                             {/* Pickup Time */}
                             <div>
                               <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Pickup Time</label>
-                              <input type="text"
+                              <TimeInput12
                                 className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
                                 value={pt.pickupTime || ""}
-                                onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
-                                placeholder="N/A"
+                                onChange={(val) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, pickupTime: val } : p))}
                               />
                             </div>
 
@@ -2339,11 +2349,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                             {/* Drop Time */}
                             <div>
                               <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Drop Time</label>
-                              <input type="text"
+                              <TimeInput12
                                 className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
                                 value={pt.dropTime || ""}
-                                onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, dropTime: e.target.value } : p))}
-                                placeholder="N/A"
+                                onChange={(val) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, dropTime: val } : p))}
                               />
                             </div>
 
@@ -2375,17 +2384,17 @@ const AddUserShift = ({ mode = "add", user }) => {
                                   <div>
                                     <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Visit Time</label>
                                     <div className="flex items-center gap-2">
-                                      <input type="text"
+                                      <TimeInput12
                                         className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
                                         value={pt.visitStartTime || ""}
-                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitStartTime: e.target.value } : p))}
+                                        onChange={(val) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitStartTime: val } : p))}
                                         placeholder="Start"
                                       />
                                       <span className="text-gray-400 text-sm">–</span>
-                                      <input type="text"
+                                      <TimeInput12
                                         className="flex-1 bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#145228] focus:bg-white"
                                         value={pt.visitEndTime || ""}
-                                        onChange={(e) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitEndTime: e.target.value } : p))}
+                                        onChange={(val) => setShiftPoints((prev) => prev.map((p, i) => i === idx ? { ...p, visitEndTime: val } : p))}
                                         placeholder="End"
                                       />
                                     </div>
@@ -2581,11 +2590,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Pickup Time</label>
-                                  <input type="text"
+                                  <TimeInput12
                                     className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
                                     value={pt.pickupTime || ""}
-                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, pickupTime: e.target.value } : p))}
-                                    placeholder="N/A" />
+                                    onChange={(val) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, pickupTime: val } : p))} />
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Drop Location</label>
@@ -2597,11 +2605,10 @@ const AddUserShift = ({ mode = "add", user }) => {
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Drop Time</label>
-                                  <input type="text"
+                                  <TimeInput12
                                     className="w-full bg-[#f3f3f5] border border-[#e6e6e6] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1d4ed8]"
                                     value={pt.dropTime || ""}
-                                    onChange={(e) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, dropTime: e.target.value } : p))}
-                                    placeholder="N/A" />
+                                    onChange={(val) => setReturnShiftPoints(prev => prev.map((p, i) => i === idx ? { ...p, dropTime: val } : p))} />
                                 </div>
                               </div>
                             ))}
