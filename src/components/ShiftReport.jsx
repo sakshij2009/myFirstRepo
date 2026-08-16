@@ -13,6 +13,7 @@ import FollowThroughForm from "./FollowThroughForm";
 import MedicalLogForm from "./MedicalLogForm";
 import ServicePlanForm from "./ServicePlanForm";
 import { formatTime12 } from "../utils/timeHelpers";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 import {
   ArrowLeft, Calendar, Clock, User, MapPin, Phone, Mail,
   FileText, Download, CheckCircle, AlertCircle, Edit,
@@ -1047,7 +1048,11 @@ const ShiftReport = ({ user }) => {
     clientName: shiftData.clientName || shiftData.clientDetails?.name || "N/A",
     dob: shiftData.dob || "N/A",
     avatar: shiftData.clientAvatar || null,
-    category: shiftData.categoryName || shiftData.category || shiftData.shiftCategory || "N/A",
+    category: categoryLabel(
+      shiftData.categoryName || shiftData.category || shiftData.shiftCategory,
+      isTherapyDriveShift(shiftData),
+      "N/A"
+    ),
     serviceType: shiftData.serviceType || intakeData?.serviceType || shiftData.typeName || "N/A",
     agency: shiftData.agencyName || intakeData?.agencyName || shiftData.agency || "N/A",
     startDate: shiftData.startDate || null,

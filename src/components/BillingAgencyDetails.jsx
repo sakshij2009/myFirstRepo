@@ -7,6 +7,7 @@ import {
 import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import InvoiceGenerator from "./InvoiceGenerator";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 
 const fmtC = (v) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0);
@@ -202,7 +203,11 @@ export default function BillingAgencyDetails({ agency, onBack }) {
               id: s.id,
               date: displayDate,
               sortTs,
-              type: rawCatKey,
+              // Label only — rawCatKey (without the suffix) still drives the
+              // rate lookup above, so a therapy drive bills exactly as it did
+              // until a Therapy Drive rate is configured.
+              type: categoryLabel(rawCatKey, isTherapyDriveShift(s)),
+              isTherapyDrive: isTherapyDriveShift(s),
               staff: staffMember,
               hours: h,
               rate: r,

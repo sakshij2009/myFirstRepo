@@ -33,6 +33,7 @@ import { FaRegMap, FaExchangeAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import PlacesAutocomplete from "./PlacesAutocomplete";
 import TimeInput12 from "./TimeInput12";
+import { isSupervisedVisitation } from "../utils/shiftCategoryHelpers";
 import { formatLocalISO, parseLocalSafe } from "../utils/dateHelpers";
 import { formatTime12 } from "../utils/timeHelpers";
 
@@ -227,6 +228,7 @@ const AddUserShift = ({ mode = "add", user }) => {
     description: "",
     shiftAddress: "",
     accessToShiftReport: false,
+    isTherapyDrive: false,
     shiftDates: [],
   });
 
@@ -659,6 +661,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             description: data.jobdescription || data.description || "",
             shiftAddress: data.shiftAddress || "",
             accessToShiftReport: data.accessToShiftReport || false,
+            isTherapyDrive: data.isTherapyDrive === true,
             shiftDates: calendarDates,
           }));
 
@@ -1414,6 +1417,9 @@ const AddUserShift = ({ mode = "add", user }) => {
           billingStatus:   "Billable",
           locked:          false,
           accessToShiftReport: values.accessToShiftReport || false,
+          // Only meaningful under Supervised Visitation — never let the flag
+          // survive a category switch.
+          isTherapyDrive: isSupervisedVisitation(values.shiftCategory) && values.isTherapyDrive === true,
           totalScheduledKm: scheduledKm,
 
           // ── Location defaults ─────────────────────────────────────
@@ -1551,6 +1557,7 @@ const AddUserShift = ({ mode = "add", user }) => {
             billingStatus: "Billable",
             locked:        false,
             accessToShiftReport: values.accessToShiftReport || false,
+            isTherapyDrive: isSupervisedVisitation(values.shiftCategory) && values.isTherapyDrive === true,
             startLatitude: 0, startLongitude: 0,
             endLatitude: 0, endLongitude: 0,
             visitLocation: "", visitStartTime: "", visitEndTime: "",
@@ -1888,7 +1895,12 @@ const AddUserShift = ({ mode = "add", user }) => {
                         <label className="block font-semibold mb-2" style={{ fontSize: 13, color: "#374151" }}>Shift Category</label>
                         <Field as="select" name="shiftCategory"
                           className={selectCls(touched.shiftCategory && errors.shiftCategory, !values.shiftCategory)}
-                          onChange={e => { setFieldValue("shiftCategory", e.target.value); setCategoryWarning(""); }}>
+                          onChange={e => {
+                            setFieldValue("shiftCategory", e.target.value);
+                            // Therapy Drive only applies to Supervised Visitation
+                            if (!isSupervisedVisitation(e.target.value)) setFieldValue("isTherapyDrive", false);
+                            setCategoryWarning("");
+                          }}>
                           <option value="">Please select the shift category</option>
                           {shiftCategories.map((item) => (
                             <option key={item.id} value={item.name}>{item.name}</option>
@@ -1993,6 +2005,35 @@ const AddUserShift = ({ mode = "add", user }) => {
                         />
                         <ErrorMessage name="endTime" component="div" className="text-red-500 text-xs mt-1" />
                       </div>
+
+                      {/* Therapy Drive — Supervised Visitation only.
+                          Billed differently, so it is an explicit choice rather
+                          than something inferred from the description. */}
+                      {isSupervisedVisitation(values.shiftCategory) && (
+                        <div className="col-span-2">
+                          <label className="flex items-start gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors"
+                            style={{
+                              background: values.isTherapyDrive ? "#f0fdf4" : "#fafafa",
+                              borderColor: values.isTherapyDrive ? "#86efac" : "#e5e7eb",
+                            }}>
+                            <input
+                              type="checkbox"
+                              checked={values.isTherapyDrive === true}
+                              onChange={(e) => setFieldValue("isTherapyDrive", e.target.checked)}
+                              className="mt-0.5 w-4 h-4 accent-[#145228] cursor-pointer flex-shrink-0"
+                            />
+                            <span>
+                              <span className="block font-semibold" style={{ fontSize: 13, color: "#374151" }}>
+                                Therapy Drive
+                              </span>
+                              <span className="block text-gray-500" style={{ fontSize: 12, marginTop: 2 }}>
+                                Staff drives the client to an appointment, waits, and drives them back.
+                                Stays under Supervised Visitation but is flagged separately for billing.
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+                      )}
 
                       {/* Access to Shift Report toggle */}
                       <div className="col-span-2">

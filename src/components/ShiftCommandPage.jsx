@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { parseLocalSafe } from "../utils/dateHelpers";
 import { formatTime12 } from "../utils/timeHelpers";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 
 // ─── Service Config ────────────────────────────────────────────────────────────
 const SERVICE_CFG = {
@@ -278,7 +279,7 @@ function ShiftGridRow({ shift, showDate, navigate, onDelete }) {
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold"
           style={{ background: svc.bg, color: svc.color, fontSize: 11, border: `1px solid ${svc.border}` }}>
           <span className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, background: svc.color, display: "inline-block" }} />
-          {svc.label}
+          {categoryLabel(svc.label, isTherapyDriveShift(shift))}
         </span>
       </div>
 
@@ -331,7 +332,7 @@ function ShiftCompactRow({ shift, navigate }) {
         </span>
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold"
           style={{ background: svc.bg, color: svc.color, fontSize: 10 }}>
-          {svc.label}
+          {categoryLabel(svc.label, isTherapyDriveShift(shift))}
         </span>
       </div>
       <div className="flex flex-col gap-0.5 mt-1" style={{ fontSize: 11, color: shift.staff ? "#6b7280" : "#ea580c" }}>
@@ -565,7 +566,7 @@ function TodayView({ shifts, navigate }) {
                 </div>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold"
                   style={{ background: svc.bg, color: svc.color, fontSize: 11 }}>
-                  {svc.label}
+                  {categoryLabel(svc.label, isTherapyDriveShift(s))}
                 </span>
               </div>
             </div>
@@ -781,6 +782,7 @@ export default function ShiftCommandPage() {
             client: data.clientName || data.clientDetails?.name || "",
             serviceKey,
             status,
+            isTherapyDrive: data.isTherapyDrive === true,
           };
         });
         setRawShifts(list);

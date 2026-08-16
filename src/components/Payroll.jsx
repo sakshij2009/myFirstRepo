@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtC = (v) =>
@@ -370,7 +371,11 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                   const expense = Number(shift.approvedExpense || shift.expense || shift.expenseAmount || 0);
                   const amount = (shiftHrs * rate) + kmCalculated + expense;
                   
-                  const serviceType = shift.categoryName || shift.serviceType || shift.category || shift.shiftType || "";
+                  const serviceType = categoryLabel(
+                    shift.categoryName || shift.serviceType || shift.category || shift.shiftType,
+                    isTherapyDriveShift(shift),
+                    ""
+                  );
                   const badge = serviceTypeBadge(serviceType);
                   const isLocked = !!(shift.locked || shift.shiftLocked || shift.isLocked);
                   const rowBg = isShiftCancelled ? "#fee2e2" : (idx % 2 === 0 ? "#ffffff" : "#fafafa");
@@ -448,7 +453,7 @@ function StaffRow({ rec, monthLabel, expanded, onToggle, userShifts = [], onAppr
                       </td>
                       {/* TYPE */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151" }}>
-                        {shift.type || shift.shiftCategory || "Regular"}
+                        {categoryLabel(shift.type || shift.shiftCategory, isTherapyDriveShift(shift), "Regular")}
                       </td>
                       {/* RATE */}
                       <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151" }}>
@@ -713,7 +718,11 @@ export default function Payroll() {
     const rows = rec.userShifts.map((shift) => {
       const dateStr = fmtShiftDate(shift.dateKey || shift.startDate || shift.clockIn) || "—";
       const client = `"${shift.clientName || shift.client || ""}"`;
-      const serviceType = `"${shift.categoryName || shift.serviceType || shift.category || shift.shiftType || ""}"`;
+      const serviceType = `"${categoryLabel(
+        shift.categoryName || shift.serviceType || shift.category || shift.shiftType,
+        isTherapyDriveShift(shift),
+        ""
+      )}"`;
 
       const cIn = formatTime(shift.clockInTime || shift.clockIn);
       const cOut = formatTime(shift.clockOutTime || shift.clockOut);

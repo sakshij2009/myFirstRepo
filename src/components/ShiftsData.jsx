@@ -6,6 +6,7 @@ import { CheckCircle } from "lucide-react";
 import ShiftLockToggle from "./ShiftLockToggle";
 import { generateShiftReportPDF } from "../components/GenerateShiftReportPDF";
 import { formatTime12 } from "../utils/timeHelpers";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 import {
   ChevronLeft, ChevronRight, Calendar, User, Tag, Clock,
   FileText, Edit2, Download, Lock, Building2, Car,
@@ -47,7 +48,10 @@ function confirmedBadge(confirmed) {
   );
 }
 
-function categoryBadge(cat) {
+// `cat` selects the colour (exact match against the map); `label` is what is
+// rendered, so a suffixed label like "Supervised Visitation (Therapy Drive)"
+// still gets its category's colour.
+function categoryBadge(cat, label = cat) {
   const map = {
     "Emergent Care": { bg: "#fff1f2", color: "#c70036", border: "#ffccd3" },
     "Supervised Visitation": { bg: "#fffbeb", color: "#bf4d00", border: "#fee685" },
@@ -59,7 +63,7 @@ function categoryBadge(cat) {
       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.color, borderColor: s.border }}
     >
-      {cat || "—"}
+      {label || "—"}
     </span>
   );
 }
@@ -206,7 +210,7 @@ const ShiftsData = ({ filteredShifts = [] }) => {
                     </span>
                   )}
                 </div>
-                {categoryBadge(normCat)}
+                {categoryBadge(normCat, categoryLabel(normCat, isTherapyDriveShift(shift)))}
                 {statusBadge(effectiveStatus)}
                 {confirmedBadge(effectiveShiftConfirmed)}
               </div>

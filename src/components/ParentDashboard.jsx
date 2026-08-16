@@ -4,6 +4,7 @@ import { collection, query, where, onSnapshot, getDocs } from "firebase/firestor
 import { db } from "../firebase";
 import { filterFieldsForParents } from "../utils/parentFieldFilter";
 import { formatTime12 } from "../utils/timeHelpers";
+import { categoryLabel, isTherapyDriveShift } from "../utils/shiftCategoryHelpers";
 import {
   LayoutGrid, Bell, LogOut, Search, ChevronLeft, ChevronRight,
   Calendar, Clock, Eye, FileText,
@@ -411,7 +412,7 @@ const ParentDashboard = ({ user, onLogout }) => {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs px-2.5 py-1 rounded-full font-semibold" style={{ background: "#DBEAFE", color: "#2563EB" }}>
-                        {shift.categoryName || shift.shiftType || "Shift"}
+                        {categoryLabel(shift.categoryName || shift.shiftType, isTherapyDriveShift(shift), "Shift")}
                       </span>
                       <StatusBadge status={shift.status} />
                       <button

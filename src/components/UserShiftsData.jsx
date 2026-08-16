@@ -19,6 +19,7 @@ import {
 import { db } from "../firebase";
 import { sendNotification } from "../utils/notificationHelper"; // adjust path if needed
 import { formatTime12 } from "../utils/timeHelpers";
+import { shiftCategoryLabel } from "../utils/shiftCategoryHelpers";
 
 const UserShiftsData = ({ user, userShifts = [] }) => {
   // pagination + local UI state
@@ -279,8 +280,9 @@ const handleTransferShift = async () => {
                     </div>
                     <div className="w-[160px]">
                       <p className="font-normal text-[14px] leading-[20px]">Shift Category</p>
-                      <p className={getShiftCategoryStyle(emp.categoryName || emp.shiftCategory)} title={emp.categoryName || emp.shiftCategory}>
-                        {emp.categoryName || emp.shiftCategory || "-"}
+                      <p className={getShiftCategoryStyle(emp.categoryName || emp.shiftCategory)}
+                        title={shiftCategoryLabel(emp, "-")}>
+                        {shiftCategoryLabel(emp, "-")}
                       </p>
                     </div>
                     <div className="w-[75px]">
@@ -438,7 +440,7 @@ const handleTransferShift = async () => {
                 </div>
                 <div className="flex flex-col">
                   <p className="font-normal text-sm leading-5">Category</p>
-                  <p className="font-bold text-sm leading-5">{selectedShift?.categoryName}</p>
+                  <p className="font-bold text-sm leading-5">{shiftCategoryLabel(selectedShift, "")}</p>
                 </div>
                 <div className="flex flex-col">
                   <p className="font-normal text-sm leading-5">Type</p>
