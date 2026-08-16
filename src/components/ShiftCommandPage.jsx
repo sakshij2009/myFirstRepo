@@ -10,6 +10,7 @@ import {
   Eye, Edit2, MoreHorizontal, Trash2,
 } from "lucide-react";
 import { parseLocalSafe } from "../utils/dateHelpers";
+import { formatTime12 } from "../utils/timeHelpers";
 
 // ─── Service Config ────────────────────────────────────────────────────────────
 const SERVICE_CFG = {
@@ -164,11 +165,11 @@ function ShiftChip({ shift, navigate }) {
       onClick={() => navigate && navigate(`/admin-dashboard/shift-report/${shift.id}`)}
       className="flex items-center gap-1 px-1.5 py-0.5 rounded cursor-pointer select-none hover:opacity-75 transition-opacity"
       style={{ background: s.bg, border: `1px solid ${s.border}` }}
-      title={`${shift.timeStart}–${shift.timeEnd} · ${shift.client} · P: ${shift.staff || "Unassigned"}${shift.secondaryStaff ? ` · S: ${shift.secondaryStaff}` : ""}`}
+      title={`${formatTime12(shift.timeStart)}–${formatTime12(shift.timeEnd)} · ${shift.client} · P: ${shift.staff || "Unassigned"}${shift.secondaryStaff ? ` · S: ${shift.secondaryStaff}` : ""}`}
     >
       <span className="rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: s.color }} />
       <span className="truncate" style={{ fontSize: 10, color: s.color, fontWeight: 600, lineHeight: 1 }}>
-        {shift.timeStart} {shift.client}
+        {formatTime12(shift.timeStart)} {shift.client}
       </span>
     </div>
   );
@@ -244,7 +245,7 @@ function ShiftGridRow({ shift, showDate, navigate, onDelete }) {
         <div className="flex items-center gap-1.5">
           <Clock size={12} style={{ color: svc.color, flexShrink: 0 }} />
           <span className="font-semibold" style={{ fontSize: 12, color: "#374151" }}>
-            {shift.timeStart}–{shift.timeEnd}
+            {formatTime12(shift.timeStart)}–{formatTime12(shift.timeEnd)}
           </span>
         </div>
         {dur && <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{dur} duration</p>}
@@ -326,7 +327,7 @@ function ShiftCompactRow({ shift, navigate }) {
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1" style={{ fontSize: 11, color: "#6b7280" }}>
-          <Clock size={10} /> {shift.timeStart}–{shift.timeEnd}
+          <Clock size={10} /> {formatTime12(shift.timeStart)}–{formatTime12(shift.timeEnd)}
         </span>
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold"
           style={{ background: svc.bg, color: svc.color, fontSize: 10 }}>
@@ -394,11 +395,15 @@ const ROW_H = 115;
 function MonthCalendar({ year, month, shifts, navigate }) {
   const TODAY = todayStr();
   const weeks = getMonthGrid(year, month);
-  const [expandedDate, setExpandedDate] = useState(null);
 
+  // Every shift on a day is rendered — no cap. Days are sorted by start time
+  // so a busy day still reads top-to-bottom in chronological order.
   const shiftMap = useMemo(() => {
     const m = {};
     shifts.forEach((s) => { (m[s.date] = m[s.date] || []).push(s); });
+    Object.values(m).forEach((list) =>
+      list.sort((a, b) => (a.timeStart || "").localeCompare(b.timeStart || ""))
+    );
     return m;
   }, [shifts]);
 
@@ -412,14 +417,11 @@ function MonthCalendar({ year, month, shifts, navigate }) {
         ))}
       </div>
       {weeks.map((week, wi) => (
-        <div key={wi} className="grid grid-cols-7" style={{ height: ROW_H }}>
+        <div key={wi} className="grid grid-cols-7" style={{ minHeight: ROW_H }}>
           {week.map((dateStr, di) => {
             const isToday = dateStr === TODAY;
             const isCurrentMonth = parseInt(dateStr.slice(5, 7)) - 1 === month;
             const dayShifts = shiftMap[dateStr] || [];
-            const visible = dayShifts.slice(0, 3);
-            const overflow = dayShifts.length - visible.length;
-            const isExpanded = expandedDate === dateStr;
 
             return (
               <div key={di}
@@ -440,42 +442,9 @@ function MonthCalendar({ year, month, shifts, navigate }) {
                     {parseInt(dateStr.slice(8))}
                   </span>
                 </div>
-                <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
-                  {visible.map((s) => <ShiftChip key={s.id} shift={s} navigate={navigate} />)}
-                  {overflow > 0 && (
-                    <span 
-                      onClick={() => setExpandedDate(dateStr)}
-                      className="px-1 rounded cursor-pointer hover:bg-gray-100 transition-colors max-w-max"
-                      style={{ fontSize: 10, color: "#6b7280", fontWeight: 600 }}>
-                      +{overflow} more
-                    </span>
-                  )}
+                <div className="flex flex-col gap-0.5 flex-1">
+                  {dayShifts.map((s) => <ShiftChip key={s.id} shift={s} navigate={navigate} />)}
                 </div>
-
-                {isExpanded && (
-                  <div 
-                    className="absolute z-50 bg-white rounded-xl shadow-2xl border p-2 flex flex-col gap-1.5"
-                    style={{ 
-                      top: -4, 
-                      left: -4, 
-                      width: "calc(100% + 8px)",
-                      minWidth: 160,
-                      borderColor: "#e5e7eb" 
-                    }}
-                  >
-                    <div className="flex justify-between items-center pb-1 border-b" style={{ borderColor: "#f3f4f6" }}>
-                        <span className="font-bold ml-1" style={{ fontSize: 12, color: "#111827" }}>
-                          {parseInt(dateStr.slice(8))} {new Date(dateStr + "T00:00:00").toLocaleString('default', { month: 'short' })}
-                        </span>
-                        <button onClick={() => setExpandedDate(null)} className="text-gray-400 hover:text-red-500 rounded p-0.5 transition-colors">
-                          <XCircle size={14} />
-                        </button>
-                    </div>
-                    <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
-                      {dayShifts.map((s) => <ShiftChip key={s.id} shift={s} navigate={navigate} />)}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -532,7 +501,7 @@ function WeekView({ anchorDate, shifts, navigate }) {
                     onClick={() => navigate && navigate(`/admin-dashboard/add/update-user-shift/${s.id}`)}
                     className="rounded-lg p-2 cursor-pointer hover:opacity-80 transition-opacity"
                     style={{ background: svc.light, border: `1px solid ${svc.border}`, borderLeftWidth: 3, borderLeftColor: svc.color, borderLeftStyle: "solid" }}>
-                    <p className="font-bold" style={{ fontSize: 11, color: svc.color }}>{s.timeStart}–{s.timeEnd}</p>
+                    <p className="font-bold" style={{ fontSize: 11, color: svc.color }}>{formatTime12(s.timeStart)}–{formatTime12(s.timeEnd)}</p>
                     <p className="font-semibold truncate mt-0.5" style={{ fontSize: 11, color: "#111827" }}>{s.client}</p>
                     <p className="truncate" style={{ fontSize: 10, color: "#6b7280" }}>{s.staff || "⚠ Unassigned"}</p>
                   </div>
@@ -566,7 +535,7 @@ function TodayView({ shifts, navigate }) {
             <div className="rounded-xl flex items-center justify-center flex-shrink-0 text-center"
               style={{ width: 50, height: 50, background: svc.bg }}>
               <span className="font-bold" style={{ fontSize: 11, color: svc.color, lineHeight: 1.3 }}>
-                {s.timeStart}<br />–<br />{s.timeEnd}
+                {formatTime12(s.timeStart)}<br />–<br />{formatTime12(s.timeEnd)}
               </span>
             </div>
             <div className="flex-1 min-w-0">
@@ -582,7 +551,7 @@ function TodayView({ shifts, navigate }) {
               </div>
               <div className="flex items-center gap-4 flex-wrap">
                 <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#6b7280" }}>
-                  <Clock size={12} /> {s.timeStart} – {s.timeEnd}
+                  <Clock size={12} /> {formatTime12(s.timeStart)} – {formatTime12(s.timeEnd)}
                 </span>
                 <div className="flex flex-col gap-0.5">
                   <span className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#6b7280" }}>
