@@ -94,6 +94,7 @@ useEffect(() => {
       const newForms = newFormsSnap.docs.map((doc) => ({ id: doc.id, _source: "new", ...doc.data() }));
       const seenIds = new Set();
       const allForms = [...oldForms, ...newForms].filter(f => {
+        if (f.isDeleted === true) return false;   // soft-deleted in Manage Intake Forms
         if (seenIds.has(f.id)) return false;
         seenIds.add(f.id);
         return true;

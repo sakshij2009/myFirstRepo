@@ -718,13 +718,13 @@ const IntakeWorkerDashboard = ({ user, onLogout }) => {
 
     const unsubOld = onSnapshot(
       collection(db, "InTakeForms"),
-      (snap) => { oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() })); oldLoaded = true; merge(); },
+      (snap) => { oldAppForms = snap.docs.map(d => ({ id: d.id, _source: "old", ...d.data() })).filter(f => f.isDeleted !== true); oldLoaded = true; merge(); },
       (err) => { console.error("InTakeForms listener:", err); toast.error("Failed to load intake forms"); setLoading(false); }
     );
 
     const unsubNew = onSnapshot(
       collection(db, "intakeForms"),
-      (snap) => { newAppForms = snap.docs.map(d => ({ id: d.id, _source: "new", ...d.data() })); newLoaded = true; merge(); },
+      (snap) => { newAppForms = snap.docs.map(d => ({ id: d.id, _source: "new", ...d.data() })).filter(f => f.isDeleted !== true); newLoaded = true; merge(); },
       (err) => { console.error("intakeForms listener:", err); newLoaded = true; merge(); }
     );
 

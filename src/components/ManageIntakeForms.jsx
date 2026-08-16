@@ -302,6 +302,9 @@ export default function ManageIntakeForms() {
           return {
             id: d.id,
             formId: d.id,
+            // Must be carried through — the list filters on it below, and
+            // without it every soft-deleted form comes back on refresh.
+            isDeleted: data.isDeleted === true,
             clientName,
             clientCode,
             serviceType,
@@ -361,14 +364,28 @@ export default function ManageIntakeForms() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this form?")) return;
-    try {
-      const form = forms.find(f => f.id === id);
-      const col = form?._source === "new" ? "intakeForms" : "InTakeForms";
-      await updateDoc(doc(db, col, id), { isDeleted: true, deletedAt: new Date().toISOString() });
-      setForms((prev) => prev.filter((f) => f.id !== id));
-    } catch (e) {
-      console.error("Error deleting form:", e);
+
+    // The list merges "InTakeForms" (old) and "intakeForms" (new) and dedupes
+    // by id, so the same form can exist in BOTH collections while showing once.
+    // Flagging only the _source copy leaves the twin unflagged, and the form
+    // reappears on refresh. Mark it in every collection that actually has it.
+    const patch = { isDeleted: true, deletedAt: new Date().toISOString() };
+    const results = await Promise.allSettled(
+      ["intakeForms", "InTakeForms"].map((col) => updateDoc(doc(db, col, id), patch))
+    );
+
+    // updateDoc rejects when the document isn't in that collection, which is
+    // expected for the collection the form doesn't live in.
+    if (!results.some((r) => r.status === "fulfilled")) {
+      console.error(
+        "Error deleting form:",
+        results.map((r) => r.reason)
+      );
+      window.alert("Could not delete this form. Please try again.");
+      return;
     }
+
+    setForms((prev) => prev.filter((f) => f.id !== id));
   };
 
   const handleToggleEdit = async (form) => {

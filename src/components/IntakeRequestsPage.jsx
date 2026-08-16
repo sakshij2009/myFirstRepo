@@ -126,8 +126,10 @@ export default function IntakeRequestsPage() {
           };
         };
 
-        const oldData = oldSnap.docs.map(d => normalizeDoc(d, "old"));
-        const newData = newSnap.docs.map(d => normalizeDoc(d, "new"));
+        // Filter on the raw doc — normalizeDoc reshapes it and drops isDeleted.
+        const notDeleted = (d) => d.data()?.isDeleted !== true;
+        const oldData = oldSnap.docs.filter(notDeleted).map(d => normalizeDoc(d, "old"));
+        const newData = newSnap.docs.filter(notDeleted).map(d => normalizeDoc(d, "new"));
 
         // Merge: old first, then mobile — deduplicate by id
         const seenIds = new Set();
