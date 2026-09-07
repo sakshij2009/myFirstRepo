@@ -34,14 +34,25 @@ export default function TransportationDetail() {
         if (!snap.empty) {
           const data = { id: snap.docs[0].id, ref: snap.docs[0].ref, ...snap.docs[0].data() };
           setShift(data);
-          if (taskId && data.transportTasks) {
-            const found = data.transportTasks.find((t) => t.id === taskId);
-            if (found) setTask(found);
+          if (taskId) {
+            const points = Array.isArray(data.shiftPoints) ? data.shiftPoints
+              : Array.isArray(data.clientDetails?.shiftPoints) ? data.clientDetails.shiftPoints : [];
+            const idx = taskId.startsWith("p-") ? parseInt(taskId.replace("p-", ""), 10) : -1;
+            if (idx >= 0 && idx < points.length) {
+              const pt = points[idx];
+              setTask({
+                id: taskId,
+                passenger: pt.name || data.clientName || "Client",
+                pickup: pt.pickupLocation || "",
+                visit: pt.visitLocation || "",
+                destination: pt.dropLocation || "",
+                time: pt.pickupTime || pt.visitStartTime || "",
+                status: pt.status || "Pending",
+              });
+            }
           }
         }
       }
-      // If params include direct task info (from routes tab), populate from params
-      const params = useLocalSearchParams ? {} : {};
     } catch (e) {
       console.log("Error loading transportation detail:", e);
     } finally {
@@ -102,9 +113,15 @@ export default function TransportationDetail() {
     );
   }
 
+  const primaryPoint = Array.isArray(shift?.shiftPoints) && shift.shiftPoints.length > 0
+    ? shift.shiftPoints[0]
+    : Array.isArray(shift?.clientDetails?.shiftPoints) && shift.clientDetails.shiftPoints.length > 0
+      ? shift.clientDetails.shiftPoints[0] : {};
+
   const displayClient = task?.passenger || shift?.clientName || shift?.name || "Client";
-  const displayPickup = task?.pickup || task?.pickupLocation || shift?.pickupLocation || shift?.location || "Pickup location";
-  const displayDrop = task?.destination || task?.dropLocation || shift?.dropLocation || shift?.destination || "Drop-off location";
+  const displayPickup = task?.pickup || primaryPoint?.pickupLocation || shift?.pickupLocation || "Pickup location";
+  const displayVisit = task?.visit || primaryPoint?.visitLocation || shift?.visitLocation || "";
+  const displayDrop = task?.destination || primaryPoint?.dropLocation || shift?.dropLocation || "Drop-off location";
   const displayTime = task?.time || (shift ? `${formatShiftTimeUTCtoCanada(null, shift.startTime)} – ${formatShiftTimeUTCtoCanada(null, shift.endTime)}` : "—");
   const displayDate = shift?.startDate || "—";
   const status = task?.status || shift?.status || "Pending";
@@ -159,12 +176,13 @@ export default function TransportationDetail() {
 
             {/* Route Stops */}
             <View style={{ marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" }}>
+              {/* Starting Point */}
               <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 12 }}>
                 <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                   <Ionicons name="radio-button-on" size={16} color={GREEN} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>PICKUP</Text>
+                  <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>STARTING POINT</Text>
                   <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{displayPickup}</Text>
                 </View>
                 <Pressable onPress={() => openNavigation(displayPickup)} style={{ padding: 8 }}>
@@ -172,15 +190,34 @@ export default function TransportationDetail() {
                 </Pressable>
               </View>
 
-              {/* Connector line */}
               <View style={{ width: 2, height: 24, backgroundColor: "#d1d5db", marginLeft: 15, marginBottom: 12 }} />
 
+              {/* Visit Destination */}
+              {displayVisit ? (
+                <>
+                  <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 12 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#dbeafe", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                      <Ionicons name="location" size={16} color="#3b82f6" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>VISIT DESTINATION</Text>
+                      <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{displayVisit}</Text>
+                    </View>
+                    <Pressable onPress={() => openNavigation(displayVisit)} style={{ padding: 8 }}>
+                      <Ionicons name="navigate-outline" size={18} color="#3b82f6" />
+                    </Pressable>
+                  </View>
+                  <View style={{ width: 2, height: 24, backgroundColor: "#d1d5db", marginLeft: 15, marginBottom: 12 }} />
+                </>
+              ) : null}
+
+              {/* Ending Point */}
               <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
                 <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                   <Ionicons name="location" size={16} color="#dc2626" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>DROP-OFF</Text>
+                  <Text style={{ fontSize: 11, color: "#9ca3af", fontWeight: "600", marginBottom: 2 }}>ENDING POINT</Text>
                   <Text style={{ fontSize: 14, fontWeight: "600", color: "#1a1a1a" }}>{displayDrop}</Text>
                 </View>
                 <Pressable onPress={() => openNavigation(displayDrop)} style={{ padding: 8 }}>
