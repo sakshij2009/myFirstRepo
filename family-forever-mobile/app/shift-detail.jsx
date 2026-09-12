@@ -616,30 +616,28 @@ export default function ShiftDetails() {
         }
       }
 
-      // Auto-clock-out: if clocked in but not clocked out and 15+ min past shift end
-      // Compute diff inline (diffFromScheduled was removed with helper refactor)
+      // Auto-clock-out: if clocked in but not clocked out and 15+ min past shift end.
+      // Compare real date-times, never minutes-since-midnight: for an 8pm-to-8am
+      // shift the latter reads as 12 hours overdue the moment the person clocks
+      // in, which used to clock overnight staff straight back out.
       const _endSnap = snapTime(shift.endTime);
-      const _now = new Date();
-      const _nowMins = _now.getHours() * 60 + _now.getMinutes();
-      const _endStr = String(shift.endTime || "").trim();
-      let _endMins = null;
-      if (/^\d{1,2}:\d{2}$/.test(_endStr)) {
-        const [_h, _m] = _endStr.split(":").map(Number);
-        _endMins = _h * 60 + _m;
-      } else if (/AM|PM/i.test(_endStr)) {
-        const _idx = _endStr.lastIndexOf(" ");
-        const _p = _endStr.slice(_idx + 1).toUpperCase();
-        let [_h, _m] = _endStr.slice(0, _idx).split(":").map(Number);
-        if (_p === "PM" && _h !== 12) _h += 12;
-        if (_p === "AM" && _h === 12) _h = 0;
-        _endMins = _h * 60 + _m;
-      } else if (shift.endTime?.seconds) {
-        const _d = new Date(shift.endTime.seconds * 1000);
-        _endMins = _d.getHours() * 60 + _d.getMinutes();
+      let _endDT = parseShiftDateTime(shift.endDate || shift.startDate, shift.endTime);
+      const _startDTForEnd = parseShiftDateTime(shift.startDate, shift.startTime);
+      // No separate endDate stored? Then an end at or before the start means the
+      // shift runs past midnight, so its end belongs to the next day.
+      if (_endDT && _startDTForEnd && !shift.endDate && _endDT.getTime() <= _startDTForEnd.getTime()) {
+        _endDT = new Date(_endDT.getTime() + 24 * 60 * 60 * 1000);
       }
-      let minsPassedEnd = _endMins !== null ? _nowMins - _endMins : null;
-      if (minsPassedEnd !== null && minsPassedEnd < -720) minsPassedEnd += 1440;
-      if (isInProgress && minsPassedEnd !== null && minsPassedEnd >= 15 && !autoClockOutFiredRef.current) {
+      const minsPassedEnd = _endDT ? (Date.now() - _endDT.getTime()) / 60000 : null;
+      // Belt and braces: never clock someone out before they clocked in. If the
+      // device's own time zone ever throws the computed end off by a day, this
+      // still cannot end a shift the moment it starts.
+      const _clockInDT = shift.clockIn?.toDate ? shift.clockIn.toDate()
+        : (typeof shift.clockIn === "string" && shift.clockIn ? new Date(shift.clockIn) : null);
+      const _clockedInAfterEnd = !!(_clockInDT && !isNaN(_clockInDT.getTime()) && _endDT
+        && _clockInDT.getTime() > _endDT.getTime());
+      if (isInProgress && minsPassedEnd !== null && minsPassedEnd >= 15
+          && !_clockedInAfterEnd && !autoClockOutFiredRef.current) {
         autoClockOutFiredRef.current = true;
         try {
             const scheduledEndTime = formatStoredTime(shift.endTime) || _endSnap || new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
@@ -764,7 +762,6 @@ export default function ShiftDetails() {
         } else {
           roundedTime = _now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
         }
-        Alert.alert("Clock Snap", `Scheduled: ${shift.startTime}\nNow mins: ${_nowMins}, Sched mins: ${_schMins}, Diff: ${_diff}\nSaving: ${roundedTime}`);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {
@@ -816,7 +813,6 @@ export default function ShiftDetails() {
         } else {
           roundedTime = _now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
         }
-        Alert.alert("Clock Snap", `Scheduled end: ${shift.endTime}\nNow mins: ${_nowMins}, Sched mins: ${_schMins}, Diff: ${_diff}\nSaving: ${roundedTime}`);
         const locationStr = await getLocationString();
 
         await updateDoc(ref, {

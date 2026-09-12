@@ -386,6 +386,60 @@ exports.autoClockOut = onSchedule(
       return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
     };
 
+    // ── Build a real Edmonton date-time, so overnight shifts work ──────────
+    // Minutes-since-midnight alone cannot tell "08:00 tomorrow" from
+    // "08:00 today", which clocked overnight staff out the moment they
+    // clocked in. These helpers produce an absolute instant instead.
+    const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+    // Parse the shift's stored date fields → { y, m, d } (m is 0-based)
+    const parseDateFields = (data, preferEnd) => {
+      const candidates = preferEnd
+        ? [data.endDate, data.dateKey_iso, data.dateKey, data.startDate]
+        : [data.dateKey_iso, data.dateKey, data.startDate];
+      for (const raw of candidates) {
+        if (!raw || typeof raw.toDate === "function") continue;
+        const t = String(raw).trim();
+        let m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);            // 2026-09-11
+        if (m) return { y: +m[1], m: +m[2] - 1, d: +m[3] };
+        m = t.match(/^(\d{2})-(\d{2})-(\d{4})$/);                // 11-09-2026 (DD-MM-YYYY)
+        if (m) return { y: +m[3], m: +m[2] - 1, d: +m[1] };
+        m = t.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})$/); // 11 Sep 2026
+        if (m && MONTHS[m[2].toLowerCase()] !== undefined) return { y: +m[3], m: MONTHS[m[2].toLowerCase()], d: +m[1] };
+      }
+      return null;
+    };
+
+    // Edmonton wall-clock (y, m, d, h, min) → UTC instant, DST-correct
+    const edmontonInstant = (y, m, d, h, min) => {
+      const offsetAt = (utcMs) => {
+        const p = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Edmonton", year: "numeric", month: "2-digit",
+          day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+        }).formatToParts(new Date(utcMs)).reduce((a, x) => (a[x.type] = x.value, a), {});
+        const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, p.hour === "24" ? 0 : +p.hour, +p.minute);
+        return (asUTC - utcMs) / 60000; // minutes ahead of UTC (negative for Edmonton)
+      };
+      const guess = Date.UTC(y, m, d, h, min);
+      let utc = guess - offsetAt(guess) * 60000;
+      utc = guess - offsetAt(utc) * 60000; // settle DST boundaries
+      return new Date(utc);
+    };
+
+    // The absolute moment this shift was scheduled to end.
+    // If the end clock time is not after the start, the shift runs past midnight.
+    const scheduledEndInstant = (data, startMins, endMins) => {
+      const parts = parseDateFields(data, true);
+      if (!parts) return null;
+      const end = edmontonInstant(parts.y, parts.m, parts.d, Math.floor(endMins / 60), endMins % 60);
+      const usedEndDate = !!data.endDate && parseDateFields(data, false) !== null &&
+        JSON.stringify(parseDateFields(data, true)) !== JSON.stringify(parseDateFields(data, false));
+      if (!usedEndDate && startMins !== null && endMins <= startMins) {
+        return new Date(end.getTime() + 24 * 60 * 60 * 1000);
+      }
+      return end;
+    };
+
     // Query: all shifts from the last 2 days (covers overnight shifts too).
     // We intentionally avoid ".where('autoClockOut', '!=', true)" because Firestore
     // excludes documents where the field doesn't exist, so brand-new shifts would
@@ -411,12 +465,22 @@ exports.autoClockOut = onSchedule(
 
       const endMins = timeToMins(data.endTime);
       if (endMins === null) continue;
+      const startMins = timeToMins(data.startTime);
 
-      // Diff: positive = we are past the end time
-      let diff = nowMins - endMins;
-      if (diff < -720) diff += 1440; // midnight crossover
+      // Compare against the shift's real end instant, not minutes-since-midnight,
+      // so an 8pm→8am shift is not treated as 12 hours overdue at 8pm.
+      const endInstant = scheduledEndInstant(data, startMins, endMins);
+      if (endInstant === null) continue;
 
-      if (diff >= 15) {
+      const minsPastEnd = (now.getTime() - endInstant.getTime()) / 60000;
+
+      // Never clock out before the person actually clocked in.
+      const clockInInstant = data.clockIn?.toDate ? data.clockIn.toDate()
+        : (typeof data.clockIn === "string" && data.clockIn ? new Date(data.clockIn) : null);
+      const startedAfterEnd = clockInInstant && !isNaN(clockInInstant.getTime())
+        && clockInInstant.getTime() > endInstant.getTime();
+
+      if (minsPastEnd >= 15 && !startedAfterEnd) {
         const scheduledEndTimeStr = minsToTimeStr(endMins);
         batch.update(docSnap.ref, {
           clockOut: FieldValue.serverTimestamp(),

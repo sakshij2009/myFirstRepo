@@ -13,7 +13,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebase/config";
 import { formatShiftTimeUTCtoCanada } from "../src/utils/date";
 
@@ -65,7 +65,10 @@ export default function GeoCheckOut() {
             return dt;
           };
           try {
-            const checkInDate = checkInStr.includes(":") ? parseTime(checkInStr) : new Date(checkInStr);
+            let checkInDate = checkInStr.includes(":") ? parseTime(checkInStr) : new Date(checkInStr);
+            if (checkInDate.getTime() > Date.now()) {
+              checkInDate = new Date(checkInDate.getTime() - 24 * 60 * 60 * 1000);
+            }
             const startElapsed = Math.floor((Date.now() - checkInDate.getTime()) / 1000);
             if (startElapsed > 0) setElapsed(startElapsed);
           } catch {}
@@ -129,6 +132,7 @@ export default function GeoCheckOut() {
       const snap = await getDocs(q);
       if (!snap.empty) {
         await updateDoc(snap.docs[0].ref, {
+          clockOut: serverTimestamp(),
           clockOutTime: roundedTime,
           clockOutLocation: locStr,
           checkedOut: true,
