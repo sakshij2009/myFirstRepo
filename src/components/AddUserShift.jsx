@@ -1221,8 +1221,11 @@ const AddUserShift = ({ mode = "add", user }) => {
           let endDateObj = new Date(shiftDate);
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
           const cat = (values.shiftCategory || "").toLowerCase();
-          const desc = (values.description || "").toLowerCase();
-          const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised") || desc.includes("supervised");
+          // Decide on the chosen category alone. The form only offers the visit
+          // fields for Supervised Visitation, so keying off the description too
+          // meant a Transportation shift whose notes mention a supervised visit
+          // silently kept the client's intake visit address and times.
+          const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised");
 
           return {
             ...restValues,
@@ -1339,8 +1342,11 @@ const AddUserShift = ({ mode = "add", user }) => {
         if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
         const cat = (values.shiftCategory || "").toLowerCase();
-        const desc = (values.description || "").toLowerCase();
-        const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised") || desc.includes("supervised");
+        // Decide on the chosen category alone. The form only offers the visit
+          // fields for Supervised Visitation, so keying off the description too
+          // meant a Transportation shift whose notes mention a supervised visit
+          // silently kept the client's intake visit address and times.
+          const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised");
 
         const filteredPoints = finalPoints.map(p => ({
           ...p,

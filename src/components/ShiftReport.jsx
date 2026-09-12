@@ -1916,9 +1916,21 @@ const ShiftReport = ({ user }) => {
                       const pickupTime = formatTime12(sp.pickupTime || (idx === 0 ? shiftData?.pickupTime : null), "N/A");
                       const pickedUpTime = formatTime12(sp.pickedUpTime || (idx === 0 ? shiftData?.pickedUpTime : null), "N/A");
                       const pickedUpLoc = sp.pickedUpLocation || (idx === 0 ? shiftData?.pickedUpLocation : null) || "N/A";
-                      const visitLoc = sp.visitLocation || (idx === 0 ? shiftData?.visitLocation : null) || "N/A";
-                      const visitStartTime = formatTime12(sp.visitStartTime || (idx === 0 ? shiftData?.visitStartOfficialTime : null), "N/A");
-                      const visitEndTime = formatTime12(sp.visitEndTime || (idx === 0 ? shiftData?.visitEndOfficialTime : null), "N/A");
+                      // Only a Supervised Visitation has a visit. Shifts created before
+                      // the save rule was fixed can still carry a visit address copied
+                      // from the client's intake record, so gate on the shift's own
+                      // category rather than trusting whatever is on the record.
+                      const visitCat = (shiftData?.shiftCategory || shiftData?.categoryName || "").toLowerCase();
+                      const showVisit = visitCat.includes("supervised") || visitCat.includes("visitation");
+                      const visitLoc = showVisit
+                        ? (sp.visitLocation || (idx === 0 ? shiftData?.visitLocation : null) || "N/A")
+                        : "N/A";
+                      const visitStartTime = showVisit
+                        ? formatTime12(sp.visitStartTime || (idx === 0 ? shiftData?.visitStartOfficialTime : null), "N/A")
+                        : "N/A";
+                      const visitEndTime = showVisit
+                        ? formatTime12(sp.visitEndTime || (idx === 0 ? shiftData?.visitEndOfficialTime : null), "N/A")
+                        : "N/A";
                       const dropLoc = sp.dropLocation || (idx === 0 ? shiftData?.dropLocation : null) || "N/A";
                       const dropTime = formatTime12(sp.dropTime || (idx === 0 ? shiftData?.dropTime : null), "N/A");
                       const droppedOffLoc = sp.droppedLocation || sp.dropActualLocation || (idx === 0 ? (shiftData?.droppedLocation || shiftData?.dropActualLocation) : null) || "N/A";
