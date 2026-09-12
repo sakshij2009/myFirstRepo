@@ -62,6 +62,41 @@ const AddClient = ({ mode = "add", user }) => {
   const toggleShiftPoint = (index) =>
     setOpenShiftPoints((prev) => ({ ...prev, [index]: !prev[index] }));
 
+  // Build shift points straight from an intake form doc — the intake form is
+  // the only source of truth for pickup/drop info, so both the initial load
+  // and the manual re-sync button use this same logic.
+  const buildShiftPointsFromIntake = (intake) => {
+    const clients = Array.isArray(intake.clients)
+      ? intake.clients
+      : Object.values(intake.clients || {});
+    if (!clients.length) return null;
+
+    return clients.map((c) => {
+      const transport = (intake.transportationInfoList || []).find(
+        (t) => t.clientName === c.fullName
+      ) || {};
+      const parent = (intake.parentInfoList || []).find(
+        (p) => p.clientName === c.fullName
+      ) || intake.parentInfoList?.[0] || {};
+      return {
+        name:          c.fullName || "",
+        gender:        c.gender || "Male",
+        dob:           c.birthDate || "",
+        seatType:      transport.carSeatType || "No Seat Required",
+        pickupLocation: transport.pickupAddress || c.address || "",
+        dropLocation:  transport.dropoffAddress || "",
+        pickupTime:    transport.pickupTime || "",
+        dropTime:      transport.dropOffTime || "",
+        clientInfo:    c.clientInfo || "",
+        parentName:    parent.parentName || "",
+        parentPhone:   parent.parentPhone || "",
+        parentEmail:   parent.parentEmail || "",
+        parentAddress: parent.parentAddress || "",
+        relationship:  parent.relationShip || "",
+      };
+    });
+  };
+
   const [initialValues, setInitialValues] = useState({
     name: "",
     clientCode: "",
@@ -112,6 +147,25 @@ const AddClient = ({ mode = "add", user }) => {
           const clientSnap = await getDoc(doc(db, "clients", id));
           if (clientSnap.exists()) {
             const data = clientSnap.data();
+
+            // The client doc's own `shiftPoints` is only a snapshot that can
+            // drift from the intake form (e.g. after the intake gets edited).
+            // The intake form is the source of truth for pickup/drop info, so
+            // always pull fresh from it when this client has one on record.
+            let shiftPoints = Array.isArray(data.shiftPoints) ? data.shiftPoints : [];
+            const linkedIntakeId = data.intakeId || data.InTakeId || null;
+            if (linkedIntakeId) {
+              try {
+                const intakeSnap = await getDoc(doc(db, COLLECTION_NEW_INTAKES, String(linkedIntakeId)));
+                if (intakeSnap.exists()) {
+                  const fromIntake = buildShiftPointsFromIntake(intakeSnap.data());
+                  if (fromIntake) shiftPoints = fromIntake;
+                }
+              } catch (err) {
+                console.error("Error loading intake form for client:", err);
+              }
+            }
+
             setInitialValues({
               name: data.name || "",
               clientCode: data.clientCode || "",
@@ -125,7 +179,7 @@ const AddClient = ({ mode = "add", user }) => {
               description: data.description || "",
               isFamily: data.isFamily === true,
               avatar: null,
-              shiftPoints: Array.isArray(data.shiftPoints) ? data.shiftPoints : [],
+              shiftPoints,
               medications:
                 Array.isArray(data.medications) && data.medications.length > 0
                   ? data.medications
@@ -139,7 +193,7 @@ const AddClient = ({ mode = "add", user }) => {
             });
             if (data.avatar) setAvatarPreview(data.avatar);
             setIntakeId(data.intakeId || data.InTakeId || null);
-            if (Array.isArray(data.shiftPoints) && data.shiftPoints.length > 0) {
+            if (shiftPoints.length > 0) {
               setOpenShiftPoints({ 0: true });
             }
             if (Array.isArray(data.medications) && data.medications.some(m => m.medicationName?.trim())) {
@@ -169,42 +223,11 @@ const AddClient = ({ mode = "add", user }) => {
         alert("Intake form not found. Cannot re-sync siblings.");
         return;
       }
-      const intake = intakeSnap.data();
-
-      // Normalise clients list (array or object-map)
-      const clients = Array.isArray(intake.clients)
-        ? intake.clients
-        : Object.values(intake.clients || {});
-
-      if (!clients.length) {
+      const builtShiftPoints = buildShiftPointsFromIntake(intakeSnap.data());
+      if (!builtShiftPoints) {
         alert("No siblings found in the intake form.");
         return;
       }
-
-      const builtShiftPoints = clients.map((c) => {
-        const transport = (intake.transportationInfoList || []).find(
-          (t) => t.clientName === c.fullName
-        ) || {};
-        const parent = (intake.parentInfoList || []).find(
-          (p) => p.clientName === c.fullName
-        ) || intake.parentInfoList?.[0] || {};
-        return {
-          name:          c.fullName || "",
-          gender:        c.gender || "Male",
-          dob:           c.birthDate || "",
-          seatType:      transport.carSeatType || "No Seat Required",
-          pickupLocation: transport.pickupAddress || c.address || "",
-          dropLocation:  transport.dropoffAddress || "",
-          pickupTime:    transport.pickupTime || "",
-          dropTime:      transport.dropOffTime || "",
-          clientInfo:    c.clientInfo || "",
-          parentName:    parent.parentName || "",
-          parentPhone:   parent.parentPhone || "",
-          parentEmail:   parent.parentEmail || "",
-          parentAddress: parent.parentAddress || "",
-          relationship:  parent.relationShip || "",
-        };
-      });
 
       setFieldValue("shiftPoints", builtShiftPoints);
       // Expand all newly loaded shift points
