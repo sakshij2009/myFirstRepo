@@ -23,6 +23,16 @@ const getAgencyColor = (agency) => {
   return { text: "#6b7280", bg: "#f3f4f6" };
 };
 
+// Client status has been saved three different ways over time: "Inactive",
+// "InActive" and the older "Not Active". Compare on a normalised value so the
+// Status filter finds every one of them, whatever spelling is on the record.
+const normalizeStatus = (raw) => {
+  const s = (raw || "").toLowerCase().replace(/[^a-z]/g, "");
+  if (s === "active") return "Active";
+  if (s === "inactive" || s === "notactive") return "Inactive";
+  return "";
+};
+
 function FilterDropdown({ label, value, options, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -92,11 +102,11 @@ function ClientCard({ client, service, parentContact, onEdit, onDelete, onToggle
               style={{
                 fontSize: "11px",
                 fontWeight: 600,
-                color: client.clientStatus === "Active" ? "#1a6432" : "#6b7280",
-                backgroundColor: client.clientStatus === "Active" ? "#d8f3e3" : "#f3f4f6",
+                color: normalizeStatus(client.clientStatus) === "Active" ? "#1a6432" : "#6b7280",
+                backgroundColor: normalizeStatus(client.clientStatus) === "Active" ? "#d8f3e3" : "#f3f4f6",
               }}
             >
-              {client.clientStatus || "—"}
+              {normalizeStatus(client.clientStatus) || client.clientStatus || "—"}
             </span>
           </div>
           <p className="font-medium" style={{ fontSize: "12px", color: "#9ca3af" }}>
@@ -418,9 +428,8 @@ const ManageClients = () => {
   const filtered = clients.filter((c) => {
     const gMatch = !gender || c.gender === gender;
     const sMatch = !clientStatus ||
-      (clientStatus === "Active"   && c.clientStatus === "Active") ||
-      (clientStatus === "Inactive" && c.clientStatus === "Inactive") ||
-      (clientStatus === "Closed"   && c.fileClosed === true);
+      (clientStatus === "Closed" && c.fileClosed === true) ||
+      (clientStatus !== "Closed" && normalizeStatus(c.clientStatus) === clientStatus);
     const aMatch = !agencyType || c.agencyName === agencyType;
     const srch = !search ||
       c.name?.toLowerCase().includes(search.toLowerCase()) ||

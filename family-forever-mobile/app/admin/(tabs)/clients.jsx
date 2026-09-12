@@ -6,6 +6,16 @@ import { useRouter } from 'expo-router';
 import { collection, doc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../src/firebase/config';
 
+// Client status has been saved three different ways over time: 'Inactive',
+// 'InActive' and the older 'Not Active'. Compare on a normalised value so the
+// status filter finds every one of them, whatever spelling is on the record.
+const normalizeStatus = (raw) => {
+  const v = (raw || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (v === 'active') return 'Active';
+  if (v === 'inactive' || v === 'notactive') return 'Inactive';
+  return '';
+};
+
 export default function ClientsScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -168,8 +178,8 @@ export default function ClientsScreen() {
 
       let matchStatus = false;
       if (statusFilter === 'All') matchStatus = true;
-      else if (statusFilter === 'Active') matchStatus = client.clientStatus === 'Active';
-      else if (statusFilter === 'Inactive') matchStatus = client.clientStatus === 'Inactive';
+      else if (statusFilter === 'Active') matchStatus = normalizeStatus(client.clientStatus) === 'Active';
+      else if (statusFilter === 'Inactive') matchStatus = normalizeStatus(client.clientStatus) === 'Inactive';
       else if (statusFilter === 'Closed') matchStatus = client.fileClosed === true;
 
       const searchLow = searchQuery.toLowerCase();
@@ -281,7 +291,8 @@ export default function ClientsScreen() {
             const initials = client.name ? client.name.substring(0, 2).toUpperCase() : '??';
             const serviceStr = client._service || '—';
             const sColor = getServiceColor(serviceStr);
-            const statusColor = client.clientStatus === 'Active' ? '#10B981' : '#9CA3AF';
+            const statusLabel = normalizeStatus(client.clientStatus) || client.clientStatus || 'Active';
+            const statusColor = statusLabel === 'Active' ? '#10B981' : '#9CA3AF';
             const agencyName = client.agencyName || 'No Agency';
             const agencyExpanded = expandedAgencyId === client.id;
 
@@ -311,7 +322,7 @@ export default function ClientsScreen() {
                 {/* Badges */}
                 <View style={s.badgesRow}>
                   <View style={[s.badge, { backgroundColor: sColor }]}><Text style={s.badgeText}>{serviceStr}</Text></View>
-                  <View style={[s.badge, { backgroundColor: statusColor }]}><Text style={s.badgeText}>{client.clientStatus || 'Active'}</Text></View>
+                  <View style={[s.badge, { backgroundColor: statusColor }]}><Text style={s.badgeText}>{statusLabel}</Text></View>
                   {/* Agency — truncate when long; tap to expand to full name */}
                   <Pressable
                     style={[s.badge, { backgroundColor: '#3B82F6', maxWidth: agencyExpanded ? undefined : 160 }]}

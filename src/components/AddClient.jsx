@@ -464,7 +464,7 @@ const AddClient = ({ mode = "add", user }) => {
                       >
                         <option value="">Select client status</option>
                         <option value="Active">Active</option>
-                        <option value="InActive">InActive</option>
+                        <option value="Inactive">Inactive</option>
                       </Field>
                       <span className="absolute right-3 top-[60%] -translate-y-1/2 pointer-events-none">
                         <FaChevronDown className="text-gray-400 w-3.5 h-3.5" />
