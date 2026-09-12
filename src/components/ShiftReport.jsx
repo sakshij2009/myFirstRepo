@@ -1938,10 +1938,21 @@ const ShiftReport = ({ user }) => {
 
                       return (
                         <div key={idx} className="rounded-xl border p-4 space-y-4" style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
-                          {/* Header with client name + pickup order badge */}
+                          {/* Header with client name + pickup order badge.
+                              Name the child being picked up even on a single-child
+                              shift: staff could not tell who the pickup was for.
+                              Older shifts saved a blank name on the point, so fall
+                              back to the shift's own client name. */}
                           <div className="flex items-center gap-2">
                             <p className="font-bold" style={{ fontSize: 13, color: "#2b3232" }}>
-                              Transport Information{sortedPts.length > 1 ? ` — ${sp.name || `Client ${idx + 1}`}` : ""}
+                              Transport Information{(() => {
+                                const who = (sp.name || "").trim()
+                                  || (sortedPts.length === 1
+                                    ? (shiftData?.clientName || shiftData?.name || "").trim()
+                                    : "")
+                                  || (sortedPts.length > 1 ? `Client ${idx + 1}` : "");
+                                return who ? ` — ${who}` : "";
+                              })()}
                             </p>
                             {sortedPts.length > 1 && (
                               <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: "#fef9c3", color: "#854d0e" }}>
