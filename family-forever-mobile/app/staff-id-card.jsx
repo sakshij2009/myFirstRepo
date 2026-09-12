@@ -73,8 +73,27 @@ export default function StaffIdCard() {
     outputRange: ["180deg", "360deg"],
   });
 
-  const frontAnimatedStyle = { transform: [{ rotateY: frontInterpolate }] };
-  const backAnimatedStyle = { transform: [{ rotateY: backInterpolate }] };
+  // Swap the faces with opacity rather than backfaceVisibility. The native
+  // animation driver writes rotationY straight to the native view, and Android
+  // never re-runs the alpha calculation that backfaceVisibility depends on, so
+  // both faces end up visible (the back one painting over the front) or neither.
+  const frontOpacity = flipAnim.interpolate({
+    inputRange: [0, 89.99, 90, 180],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = flipAnim.interpolate({
+    inputRange: [0, 89.99, 90, 180],
+    outputRange: [0, 0, 1, 1],
+  });
+
+  const frontAnimatedStyle = {
+    opacity: frontOpacity,
+    transform: [{ perspective: 1200 }, { rotateY: frontInterpolate }],
+  };
+  const backAnimatedStyle = {
+    opacity: backOpacity,
+    transform: [{ perspective: 1200 }, { rotateY: backInterpolate }],
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -99,7 +118,7 @@ export default function StaffIdCard() {
         {/* 3D Card Container */}
         <View style={styles.perspectiveWrapper}>
           {/* FRONT */}
-          <Animated.View style={[styles.idCard, frontAnimatedStyle, { backfaceVisibility: "hidden" }]}>
+          <Animated.View style={[styles.idCard, styles.cardFace, frontAnimatedStyle]}>
             <View style={styles.cardHeader}>
               <View style={styles.logoRow}>
                 <Image 
@@ -145,7 +164,7 @@ export default function StaffIdCard() {
           </Animated.View>
 
           {/* BACK */}
-          <Animated.View style={[styles.idCard, styles.backCard, backAnimatedStyle, { backfaceVisibility: "hidden", position: "absolute" }]}>
+          <Animated.View style={[styles.idCard, styles.cardFace, styles.backCard, backAnimatedStyle]}>
             <Text style={styles.backOrgName}>Family Forever Inc.</Text>
             
             <View style={styles.qrBox}>
@@ -265,6 +284,8 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
     elevation: 20
   },
+  // Both faces stack in the same spot so neither depends on document order.
+  cardFace: { position: "absolute", top: 0, left: 0 },
   backCard: { padding: 30, alignItems: "center", justifyContent: "space-between" },
   
   cardHeader: { 
