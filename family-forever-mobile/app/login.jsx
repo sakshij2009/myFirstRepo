@@ -130,7 +130,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     setError("");
-    if (!email || !password) {
+    if (!email.trim() || !password.trim()) {
       setError("Please enter email and password");
       return;
     }
@@ -140,7 +140,7 @@ export default function Login() {
       const q = query(
         collection(db, "users"),
         where("email", "==", email.trim().toLowerCase()),
-        where("password", "==", password)
+        where("password", "==", password.trim())
       );
       const snapshot = await getDocs(q);
 
@@ -253,9 +253,12 @@ export default function Login() {
               </View>
 
               <Text style={{ fontSize: 22, fontWeight: "700", color: "#111111", textAlign: "center", marginBottom: 8 }}>Verify Your Identity</Text>
-              <Text style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, marginBottom: 28 }}>
+              <Text style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20, marginBottom: 10 }}>
                 We sent a 6-digit code to{"\n"}
                 <Text style={{ fontWeight: "600", color: "#374151" }}>{maskedEmail}</Text>
+              </Text>
+              <Text style={{ fontSize: 12, color: "#6B7280", textAlign: "center", lineHeight: 18, marginBottom: 24 }}>
+                Not in your inbox? Check your Junk or Spam folder. Hotmail, Outlook, Yahoo and iCloud often put it there, and it can take a minute to arrive.
               </Text>
 
               {/* OTP Input boxes */}

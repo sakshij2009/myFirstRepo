@@ -276,7 +276,8 @@ const AddUserForm = ({ mode = "add", user }) => {
       }
 
       const fullName = `${values.firstName} ${values.lastName}`.trim() || values.name;
-      const submissionData = { ...values, name: fullName };
+      // Login matches on trimmed, lowercased email, so store it that way.
+      const submissionData = { ...values, name: fullName, email: (values.email || "").trim().toLowerCase() };
 
       if (mode === "update") {
         const q = query(collection(db, "users"), where("userId", "==", id));

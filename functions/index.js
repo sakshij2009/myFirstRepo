@@ -563,6 +563,14 @@ exports.sendLoginOTP = onCall(
         to: email.trim().toLowerCase(),
         from: { email: FROM_EMAIL, name: FROM_NAME },
         subject: `${code} — Your Family Forever verification code`,
+        // Plain-text part: Outlook/Hotmail, Yahoo and iCloud are more likely to junk HTML-only mail.
+        text: `Hi${name ? " " + name : ""},
+
+Your Family Forever verification code is: ${code}
+
+This code expires in 5 minutes. If you did not request this code, please ignore this email.
+
+Family Forever Inc.`,
         html,
       });
     } catch (err) {
