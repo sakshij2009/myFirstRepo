@@ -1220,11 +1220,9 @@ const AddUserShift = ({ mode = "add", user }) => {
           const isOvernight = values.endTime < values.startTime;
           let endDateObj = new Date(shiftDate);
           if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
-          const day = shiftDate.getDay();
-          const isWeekend = day === 0 || day === 6;
           const cat = (values.shiftCategory || "").toLowerCase();
           const desc = (values.description || "").toLowerCase();
-          const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
+          const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised") || desc.includes("supervised");
 
           return {
             ...restValues,
@@ -1271,44 +1269,57 @@ const AddUserShift = ({ mode = "add", user }) => {
           };
         };
 
-        // Always update the specific shift being edited, using ITS OWN original date —
-        // never selectedDates[0]. shiftDates holds every sibling date in the batch for
-        // display, and this doc isn't necessarily the first one chronologically, so
-        // selectedDates[0] used to silently relabel whichever shift was edited to the
-        // batch's earliest date (e.g. editing the 23rd's shift would rewrite it to the 21st).
+        // The calendar's checked dates are the user's explicit statement of which
+        // shifts in this batch they want touched: update every sibling shift whose
+        // date is still selected, leave every sibling whose date got deselected
+        // completely untouched (not updated, not deleted), and create brand-new
+        // shifts for any selected date that has no sibling yet.
         const qShift = query(collection(db, "shifts"), where("id", "==", id));
         const snap = await getDocs(qShift);
         if (!snap.empty) {
           const bData = snap.docs[0].data();
-          const shiftDate = bData.dateKey_iso
-            ? (parseLocalSafe(bData.dateKey_iso) || normalizeDate(selectedDates[0]))
-            : normalizeDate(selectedDates[0]);
-          await updateDoc(snap.docs[0].ref, {
-            ...buildPayload(shiftDate),
-            clockIn:  bData.clockIn  || originalClockIn || "",
-            clockOut: bData.clockOut || originalClockOut || "",
-          });
+          batchId = bData.batchId || `batch_${Date.now()}`;
+
+          // Re-fetch every sibling in the batch fresh so we always act on current data.
+          let siblingDocs = [snap.docs[0]];
+          if (bData.batchId) {
+            const batchSnap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", bData.batchId)));
+            siblingDocs = batchSnap.docs;
+          }
+
+          const remainingKeys = new Set(selectedDates.map(d => formatLocalISO(normalizeDate(d))));
+          let updatedCount = 0;
+          let lastUpdatedDate = null;
+
+          for (const sDoc of siblingDocs) {
+            const sData = sDoc.data();
+            const sDate = sData.dateKey_iso ? parseLocalSafe(sData.dateKey_iso) : null;
+            if (!sDate) continue;
+            const key = formatLocalISO(sDate);
+            if (!remainingKeys.has(key)) continue; // deselected on the calendar — leave as-is
+
+            await updateDoc(sDoc.ref, {
+              ...buildPayload(sDate),
+              clockIn:  sData.clockIn  || (sDoc.id === id ? originalClockIn : "")  || "",
+              clockOut: sData.clockOut || (sDoc.id === id ? originalClockOut : "") || "",
+            });
+            updatedCount++;
+            lastUpdatedDate = sDate;
+            remainingKeys.delete(key); // whatever's left over are brand-new dates to create
+          }
+
           setSlider({
             show: true,
             title: "Shift Updated Successfully!",
-            subtitle: `${selectedClient?.name || ""} on ${shiftDate.toDateString()} at ${formatTime12(values.startTime)}`,
+            subtitle: updatedCount > 1
+              ? `${selectedClient?.name || ""} – ${updatedCount} shift(s) updated`
+              : `${selectedClient?.name || ""} on ${(lastUpdatedDate || normalizeDate(selectedDates[0])).toDateString()} at ${formatTime12(values.startTime)}`,
             redirectTo: "/admin-dashboard/dashboard",
           });
 
-          batchId = bData.batchId || `batch_${Date.now()}`;
-
-          // Only dates with no existing sibling shift in this batch should become brand-new
-          // shifts. Re-fetch the batch fresh so a date that already has a shift is never
-          // recreated — that was duplicating every sibling shift again on each save.
-          const existingDateKeys = new Set([formatLocalISO(shiftDate)]);
-          if (bData.batchId) {
-            const batchSnap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", bData.batchId)));
-            batchSnap.docs.forEach(d => {
-              const key = d.data().dateKey_iso;
-              if (key) existingDateKeys.add(key);
-            });
-          }
-          datesToCreate = selectedDates.filter(d => !existingDateKeys.has(formatLocalISO(normalizeDate(d))));
+          datesToCreate = [...remainingKeys]
+            .map(k => parseLocalSafe(k))
+            .filter(Boolean);
         }
 
         if (datesToCreate.length === 0) return;
@@ -1327,11 +1338,9 @@ const AddUserShift = ({ mode = "add", user }) => {
         let endDateObj = new Date(startDateObj);
         if (isOvernight) endDateObj.setDate(endDateObj.getDate() + 1);
 
-        const day = startDateObj.getDay();
-        const isWeekend = day === 0 || day === 6;
         const cat = (values.shiftCategory || "").toLowerCase();
         const desc = (values.description || "").toLowerCase();
-        const needsVisit = isWeekend || cat.includes("supervised") || desc.includes("supervised");
+        const needsVisit = isSupervisedVisitation(values.shiftCategory) || cat.includes("supervised") || desc.includes("supervised");
 
         const filteredPoints = finalPoints.map(p => ({
           ...p,
@@ -1756,27 +1765,36 @@ const AddUserShift = ({ mode = "add", user }) => {
                   return;
                 }
 
-                // Multi-date group: deleting the whole group is a separate, explicit
-                // choice from deleting just the one shift currently open. Defaulting
-                // "Delete Shift" to wiping every sibling silently deleted dates the
-                // user never asked to touch.
-                const deleteWholeGroup = window.confirm(
-                  "This shift is part of a multi-date group.\n\nClick OK to delete the ENTIRE group of shifts.\nClick Cancel to delete only this one shift instead."
-                );
+                // Multi-date group: delete exactly the dates currently checked on the
+                // calendar — same selection the Update flow uses — and leave every
+                // sibling shift whose date is unchecked completely untouched.
+                const selectedDates = formikRef.current?.values?.shiftDates || [];
+                const selectedKeys = new Set(selectedDates.map(d => formatLocalISO(normalizeDate(d))));
 
-                if (deleteWholeGroup) {
-                  const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
-                  const batch = writeBatch(db);
-                  snap.docs.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
-                  await batch.commit();
-                  alert(`Deleted ${snap.docs.length} shift(s) in this group.`);
-                  window.history.back();
+                const snap = await getDocs(query(collection(db, "shifts"), where("batchId", "==", batchId)));
+                const toDelete = snap.docs.filter(d => {
+                  const sDate = d.data().dateKey_iso ? parseLocalSafe(d.data().dateKey_iso) : null;
+                  return sDate && selectedKeys.has(formatLocalISO(sDate));
+                });
+
+                if (toDelete.length === 0) {
+                  alert("No checked dates match an existing shift in this group. Check the date(s) you want to delete on the calendar first.");
                   return;
                 }
 
-                if (!window.confirm("Delete only this one shift?")) return;
-                await updateDoc(doc(db, "shifts", id), { isDeleted: true, deletedAt: new Date().toISOString() });
-                alert("Shift deleted successfully!");
+                const dateList = toDelete
+                  .map(d => d.data().dateKey_iso)
+                  .sort()
+                  .join(", ");
+                const confirmMsg = toDelete.length === snap.docs.length
+                  ? `Delete all ${toDelete.length} shift(s) in this group (${dateList})?`
+                  : `Delete the ${toDelete.length} checked shift(s) on: ${dateList}?\n\nThe other ${snap.docs.length - toDelete.length} shift(s) in this group will not be touched.`;
+                if (!window.confirm(confirmMsg)) return;
+
+                const batch = writeBatch(db);
+                toDelete.forEach(d => batch.update(d.ref, { isDeleted: true, deletedAt: new Date().toISOString() }));
+                await batch.commit();
+                alert(`Deleted ${toDelete.length} shift(s).`);
                 window.history.back();
               } catch (err) {
                 console.error("Error deleting shift:", err);
